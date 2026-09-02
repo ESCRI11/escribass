@@ -53,6 +53,14 @@ gh pr checks --watch
 gh pr merge --squash --delete-branch
 ```
 
+A pre-push hook in `.githooks/` refuses a direct push to `main`. It is client-side: GitHub
+branch protection and rulesets both require Pro on a private repository, so the server will
+accept a direct push and this is what stops one being sent. A fresh clone must enable it:
+
+```
+git config core.hooksPath .githooks
+```
+
 `.github/workflows/checks.yml` runs the four checks on every push and PR. It additionally
 runs `buf breaking` against the PR's base branch — that check exists only on pull requests,
 because comparing a branch against itself proves nothing.
