@@ -73,6 +73,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "escribass-core"
+version = "0.1.0"
+dependencies = [
+ "escribass-schema",
+ "serde_json",
+]
+
+[[package]]
 name = "escribass-schema"
 version = "0.1.0"
 dependencies = [

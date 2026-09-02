@@ -78,21 +78,35 @@ This needs no custom serialiser for `song.json`: `pbjson` exposes
 `preserve_proto_field_names`, `emit_fields` and `btree_map`, and a `BTreeMap` iterates in
 sorted key order. The concrete writer lands in `core` at M0.2.
 
-Three further degrees of freedom are part of the canonical form and are the writer's job:
+Three further degrees of freedom are part of the canonical form. **Amended 2026-09-02,
+while implementing the writer:** the original text put all three on the writer. Only the
+first belongs there. A writer that silently rewrites values puts the in-memory model and the
+file out of agreement, which is the second-representation problem §14.2 exists to prevent, so
+each normalisation now sits where the value enters rather than where it leaves.
 
-- **Doubles.** `serde_json` must be built with `float_roundtrip`. Its default parser is off
-  by one ULP on roughly a third of doubles, so load-then-save is not a fixed point and §11's
-  "same project file → identical output" fails on the first re-save. Printing is already
-  shortest-round-trip and stable. The writer **rejects non-finite doubles**: NaN and the
-  infinities serialise as `null` and cannot be read back, so one NaN from a plugin parameter
-  would otherwise write an unreadable project. `-0.0` normalises to `0.0`.
-- **Message presence.** `Track { routing: None }` and `Track { routing: Some(default) }` are
-  semantically identical and produce different bytes. The writer normalises presence, and
-  the validator requires `provenance`, `mix`, `routing`, `tempo_map`, `time_signature_map`
-  and `render_target`, with `instrument` present exactly when `kind == INSTRUMENT`.
-- **Timestamps.** RFC 3339, `Z`-suffixed, millisecond precision — the proto3 canonical form,
-  which is also what the TypeScript and Python generators emit. `pbjson` writes `+00:00`
-  today; the writer normalises at M0.2, and all three languages already parse both forms.
+- **Doubles — the writer's job.** `serde_json` must be built with `float_roundtrip`. Its
+  default parser is off by one ULP on roughly a third of doubles, so load-then-save is not a
+  fixed point and §11's "same project file → identical output" fails on the first re-save.
+  Printing is already shortest-round-trip and stable. The writer **rejects non-finite
+  doubles**: NaN and the infinities serialise as `null` and cannot be read back, so one NaN
+  from a plugin parameter would otherwise write a project that cannot be opened. The error
+  names the offending field by JSON Pointer.
+- **`-0.0` — the tool API's job, on input.** It compares equal to `0.0` and prints
+  differently, so two equal songs would produce different bytes. It is normalised where
+  values enter, and the validator rejects it in a stored document. The writer serialises what
+  the model holds.
+- **Message presence — the validator's job.** `Track { routing: None }` and
+  `Track { routing: Some(default) }` are semantically identical and produce different bytes.
+  The validator requires `provenance`, `mix`, `routing`, `tempo_map`, `time_signature_map`
+  and `render_target`, with `instrument` present exactly when `kind == INSTRUMENT`. A valid
+  song therefore carries them all and there is nothing for the writer to fill in.
+- **Timestamps — the clock's job.** The injectable clock yields millisecond precision, so
+  nothing downstream truncates, and the validator rejects finer precision in a stored
+  document. The text form is whatever `pbjson` emits: RFC 3339 with a `+00:00` offset. The
+  original text specified a `Z` suffix to match proto3's canonical JSON, which was not worth
+  it — this canonical form already departs from proto3's in two larger ways, field naming and
+  default emission, so matching it on timestamps buys no compatibility and would cost a
+  string pass over the serialised document. All three languages parse both forms.
 
 ### 5. `optional` only where absent differs from zero
 

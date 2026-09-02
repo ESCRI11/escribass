@@ -1,0 +1,9 @@
+//! Song model core.
+//!
+//! Owns everything that reads or writes song state: canonical persistence now; the validator,
+//! the patch log and the project store as M0.2 continues. Model types come from
+//! `escribass-schema` and are never redefined here (docs/specs.md §4.1).
+
+pub mod canonical;
+
+pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};

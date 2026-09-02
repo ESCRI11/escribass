@@ -1,0 +1,12 @@
+[package]
+name = "escribass-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Song model core: canonical persistence, validation, patch log"
+
+[dependencies]
+escribass-schema = { path = "../schema" }
+# float_roundtrip: without it the parser is off by one ULP on ~30% of doubles, so
+# load-then-save is not a fixed point (ADR 0002 §4).
+serde_json = { version = "1", features = ["float_roundtrip"] }

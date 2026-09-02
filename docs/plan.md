@@ -13,7 +13,10 @@ stale.
 | M0.1 | `schema/song.proto`, `history.proto`, codegen for Rust/TS/Python | done | `c0dc9da` |
 | M0.1 | Two determinism defects found by review, fixed | done | `b402dc0` |
 | M0.1 | `schema/` restructured; AGENTS.md files | done | `5fe160c` |
-| M0.2 | `core/`: validator, patch log, canonical writer, project store | **next** | — |
+| — | CI running the four checks; §13 scoped to source directories | done | `89aead1` |
+| M0.2 | `core/`: canonical writer, non-finite rejection | done | `HEAD` |
+| M0.2 | `core/`: validator | **next** | — |
+| M0.2 | `core/`: patch log DAG, refs, `.escri` project store | not started | — |
 | M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 
@@ -80,12 +83,10 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 
 ## Known gaps
 
-- **No CI.** `.github/` does not exist, so `schema/codegen.sh --check` and the three test
-  suites are a gate only when a human runs them. Everything the last two reviews fixed is
-  currently protected by habit. Worth closing before M0.2 rather than after.
-- **`buf breaking` is configured and unautomated.** It works from the root as of `5fe160c`;
-  nothing invokes it. It is what stands between `song.proto` and an accidental wire break
-  once `core` depends on it.
+- **CI has never run.** `.github/workflows/checks.yml` exists as of `89aead1` and every
+  command in it is verified from a clean clone, but nothing is pushed, so GitHub has not
+  executed it once. `setup-node` resolving `"25"`, the cache action and the `GITHUB_BASE_REF`
+  substitution are unproven until the first push.
 
 ## Open — not ours to decide
 
