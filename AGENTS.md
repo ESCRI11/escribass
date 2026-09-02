@@ -39,6 +39,24 @@ cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 cd schema && uv run python -m unittest discover -s tests
 ```
 
+## Working by pull request
+
+`main` is never committed to directly (CLAUDE.md, Working style). One branch and one PR per
+milestone step.
+
+```
+git switch -c m0.2-validator          # <milestone>-<step>
+# ... work, and run the four checks above locally
+git push -u origin m0.2-validator
+gh pr create --fill
+gh pr checks --watch
+gh pr merge --squash --delete-branch
+```
+
+`.github/workflows/checks.yml` runs the four checks on every push and PR. It additionally
+runs `buf breaking` against the PR's base branch — that check exists only on pull requests,
+because comparing a branch against itself proves nothing.
+
 ## Rules that cross directories
 
 | Rule | Set by |
