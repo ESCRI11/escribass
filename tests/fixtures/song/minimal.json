@@ -1,5 +1,5 @@
 {
-  "id": "01K4F2S000",
+  "id": "01M1FPMP00SNG0000000000001",
   "provenance": {
     "author": "AUTHOR_HUMAN",
     "created_at": "2026-09-02T00:00:00+00:00"
@@ -8,8 +8,8 @@
   "schema_version": 1,
   "tempo_map": {
     "events": {
-      "01K4F2M001": {
-        "id": "01K4F2M001",
+      "01M1FPMP00TEMP00000000000E": {
+        "id": "01M1FPMP00TEMP00000000000E",
         "tick": 0,
         "bpm": 92.0
       }
@@ -17,8 +17,8 @@
   },
   "time_signature_map": {
     "events": {
-      "01K4F2M002": {
-        "id": "01K4F2M002",
+      "01M1FPMP00TMESG0000000000F": {
+        "id": "01M1FPMP00TMESG0000000000F",
         "tick": 0,
         "numerator": 4,
         "denominator": 4
@@ -26,8 +26,8 @@
     }
   },
   "sections": {
-    "01K4F2C003": {
-      "id": "01K4F2C003",
+    "01M1FPMP00SECTCHRS00000009": {
+      "id": "01M1FPMP00SECTCHRS00000009",
       "provenance": {
         "author": "AUTHOR_MODEL",
         "model_id": "anthropic/claude-opus-5",
@@ -42,8 +42,8 @@
   },
   "markers": {},
   "tracks": {
-    "01K4F2T001": {
-      "id": "01K4F2T001",
+    "01M1FPMP00TRACKBASS0000002": {
+      "id": "01M1FPMP00TRACKBASS0000002",
       "provenance": {
         "author": "AUTHOR_HUMAN",
         "created_at": "2026-09-02T00:00:00+00:00"
@@ -53,7 +53,7 @@
       "kind": "TRACK_KIND_INSTRUMENT",
       "index": 0,
       "instrument": {
-        "id": "01K4F2A000",
+        "id": "01M1FPMP00NSTSBBASS0000004",
         "provenance": {
           "author": "AUTHOR_MODEL",
           "model_id": "anthropic/claude-opus-5",
@@ -72,8 +72,8 @@
         }
       },
       "fx_chain": {
-        "01K4F2E001": {
-          "id": "01K4F2E001",
+        "01M1FPMP00FXSRGE0000000005": {
+          "id": "01M1FPMP00FXSRGE0000000005",
           "provenance": {
             "author": "AUTHOR_HUMAN",
             "created_at": "2026-09-02T00:00:00+00:00"
@@ -102,8 +102,8 @@
       },
       "allow_overlap": false
     },
-    "01K4F2T002": {
-      "id": "01K4F2T002",
+    "01M1FPMP00TRACKMASTER00003": {
+      "id": "01M1FPMP00TRACKMASTER00003",
       "provenance": {
         "author": "AUTHOR_HUMAN",
         "created_at": "2026-09-02T00:00:00+00:00"
@@ -127,8 +127,8 @@
     }
   },
   "clips": {
-    "01K4F2QN8B": {
-      "id": "01K4F2QN8B",
+    "01M1FPMP00CPCHRS0000000006": {
+      "id": "01M1FPMP00CPCHRS0000000006",
       "provenance": {
         "author": "AUTHOR_MODEL",
         "model_id": "anthropic/claude-opus-5",
@@ -136,29 +136,13 @@
         "created_at": "2026-09-02T00:00:00+00:00"
       },
       "version": 2,
-      "track_id": "01K4F2T001",
+      "track_id": "01M1FPMP00TRACKBASS0000002",
       "start_tick": 61440,
       "length_ticks": 7680,
       "note_clip": {
         "notes": {
-          "01K4F2N001": {
-            "id": "01K4F2N001",
-            "provenance": {
-              "author": "AUTHOR_MODEL",
-              "model_id": "anthropic/claude-opus-5",
-              "tool_call_id": "call_01H",
-              "created_at": "2026-09-02T00:00:00+00:00"
-            },
-            "version": 1,
-            "pitch": 43,
-            "microtonal_cents": 0.0,
-            "start_tick": 0,
-            "length_ticks": 480,
-            "velocity": 104,
-            "expression": {}
-          },
-          "01K4F2N002": {
-            "id": "01K4F2N002",
+          "01M1FPMP00NTED200000000008": {
+            "id": "01M1FPMP00NTED200000000008",
             "provenance": {
               "author": "AUTHOR_MODEL",
               "model_id": "anthropic/claude-opus-5",
@@ -174,32 +158,48 @@
             "expression": {
               "timbre": 0.62
             }
+          },
+          "01M1FPMP00NTEG100000000007": {
+            "id": "01M1FPMP00NTEG100000000007",
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "model_id": "anthropic/claude-opus-5",
+              "tool_call_id": "call_01H",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "version": 1,
+            "pitch": 43,
+            "microtonal_cents": 0.0,
+            "start_tick": 0,
+            "length_ticks": 480,
+            "velocity": 104,
+            "expression": {}
           }
         }
       }
     }
   },
   "automation": {
-    "01K4F2U001": {
-      "id": "01K4F2U001",
+    "01M1FPMP00ATCTFF000000000A": {
+      "id": "01M1FPMP00ATCTFF000000000A",
       "provenance": {
         "author": "AUTHOR_HUMAN",
         "created_at": "2026-09-02T00:00:00+00:00"
       },
       "version": 1,
       "target": {
-        "device_id": "01K4F2A000",
+        "device_id": "01M1FPMP00NSTSBBASS0000004",
         "param": "cutoff"
       },
       "points": {
-        "01K4F2P001": {
-          "id": "01K4F2P001",
+        "01M1FPMP00ATPT00000000000B": {
+          "id": "01M1FPMP00ATPT00000000000B",
           "tick": 61440,
           "value": 0.2,
           "curve": "CURVE_LINEAR"
         },
-        "01K4F2P002": {
-          "id": "01K4F2P002",
+        "01M1FPMP00ATPT00000000000C": {
+          "id": "01M1FPMP00ATPT00000000000C",
           "tick": 69120,
           "value": 0.8,
           "curve": "CURVE_HOLD"
@@ -208,8 +208,8 @@
     }
   },
   "generators": {
-    "01K4F2G001": {
-      "id": "01K4F2G001",
+    "01M1FPMP00GENCHRS00000000D": {
+      "id": "01M1FPMP00GENCHRS00000000D",
       "provenance": {
         "author": "AUTHOR_MODEL",
         "model_id": "anthropic/claude-opus-5",
@@ -222,7 +222,7 @@
       "seed": "9007199254740993",
       "toolchain_version": "0.4.1",
       "params": {},
-      "clip_id": "01K4F2QN8B"
+      "clip_id": "01M1FPMP00CPCHRS0000000006"
     }
   },
   "render_target": {

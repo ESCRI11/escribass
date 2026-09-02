@@ -15,8 +15,8 @@ stale.
 | M0.1 | `schema/` restructured; AGENTS.md files | done | `5fe160c` |
 | — | CI running the four checks; §13 scoped to source directories | done | `89aead1` |
 | M0.2 | `core/`: canonical writer, non-finite rejection | done | `HEAD` |
-| M0.2 | `core/`: validator | **next** | — |
-| M0.2 | `core/`: patch log DAG, refs, `.escri` project store | not started | — |
+| M0.2 | `core/`: validator | done | `HEAD` |
+| M0.2 | `core/`: patch log DAG, refs, `.escri` project store | **next** | — |
 | M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 

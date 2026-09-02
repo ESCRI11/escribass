@@ -5,5 +5,7 @@
 //! `escribass-schema` and are never redefined here (docs/specs.md §4.1).
 
 pub mod canonical;
+pub mod validate;
 
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
+pub use validate::{validate, Violation};

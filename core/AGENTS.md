@@ -10,8 +10,9 @@ The schema itself: `/schema/AGENTS.md`.
 |---|---|---|
 | `src/canonical.rs` | Canonical JSON persistence: `to_canonical_json`, `from_canonical_json`, `CanonicalError`. | done |
 | `tests/canonical.rs` | Fixed-point, idempotence, non-finite rejection, seeded double round-trip, key order. Reads `/tests/fixtures/song/minimal.json`. | done |
-| validator | §4.4 plus the rules in ADR 0002 Consequences | M0.2, next |
-| patch log, `refs.json`, `.escri` project store | ADR 0001 §1–§2; specs §10 | M0.2 |
+| `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
+| `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
+| patch log, `refs.json`, `.escri` project store | ADR 0001 §1–§2; specs §10 | M0.2, next |
 | id source and clock, both injectable | ADR 0001 §5; ADR 0002 §4 | M0.2, with the first mutation |
 
 ## Commands
@@ -36,7 +37,13 @@ cargo test -p escribass-core
 ## Adding things
 
 - **A rule to the validator:** it belongs in ADR 0002 Consequences first if it is implied by
-  the schema shape, or §4.4 if it is architectural. Test it against a song built in-crate.
+  the schema shape, or §4.4 if it is architectural. Add a `check_*` in `src/validate.rs` and a
+  test in `tests/validate.rs` that breaks the fixture in exactly one way. `rule` ids are a
+  stable API — tests and the AI orchestrator match on them, so they do not change with wording.
+- **Two limits are structural, not oversights.** A `DeviceRef` is checked as well-formed but
+  not resolved against `lock.json` (needs the project store); a `ParamRef` is checked to name a
+  device in this song but not a real parameter of it (needs the plugin manifest, M1). Both are
+  marked in the code.
 - **A normalisation:** decide where the value *enters* before writing code. The writer is not
   the default answer — see the Rules row above and ADR 0002 §4.
 - **A test:** `tests/*.rs`. Anything asserting byte-level output reads the shared fixture
