@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Enforces the seven rules of https://chris.beams.io/posts/git-commit/ on every commit
+# message. Rules 1-4 and 6 are mechanical (blank line, length, capitalisation, no
+# trailing period, wrap) and are hard failures. Rule 5 (imperative mood) cannot be
+# checked without parsing English, so this only rejects the obvious cases — a first
+# word ending in "ed"/"ing", or a short list of common offenders — never anything
+# subtler. Rule 7 (what/why vs how) is a content judgement, not a syntactic property;
+# it is not enforced here at all rather than faked with a check that cannot tell "why"
+# from "how".
+#
+# Thresholds were picked against this repo's own history (git log --format='%s' | awk
+# '{print length}' | sort -n), not the article's numbers in isolation: hard-failing at
+# the article's 50-char rule of thumb would reject 5 of this repo's 10 commits, and a
+# hook that rejects most of real history just trains people to reach for --no-verify.
+# So 50 is a warning, and the article's own stated "absolute maximum" of 72 is the hard
+# failure. That still flags one existing subject (73 chars, one over) — reported
+# honestly rather than raising the bar to make history pass.
+#
+# Rule 6's 72-char wrap does not fire on a line that cannot be wrapped: a
+# "Key: value" trailer (Co-Authored-By:, Claude-Session:, ...), a URL, or a long
+# unbroken token such as a file path or git hash.
+#
+# Never checked at all: merge commits, revert commits, fixup!/squash! subjects, or an
+# empty message (git rejects that itself before this hook can matter).
+#
+# `git commit --no-verify` bypasses this, as always.
+set -euo pipefail
+
+msg_file="$1"
+
+# commit-msg runs before git strips comment lines and the --verbose diff below the
+# scissors line, so do that ourselves; neither is part of the message.
+lines=()
+in_scissors=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" == "# ------------------------ >8 ------------------------" ]]; then
+    in_scissors=1
+  fi
+  if (( in_scissors )); then
+    continue
+  fi
+  if [[ "$line" == '#'* ]]; then
+    continue
+  fi
+  lines+=("$line")
+done < "$msg_file"
+
+if [[ ${#lines[@]} -eq 0 ]]; then
+  # Empty message: git's own "Aborting commit due to empty commit message" handles
+  # this, or --allow-empty-message was used on purpose. Nothing for us to check.
+  exit 0
+fi
+
+subject="${lines[0]}"
+
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup!"* | "squash!"*)
+    exit 0
+    ;;
+esac
+
+fail=0
+
+# --- Rule 2 (subject length) -------------------------------------------------------
+subj_len=${#subject}
+if [[ $subj_len -gt 72 ]]; then
+  fail=1
+  cat >&2 <<MSG
+Rule 2 (Beams #2) — subject line is $subj_len characters; 72 is the absolute max:
+  $subject
+
+Say what changed in 50 characters or less if you can, 72 at the outside. Move detail
+into the body.
+MSG
+elif [[ $subj_len -gt 50 ]]; then
+  cat >&2 <<MSG
+warning: Rule 2 (Beams #2) — subject line is $subj_len characters, over the 50-char
+rule of thumb (not a hard failure until 72):
+  $subject
+MSG
+fi
+
+# --- Rule 1 (blank line between subject and body) ----------------------------------
+if [[ ${#lines[@]} -gt 1 ]]; then
+  second="${lines[1]}"
+  if [[ -n "$second" ]]; then
+    fail=1
+    cat >&2 <<MSG
+Rule 1 (Beams #1) — no blank line between subject and body:
+  $subject
+  $second
+
+Put a blank line right after the subject. git log --oneline, shortlog and rebase -i
+all treat line 1 as the title; without the blank line the body runs into it.
+MSG
+  fi
+fi
+
+# --- Rule 3 (capitalised subject) ---------------------------------------------------
+first_char="${subject:0:1}"
+if [[ "$first_char" =~ [a-z] ]]; then
+  fail=1
+  cat >&2 <<MSG
+Rule 3 (Beams #3) — subject line does not start with a capital letter:
+  $subject
+
+Capitalise the first word.
+MSG
+fi
+
+# --- Rule 4 (no trailing period) -----------------------------------------------------
+if [[ "$subject" == *. ]]; then
+  fail=1
+  cat >&2 <<MSG
+Rule 4 (Beams #4) — subject line ends with a period:
+  $subject
+
+Drop it; git never adds one and it only costs a character.
+MSG
+fi
+
+# --- Rule 5 (imperative mood, obvious cases only) -----------------------------------
+first_word="${subject%% *}"
+first_word="${first_word%:}"
+first_word_lc="$(printf '%s' "$first_word" | tr '[:upper:]' '[:lower:]')"
+imperative_violation=0
+case "$first_word_lc" in
+  added | fixed | updated | changes | adds)
+    imperative_violation=1
+    ;;
+esac
+if [[ "$first_word_lc" == *ed ]]; then
+  imperative_violation=1
+fi
+if [[ "$first_word_lc" == *ing ]]; then
+  imperative_violation=1
+fi
+if [[ $imperative_violation -eq 1 ]]; then
+  fail=1
+  cat >&2 <<MSG
+Rule 5 (Beams #5) — subject line is probably not in the imperative mood:
+  $subject
+
+Write it as a command: "Fix the parser", not "Fixed the parser" or "Fixes the parser".
+Test: it should complete "If applied, this commit will ___".
+MSG
+fi
+
+# --- Rule 6 (body wrapped at 72) -----------------------------------------------------
+# A line is exempt if it cannot be wrapped: a "Key: value" trailer, a URL, or a long
+# unbroken token (file path, git hash, ...) that no amount of rewrapping would shorten.
+is_exempt_line() {
+  local l="$1" word
+  if [[ "$l" =~ ^[A-Za-z][A-Za-z0-9-]*:[[:space:]] ]]; then
+    return 0
+  fi
+  if [[ "$l" == *"://"* ]]; then
+    return 0
+  fi
+  for word in $l; do
+    if [[ ${#word} -ge 25 ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+for ((i = 1; i < ${#lines[@]}; i++)); do
+  body_line="${lines[$i]}"
+  if [[ -z "$body_line" ]]; then
+    continue
+  fi
+  if [[ ${#body_line} -le 72 ]]; then
+    continue
+  fi
+  if is_exempt_line "$body_line"; then
+    continue
+  fi
+  fail=1
+  cat >&2 <<MSG
+Rule 6 (Beams #6) — body line is ${#body_line} characters, over the 72-char wrap:
+  $body_line
+
+Wrap body text by hand at ~72 columns. Lines with a URL, a file path/hash, or a
+"Key: value" trailer (Co-Authored-By:, Claude-Session:, ...) are exempt.
+MSG
+done
+
+if [[ $fail -eq 1 ]]; then
+  cat >&2 <<'MSG'
+
+git commit --no-verify bypasses this if a rule genuinely does not apply.
+MSG
+  exit 1
+fi
+
+exit 0
