@@ -53,9 +53,12 @@ gh pr checks --watch
 gh pr merge --squash --delete-branch
 ```
 
-A pre-push hook in `.githooks/` refuses a direct push to `main`. It is client-side: GitHub
-branch protection and rulesets both require Pro on a private repository, so the server will
-accept a direct push and this is what stops one being sent. A fresh clone must enable it:
+Two hooks live in `.githooks/`. `pre-push` refuses a direct push to `main`: it is
+client-side, because GitHub branch protection and rulesets both require Pro on a private
+repository, so the server will accept a direct push and this is what stops one being sent.
+`commit-msg` enforces the seven rules of https://chris.beams.io/posts/git-commit/ against
+each commit message. Both are client-side; `--no-verify` bypasses either deliberately. A
+fresh clone must enable them:
 
 ```
 git config core.hooksPath .githooks
