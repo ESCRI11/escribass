@@ -177,6 +177,10 @@ Before merging any change, confirm:
 /docs            this file, ADRs
 ```
 
+This list governs **source** directories. Tooling and configuration at the repository root —
+`.github/`, `.gitignore`, `rust-toolchain.toml`, `buf.yaml`, the workspace `Cargo.toml` — is
+not in its scope and needs no ADR.
+
 ## 14. Agent working rules [MUST]
 
 1. Read §2, §4, §5, §11 before any task. Do not modify the schema without an ADR in `/docs/adr/`.

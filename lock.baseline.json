@@ -155,5 +155,21 @@
         "version": "2.13.5"
       }
     }
+  },
+  "ci": {
+    "_note": "GitHub Actions used by .github/workflows/. Build-time only; pinned by major version per the registry-package rule in docs/specs.md \u00a717.",
+    "actions_checkout": {
+      "version": "v4"
+    },
+    "actions_setup_node": {
+      "version": "v4"
+    },
+    "actions_cache": {
+      "version": "v4"
+    },
+    "node": {
+      "version": "25",
+      "note": "major pin; lock.baseline.json schema.typescript.node records the local 25.6.1"
+    }
   }
 }
