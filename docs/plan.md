@@ -16,6 +16,7 @@ stale.
 | — | CI running the four checks; §13 scoped to source directories | done | `89aead1` |
 | M0.2 | `core/`: canonical writer, non-finite rejection | done | `HEAD` |
 | M0.2 | `core/`: validator | done | `HEAD` |
+| M0.2 | `core/`: injectable id source and clock | done | `HEAD` |
 | M0.2 | `core/`: patch log DAG, refs, `.escri` project store | **next** | — |
 | M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
@@ -34,9 +35,9 @@ Scope is fixed by decisions already made, not open for redesign:
   tempo map non-empty with an event at tick 0; all doubles finite. Also: ULID keys
   canonicalised to uppercase Crockford, and duplicate JSON object keys rejected rather than
   last-wins.
-- **Injectable id source** (ADR 0001 §5) and **injectable clock** (ADR 0002 Consequences).
-  Both exist so §11 holds inside `core` and so M0.4 can compare byte for byte with no
-  normalisation step.
+- ~~**Injectable id source** and **clock**~~ — done. `UlidSource` takes entropy from `std`'s
+  `RandomState` rather than a new dependency; ULID's tail is a uniqueness requirement, not a
+  secrecy one.
 - **Canonical writer** (ADR 0002 §4) — `serde_json` with `float_roundtrip`; rejects non-finite
   doubles; normalises `-0.0`; normalises message-field presence; timestamps `Z`-suffixed at
   millisecond precision.
