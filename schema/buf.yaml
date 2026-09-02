@@ -1,0 +1,15 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # docs/specs.md §13 fixes these files at schema/*.proto, not schema/escribass/song/v1/.
+    # Both rules assume a directory tree mirroring package names; the spec names the flat
+    # layout, and ADR 0002 §6 requires song and history to be separate packages.
+    - PACKAGE_DIRECTORY_MATCH
+    - DIRECTORY_SAME_PACKAGE
+breaking:
+  use:
+    - FILE

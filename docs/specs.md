@@ -145,7 +145,7 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
 
 ## 10. Persistence and interoperability
 
-- Project directory: `song.json` (canonical model), `patches/` (append-only DAG of patch entries), `refs.json` (branch pointers and `HEAD`), `assets/` (content-addressed samples, compiled plugins, models), `lock.json` (pinned versions of every toolchain, plugin, and model; the platform baseline is in §17 and `lock.baseline.json`).
+- Project directory, named `<name>.escri/` and presented by the OS as a single item where the platform supports package bundles: `song.json` (canonical model), `patches/` (append-only DAG of patch entries), `refs.json` (branch pointers and `HEAD`), `assets/` (content-addressed samples, compiled plugins, models), `lock.json` (pinned versions of every toolchain, plugin, and model; the platform baseline is in §17 and `lock.baseline.json`).
 - Import/export: **DAWproject** (lossless for layer 2 + plugin references), MIDI (layer 2 notes), WAV/stems.
 - Assets referenced by hash; missing assets are reported by the validator, never silently substituted.
 
@@ -203,6 +203,10 @@ Before merging any change, confirm:
 | Song history | Patch DAG + named refs; git as interop only | Branching falls out of the existing patch log; git's line merge is wrong for a structured model (ADR 0001) | 2026-09-02 |
 | Entity collections | id-keyed maps, not `repeated` fields | RFC 6902 paths into arrays break under concurrent inserts (ADR 0001) | 2026-09-02 |
 | Entity id generation | Injectable id source, seeded in tests | Reconciles §4.3 ULIDs with §11's no-unseeded-randomness rule (ADR 0001) | 2026-09-02 |
+| Project file extension | `.escri` on the project directory; contents stay `.json` | Bundle gives file association and identity; standard extensions inside keep §2.6 diffability and editor/LLM legibility | 2026-09-02 |
+| Tick integer width | `int32` (960 PPQ, ~559k bars) | proto3 JSON encodes 64-bit ints as strings, which would break §2.6 readable/diffable text (ADR 0002) | 2026-09-02 |
+| Canonical JSON form | snake_case, defaults emitted, map keys sorted, 2-space | Always-present fields make RFC 6902 `replace`/`test` well-defined (ADR 0002) | 2026-09-02 |
+| `FormRule` | Deferred to M4 | Least-specified entity in §4 and nothing consumes it before the generative compiler; additive to add (ADR 0002) | 2026-09-02 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process); minimum supported OS versions; symbolic model choice for v1 melody/drum generation.
 

@@ -1,0 +1,16 @@
+[package]
+name = "escribass-schema"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Generated Rust types for the escribass song model"
+
+[dependencies]
+prost = "0.14"
+pbjson = "0.8"
+pbjson-types = "0.8"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde = "1"
+serde_json = "1"

@@ -26,21 +26,22 @@ Retrofitting it after M0.1 would be a breaking schema change.
 
 ### 1. The patch log is a DAG, not a list
 
-Every patch entry gains a `parent`: the ULID of the entry it was applied to, null for the
-root. The log stays append-only (§10 unchanged); entries are never rewritten or deleted.
+Every patch entry gains `parents`: the ULIDs of the entries it was applied to — empty at the
+root, one normally, two for a merge (a repeated field rather than a scalar, so decision 4
+below needs no second shape). The log stays append-only (§10 unchanged); entries are never rewritten or deleted.
 
 ```
 patches/01K4F31M2T.json
 {
   "id":     "01K4F31M2T",
-  "parent": "01K4F2QN8B",
+  "parents": ["01K4F2QN8B"],
   "tool":   "set_notes",
   "ops":    [ { "op": "replace", "path": "/clips/…/notes/…/pitch", "value": 43 } ],
   "provenance": { "author": "model", "model_id": "…", "tool_call_id": "…", "created_at": "…" }
 }
 ```
 
-A merge entry (§4) names two parents; nothing else about the format changes.
+A merge entry (§4) carries two entries in `parents`; nothing else about the format changes.
 
 ### 2. Branches are named refs in a single `refs.json`
 
@@ -191,7 +192,7 @@ with DAWproject.
 **Schema (M0.1).** Collections become maps. Every entity keeps its ULID. Order fields
 (`start_tick`, effect chain `index`) become load-bearing rather than incidental.
 
-**Core (M0.2).** Patch entries gain `parent`. A `refs.json` with `head` and `refs`. An
+**Core (M0.2).** Patch entries gain `parents`. A `refs.json` with `head` and `refs`. An
 injectable id source on the session constructor.
 
 Materialise-and-diff is the single mechanism behind both undo and branch switching: replay

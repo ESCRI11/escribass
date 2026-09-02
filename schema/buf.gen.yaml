@@ -1,0 +1,35 @@
+version: v2
+inputs:
+  - directory: .
+plugins:
+  # Rust: prost types, then the pbjson serde impls that produce the canonical JSON of
+  # ADR 0002 §4 — proto field names, defaults emitted, map keys sorted (BTreeMap).
+  - local: protoc-gen-prost
+    out: gen/rust/src
+    opt:
+      - btree_map=.
+      - compile_well_known_types
+      - extern_path=.google.protobuf=::pbjson_types
+  - local: protoc-gen-prost-serde
+    out: gen/rust/src
+    opt:
+      - btree_map=.
+      - emit_fields
+      - preserve_proto_field_names
+      - extern_path=.google.protobuf=::pbjson_types
+  # TypeScript
+  - local: protoc-gen-es
+    out: gen/ts
+    opt:
+      - target=ts
+      - json_types=true
+      # NodeNext resolution requires explicit extensions on relative imports.
+      - import_extension=js
+  # Python: pydantic dataclasses, validated on construction
+  # Output lands inside a named root package: the generated modules reach the shared
+  # message pool with `from ....message_pool import ...`, which needs a package above
+  # `escribass`. Import as `escribass_schema.escribass.song.v1`.
+  - local: [uv, run, protoc-gen-python_betterproto2]
+    out: gen/python/escribass_schema
+    opt:
+      - pydantic_dataclasses

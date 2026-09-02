@@ -1,0 +1,352 @@
+// The song model. See docs/specs.md §4 for the normative description and
+// docs/adr/0002-song-proto-v1.md for the choices this file makes that §4 leaves open.
+//
+// This file is the only representation of song state (CLAUDE.md #1). Model types are
+// generated from it for every language; none are written by hand.
+//
+// Time base is integer ticks at a fixed 960 PPQ (§4.2). Tick fields are int32 because the
+// proto3 JSON mapping encodes 64-bit integers as strings, which the readable, diffable
+// project file of §2.6 cannot afford; int32 reaches ~559,000 bars of 4/4 (ADR 0002 §1).
+//
+// Every collection of entities is a map keyed by the entity's own id, never a repeated
+// field: RFC 6902 paths into an array are positional and break under concurrent inserts on
+// branches (ADR 0001 §3). Musical order is derived from start_tick and index, never from
+// storage position.
+
+syntax = "proto3";
+
+package escribass.song.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ---------------------------------------------------------------------------
+// Cross-cutting (§4.3)
+// ---------------------------------------------------------------------------
+
+enum Author {
+  AUTHOR_UNSPECIFIED = 0;
+  AUTHOR_HUMAN = 1;
+  AUTHOR_MODEL = 2;
+}
+
+// Who made an entity and why. Present on every entity except AutomationPoint, whose
+// author is its parent Automation's.
+message Provenance {
+  Author author = 1;
+  optional string model_id = 2;
+  optional string prompt_id = 3;
+  optional string tool_call_id = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Root
+// ---------------------------------------------------------------------------
+
+message Song {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  // Version of this schema, not of docs/specs.md. 960 PPQ is fixed by schema_version 1.
+  uint32 schema_version = 4;
+
+  TempoMap tempo_map = 5;
+  TimeSignatureMap time_signature_map = 6;
+
+  map<string, Section> sections = 7;
+  map<string, Marker> markers = 8;
+  map<string, Track> tracks = 9;
+  map<string, Clip> clips = 10;
+  map<string, Automation> automation = 11;
+  map<string, Generator> generators = 12;
+
+  RenderTarget render_target = 13;
+
+  // FormRule (§4.2, layer 1) is deferred to M4, when the generative compiler gives it a
+  // consumer. Adding it is additive: a new map on this message. ADR 0002 §7.
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 — time base (§4.2)
+// ---------------------------------------------------------------------------
+
+// Tempo and time-signature events are repeated, not mapped: they have no identity of their
+// own, so ADR 0001's map rule does not apply.
+message TempoEvent {
+  int32 tick = 1;
+  double bpm = 2;
+}
+
+message TempoMap {
+  repeated TempoEvent events = 1;
+}
+
+message TimeSignatureEvent {
+  int32 tick = 1;
+  uint32 numerator = 2;
+  uint32 denominator = 3;
+}
+
+message TimeSignatureMap {
+  repeated TimeSignatureEvent events = 1;
+}
+
+message Section {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  string name = 4;
+  int32 start_tick = 5;
+  int32 end_tick = 6;
+}
+
+message Marker {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  string name = 4;
+  int32 tick = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 — tracks
+// ---------------------------------------------------------------------------
+
+enum TrackKind {
+  TRACK_KIND_UNSPECIFIED = 0;
+  TRACK_KIND_INSTRUMENT = 1;
+  TRACK_KIND_AUDIO = 2;
+  TRACK_KIND_BUS = 3;
+  TRACK_KIND_MASTER = 4;
+}
+
+message Mix {
+  double gain_db = 1;
+  double pan = 2; // -1.0 hard left .. 1.0 hard right
+  bool mute = 3;
+  bool solo = 4;
+}
+
+message Routing {
+  // Absent means the master track.
+  optional string output_track_id = 1;
+  // Key: destination bus track id. Value: send level in dB.
+  map<string, double> sends = 2;
+  // Key: an effect id on this track. Value: the track id feeding its sidechain.
+  map<string, string> sidechains = 3;
+}
+
+message Track {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  string name = 4;
+  TrackKind kind = 5;
+  // Display and mixer order (§4.2 has none; wireframe plates 1 and 4 show one). Unique.
+  uint32 index = 6;
+
+  // Unset on audio, bus and master tracks.
+  Instrument instrument = 7;
+  map<string, Effect> fx_chain = 8;
+
+  Routing routing = 9;
+  Mix mix = 10;
+
+  // §4.4: clips on this track may overlap only if this is set.
+  bool allow_overlap = 11;
+}
+
+// ---------------------------------------------------------------------------
+// Layer 3 — sound (§4.2)
+// ---------------------------------------------------------------------------
+
+message PluginRef {
+  string plugin_id = 1;
+  string version = 2;
+}
+
+// Content hash of a Cmajor or Faust source in assets/ (§10).
+message SourceRef {
+  string source_hash = 1;
+}
+
+message ModelRef {
+  string model_hash = 1;
+}
+
+// The SFZ file is the sample map (§4.2 SampleMap, reduced per ADR 0002 §8).
+message SamplerRef {
+  string sfz_hash = 1;
+}
+
+// The set case is the device kind; there is no separate kind enum to disagree with it.
+message DeviceRef {
+  oneof kind {
+    PluginRef plugin = 1;
+    SourceRef cmajor = 2;
+    SourceRef faust = 3;
+    ModelRef neural = 4;
+    SamplerRef sampler = 5;
+  }
+}
+
+message Instrument {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  DeviceRef ref = 4;
+  bytes state = 5;
+  map<string, double> params = 6;
+}
+
+message Effect {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  DeviceRef ref = 4;
+  bytes state = 5;
+  map<string, double> params = 6;
+
+  // Position in the containing track's chain. Unique within that chain (ADR 0001 §3).
+  uint32 index = 7;
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 — clips and notes
+// ---------------------------------------------------------------------------
+
+message Note {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  int32 pitch = 4; // MIDI 0-127
+  double microtonal_cents = 5;
+  int32 start_tick = 6; // relative to the containing clip
+  int32 length_ticks = 7;
+  int32 velocity = 8; // 0-127
+
+  // Per-note expression (§4.2). Key: parameter name, e.g. "timbre".
+  map<string, double> expression = 9;
+}
+
+message NoteClip {
+  map<string, Note> notes = 1;
+}
+
+message AudioClip {
+  string asset_hash = 1;
+}
+
+message Clip {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  string track_id = 4;
+  int32 start_tick = 5;
+  int32 length_ticks = 6;
+
+  // Presence means looping: repeat the first loop_length_ticks of content to fill
+  // length_ticks.
+  optional int32 loop_length_ticks = 7;
+
+  oneof content {
+    NoteClip note_clip = 8;
+    AudioClip audio_clip = 9;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 — automation
+// ---------------------------------------------------------------------------
+
+// Shape of the segment from this point to the next. Limited to two shapes with defined
+// formulas: any other interpolation is renderer-specific and would put §11's bit-exactness
+// at the renderer's mercy (ADR 0002 §8).
+enum Curve {
+  CURVE_UNSPECIFIED = 0;
+  CURVE_LINEAR = 1;
+  CURVE_HOLD = 2;
+}
+
+// device_id is an Instrument or Effect id. Ids are globally unique, so no track id is
+// needed to locate the device.
+message ParamRef {
+  string device_id = 1;
+  string param = 2;
+}
+
+// Keyed for patch-path stability only, so it carries an id but no provenance
+// (ADR 0002 §2).
+message AutomationPoint {
+  string id = 1;
+  int32 tick = 2;
+  double value = 3;
+  Curve curve = 4;
+}
+
+message Automation {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  ParamRef target = 4;
+  map<string, AutomationPoint> points = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Layer 1 — generative (§4.2, optional layer)
+// ---------------------------------------------------------------------------
+
+enum GeneratorKind {
+  GENERATOR_KIND_UNSPECIFIED = 0;
+  GENERATOR_KIND_PYTHON = 1;
+  // Strudel is deferred (docs/specs.md §15).
+}
+
+message Generator {
+  string id = 1;
+  Provenance provenance = 2;
+  uint32 version = 3;
+
+  GeneratorKind kind = 4;
+  string source = 5;
+
+  // §4.4 requires a non-null seed. A no-presence field always has one; 0 is valid.
+  uint64 seed = 6;
+  string toolchain_version = 7;
+
+  oneof target {
+    string track_id = 8;
+    string clip_id = 9;
+  }
+
+  map<string, string> params = 10;
+
+  // Compiled output is the target clip's notes, carrying this generator's compile call in
+  // their provenance; §4.2's "stored alongside the source" is satisfied by layer 2 itself.
+}
+
+// ---------------------------------------------------------------------------
+// Render target (§4.2)
+// ---------------------------------------------------------------------------
+
+enum RenderKind {
+  RENDER_KIND_UNSPECIFIED = 0;
+  RENDER_KIND_MASTER = 1;
+  RENDER_KIND_STEMS = 2;
+}
+
+message RenderTarget {
+  RenderKind kind = 1;
+  uint32 sample_rate = 2;
+  uint32 bit_depth = 3;
+  bool dither = 4;
+}
