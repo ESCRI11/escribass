@@ -1,0 +1,784 @@
+<title>Escribass Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{
+  --ground:#F2F4F5; --paper:#FFFFFF; --plate:#E5EAEC;
+  --ink:#12171A; --ink2:#4A555C; --ink3:#7C888F;
+  --line:#C4CED4; --line2:#DFE5E8; --fill:#F5F7F8;
+  --accent:#0B6E75; --accent-soft:#D5EAEB;
+  --pend:#8F5400; --pend-soft:#FAEBD5;
+  --add:#1E6B39; --add-soft:#DDEEE3;
+  --del:#A32B2B; --del-soft:#F6E1E1;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --serif:"IBM Plex Serif",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1417; --paper:#151C20; --plate:#090D0F;
+    --ink:#E6EDF0; --ink2:#9AA8AF; --ink3:#6B7A82;
+    --line:#2C373D; --line2:#1E272C; --fill:#111A1E;
+    --accent:#48B7BC; --accent-soft:#0F3438;
+    --pend:#DFA34F; --pend-soft:#382A13;
+    --add:#54B87B; --add-soft:#14301E;
+    --del:#E17575; --del-soft:#331919;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1417; --paper:#151C20; --plate:#090D0F;
+  --ink:#E6EDF0; --ink2:#9AA8AF; --ink3:#6B7A82;
+  --line:#2C373D; --line2:#1E272C; --fill:#111A1E;
+  --accent:#48B7BC; --accent-soft:#0F3438;
+  --pend:#DFA34F; --pend-soft:#382A13;
+  --add:#54B87B; --add-soft:#14301E;
+  --del:#E17575; --del-soft:#331919;
+}
+
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:56px 24px 96px;display:flex;flex-direction:column;gap:56px}
+.col{max-width:68ch}
+h1,h2,h3{font-family:var(--serif);text-wrap:balance;margin:0}
+h1{font-size:34px;font-weight:600;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:600;margin-bottom:6px}
+h3{font-size:16px;font-weight:600}
+p{margin:0 0 12px;color:var(--ink2);font-family:var(--serif);font-size:15.5px}
+p:last-child{margin-bottom:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:0 0 10px}
+.lede{font-size:17px;color:var(--ink2)}
+code,.mono{font-family:var(--mono)}
+.col code{font-size:.88em;background:var(--fill);border:1px solid var(--line2);padding:1px 4px;border-radius:3px;color:var(--ink)}
+hr.rule{border:0;border-top:1px solid var(--line);margin:0}
+
+/* ---------- plate scaffold ---------- */
+.plate{margin:0;display:flex;flex-direction:column;gap:14px}
+.plate-cap{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.fig{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.cap-t{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)}
+.ref{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.stage{background:var(--plate);border:1px solid var(--line);padding:22px;overflow-x:auto}
+.notes{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:10px 26px;counter-reset:n}
+.notes li{position:relative;padding-left:26px;font-size:13.5px;color:var(--ink2);font-family:var(--serif);counter-increment:n}
+.notes li::before{content:counter(n);position:absolute;left:0;top:2px;width:17px;height:17px;border:1px solid var(--line);border-radius:50%;background:var(--paper);color:var(--ink2);font-family:var(--mono);font-size:10px;display:grid;place-items:center}
+.notes b{color:var(--ink);font-weight:600}
+.pin{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:9px;font-weight:600;vertical-align:middle;flex:none}
+
+/* ---------- window chrome ---------- */
+.win{background:var(--paper);border:1px solid var(--line);border-radius:4px;min-width:940px;font-size:12.5px;overflow:hidden}
+.win-bar{display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--fill)}
+.dots{display:flex;gap:5px}
+.dots i{width:9px;height:9px;border-radius:50%;border:1px solid var(--line);display:block}
+.win-title{font-size:12px;color:var(--ink2)}
+.win-title .mono{font-size:11px;color:var(--ink3)}
+.procs{margin-left:auto;display:flex;gap:6px}
+.proc{font-family:var(--mono);font-size:10px;padding:2px 7px;border:1px solid var(--line);border-radius:99px;color:var(--ink2);display:flex;gap:5px;align-items:center}
+.proc::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--add)}
+.win-tabs{display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--line)}
+.tab{font-size:12px;padding:8px 12px;color:var(--ink3);border-bottom:2px solid transparent;display:block}
+.tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
+.chips{margin-left:auto;display:flex;gap:6px;padding:5px 0}
+.chip{font-family:var(--mono);font-size:10px;padding:2px 7px;border:1px solid var(--line2);background:var(--fill);border-radius:3px;color:var(--ink2);white-space:nowrap}
+.chip.ac{border-color:var(--accent);color:var(--accent)}
+.chip.pd{border-color:var(--pend);color:var(--pend);background:var(--pend-soft)}
+.win-body{display:grid;grid-template-columns:190px minmax(0,1fr) 320px;min-height:400px}
+.pane{min-width:0}
+.pane+.pane{border-left:1px solid var(--line)}
+.pane-h{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid var(--line2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.win-foot{display:flex;align-items:center;gap:14px;padding:7px 12px;border-top:1px solid var(--line);background:var(--fill);font-family:var(--mono);font-size:10.5px;color:var(--ink3);flex-wrap:wrap}
+.win-foot b{color:var(--ink2);font-weight:500}
+.win-foot .sep{color:var(--line)}
+
+/* ---------- left: project tree ---------- */
+.tree{padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--ink2);display:flex;flex-direction:column;gap:3px}
+.tree .d{color:var(--ink);font-weight:500}
+.tree .i{padding-left:14px}
+.tree .i2{padding-left:26px}
+.tree .note{color:var(--ink3);font-size:10px}
+.tree .sel{background:var(--accent-soft);color:var(--ink);margin:0 -10px;padding:1px 10px 1px 24px}
+
+/* ---------- centre: timeline ---------- */
+.tl{display:grid;grid-template-columns:150px minmax(0,1fr)}
+.tl-hd{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:4px 8px;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);display:flex;align-items:center}
+.grid32{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line2)}
+.sect{grid-row:1;font-family:var(--mono);font-size:10px;padding:3px 6px;color:var(--ink2);border-left:1px solid var(--line);background:var(--fill);white-space:nowrap;overflow:hidden}
+.sect.hot{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.bars{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line2)}
+.bars span{border-left:1px solid var(--line2);font-family:var(--mono);font-size:9px;color:var(--ink3);padding:2px 0 2px 3px;min-height:16px}
+.bars span.q{border-left-color:var(--line)}
+.bars span.hot{color:var(--pend);font-weight:600;border-left-color:var(--pend)}
+.trk{display:contents}
+.trk-n{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:5px 8px;display:flex;flex-direction:column;gap:2px;min-height:38px;justify-content:center}
+.trk-n b{font-size:11.5px;font-weight:500;color:var(--ink)}
+.trk-n .src{font-family:var(--mono);font-size:9.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trk-n .mx{display:flex;gap:3px;margin-top:2px}
+.trk-n .mx i{font-family:var(--mono);font-style:normal;font-size:8.5px;border:1px solid var(--line);border-radius:2px;padding:0 3px;color:var(--ink3)}
+.lane{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line2);min-height:38px;background:repeating-linear-gradient(to right,transparent 0,transparent calc(12.5% - 1px),var(--line2) calc(12.5% - 1px),var(--line2) 12.5%)}
+.clip{margin:4px 1px;border:1px solid var(--line);background:var(--fill);border-radius:2px;font-family:var(--mono);font-size:9.5px;color:var(--ink2);padding:2px 5px;overflow:hidden;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.clip.ai{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.clip.pending{border-color:var(--pend);border-style:dashed;background:var(--pend-soft);color:var(--pend);font-weight:600}
+.clip .dots-m{letter-spacing:1px;opacity:.55}
+.auto{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line2);min-height:26px;position:relative;background:var(--fill)}
+.auto-l{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:0 8px;display:flex;align-items:center;font-family:var(--mono);font-size:9.5px;color:var(--ink3);background:var(--fill)}
+.pt{align-self:center;height:5px;width:5px;border-radius:50%;background:var(--ink3);justify-self:center}
+.playhead{grid-column:17;border-left:1.5px solid var(--pend)}
+
+/* ---------- right: AI panel ---------- */
+.ai{display:flex;flex-direction:column;height:100%}
+.msgs{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
+.msg{font-size:11.5px;border:1px solid var(--line2);border-radius:4px;padding:7px 9px;background:var(--fill);color:var(--ink2)}
+.msg .who{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:3px}
+.msg.you{background:var(--paper)}
+.msg.bot{border-color:var(--accent);background:var(--paper)}
+.msg.bot .who{color:var(--accent)}
+.call{font-family:var(--mono);font-size:10px;background:var(--fill);border:1px solid var(--line2);border-radius:3px;padding:5px 6px;margin-top:6px;color:var(--ink2);white-space:pre-wrap;word-break:break-word}
+.verdict{font-family:var(--mono);font-size:10px;margin-top:5px;color:var(--add)}
+.verdict.bad{color:var(--del)}
+.patchbox{border-top:1px solid var(--line);background:var(--pend-soft)}
+.patchbox .pb-h{display:flex;align-items:center;gap:7px;padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--pend);font-weight:600;border-bottom:1px solid var(--line2)}
+.diff{font-family:var(--mono);font-size:10px;padding:7px 10px;display:flex;flex-direction:column;gap:1px;background:var(--paper);border-bottom:1px solid var(--line2)}
+.diff div{padding:1px 4px;border-radius:2px;white-space:pre;overflow-x:auto;color:var(--ink2)}
+.diff .a{background:var(--add-soft);color:var(--add)}
+.diff .r{background:var(--del-soft);color:var(--del)}
+.acts{display:flex;gap:6px;padding:8px 10px;align-items:center}
+.btn{font-family:var(--sans);font-size:11px;padding:4px 12px;border:1px solid var(--line);border-radius:3px;background:var(--paper);color:var(--ink2);display:block}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:500}
+.acts .hint{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+.prompt{border-top:1px solid var(--line);padding:8px 10px;display:flex;gap:7px;align-items:center;background:var(--fill)}
+.prompt .field{flex:1;border:1px solid var(--line);border-radius:3px;background:var(--paper);padding:5px 8px;font-size:11px;color:var(--ink3)}
+
+/* ---------- piano roll ---------- */
+.roll{background:var(--paper);border:1px solid var(--line);border-radius:4px;min-width:900px;overflow:hidden}
+.roll-h{display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--line);background:var(--fill);flex-wrap:wrap}
+.roll-h .t{font-size:12px;color:var(--ink);font-weight:500}
+.rollgrid{display:grid;grid-template-columns:74px minmax(0,1fr)}
+.pk{border-right:1px solid var(--line);border-bottom:1px solid var(--line2);font-family:var(--mono);font-size:9.5px;color:var(--ink3);padding:0 7px;display:flex;align-items:center;justify-content:space-between;height:22px}
+.pk.blk{background:var(--fill);color:var(--ink3)}
+.pr{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line2);height:22px;background:repeating-linear-gradient(to right,transparent 0,transparent calc(6.25% - 1px),var(--line2) calc(6.25% - 1px),var(--line2) 6.25%)}
+.pr.blk{background-color:var(--fill)}
+.n{margin:3px 1px;border-radius:2px;background:var(--ink2);border:1px solid var(--ink2)}
+.n.ai{background:var(--accent);border-color:var(--accent)}
+.n.pending{background:var(--pend-soft);border:1.5px dashed var(--pend)}
+.n.gone{background:transparent;border:1.5px dashed var(--del);opacity:.75}
+.velrow{display:grid;grid-template-columns:74px minmax(0,1fr);border-top:1px solid var(--line)}
+.vel-l{border-right:1px solid var(--line);padding:5px 7px;font-family:var(--mono);font-size:9.5px;color:var(--ink3);display:flex;align-items:center}
+.vels{display:grid;grid-template-columns:repeat(32,1fr);align-items:end;height:46px;padding:4px 0}
+.vels i{background:var(--ink3);display:block;margin:0 2px;border-radius:1px 1px 0 0}
+.vels i.ai{background:var(--accent)}
+.vels i.pd{background:var(--pend)}
+.rollbars{display:grid;grid-template-columns:repeat(32,1fr);border-bottom:1px solid var(--line);background:var(--fill)}
+.rollbars span{font-family:var(--mono);font-size:9px;color:var(--ink3);border-left:1px solid var(--line2);padding:2px 0 2px 3px}
+.rollbars span.q{border-left-color:var(--line);color:var(--ink2)}
+
+/* ---------- code / mixer / history ---------- */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--paper);border:1px solid var(--line);border-radius:4px;min-width:900px;overflow:hidden}
+.two>section+section{border-left:1px solid var(--line)}
+.ed-h{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid var(--line);background:var(--fill);font-size:11.5px;color:var(--ink);font-weight:500;flex-wrap:wrap}
+.src{font-family:var(--mono);font-size:10.5px;line-height:1.75;padding:9px 0;color:var(--ink2);counter-reset:l;overflow-x:auto}
+.src div{counter-increment:l;padding:0 12px 0 44px;position:relative;white-space:pre}
+.src div::before{content:counter(l);position:absolute;left:0;width:34px;text-align:right;color:var(--ink3);opacity:.6;font-size:9.5px}
+.src .k{color:var(--accent)}
+.src .c{color:var(--ink3);font-style:italic}
+.src div.hl{background:var(--accent-soft)}
+.ed-f{border-top:1px solid var(--line);padding:7px 12px;font-family:var(--mono);font-size:10px;color:var(--ink2);background:var(--fill);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ok{color:var(--add)}
+.warn{color:var(--pend)}
+
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+@media(max-width:1000px){.pair{grid-template-columns:1fr}}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:4px;overflow:hidden;min-width:0}
+.panel-h{padding:7px 11px;border-bottom:1px solid var(--line);background:var(--fill);font-size:11.5px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:7px}
+
+.strips{display:flex;overflow-x:auto}
+.strip{flex:1;min-width:78px;border-right:1px solid var(--line2);padding:8px 7px;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.strip:last-child{border-right:0}
+.strip.mst{background:var(--fill)}
+.strip .nm{font-size:10.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot{font-family:var(--mono);font-size:9px;border:1px solid var(--line2);border-radius:2px;padding:2px 4px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--fill)}
+.slot.ai{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.slot.empty{border-style:dashed;color:var(--ink3);opacity:.7}
+.fader{height:74px;border:1px solid var(--line2);border-radius:2px;position:relative;background:var(--fill);display:flex;justify-content:center}
+.fader i{position:absolute;left:6px;right:6px;height:4px;background:var(--ink2);border-radius:1px}
+.meter{position:absolute;right:5px;bottom:3px;top:3px;width:4px;background:var(--line2);border-radius:1px;overflow:hidden}
+.meter em{position:absolute;bottom:0;left:0;right:0;background:var(--add);display:block}
+.sbtn{display:flex;gap:3px}
+.sbtn i{flex:1;font-style:normal;font-family:var(--mono);font-size:8.5px;text-align:center;border:1px solid var(--line2);border-radius:2px;color:var(--ink3);padding:1px 0}
+.db{font-family:var(--mono);font-size:9.5px;color:var(--ink2);text-align:center;font-variant-numeric:tabular-nums}
+
+table.log{width:100%;border-collapse:collapse;font-size:11px}
+.log th{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);text-align:left;font-weight:500;padding:6px 9px;border-bottom:1px solid var(--line)}
+.log td{padding:5px 9px;border-bottom:1px solid var(--line2);color:var(--ink2);vertical-align:middle}
+.log td.m{font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
+.log tr.head-row td{background:var(--pend-soft)}
+.who-tag{font-family:var(--mono);font-size:9px;border:1px solid var(--line);border-radius:99px;padding:1px 6px;color:var(--ink3);white-space:nowrap}
+.who-tag.ai{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.who-tag.pd{border-color:var(--pend);color:var(--pend)}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:22px;height:11px;border-radius:2px;display:block;flex:none}
+.sw-h{border:1px solid var(--line);background:var(--fill)}
+.sw-a{border:1px solid var(--accent);background:var(--accent-soft)}
+.sw-p{border:1.5px dashed var(--pend);background:var(--pend-soft)}
+
+.slab{background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:20px 22px}
+.slab h3{margin-bottom:8px}
+.slab ul{margin:0;padding-left:18px;color:var(--ink2);font-family:var(--serif);font-size:14.5px}
+.slab li{margin-bottom:5px}
+.slab li:last-child{margin-bottom:0}
+.slab li b{color:var(--ink);font-weight:600}
+.scope{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:840px){.scope{grid-template-columns:1fr}}
+footer{font-family:var(--mono);font-size:11px;color:var(--ink3);border-top:1px solid var(--line);padding-top:18px}
+</style>
+
+<div class="wrap">
+
+<header class="col">
+  <p class="eyebrow">Wireframes · draft 0.1 · 2026-09-02</p>
+  <h1>Escribass</h1>
+  <p class="lede">Six plates showing the desktop shell implied by <code>docs/specs.md</code> §9, drawn against the canonical demo from §18.2: <b>change the bass line in bar 17, re-render, everything else identical.</b></p>
+  <p>The same pending edit runs through every plate — proposed in the AI panel, unapplied in the arrangement, dashed in the piano roll, waiting at the head of the patch log. Nothing here is built. M0 ships the schema, core and tool API only; this is what the tool API will eventually be driving.</p>
+  <div class="legend" style="margin-top:20px">
+    <span><i class="sw-h"></i> human-authored</span>
+    <span><i class="sw-a"></i> model-authored, applied</span>
+    <span><i class="sw-p"></i> pending — dry-run, not applied</span>
+  </div>
+</header>
+
+<hr class="rule">
+
+<!-- ============ PLATE 1 ============ -->
+<figure class="plate">
+  <figcaption class="plate-cap">
+    <span class="fig">Plate 1</span>
+    <span class="cap-t">Arrangement — the default window</span>
+    <span class="ref">§3 · §9 · §10</span>
+  </figcaption>
+  <div class="stage">
+    <div class="win">
+
+      <div class="win-bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="win-title">chorus-sketch <span class="mono">— ~/music/chorus-sketch/</span></span>
+        <span class="procs"><span class="pin">1</span>
+          <span class="proc">app</span><span class="proc">ai</span><span class="proc">engine</span>
+        </span>
+      </div>
+
+      <div class="win-tabs">
+        <span class="tab on">Arrange</span>
+        <span class="tab">Piano roll</span>
+        <span class="tab">Mixer</span>
+        <span class="tab">Code</span>
+        <span class="tab">History</span>
+        <span class="chips">
+          <span class="chip">92.000 BPM</span>
+          <span class="chip">4/4</span>
+          <span class="chip">960 PPQ</span>
+          <span class="chip ac">schema v0.4</span>
+        </span>
+      </div>
+
+      <div class="win-body">
+
+        <aside class="pane pane-l">
+          <div class="pane-h"><span class="pin">2</span> Project</div>
+          <div class="tree">
+            <div class="d">chorus-sketch/</div>
+            <div class="i sel">song.json</div>
+            <div class="i">patches/</div>
+            <div class="i2 note">0214 ops · append-only</div>
+            <div class="i">assets/</div>
+            <div class="i2 note">sha256/2a7e…  ×9</div>
+            <div class="i">lock.json</div>
+            <div class="i2 note">14 pins · verified</div>
+            <div style="height:10px"></div>
+            <div class="pane-h" style="padding:6px 0;border:0">Sections</div>
+            <div class="i">1 Intro <span class="note">1–8</span></div>
+            <div class="i">2 Verse <span class="note">9–16</span></div>
+            <div class="i" style="color:var(--accent)">3 Chorus <span class="note">17–24</span></div>
+            <div class="i">4 Verse <span class="note">25–32</span></div>
+          </div>
+        </aside>
+
+        <section class="pane pane-c">
+          <div class="pane-h"><span class="pin">3</span> Timeline · bars 1–32</div>
+          <div class="tl">
+            <div class="tl-hd">Track</div>
+            <div>
+              <div class="grid32">
+                <span class="sect" style="grid-column:1/span 8">Intro</span>
+                <span class="sect" style="grid-column:9/span 8">Verse</span>
+                <span class="sect hot" style="grid-column:17/span 8">Chorus</span>
+                <span class="sect" style="grid-column:25/span 8">Verse</span>
+              </div>
+              <div class="bars">
+                <span class="q">1</span><span></span><span></span><span></span>
+                <span class="q">5</span><span></span><span></span><span></span>
+                <span class="q">9</span><span></span><span></span><span></span>
+                <span class="q">13</span><span></span><span></span><span></span>
+                <span class="q hot">17</span><span></span><span></span><span></span>
+                <span class="q">21</span><span></span><span></span><span></span>
+                <span class="q">25</span><span></span><span></span><span></span>
+                <span class="q">29</span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <div class="trk-n"><b>Drums</b><span class="src">sfizz · kit_808.sfz</span><span class="mx"><i>M</i><i>S</i><i>−3.0</i></span></div>
+            <div class="lane">
+              <div class="clip" style="grid-column:9/span 8">beat A</div>
+              <div class="clip ai" style="grid-column:17/span 16">beat B <span class="dots-m">▪▪▪</span></div>
+            </div>
+
+            <div class="trk-n"><b>Bass</b><span class="src">cmajor · sub_bass.cmajor</span><span class="mx"><i>M</i><i>S</i><i>−6.5</i></span></div>
+            <div class="lane">
+              <div class="clip" style="grid-column:9/span 8">verse line</div>
+              <div class="clip pending" style="grid-column:17/span 8"><span class="pin">4</span> bar 17 — pending</div>
+              <div class="clip" style="grid-column:25/span 8">verse line</div>
+            </div>
+
+            <div class="trk-n"><b>Keys</b><span class="src">vst3 · Surge XT 1.3.4</span><span class="mx"><i>M</i><i>S</i><i>−4.2</i></span></div>
+            <div class="lane">
+              <div class="clip" style="grid-column:1/span 8">intro pad</div>
+              <div class="clip" style="grid-column:17/span 8">chorus stabs</div>
+            </div>
+
+            <div class="auto-l"><span class="pin">5</span>&nbsp;cutoff</div>
+            <div class="auto">
+              <span class="pt" style="grid-column:1"></span><span class="pt" style="grid-column:9"></span>
+              <span class="pt" style="grid-column:17"></span><span class="pt" style="grid-column:22"></span>
+              <span class="pt" style="grid-column:29"></span>
+              <span class="playhead"></span>
+            </div>
+
+            <div class="trk-n"><b>Pad</b><span class="src">neural · rave_glass.onnx</span><span class="mx"><i>M</i><i>S</i><i>−9.0</i></span></div>
+            <div class="lane"><div class="clip ai" style="grid-column:1/span 32">bed</div></div>
+
+            <div class="trk-n"><b>Reverb bus</b><span class="src">bus · 2 sends</span><span class="mx"><i>M</i><i>S</i><i>−2.0</i></span></div>
+            <div class="lane"></div>
+
+            <div class="trk-n"><b>Master</b><span class="src">master · 48 kHz / 24-bit</span><span class="mx"><i>M</i><i>S</i><i>0.0</i></span></div>
+            <div class="lane"></div>
+          </div>
+        </section>
+
+        <aside class="pane pane-r">
+          <div class="pane-h"><span class="pin">6</span> Assistant · openrouter/anthropic/claude</div>
+          <div class="ai">
+            <div class="msgs">
+              <div class="msg you"><span class="who">You</span>Make the bass in the chorus follow the root notes an octave lower, and add a pickup into bar 17.</div>
+              <div class="msg bot"><span class="who">Model · 2 tool calls</span>Reading the chorus clip, then proposing one edit.
+                <div class="call">set_notes(
+  clip_id="01K4F2QN8B",
+  notes=[…14],
+  dry_run=true)</div>
+                <div class="verdict">valid · 3 ops · 0 errors</div>
+              </div>
+            </div>
+
+            <div class="patchbox">
+              <div class="pb-h"><span class="pin">7</span> Pending patch · RFC 6902</div>
+              <div class="diff">
+                <div class="r">− /clips/01K4F2QN8B/notes/3/pitch  55</div>
+                <div class="a">+ /clips/01K4F2QN8B/notes/3/pitch  43</div>
+                <div class="r">− …/notes/3/start_tick  1920</div>
+                <div class="a">+ …/notes/3/start_tick  1440</div>
+                <div class="a">+ …/notes/-  {pitch 38, tick 2880}</div>
+              </div>
+              <div class="acts">
+                <span class="btn pri">Apply</span>
+                <span class="btn">Reject</span>
+                <span class="btn">Edit</span>
+                <span class="hint">⌘Z undoes</span>
+              </div>
+            </div>
+
+            <div class="prompt">
+              <span class="field">Ask or instruct…</span>
+              <span class="btn">Send</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="win-foot">
+        <span class="pin">8</span>
+        <span><b>song.json</b> sha256 4f9c…a17b</span><span class="sep">·</span>
+        <span><b>patches</b> 214 ops</span><span class="sep">·</span>
+        <span><b>render</b> 2a7e…9d10 <span class="warn">stale</span></span><span class="sep">·</span>
+        <span><b>lock.json</b> <span class="ok">14/14 verified</span></span><span class="sep">·</span>
+        <span>tick 61440 · bar 17.1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <ol class="notes">
+    <li><b>Process health, always visible.</b> Three dots for <code>app</code>, <code>ai</code>, <code>engine</code> (§3). The user should be able to see that the render engine died, because the UI keeps working when it does.</li>
+    <li><b>The project directory is the file browser.</b> §10's four artefacts shown literally — <code>song.json</code>, <code>patches/</code>, <code>assets/</code>, <code>lock.json</code> — because the format is a selling point, not an implementation detail.</li>
+    <li><b>Sections are first-class furniture</b>, not markers drawn on a ruler. §4.2 gives them ids and bounds, so they get their own band and can be reordered by <code>move_section</code>.</li>
+    <li><b>A pending clip is drawn, not described.</b> Dashed amber = a validated dry-run nobody has accepted yet. It occupies real timeline space so you can see where the edit lands before you take it.</li>
+    <li><b>Automation is a lane, not a dialog.</b> Targets resolve to real instrument params (§4.4), so an unresolvable target is a validation error, not a silent no-op.</li>
+    <li><b>The assistant is a docked panel, not a modal.</b> It names the model it's running, because §6 is provider-agnostic and the answer changes per project via <code>lock.json → ai.model</code>.</li>
+    <li><b>The diff is the product.</b> §5's dry-run → diff → apply, shown as raw JSON Patch paths. Users read them; that's the point of a typed model.</li>
+    <li><b>The status bar is the determinism readout</b> (§11): model hash, patch count, last render hash, lock verification. <em>Stale</em> means the model moved since the last render.</li>
+  </ol>
+</figure>
+
+<!-- ============ PLATE 2 ============ -->
+<figure class="plate">
+  <figcaption class="plate-cap">
+    <span class="fig">Plate 2</span>
+    <span class="cap-t">Piano roll — the same bar 17, mid-proposal</span>
+    <span class="ref">§4.2 · §5</span>
+  </figcaption>
+  <div class="stage">
+    <div class="roll">
+      <div class="roll-h">
+        <span class="t">Bass · clip 01K4F2QN8B</span>
+        <span class="chip">start_tick 61440</span>
+        <span class="chip">length 7680</span>
+        <span class="chip">grid 1/16 = 240 tk</span>
+        <span class="chip pd">3 pending ops</span>
+        <span style="margin-left:auto" class="chip">snap on</span>
+      </div>
+
+      <div class="rollgrid">
+        <div class="pk">bars</div>
+        <div class="rollbars">
+          <span class="q">17</span><span></span><span></span><span></span>
+          <span class="q">17.2</span><span></span><span></span><span></span>
+          <span class="q">17.3</span><span></span><span></span><span></span>
+          <span class="q">17.4</span><span></span><span></span><span></span>
+          <span class="q">18</span><span></span><span></span><span></span>
+          <span class="q">18.2</span><span></span><span></span><span></span>
+          <span class="q">18.3</span><span></span><span></span><span></span>
+          <span class="q">18.4</span><span></span><span></span><span></span>
+        </div>
+
+        <div class="pk">G2 <span>43</span></div>
+        <div class="pr"><span class="n gone" style="grid-column:9/span 4"></span></div>
+
+        <div class="pk blk">F#2 <span>42</span></div>
+        <div class="pr blk"></div>
+
+        <div class="pk">E2 <span>40</span></div>
+        <div class="pr"><span class="n" style="grid-column:25/span 6"></span></div>
+
+        <div class="pk">D2 <span>38</span></div>
+        <div class="pr"><span class="n pending" style="grid-column:13/span 2"></span></div>
+
+        <div class="pk">C2 <span>36</span></div>
+        <div class="pr"><span class="n" style="grid-column:17/span 4"></span></div>
+
+        <div class="pk blk">A#1 <span>34</span></div>
+        <div class="pr blk"></div>
+
+        <div class="pk">A1 <span>33</span></div>
+        <div class="pr"><span class="n ai" style="grid-column:5/span 3"></span></div>
+
+        <div class="pk">G1 <span>31</span></div>
+        <div class="pr"><span class="n pending" style="grid-column:7/span 6"></span><span class="n" style="grid-column:21/span 3"></span></div>
+
+        <div class="pk">E1 <span>28</span></div>
+        <div class="pr"><span class="n" style="grid-column:1/span 4"></span></div>
+      </div>
+
+      <div class="velrow">
+        <div class="vel-l">velocity</div>
+        <div class="vels">
+          <i style="grid-column:1;height:70%"></i>
+          <i class="ai" style="grid-column:5;height:52%"></i>
+          <i class="pd" style="grid-column:7;height:88%"></i>
+          <i class="pd" style="grid-column:13;height:44%"></i>
+          <i style="grid-column:17;height:64%"></i>
+          <i style="grid-column:21;height:58%"></i>
+          <i style="grid-column:25;height:76%"></i>
+        </div>
+      </div>
+      <div class="velrow">
+        <div class="vel-l">expr · timbre</div>
+        <div class="vels">
+          <i style="grid-column:1;height:30%"></i>
+          <i style="grid-column:5;height:38%"></i>
+          <i class="pd" style="grid-column:7;height:62%"></i>
+          <i style="grid-column:17;height:44%"></i>
+          <i style="grid-column:25;height:50%"></i>
+        </div>
+      </div>
+
+      <div class="ed-f">
+        <span>note 01K4F31M2T · pitch 31 · start_tick 1440 (clip-rel) · len 1440 · vel 104</span>
+        <span style="margin-left:auto" class="warn">3 ops staged — Apply in the assistant panel to commit</span>
+      </div>
+    </div>
+  </div>
+  <ol class="notes">
+    <li><b>Ticks are shown, never hidden.</b> 960 PPQ integers in the header and footer; the 1/16 grid is labelled as 240 ticks so "snap" is a documented number, not a feel.</li>
+    <li><b>Deleted-by-proposal notes stay visible</b> as red outlines until Apply or Reject. The roll shows the <em>proposal</em>, not the post-state — otherwise Reject looks like data loss.</li>
+    <li><b>Ranges are clip-relative</b> per §4.2, so the footer prints both: absolute <code>61440</code> in the ruler, <code>1440</code> in the note inspector.</li>
+    <li><b>Per-note expression gets its own lane</b> because §4.2 puts it on the note, not on a channel-wide automation curve.</li>
+  </ol>
+</figure>
+
+<!-- ============ PLATE 3 ============ -->
+<figure class="plate">
+  <figcaption class="plate-cap">
+    <span class="fig">Plate 3</span>
+    <span class="cap-t">Code views — generator source and instrument source</span>
+    <span class="ref">§7.1 · §7.2 · §4.1</span>
+  </figcaption>
+  <div class="stage">
+    <div class="two">
+      <section>
+        <div class="ed-h">generators/chorus_bass.py
+          <span class="chip">seed 0x5D4A19F2</span>
+          <span class="chip">dsl 0.4.1</span>
+        </div>
+        <div class="src">
+<div><span class="c"># target: track tr_bass · section Chorus</span></div>
+<div><span class="k">from</span> escribass <span class="k">import</span> pattern, degrees, rng</div>
+<div></div>
+<div><span class="k">def</span> generate(ctx):</div>
+<div>    r = rng(ctx.seed)          <span class="c"># seeded, never global</span></div>
+<div>    roots = degrees(ctx.harmony, octave=-1)</div>
+<div class="hl">    <span class="k">return</span> pattern(roots)              \</div>
+<div class="hl">        .every(4, lambda p: p.pickup(240))  \</div>
+<div>        .humanise(r, vel=8)</div>
+        </div>
+        <div class="ed-f">
+          <span class="ok">compiled · 14 notes · 3 ops</span>
+          <span>pure fn of (source, seed, tempo map)</span>
+          <span style="margin-left:auto" class="chip">Compile</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="ed-h">instruments/sub_bass.cmajor
+          <span class="chip">JIT</span>
+          <span class="chip ac">cmaj 1.0.3177</span>
+        </div>
+        <div class="src">
+<div><span class="k">processor</span> SubBass</div>
+<div>{</div>
+<div>    <span class="k">output</span> stream float&lt;2&gt; out;</div>
+<div>    <span class="k">input</span> event (std::notes::NoteOn) eventIn;</div>
+<div></div>
+<div>    <span class="k">node</span> osc = std::oscillators::Sine (float, 55.0f);</div>
+<div>    <span class="k">node</span> drive = Saturator (0.62f);</div>
+<div class="hl">    <span class="k">connection</span> osc -&gt; drive -&gt; out;</div>
+<div>}</div>
+        </div>
+        <div class="ed-f">
+          <span class="ok">JIT loaded · 1.4 ms</span>
+          <span class="warn">export pending</span>
+          <span>→ CLAP → VST3 · assets/sha256/8b31…</span>
+          <span style="margin-left:auto" class="chip">Export</span>
+        </div>
+      </section>
+    </div>
+  </div>
+  <ol class="notes">
+    <li><b>Seed and toolchain version sit in the title bar</b>, not in a settings pane. §4.4 makes them non-null invariants, so they belong where you can't miss them.</li>
+    <li><b>Two compile buttons, two meanings.</b> Left produces layer-2 notes through <code>compile_generator</code>; right JITs for audition and only <em>Export</em> content-hashes a VST3 into <code>assets/</code> (§7.2).</li>
+    <li><b>Diagnostics land in the editor and go to the model.</b> §7.2 requires compiler output be returned to the caller, so the same text the user reads is what the LLM retries against.</li>
+    <li><b>"Export pending" is a real state.</b> A JIT-only instrument renders now but doesn't reproduce later — the UI has to distinguish those, since §11 depends on it.</li>
+  </ol>
+</figure>
+
+<!-- ============ PLATES 4 & 5 ============ -->
+<div class="pair">
+
+  <figure class="plate">
+    <figcaption class="plate-cap">
+      <span class="fig">Plate 4</span>
+      <span class="cap-t">Mixer</span>
+      <span class="ref">§4.2 · §4.3</span>
+    </figcaption>
+    <div class="stage" style="padding:16px">
+      <div class="panel">
+        <div class="panel-h">Mixer <span class="chip">6 channels</span> <span class="chip" style="margin-left:auto">48 kHz / 24-bit</span></div>
+        <div class="strips">
+          <div class="strip">
+            <span class="nm">Drums</span>
+            <span class="slot">sfizz</span>
+            <span class="slot">comp</span>
+            <span class="slot empty">+ fx</span>
+            <div class="fader"><i style="bottom:46%"></i><span class="meter"><em style="height:58%"></em></span></div>
+            <span class="db">−3.0</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+          <div class="strip">
+            <span class="nm">Bass</span>
+            <span class="slot ai">cmajor</span>
+            <span class="slot">sat</span>
+            <span class="slot empty">+ fx</span>
+            <div class="fader"><i style="bottom:34%"></i><span class="meter"><em style="height:44%"></em></span></div>
+            <span class="db">−6.5</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+          <div class="strip">
+            <span class="nm">Keys</span>
+            <span class="slot">Surge XT</span>
+            <span class="slot">eq</span>
+            <span class="slot empty">+ fx</span>
+            <div class="fader"><i style="bottom:41%"></i><span class="meter"><em style="height:36%"></em></span></div>
+            <span class="db">−4.2</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+          <div class="strip">
+            <span class="nm">Pad</span>
+            <span class="slot ai">rave.onnx</span>
+            <span class="slot empty">+ fx</span>
+            <span class="slot" style="border-style:dashed">→ verb 40%</span>
+            <div class="fader"><i style="bottom:22%"></i><span class="meter"><em style="height:24%"></em></span></div>
+            <span class="db">−9.0</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+          <div class="strip">
+            <span class="nm">Verb bus</span>
+            <span class="slot">Airwindows</span>
+            <span class="slot empty">+ fx</span>
+            <span class="slot" style="visibility:hidden">.</span>
+            <div class="fader"><i style="bottom:52%"></i><span class="meter"><em style="height:30%"></em></span></div>
+            <span class="db">−2.0</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+          <div class="strip mst">
+            <span class="nm">Master</span>
+            <span class="slot">limiter</span>
+            <span class="slot empty">+ fx</span>
+            <span class="slot" style="visibility:hidden">.</span>
+            <div class="fader"><i style="bottom:62%"></i><span class="meter"><em style="height:72%"></em></span></div>
+            <span class="db">0.0</span>
+            <div class="sbtn"><i>M</i><i>S</i></div>
+          </div>
+        </div>
+        <div class="ed-f"><span>every slot is an <b>EffectRef</b> with a pinned version</span><span style="margin-left:auto" class="ok">all refs resolve</span></div>
+      </div>
+    </div>
+    <ol class="notes">
+      <li><b>Plugin slots name their source kind</b>, since §4.3 tracks provenance per entity — teal slots were authored by the model.</li>
+      <li><b>Unresolvable refs fail loudly</b> (§4.4, §10). Missing assets are reported, never silently substituted with a default synth.</li>
+    </ol>
+  </figure>
+
+  <figure class="plate">
+    <figcaption class="plate-cap">
+      <span class="fig">Plate 5</span>
+      <span class="cap-t">History — the patch log</span>
+      <span class="ref">§5 · §4.3</span>
+    </figcaption>
+    <div class="stage" style="padding:16px">
+      <div class="panel">
+        <div class="panel-h">History <span class="chip">214 ops</span> <span class="chip pd" style="margin-left:auto">1 pending</span></div>
+        <table class="log">
+          <thead><tr><th>#</th><th>Tool</th><th>Ops</th><th>Author</th><th>Entity</th></tr></thead>
+          <tbody>
+            <tr class="head-row">
+              <td class="m">—</td><td>set_notes</td><td class="m">3</td>
+              <td><span class="who-tag pd">pending</span></td><td class="m">01K4F2QN8B</td>
+            </tr>
+            <tr><td class="m">214</td><td>set_param</td><td class="m">1</td><td><span class="who-tag">you</span></td><td class="m">tr_bass.gain</td></tr>
+            <tr><td class="m">213</td><td>compile_generator</td><td class="m">14</td><td><span class="who-tag ai">model</span></td><td class="m">gen_chorus</td></tr>
+            <tr><td class="m">212</td><td>add_section</td><td class="m">1</td><td><span class="who-tag ai">model</span></td><td class="m">Chorus</td></tr>
+            <tr><td class="m">211</td><td>quantize</td><td class="m">22</td><td><span class="who-tag">you</span></td><td class="m">01K4F2M0PP</td></tr>
+            <tr><td class="m">210</td><td>set_track_instrument</td><td class="m">2</td><td><span class="who-tag ai">model</span></td><td class="m">tr_pad</td></tr>
+            <tr><td class="m">209</td><td>add_clip</td><td class="m">1</td><td><span class="who-tag">you</span></td><td class="m">01K4F2M0PP</td></tr>
+          </tbody>
+        </table>
+        <div class="ed-f"><span>append-only · <b>patches/</b></span><span>undo = inverse patch</span><span style="margin-left:auto" class="chip">Export as .patch</span></div>
+      </div>
+    </div>
+    <ol class="notes">
+      <li><b>Undo history and audit trail are the same list</b> (§5). There is no second stack, so an AI edit and a drag are undone identically.</li>
+      <li><b>Provenance is a column, not a tooltip.</b> "Which of this did the model write?" is the question this product exists to answer.</li>
+    </ol>
+  </figure>
+
+</div>
+
+<!-- ============ PLATE 6 ============ -->
+<figure class="plate">
+  <figcaption class="plate-cap">
+    <span class="fig">Plate 6</span>
+    <span class="cap-t">Render &amp; reproduce — the demo the product is sold on</span>
+    <span class="ref">§11 · §18.2</span>
+  </figcaption>
+  <div class="stage">
+    <div class="panel" style="min-width:900px">
+      <div class="panel-h">Render <span class="chip">master + 5 stems</span> <span class="chip" style="margin-left:auto">bars 1–32 · 48 kHz / 24-bit</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;">
+        <section style="padding:14px 16px;border-right:1px solid var(--line)">
+          <div class="pane-h" style="padding:0 0 8px;border:0">Before edit</div>
+          <div class="src" style="padding:0">
+            <div style="padding-left:0">master.wav  sha256 2a7e…9d10</div>
+            <div style="padding-left:0">stems/bass  sha256 c410…33f8</div>
+            <div style="padding-left:0">stems/keys  sha256 91bd…07a2</div>
+          </div>
+        </section>
+        <section style="padding:14px 16px">
+          <div class="pane-h" style="padding:0 0 8px;border:0">After applying the bar-17 patch</div>
+          <div class="src" style="padding:0">
+            <div style="padding-left:0" class="warn">master.wav  sha256 6d02…b81c  changed</div>
+            <div style="padding-left:0" class="warn">stems/bass  sha256 f7a1…2e55  changed</div>
+            <div style="padding-left:0" class="ok">stems/keys  sha256 91bd…07a2  identical</div>
+          </div>
+        </section>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid var(--line)">
+        <div class="pane-h" style="padding:0 0 8px;border:0">Sample-diff · master.wav</div>
+        <div class="grid32" style="border:1px solid var(--line2);height:34px;background:var(--fill)">
+          <span style="grid-column:1/span 16;border:0"></span>
+          <span style="grid-column:17/span 8;background:var(--pend-soft);border-left:1.5px solid var(--pend);border-right:1.5px solid var(--pend)"></span>
+          <span style="grid-column:25/span 8;border:0"></span>
+        </div>
+        <div class="ed-f" style="border:0;padding:8px 0 0;background:transparent">
+          <span>differing samples: <b>1&nbsp;927&nbsp;680 – 2&nbsp;891&nbsp;520</b> (bars 17–24)</span>
+          <span class="sep">·</span>
+          <span class="ok">0 differing samples outside the edited range</span>
+          <span style="margin-left:auto" class="chip">Copy hashes to release notes</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="notes">
+    <li><b>This screen is the pitch.</b> §18.2 says lead every demo with reproducibility; that only works if the app itself can show a byte-level diff, so it's a first-class view rather than a CI script.</li>
+    <li><b>Per-stem hashes, not just master.</b> "Everything else identical" is only credible per-stem — an untouched keys stem hashing the same is the proof.</li>
+    <li><b>Hashes are copyable into release notes</b>, because §18.2 asks for them to be published.</li>
+  </ol>
+</figure>
+
+<hr class="rule">
+
+<!-- ============ SCOPE ============ -->
+<section class="scope">
+  <div class="slab">
+    <h3>What the spec dictates</h3>
+    <ul>
+      <li><b>Which views exist</b> — arrangement, piano roll, mixer, instrument/effect editors, code views, AI panel, history (§9).</li>
+      <li><b>The AI panel shows a diff before applying</b>, with apply / reject / edit (§9, §5).</li>
+      <li><b>All seven views are projections</b> of one model; none holds its own state (§2.1).</li>
+      <li><b>Ticks, sections, provenance, seeds, pinned refs</b> are model fields, so they are displayable everywhere (§4).</li>
+    </ul>
+  </div>
+  <div class="slab">
+    <h3>What I invented here</h3>
+    <ul>
+      <li><b>Every layout decision.</b> Panel placement, split ratios, the tab strip, the right-hand dock — §9 lists views, not composition.</li>
+      <li><b>Plate 6 as a dedicated screen.</b> §11 and §18.2 require the capability; nothing says it's a view rather than a test report.</li>
+      <li><b>Colour as provenance.</b> Teal for model-authored, amber for pending. Reasonable, but it's a call, not a requirement.</li>
+      <li><b>The pending clip drawn in the timeline.</b> A defensible reading of "shows the diff", not a stated one.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="col">
+  <p class="eyebrow">Scope check</p>
+  <p>None of this is M0. M0 is <code>schema/song.proto</code>, the Rust <code>core</code>, the <code>SongTools</code> service with <code>dry_run</code>, its MCP surface, and the determinism suite. The value of drawing the shell first is that it fixes what the tool API has to be able to answer: every panel above is a read of the model, and every control is one tool call. If a panel here needs data the schema can't express, that's a schema gap worth finding before the proto is written — not after.</p>
+</div>
+
+<footer>Escribass · wireframes draft 0.1 · keyed to docs/specs.md v0.4 · AGPL-3.0</footer>
+
+</div>
