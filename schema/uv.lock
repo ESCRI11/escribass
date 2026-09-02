@@ -47,7 +47,7 @@ wheels = [
 [[package]]
 name = "escribass-schema"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "betterproto2", extra = ["pydantic"] },
 ]

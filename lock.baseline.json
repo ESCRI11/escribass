@@ -87,7 +87,7 @@
     "Any change here requires an ADR and a full golden-render pass."
   ],
   "schema": {
-    "_note": "Build-time codegen for schema/*.proto. Registry packages are immutable by version and their integrity hashes live in Cargo.lock, package-lock.json and uv.lock; see docs/specs.md \u00a715. None of these ship in the built product.",
+    "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md \u00a717, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",
     "rust": {
       "toolchain": {
         "version": "1.98.0",

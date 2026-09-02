@@ -105,7 +105,7 @@ message Clip {
 }
 ```
 
-The path `/clips/…/notes/01K4F2QN8B/pitch` is stable for the life of the note.
+The path `/clips/…/note_clip/notes/01K4F2QN8B/pitch` is stable for the life of the note.
 
 Applies to every collection of ULID-bearing entities: tracks, clips, notes, automation
 points, effects, sections, generators.
@@ -120,9 +120,15 @@ Corollaries:
   the result is also human-legible.
 - **The key duplicates `id`.** §4.3 requires `id` on every entity, so both are kept and the
   validator (§4.4) enforces `key == value.id`.
-- Sequences that are genuinely positional and whose elements have no identity —
-  `TempoMap.events`, anonymous automation curve segments — may stay `repeated`. Anything
-  with a ULID may not.
+- **Corrected 2026-09-02:** an earlier version of this ADR exempted sequences "whose
+  elements have no identity", naming `TempoMap.events`. That was the wrong criterion. The
+  hazard is array-index instability, not identity: a branch inserting a ritardando early
+  shifts every later index, so a sibling branch's edit to a later event has a disjoint path,
+  auto-merges under decision 4, and lands on the wrong event — silently. `TempoMap.events`
+  and `TimeSignatureMap.events` are keyed like everything else, with an `id` and no
+  provenance (ADR 0002 §2). The only `repeated` fields left in the schema are
+  `PatchEntry.parents` and lists that are genuinely positional and never patched
+  element-wise.
 
 ### 4. Merge auto-resolves disjoint paths; conflicts are structured errors
 
@@ -134,6 +140,11 @@ heuristic. The result is an ordinary patch entry with two parents and its own pr
 With `dry_run=true` the tool returns the full conflict list without applying, which is the
 natural shape for §5's dry-run contract and gives the AI orchestrator (§6) something it can
 act on and retry against.
+
+**`version` is not merged.** §4.3's per-entity `version` is maintained by `core`, never
+written by a tool-authored op, and resolved on merge as `max(a, b) + 1`. Without this rule
+every merge conflicts by construction: two edits to any one entity both write `replace
+/…/version` at the same path, and so would every pair of edits to a song via `Song.version`.
 
 Interactive conflict *resolution* — choosing side A or side B per path, editing a merged
 result — is deferred until there is a UI to host it (M2 at the earliest). Designing that

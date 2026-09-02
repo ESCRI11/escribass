@@ -53,33 +53,40 @@ pub struct Song {
 // Layer 2 — time base (§4.2)
 // ---------------------------------------------------------------------------
 
-/// Tempo and time-signature events are repeated, not mapped: they have no identity of their
-/// own, so ADR 0001's map rule does not apply.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+/// Keyed like every other collection, and for the same reason: an array index is not a
+/// stable patch path. A branch inserting a ritardando early shifts every later index, so a
+/// sibling branch's edit to a later event would auto-merge onto the wrong one (ADR 0001 §3).
+/// Events carry an id but no provenance, like AutomationPoint (ADR 0002 §2). Order is
+/// derived from `tick`.
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TempoEvent {
-    #[prost(int32, tag="1")]
+    #[prost(string, tag="1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(int32, tag="2")]
     pub tick: i32,
-    #[prost(double, tag="2")]
+    #[prost(double, tag="3")]
     pub bpm: f64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TempoMap {
-    #[prost(message, repeated, tag="1")]
-    pub events: ::prost::alloc::vec::Vec<TempoEvent>,
+    #[prost(btree_map="string, message", tag="1")]
+    pub events: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, TempoEvent>,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TimeSignatureEvent {
-    #[prost(int32, tag="1")]
+    #[prost(string, tag="1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(int32, tag="2")]
     pub tick: i32,
-    #[prost(uint32, tag="2")]
-    pub numerator: u32,
     #[prost(uint32, tag="3")]
+    pub numerator: u32,
+    #[prost(uint32, tag="4")]
     pub denominator: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TimeSignatureMap {
-    #[prost(message, repeated, tag="1")]
-    pub events: ::prost::alloc::vec::Vec<TimeSignatureEvent>,
+    #[prost(btree_map="string, message", tag="1")]
+    pub events: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, TimeSignatureEvent>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Section {

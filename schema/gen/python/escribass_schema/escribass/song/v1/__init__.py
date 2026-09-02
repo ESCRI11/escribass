@@ -922,15 +922,22 @@ class TempoEvent(betterproto2.Message):
     Layer 2 — time base (§4.2)
     ---------------------------------------------------------------------------
 
-    Tempo and time-signature events are repeated, not mapped: they have no identity of their
-    own, so ADR 0001's map rule does not apply.
+    Keyed like every other collection, and for the same reason: an array index is not a
+    stable patch path. A branch inserting a ritardando early shifts every later index, so a
+    sibling branch's edit to a later event would auto-merge onto the wrong one (ADR 0001 §3).
+    Events carry an id but no provenance, like AutomationPoint (ADR 0002 §2). Order is
+    derived from `tick`.
     """
 
-    tick: "typing.Annotated[int, pydantic.Field(ge=-2**31, le=2**31 - 1)]" = (
-        betterproto2.field(1, betterproto2.TYPE_INT32)
+    id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
     )
 
-    bpm: "float" = betterproto2.field(2, betterproto2.TYPE_DOUBLE)
+    tick: "typing.Annotated[int, pydantic.Field(ge=-2**31, le=2**31 - 1)]" = (
+        betterproto2.field(2, betterproto2.TYPE_INT32)
+    )
+
+    bpm: "float" = betterproto2.field(3, betterproto2.TYPE_DOUBLE)
 
 
 default_message_pool.register_message("escribass.song.v1", "TempoEvent", TempoEvent)
@@ -938,8 +945,12 @@ default_message_pool.register_message("escribass.song.v1", "TempoEvent", TempoEv
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class TempoMap(betterproto2.Message):
-    events: "list[TempoEvent]" = betterproto2.field(
-        1, betterproto2.TYPE_MESSAGE, repeated=True
+    events: "dict[str, TempoEvent]" = betterproto2.field(
+        1,
+        betterproto2.TYPE_MAP,
+        map_meta=betterproto2.map_meta(
+            betterproto2.TYPE_STRING, betterproto2.TYPE_MESSAGE
+        ),
     )
 
 
@@ -948,16 +959,20 @@ default_message_pool.register_message("escribass.song.v1", "TempoMap", TempoMap)
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class TimeSignatureEvent(betterproto2.Message):
+    id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
     tick: "typing.Annotated[int, pydantic.Field(ge=-2**31, le=2**31 - 1)]" = (
-        betterproto2.field(1, betterproto2.TYPE_INT32)
+        betterproto2.field(2, betterproto2.TYPE_INT32)
     )
 
     numerator: "typing.Annotated[int, pydantic.Field(ge=0, le=2**32 - 1)]" = (
-        betterproto2.field(2, betterproto2.TYPE_UINT32)
+        betterproto2.field(3, betterproto2.TYPE_UINT32)
     )
 
     denominator: "typing.Annotated[int, pydantic.Field(ge=0, le=2**32 - 1)]" = (
-        betterproto2.field(3, betterproto2.TYPE_UINT32)
+        betterproto2.field(4, betterproto2.TYPE_UINT32)
     )
 
 
@@ -968,8 +983,12 @@ default_message_pool.register_message(
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class TimeSignatureMap(betterproto2.Message):
-    events: "list[TimeSignatureEvent]" = betterproto2.field(
-        1, betterproto2.TYPE_MESSAGE, repeated=True
+    events: "dict[str, TimeSignatureEvent]" = betterproto2.field(
+        1,
+        betterproto2.TYPE_MAP,
+        map_meta=betterproto2.map_meta(
+            betterproto2.TYPE_STRING, betterproto2.TYPE_MESSAGE
+        ),
     )
 
 

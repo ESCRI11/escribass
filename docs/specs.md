@@ -206,6 +206,9 @@ Before merging any change, confirm:
 | Project file extension | `.escri` on the project directory; contents stay `.json` | Bundle gives file association and identity; standard extensions inside keep §2.6 diffability and editor/LLM legibility | 2026-09-02 |
 | Tick integer width | `int32` (960 PPQ, ~559k bars) | proto3 JSON encodes 64-bit ints as strings, which would break §2.6 readable/diffable text (ADR 0002) | 2026-09-02 |
 | Canonical JSON form | snake_case, defaults emitted, map keys sorted, 2-space | Always-present fields make RFC 6902 `replace`/`test` well-defined (ADR 0002) | 2026-09-02 |
+| Patch op representation | Canonical JSON text on disk; `bytes` on the wire | Modelling RFC 6902 values in protobuf made the patch log nondeterministic and produced documents core could not re-read (ADR 0002 §11) | 2026-09-02 |
+| Tempo/time-signature events | id-keyed maps, like every other collection | An array index is not a stable patch path under concurrent branch inserts (ADR 0001 §3, corrected) | 2026-09-02 |
+| Entity `version` on merge | Maintained by core, never in a tool op; resolved as max+1 | Otherwise every merge conflicts by construction on `/…/version` (ADR 0001 §4) | 2026-09-02 |
 | `FormRule` | Deferred to M4 | Least-specified entity in §4 and nothing consumes it before the generative compiler; additive to add (ADR 0002) | 2026-09-02 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process); minimum supported OS versions; symbolic model choice for v1 melody/drum generation.
@@ -243,6 +246,7 @@ Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags
 
 Rules:
 - `lock.baseline.json` is the only place these values live in code; CI fails if a submodule or vendored dependency drifts from it.
+- **Registry packages** (crates.io, npm, PyPI) have no commit to pin. They are recorded by exact version, and their integrity hashes live in `Cargo.lock`, `package-lock.json` and `uv.lock`, which are committed. This applies only to build-time tooling that does not ship in the product; anything vendored or linked is still pinned by commit.
 - Golden-render fixtures are regenerated **only** in the same PR that changes a pin, and the diff must be explained in the ADR.
 - JUCE is never upgraded independently of Tracktion Engine.
 

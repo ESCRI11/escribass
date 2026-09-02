@@ -22,7 +22,6 @@ plugins:
     out: gen/ts
     opt:
       - target=ts
-      - json_types=true
       # NodeNext resolution requires explicit extensions on relative imports.
       - import_extension=js
   # Python: pydantic dataclasses, validated on construction
@@ -32,4 +31,5 @@ plugins:
   - local: [uv, run, protoc-gen-python_betterproto2]
     out: gen/python/escribass_schema
     opt:
+      # Constructors validate; note that from_json() does NOT — see schema/tests.
       - pydantic_dataclasses

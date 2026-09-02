@@ -71,25 +71,30 @@ message Song {
 // Layer 2 — time base (§4.2)
 // ---------------------------------------------------------------------------
 
-// Tempo and time-signature events are repeated, not mapped: they have no identity of their
-// own, so ADR 0001's map rule does not apply.
+// Keyed like every other collection, and for the same reason: an array index is not a
+// stable patch path. A branch inserting a ritardando early shifts every later index, so a
+// sibling branch's edit to a later event would auto-merge onto the wrong one (ADR 0001 §3).
+// Events carry an id but no provenance, like AutomationPoint (ADR 0002 §2). Order is
+// derived from `tick`.
 message TempoEvent {
-  int32 tick = 1;
-  double bpm = 2;
+  string id = 1;
+  int32 tick = 2;
+  double bpm = 3;
 }
 
 message TempoMap {
-  repeated TempoEvent events = 1;
+  map<string, TempoEvent> events = 1;
 }
 
 message TimeSignatureEvent {
-  int32 tick = 1;
-  uint32 numerator = 2;
-  uint32 denominator = 3;
+  string id = 1;
+  int32 tick = 2;
+  uint32 numerator = 3;
+  uint32 denominator = 4;
 }
 
 message TimeSignatureMap {
-  repeated TimeSignatureEvent events = 1;
+  map<string, TimeSignatureEvent> events = 1;
 }
 
 message Section {

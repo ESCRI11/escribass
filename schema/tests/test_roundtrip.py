@@ -1,7 +1,8 @@
 """Python half of the cross-language agreement test.
 
-The AI orchestrator (docs/specs.md §6) reads the same project files `core` writes, through
-generated Pydantic models. Only parsing is asserted: `core` is the only writer (§5, §10).
+The AI orchestrator (docs/specs.md §6) reads the same project files `core` writes. Only
+reading is asserted: `core` is the only writer (§5, §10), and this side's ``to_json`` is not
+the canonical writer — it emits camelCase and a ``Z`` timestamp.
 """
 
 import pathlib
@@ -12,7 +13,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "gen" / "py
 
 import pydantic  # noqa: E402
 
-from escribass_schema.escribass.history.v1 import PatchEntry  # noqa: E402
 from escribass_schema.escribass.song.v1 import Note, Song  # noqa: E402
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[2] / "tests" / "fixtures"
@@ -33,6 +33,14 @@ class TestSongFixture(unittest.TestCase):
             self.song.tracks["01K4F2T001"].instrument.ref.cmajor.source_hash,
             "8b31c0de4f9c00000000000000000000",
         )
+        self.assertEqual(self.song.sections["01K4F2C003"].start_tick, 61440)
+
+    def test_tempo_events_are_keyed_not_positional(self) -> None:
+        self.assertEqual(list(self.song.tempo_map.events), ["01K4F2M001"])
+        self.assertEqual(self.song.tempo_map.events["01K4F2M001"].bpm, 92.0)
+        self.assertEqual(
+            self.song.time_signature_map.events["01K4F2M002"].numerator, 4
+        )
 
     def test_oneof_and_optional_presence(self) -> None:
         clip = self.song.clips["01K4F2QN8B"]
@@ -40,40 +48,33 @@ class TestSongFixture(unittest.TestCase):
         self.assertIsNotNone(clip.note_clip)
         self.assertIsNone(clip.audio_clip)
         self.assertIsNone(clip.loop_length_ticks, "unset optional stays absent")
+        self.assertEqual(len(clip.note_clip.notes), 2)
         self.assertEqual(clip.note_clip.notes["01K4F2N001"].pitch, 43)
         self.assertEqual(clip.note_clip.notes["01K4F2N002"].expression["timbre"], 0.62)
 
     def test_64_bit_seed_survives_the_json_string_encoding(self) -> None:
         self.assertEqual(self.song.generators["01K4F2G001"].seed, 9007199254740993)
 
-    def test_json_round_trip(self) -> None:
-        self.assertEqual(Song.from_json(self.song.to_json()), self.song)
-
     def test_binary_round_trip(self) -> None:
         self.assertEqual(Song.parse(bytes(self.song)), self.song)
 
 
-class TestPatchEntryFixture(unittest.TestCase):
-    def test_ops_are_rfc_6902_operations(self) -> None:
-        entry = PatchEntry.from_json(fixture("history/minimal.json"))
-        self.assertEqual(entry.parents, ["01K4F2QN8B"])
-        self.assertEqual(entry.ops[0].op, "replace")
-        self.assertEqual(
-            entry.ops[0].path, "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch"
-        )
-        self.assertEqual(entry.ops[1].op, "remove")
+class TestParsingIsNotValidation(unittest.TestCase):
+    """Pins where validation does and does not happen, so nobody relies on the wrong one.
 
+    Constructors are pydantic-validated. ``from_json`` is not: it coerces. That is the path
+    `ai` actually uses, so M0.2's validator is what has to catch these — not the model.
+    """
 
-class TestGeneratedModelsAreValidated(unittest.TestCase):
-    """CLAUDE.md requires generated *Pydantic* models, so construction must validate."""
-
-    def test_wrong_type_is_rejected(self) -> None:
+    def test_constructor_rejects_wrong_types_and_out_of_range(self) -> None:
         with self.assertRaises(pydantic.ValidationError):
             Note(id="x", pitch="not a number")
-
-    def test_out_of_range_int32_is_rejected(self) -> None:
         with self.assertRaises(pydantic.ValidationError):
             Note(id="x", start_tick=2**31)
+
+    def test_from_json_coerces_instead_of_rejecting(self) -> None:
+        self.assertEqual(Note.from_json('{"pitch": 43.9}').pitch, 43)
+        self.assertEqual(Note.from_json('{"pitch": true}').pitch, 1)
 
 
 if __name__ == "__main__":

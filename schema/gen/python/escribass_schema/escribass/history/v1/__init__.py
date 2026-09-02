@@ -4,7 +4,6 @@
 # This file has been @generated
 
 __all__ = (
-    "Op",
     "PatchEntry",
     "Refs",
 )
@@ -19,40 +18,6 @@ from ....message_pool import default_message_pool
 
 _COMPILER_VERSION = "0.10.1"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
-
-
-@dataclass(eq=False, repr=False, config={"extra": "forbid"})
-class Op(betterproto2.Message):
-    """
-    One RFC 6902 operation. Field names and types are chosen so that the proto3 JSON of this
-    message *is* a valid RFC 6902 operation object, and PatchEntry.ops is therefore
-    consumable by any off-the-shelf JSON Patch library without translation (ADR 0002 §11).
-    """
-
-    op: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
-        1, betterproto2.TYPE_STRING
-    )
-    """
-    "add" | "remove" | "replace" | "move" | "copy" | "test"
-    """
-
-    path: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
-        2, betterproto2.TYPE_STRING
-    )
-    """
-    JSON Pointer
-    """
-
-    from_: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
-        3, betterproto2.TYPE_STRING, optional=True
-    )
-
-    value: "___google__protobuf__.Value | None" = betterproto2.field(
-        4, betterproto2.TYPE_MESSAGE, optional=True
-    )
-
-
-default_message_pool.register_message("escribass.history.v1", "Op", Op)
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
@@ -79,11 +44,25 @@ class PatchEntry(betterproto2.Message):
     The tool call that produced these ops, e.g. "set_notes".
     """
 
-    ops: "list[Op]" = betterproto2.field(4, betterproto2.TYPE_MESSAGE, repeated=True)
+    ops: "bytes" = betterproto2.field(4, betterproto2.TYPE_BYTES)
+    """
+    The canonical JSON text of the RFC 6902 operations array, verbatim as written to
+    patches/*.json. Opaque here on purpose: carrying it as bytes keeps the bytes on the
+    wire identical to the bytes on disk, and keeps protobuf out of the business of
+    representing arbitrary JSON values.
+    """
 
     provenance: "__song__v1__.Provenance | None" = betterproto2.field(
         5, betterproto2.TYPE_MESSAGE, optional=True
     )
+
+    schema_version: "typing.Annotated[int, pydantic.Field(ge=0, le=2**32 - 1)]" = (
+        betterproto2.field(6, betterproto2.TYPE_UINT32)
+    )
+    """
+    Schema version the ops were authored against, so a replay from the root can tell when
+    it crosses a schema boundary.
+    """
 
 
 default_message_pool.register_message("escribass.history.v1", "PatchEntry", PatchEntry)
@@ -115,5 +94,4 @@ class Refs(betterproto2.Message):
 default_message_pool.register_message("escribass.history.v1", "Refs", Refs)
 
 
-from ....google import protobuf as ___google__protobuf__
 from ...song import v1 as __song__v1__

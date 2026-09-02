@@ -3831,7 +3831,13 @@ impl serde::Serialize for TempoEvent {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.song.v1.TempoEvent", len)?;
+        if true {
+            struct_ser.serialize_field("id", &self.id)?;
+        }
         if true {
             struct_ser.serialize_field("tick", &self.tick)?;
         }
@@ -3848,12 +3854,14 @@ impl<'de> serde::Deserialize<'de> for TempoEvent {
         D: serde::Deserializer<'de>,
     {
         const FIELDS: &[&str] = &[
+            "id",
             "tick",
             "bpm",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
+            Id,
             Tick,
             Bpm,
         }
@@ -3877,6 +3885,7 @@ impl<'de> serde::Deserialize<'de> for TempoEvent {
                         E: serde::de::Error,
                     {
                         match value {
+                            "id" => Ok(GeneratedField::Id),
                             "tick" => Ok(GeneratedField::Tick),
                             "bpm" => Ok(GeneratedField::Bpm),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
@@ -3898,10 +3907,17 @@ impl<'de> serde::Deserialize<'de> for TempoEvent {
                 where
                     V: serde::de::MapAccess<'de>,
             {
+                let mut id__ = None;
                 let mut tick__ = None;
                 let mut bpm__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
+                        GeneratedField::Id => {
+                            if id__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("id"));
+                            }
+                            id__ = Some(map_.next_value()?);
+                        }
                         GeneratedField::Tick => {
                             if tick__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("tick"));
@@ -3921,6 +3937,7 @@ impl<'de> serde::Deserialize<'de> for TempoEvent {
                     }
                 }
                 Ok(TempoEvent {
+                    id: id__.unwrap_or_default(),
                     tick: tick__.unwrap_or_default(),
                     bpm: bpm__.unwrap_or_default(),
                 })
@@ -4008,7 +4025,9 @@ impl<'de> serde::Deserialize<'de> for TempoMap {
                             if events__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("events"));
                             }
-                            events__ = Some(map_.next_value()?);
+                            events__ = Some(
+                                map_.next_value::<std::collections::BTreeMap<_, _>>()?
+                            );
                         }
                     }
                 }
@@ -4037,7 +4056,13 @@ impl serde::Serialize for TimeSignatureEvent {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.song.v1.TimeSignatureEvent", len)?;
+        if true {
+            struct_ser.serialize_field("id", &self.id)?;
+        }
         if true {
             struct_ser.serialize_field("tick", &self.tick)?;
         }
@@ -4057,6 +4082,7 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureEvent {
         D: serde::Deserializer<'de>,
     {
         const FIELDS: &[&str] = &[
+            "id",
             "tick",
             "numerator",
             "denominator",
@@ -4064,6 +4090,7 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureEvent {
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
+            Id,
             Tick,
             Numerator,
             Denominator,
@@ -4088,6 +4115,7 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureEvent {
                         E: serde::de::Error,
                     {
                         match value {
+                            "id" => Ok(GeneratedField::Id),
                             "tick" => Ok(GeneratedField::Tick),
                             "numerator" => Ok(GeneratedField::Numerator),
                             "denominator" => Ok(GeneratedField::Denominator),
@@ -4110,11 +4138,18 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureEvent {
                 where
                     V: serde::de::MapAccess<'de>,
             {
+                let mut id__ = None;
                 let mut tick__ = None;
                 let mut numerator__ = None;
                 let mut denominator__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
+                        GeneratedField::Id => {
+                            if id__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("id"));
+                            }
+                            id__ = Some(map_.next_value()?);
+                        }
                         GeneratedField::Tick => {
                             if tick__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("tick"));
@@ -4142,6 +4177,7 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureEvent {
                     }
                 }
                 Ok(TimeSignatureEvent {
+                    id: id__.unwrap_or_default(),
                     tick: tick__.unwrap_or_default(),
                     numerator: numerator__.unwrap_or_default(),
                     denominator: denominator__.unwrap_or_default(),
@@ -4230,7 +4266,9 @@ impl<'de> serde::Deserialize<'de> for TimeSignatureMap {
                             if events__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("events"));
                             }
-                            events__ = Some(map_.next_value()?);
+                            events__ = Some(
+                                map_.next_value::<std::collections::BTreeMap<_, _>>()?
+                            );
                         }
                     }
                 }

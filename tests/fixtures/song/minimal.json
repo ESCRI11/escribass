@@ -7,21 +7,23 @@
   "version": 214,
   "schema_version": 1,
   "tempo_map": {
-    "events": [
-      {
+    "events": {
+      "01K4F2M001": {
+        "id": "01K4F2M001",
         "tick": 0,
         "bpm": 92.0
       }
-    ]
+    }
   },
   "time_signature_map": {
-    "events": [
-      {
+    "events": {
+      "01K4F2M002": {
+        "id": "01K4F2M002",
         "tick": 0,
         "numerator": 4,
         "denominator": 4
       }
-    ]
+    }
   },
   "sections": {
     "01K4F2C003": {

@@ -10,7 +10,9 @@ prost = "0.14"
 pbjson = "0.8"
 pbjson-types = "0.8"
 serde = { version = "1", features = ["derive"] }
+# float_roundtrip: without it serde_json's parser is off by one ULP on ~30% of doubles,
+# so load-then-save is not a fixed point and §11 determinism fails on first re-save.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [dev-dependencies]
 serde = "1"
-serde_json = "1"

@@ -41,7 +41,7 @@ message, rather than one embedded `Meta` message.
 
 Protobuf has no field mixins, so the alternative is a submessage — which would put `/meta/`
 into every RFC 6902 path and contradict ADR 0001's own worked example
-(`/clips/…/notes/{id}/pitch`). Repetition costs three lines per message and nothing in any
+(`/clips/…/note_clip/notes/{id}/pitch`). Repetition costs three lines per message and nothing in any
 generated language.
 
 `AutomationPoint` carries `id` only. §4.2 writes points as anonymous `{tick, value, curve}`
@@ -74,9 +74,25 @@ message fields and map entries legitimately appear and disappear, and those are 
 snake_case matches §4, ADR 0001 and the wireframes, and matches the attribute names in
 generated Rust and Python. Every proto JSON parser accepts both casings on input.
 
-This needs no custom serialiser: `pbjson` exposes `preserve_proto_field_names`,
-`emit_fields` and `btree_map`, and a `BTreeMap` iterates in sorted key order. The concrete
-writer lands in `core` at M0.2.
+This needs no custom serialiser for `song.json`: `pbjson` exposes
+`preserve_proto_field_names`, `emit_fields` and `btree_map`, and a `BTreeMap` iterates in
+sorted key order. The concrete writer lands in `core` at M0.2.
+
+Three further degrees of freedom are part of the canonical form and are the writer's job:
+
+- **Doubles.** `serde_json` must be built with `float_roundtrip`. Its default parser is off
+  by one ULP on roughly a third of doubles, so load-then-save is not a fixed point and §11's
+  "same project file → identical output" fails on the first re-save. Printing is already
+  shortest-round-trip and stable. The writer **rejects non-finite doubles**: NaN and the
+  infinities serialise as `null` and cannot be read back, so one NaN from a plugin parameter
+  would otherwise write an unreadable project. `-0.0` normalises to `0.0`.
+- **Message presence.** `Track { routing: None }` and `Track { routing: Some(default) }` are
+  semantically identical and produce different bytes. The writer normalises presence, and
+  the validator requires `provenance`, `mix`, `routing`, `tempo_map`, `time_signature_map`
+  and `render_target`, with `instrument` present exactly when `kind == INSTRUMENT`.
+- **Timestamps.** RFC 3339, `Z`-suffixed, millisecond precision — the proto3 canonical form,
+  which is also what the TypeScript and Python generators emit. `pbjson` writes `+00:00`
+  today; the writer normalises at M0.2, and all three languages already parse both forms.
 
 ### 5. `optional` only where absent differs from zero
 
@@ -111,6 +127,10 @@ it against a real caller. `Marker` is two fields and §4.2 names it, so it stays
 | `points: [{tick, value, curve}]` | `curve` enum with `LINEAR` and `HOLD` only | Any other interpolation formula is renderer-specific and would put bit-exactness (§11) at the mercy of the renderer. Add shapes with a defined formula. |
 | `Generator.kind (strudel \| python \| …)` | `GENERATOR_KIND_PYTHON` only | §15 already defers Strudel. |
 | `Generator.params` | `map<string, string>` | Typed params when the DSL defines a parameter schema. |
+| `Track.instrument: InstrumentRef`, `fx_chain: [EffectRef]` | `Instrument` and `Effect` embedded in `Track` | Ids are globally unique and the entities have exactly one owner, so embedding removes a whole class of dangling-reference validation. `DeviceRef` is what §4.4's "InstrumentRef/EffectRef resolves" refers to. |
+| `Note` per-note expression `[{param, value}]` | `map<string, double>` | Keyed by parameter name: path-stable without needing a ULID per expression value. |
+| `Clip.loop` | `optional int32 loop_length_ticks` | Presence carries the boolean, so two fields cannot disagree. |
+| `TempoMap.events`, `TimeSignatureMap.events` | id-keyed maps | See ADR 0001 §3's correction: an array index is not a stable patch path, whether or not the elements have identity. |
 
 ### 9. `Generator.seed` is a plain `uint64`, making §4.4's non-null rule structural
 
@@ -122,12 +142,41 @@ Seed `0` is a legitimate seed. The remaining §4.4 check is `toolchain_version !
 `prost-build` does not accept `edition = "2023"` (tokio-rs/prost#1031). proto3 is fully
 supported and not deprecated.
 
-### 11. `Op` is shaped so its JSON *is* an RFC 6902 operation
+### 11. Patch operations are canonical JSON text, not a protobuf message
 
-`Op { string op; string path; optional string from; google.protobuf.Value value; }`. The
-proto3 JSON of an `Op` is a valid RFC 6902 operation object, so `PatchEntry.ops` is
-consumable by any off-the-shelf patch library in any of the four languages without a
-translation layer. M0.3's `dry_run` responses return the same message.
+**Revised 2026-09-02, before any consumer existed.** This decision originally modelled an
+operation as `Op { op, path, from, google.protobuf.Value value }`, on the reasoning that its
+proto3 JSON *is* a valid RFC 6902 operation object. The syntax was right and the effect was
+wrong, in two ways that a review caught by running it:
+
+1. **The patch log could not be byte-stable.** `pbjson_types::Struct.fields` is a `HashMap`,
+   and the `btree_map` option reaches our generated messages but not a precompiled crate.
+   The same `add` op serialised in four processes produced four key orders. Every
+   `add_track`, `add_clip` and `add_note` entry carries an object value, so ADR 0001's
+   promise that M0.4 compares patch logs byte for byte was unachievable.
+2. **Our own patches produced documents `core` could not read.** `Value.number_value` is a
+   `double`, so a pitch was written `43.0`; applying that with an ordinary JSON Pointer
+   implementation and re-parsing failed on the `int32` field. The three languages disagreed
+   about it — Rust rejected `43.0`, TypeScript accepted it, and Python silently truncated
+   `43.5` to `43` and `true` to `1`.
+
+Both follow from trying to model a dynamically typed format in a statically typed one. So:
+
+- **`patches/*.json` is a literal RFC 6902 document**, written by `core`'s canonical writer
+  from `serde_json::Value`. `serde_json::Map` is a `BTreeMap`, so object keys sort; integers
+  stay integers. Any off-the-shelf patch library can apply the file, and the result parses.
+- **`history.proto` is transport.** `PatchEntry.ops` is `bytes`, carrying that canonical JSON
+  text verbatim, so the bytes on the wire are the bytes on disk. M0.3's `dry_run` responses
+  return the same bytes.
+- **Ops targeting a 64-bit field carry a JSON string**, matching the canonical form. Written
+  as a number, a seed above 2^53 is exact in Rust and Python and lossy in TypeScript.
+
+`history.proto` therefore no longer defines the on-disk patch shape; ADR 0001 §1 does.
+
+### 12. `PatchEntry` records the schema version it was authored against
+
+ADR 0001's materialise-and-diff replays from the root, so without it a replay cannot tell
+when it crosses a schema boundary. One field now; unavailable retroactively later.
 
 ## Consequences
 

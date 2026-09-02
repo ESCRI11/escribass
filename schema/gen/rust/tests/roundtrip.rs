@@ -8,15 +8,13 @@
 //! by hand — the nearest thing to CLAUDE.md #2 available until M0.4 can drive fixtures
 //! through the tool API.
 
-use escribass_schema::history::{Op, PatchEntry, Refs};
+use escribass_schema::history::{PatchEntry, Refs};
 use escribass_schema::pbjson_types;
 use escribass_schema::song::*;
 use std::collections::BTreeMap;
 
 const SONG_FIXTURE: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tests/fixtures/song/minimal.json");
-const PATCH_FIXTURE: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tests/fixtures/history/minimal.json");
 
 /// Fixed instant so the fixture is byte-stable: 2026-09-02T00:00:00Z.
 const CREATED_AT: i64 = 1_788_307_200;
@@ -170,9 +168,26 @@ fn build() -> Song {
         provenance: prov(Author::Human, None),
         version: 214,
         schema_version: 1,
-        tempo_map: Some(TempoMap { events: vec![TempoEvent { tick: 0, bpm: 92.0 }] }),
+        tempo_map: Some(TempoMap {
+            events: [(
+                "01K4F2M001".to_string(),
+                TempoEvent { id: "01K4F2M001".to_string(), tick: 0, bpm: 92.0 },
+            )]
+            .into_iter()
+            .collect(),
+        }),
         time_signature_map: Some(TimeSignatureMap {
-            events: vec![TimeSignatureEvent { tick: 0, numerator: 4, denominator: 4 }],
+            events: [(
+                "01K4F2M002".to_string(),
+                TimeSignatureEvent {
+                    id: "01K4F2M002".to_string(),
+                    tick: 0,
+                    numerator: 4,
+                    denominator: 4,
+                },
+            )]
+            .into_iter()
+            .collect(),
         }),
         sections: [(
             "01K4F2C003".to_string(),
@@ -218,28 +233,55 @@ fn build() -> Song {
     }
 }
 
-fn minimal_patch_entry() -> PatchEntry {
-    PatchEntry {
-        id: "01K4F31M2T".to_string(),
-        parents: vec!["01K4F2QN8B".to_string()],
-        tool: "set_notes".to_string(),
-        ops: vec![
-            Op {
-                op: "replace".to_string(),
-                path: "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch".to_string(),
-                from: None,
-                value: Some(pbjson_types::Value {
-                    kind: Some(pbjson_types::value::Kind::NumberValue(43.0)),
-                }),
-            },
-            Op {
-                op: "remove".to_string(),
-                path: "/clips/01K4F2QN8B/note_clip/notes/01K4F2N002".to_string(),
-                from: None,
-                value: None,
-            },
-        ],
-        provenance: prov(Author::Model, Some("call_01B")),
+/// The operations for the canonical bar-17 edit, as an RFC 6902 array.
+///
+/// `serde_json::Map` is a `BTreeMap` by default, so object keys sort; integers stay
+/// integers. Both properties are why ops are authored as canonical JSON rather than
+/// modelled in protobuf (ADR 0002 §11).
+fn ops_json() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "op": "replace",
+            "path": "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch",
+            "value": 43
+        },
+        {
+            // 64-bit fields are JSON strings in the canonical form, so an op that writes
+            // one must carry a string or the value is silently rounded by some parsers.
+            "op": "replace",
+            "path": "/generators/01K4F2G001/seed",
+            "value": "9007199254740993"
+        },
+        { "op": "remove", "path": "/clips/01K4F2QN8B/note_clip/notes/01K4F2N002" }
+    ])
+}
+
+fn ops_text() -> String {
+    let mut s = serde_json::to_string_pretty(&ops_json()).unwrap();
+    s.push('\n');
+    s
+}
+
+/// Applies an RFC 6902 op the way any patch library would: resolve the JSON Pointer, then
+/// assign or delete. Deliberately not a dependency — the point is to behave like an
+/// arbitrary third-party implementation, not like ours.
+fn apply_ops(doc: &mut serde_json::Value, ops: &serde_json::Value) {
+    for op in ops.as_array().unwrap() {
+        let path = op["path"].as_str().unwrap();
+        match op["op"].as_str().unwrap() {
+            "replace" | "add" => {
+                *doc.pointer_mut(path).expect("path must resolve") = op["value"].clone();
+            }
+            "remove" => {
+                let (parent, key) = path.rsplit_once('/').unwrap();
+                doc.pointer_mut(parent)
+                    .and_then(|p| p.as_object_mut())
+                    .expect("parent must be an object")
+                    .remove(key)
+                    .expect("key must exist");
+            }
+            other => panic!("unhandled op {other}"),
+        }
     }
 }
 
@@ -266,13 +308,6 @@ fn song_matches_canonical_fixture() {
 }
 
 #[test]
-fn patch_entry_matches_canonical_fixture() {
-    let entry = minimal_patch_entry();
-    let actual = canonical(&entry);
-    assert_eq!(actual, read_or_write(PATCH_FIXTURE, &actual));
-}
-
-#[test]
 fn json_round_trips() {
     let song = build();
     let parsed: Song = serde_json::from_str(&canonical(&song)).unwrap();
@@ -285,27 +320,6 @@ fn binary_round_trips() {
     let song = build();
     let bytes = song.encode_to_vec();
     assert_eq!(song, Song::decode(&bytes[..]).unwrap());
-}
-
-#[test]
-fn map_keys_are_sorted_regardless_of_insertion_order() {
-    let mut reversed = build();
-    let notes: Vec<_> = match reversed.clips.get("01K4F2QN8B").unwrap().content.clone().unwrap() {
-        clip::Content::NoteClip(n) => n.notes.into_iter().collect(),
-        _ => unreachable!(),
-    };
-    let mut backwards = BTreeMap::new();
-    for (k, v) in notes.into_iter().rev() {
-        backwards.insert(k, v);
-    }
-    reversed.clips.get_mut("01K4F2QN8B").unwrap().content =
-        Some(clip::Content::NoteClip(NoteClip { notes: backwards }));
-
-    let json = canonical(&reversed);
-    let first = json.find("01K4F2N001").unwrap();
-    let second = json.find("01K4F2N002").unwrap();
-    assert!(first < second, "map keys must serialise in sorted order");
-    assert_eq!(json, canonical(&build()));
 }
 
 #[test]
@@ -353,4 +367,112 @@ fn refs_round_trip() {
     };
     let parsed: Refs = serde_json::from_str(&canonical(&refs)).unwrap();
     assert_eq!(refs, parsed);
+}
+
+#[test]
+fn map_keys_serialise_sorted_whatever_order_they_arrive_in() {
+    // Parsed from text with keys out of order, so this fails if the generated maps ever
+    // stop being ordered — unlike asserting that a BTreeMap is sorted, which cannot fail.
+    let refs: Refs =
+        serde_json::from_str(r#"{"head": "main", "refs": {"zulu": "1", "alpha": "2"}}"#).unwrap();
+    let json = canonical(&refs);
+    assert!(json.find("alpha").unwrap() < json.find("zulu").unwrap());
+}
+
+#[test]
+fn a_patch_applied_by_an_ordinary_library_leaves_a_document_core_can_read() {
+    // The case that matters: `core` writes a patch, something else applies it, `core` reads
+    // the result. Modelling op values in protobuf made this fail — `google.protobuf.Value`
+    // is double-valued, so a pitch came back as `43.0` and the int32 field rejected it.
+    let mut doc: serde_json::Value = serde_json::from_str(&canonical(&build())).unwrap();
+    apply_ops(&mut doc, &ops_json());
+
+    let patched: Song = serde_json::from_value(doc)
+        .expect("core must be able to read the document its own patch produced");
+
+    let clip::Content::NoteClip(notes) =
+        patched.clips["01K4F2QN8B"].content.clone().unwrap()
+    else {
+        unreachable!()
+    };
+    assert_eq!(notes.notes.len(), 1, "the removed note is gone");
+    assert_eq!(notes.notes["01K4F2N001"].pitch, 43);
+    assert_eq!(patched.generators["01K4F2G001"].seed, 9_007_199_254_740_993);
+}
+
+#[test]
+fn an_op_writing_a_float_into_an_integer_field_is_rejected_rather_than_truncated() {
+    let mut doc: serde_json::Value = serde_json::from_str(&canonical(&build())).unwrap();
+    let path = "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch";
+    *doc.pointer_mut(path).unwrap() = serde_json::json!(43.5);
+    assert!(
+        serde_json::from_value::<Song>(doc).is_err(),
+        "a non-integral pitch must be an error, not a silent truncation"
+    );
+}
+
+#[test]
+fn patch_entry_carries_its_ops_verbatim_over_the_wire() {
+    use prost::Message;
+    let entry = PatchEntry {
+        id: "01K4F31M2T".to_string(),
+        parents: vec!["01K4F2QN8B".to_string()],
+        tool: "set_notes".to_string(),
+        ops: ops_text().into_bytes(),
+        provenance: prov(Author::Model, Some("call_01B")),
+        schema_version: 1,
+    };
+    let decoded = PatchEntry::decode(&entry.encode_to_vec()[..]).unwrap();
+    assert_eq!(decoded, entry);
+    // Byte-identical to what goes in patches/*.json: the wire carries the file, not a
+    // re-encoding of it.
+    assert_eq!(String::from_utf8(decoded.ops).unwrap(), ops_text());
+}
+
+#[test]
+fn doubles_survive_a_canonical_round_trip_bit_for_bit() {
+    // Fails without serde_json's `float_roundtrip`: its default parser is off by one ULP on
+    // roughly a third of doubles, so load-then-save would not be a fixed point (§11).
+    // Seeded LCG, so this is deterministic and depends on no wall clock.
+    let mut state: u64 = 0x2545_F491_4F6C_DD1D;
+    let mut checked = 0;
+    for _ in 0..40_000 {
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        let v = f64::from_bits(state);
+        if !v.is_finite() {
+            continue;
+        }
+        let mix = Mix { gain_db: v, pan: 0.0, mute: false, solo: false };
+        let text = serde_json::to_string(&mix).unwrap();
+        let back: Mix = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.gain_db.to_bits(), v.to_bits(), "{v:e} did not survive as {text}");
+        checked += 1;
+    }
+    assert!(checked > 30_000, "expected a meaningful sample, got {checked}");
+}
+
+#[test]
+fn non_finite_doubles_do_not_survive_and_so_the_writer_must_reject_them() {
+    // Pins the reason ADR 0002 lists "all doubles finite" as a rule the *writer* enforces,
+    // not just the validator: one NaN from a plugin param would otherwise write a file that
+    // cannot be read back.
+    let mix = Mix { gain_db: f64::NAN, ..Default::default() };
+    let text = serde_json::to_string(&mix).unwrap();
+    assert!(text.contains("null"), "non-finite doubles serialise as null: {text}");
+    assert!(serde_json::from_str::<Mix>(&text).is_err(), "and null does not read back");
+}
+
+#[test]
+fn timestamps_parse_in_both_the_z_and_offset_forms() {
+    // pbjson writes `+00:00`; proto3's canonical JSON is `Z`, and TS and Python both write
+    // `Z`. Pinning that Rust reads both keeps M0.2 free to normalise the written form.
+    let z: Provenance =
+        serde_json::from_str(r#"{"author": "AUTHOR_HUMAN", "created_at": "2026-09-02T00:00:00Z"}"#)
+            .unwrap();
+    let offset: Provenance = serde_json::from_str(
+        r#"{"author": "AUTHOR_HUMAN", "created_at": "2026-09-02T00:00:00+00:00"}"#,
+    )
+    .unwrap();
+    assert_eq!(z, offset);
+    assert_eq!(z.created_at.unwrap().seconds, CREATED_AT);
 }

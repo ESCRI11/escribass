@@ -3,23 +3,17 @@
 // This lives in its own package, and song.proto never imports it. History must never reach
 // the render engine (§14.6), and separate packages make that structural rather than a rule
 // somebody has to remember: a Song cannot carry a PatchEntry.
+//
+// Note what this file is NOT: the on-disk shape of patches/*.json. That file is a literal
+// RFC 6902 document written by core's canonical writer (ADR 0001 §1). JSON Patch values are
+// dynamically typed by nature, and modelling them in protobuf cost both determinism and
+// round-tripping — see ADR 0002 §11. The messages here are the gRPC transport.
 
 syntax = "proto3";
 
 package escribass.history.v1;
 
-import "google/protobuf/struct.proto";
 import "song.proto";
-
-// One RFC 6902 operation. Field names and types are chosen so that the proto3 JSON of this
-// message *is* a valid RFC 6902 operation object, and PatchEntry.ops is therefore
-// consumable by any off-the-shelf JSON Patch library without translation (ADR 0002 §11).
-message Op {
-  string op = 1; // "add" | "remove" | "replace" | "move" | "copy" | "test"
-  string path = 2; // JSON Pointer
-  optional string from = 3;
-  google.protobuf.Value value = 4;
-}
 
 // One node in the history DAG. Append-only; entries are never rewritten or deleted.
 message PatchEntry {
@@ -28,8 +22,15 @@ message PatchEntry {
   repeated string parents = 2;
   // The tool call that produced these ops, e.g. "set_notes".
   string tool = 3;
-  repeated Op ops = 4;
+  // The canonical JSON text of the RFC 6902 operations array, verbatim as written to
+  // patches/*.json. Opaque here on purpose: carrying it as bytes keeps the bytes on the
+  // wire identical to the bytes on disk, and keeps protobuf out of the business of
+  // representing arbitrary JSON values.
+  bytes ops = 4;
   escribass.song.v1.Provenance provenance = 5;
+  // Schema version the ops were authored against, so a replay from the root can tell when
+  // it crosses a schema boundary.
+  uint32 schema_version = 6;
 }
 
 // The contents of refs.json: branch pointers and the current branch (ADR 0001 §2).
