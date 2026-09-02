@@ -209,18 +209,25 @@ Before merging any change, confirm:
 | Patch op representation | Canonical JSON text on disk; `bytes` on the wire | Modelling RFC 6902 values in protobuf made the patch log nondeterministic and produced documents core could not re-read (ADR 0002 §11) | 2026-09-02 |
 | Tempo/time-signature events | id-keyed maps, like every other collection | An array index is not a stable patch path under concurrent branch inserts (ADR 0001 §3, corrected) | 2026-09-02 |
 | Entity `version` on merge | Maintained by core, never in a tool op; resolved as max+1 | Otherwise every merge conflicts by construction on `/…/version` (ADR 0001 §4) | 2026-09-02 |
+| Milestone scope | §16 authoritative; eight unplaced items placed; neural runtime in v1 at M4 | Unplaced scope is invisible scope, and §16 had fallen behind decisions binding elsewhere (ADR 0003) | 2026-09-02 |
 | `FormRule` | Deferred to M4 | Least-specified entity in §4 and nothing consumes it before the generative compiler; additive to add (ADR 0002) | 2026-09-02 |
 
-Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process); minimum supported OS versions; symbolic model choice for v1 melody/drum generation.
+Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process — must be resolved before M4, ADR 0003 §7); minimum supported OS versions; symbolic model choice for v1 melody/drum generation; whether §6's analysis features and symbolic generation are v1 scope at all (ADR 0003, Still unplaced).
 
-## 16. Milestones (proposed)
+## 16. Milestones
 
-1. **M0 – Schema & core**: proto, Rust core, validator, patch log, tool API, JSON persistence, tests.
-2. **M1 – Render**: engine process, Tracktion edit builder, one bundled synth, offline WAV render, golden test.
-3. **M2 – UI**: Tauri app, timeline + piano roll as model projections, preview playback.
-4. **M3 – AI loop**: Python sidecar, tool-calling loop with dry-run/diff/apply, AI panel.
-5. **M4 – Compilers**: Cmajor JIT + CLAP export + clap-wrapper, Python DSL generator with seeds, lock file.
-6. **M5 – Interop & polish**: DAWproject import/export, stems, installer bundling all three processes.
+Scope placement is recorded in ADR 0003. Live status is `docs/plan.md`; the arc in user terms
+is `docs/roadmap.md`. Both defer to this section.
+
+1. **M0 – Schema & core**: proto, Rust core, validator, patch log with branching and merge, tool API over gRPC and MCP, JSON persistence, tests.
+2. **M1 – Render**: engine process, Tracktion edit builder, the bundled instruments of §8 with a golden-render test each (§11), offline WAV render.
+3. **M2 – UI**: Tauri app, timeline, piano roll, mixer and history as model projections, preview playback.
+4. **M3 – AI loop**: Python sidecar, tool-calling loop with dry-run/diff/apply, AI panel. Preceded by the Libretto-grammar ADR required by §18.2.
+5. **M4 – Compilers**: Cmajor JIT + CLAP export + clap-wrapper, Python DSL generator with seeds, neural runtime (§7.3), code views (§9), `lock.json` completed with compiled artefacts.
+6. **M5 – Interop & polish**: DAWproject import/export, MIDI import/export (§10), REAPER RPP path, `song.proto` published as a standalone versioned artifact (§18.2), stems, installer bundling all three processes.
+
+`lock.json` itself is created by the project store at M0 — it is part of the project directory
+(§10) and is checked at load (§11). M4 adds the compiled artefacts to it.
 
 ## 17. Pinned toolchain baseline [MUST]
 

@@ -15,6 +15,9 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
 
 ## Current milestone: M0 — Schema & core
+
+Live status, deferred items and known gaps: `docs/plan.md`.
+
 Deliver, in this order, each as a separate PR with tests:
 1. `schema/song.proto` implementing §4, plus codegen for Rust, TypeScript, Python (C++ later).
 2. `core/`: Rust crate with model types (generated), validator (§4.4), JSON Patch log, canonical JSON persistence.
