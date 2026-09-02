@@ -33,5 +33,7 @@ Out of scope for M0: engine, UI, AI orchestrator, compilers. Do not scaffold the
 
 ## Working style
 - Small PRs, one milestone step each. Write the ADR first when a decision is needed.
+- **Never commit to `main`.** Branch, push, open a PR, merge when CI is green. `buf breaking`
+  runs on pull requests only, so work that skips the PR skips the wire-compatibility check.
 - Run the full test suite before declaring a step done. Never skip failing tests.
 - Ask before adding a dependency not in `lock.baseline.json`.

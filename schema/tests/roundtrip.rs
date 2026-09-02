@@ -48,14 +48,14 @@ fn note(id: &str, pitch: i32, start_tick: i32, expression: &[(&str, f64)]) -> No
 /// a well-known type, and a 64-bit integer.
 fn build() -> Song {
     let bass = Track {
-        id: "01K4F2T001".to_string(),
+        id: "01M1FPMP00TRACKBASS0000002".to_string(),
         provenance: prov(Author::Human, None),
         version: 3,
         name: "Bass".to_string(),
         kind: TrackKind::Instrument as i32,
         index: 0,
         instrument: Some(Instrument {
-            id: "01K4F2A000".to_string(),
+            id: "01M1FPMP00NSTSBBASS0000004".to_string(),
             provenance: prov(Author::Model, Some("call_01A")),
             version: 1,
             r#ref: Some(DeviceRef {
@@ -67,9 +67,9 @@ fn build() -> Song {
             params: [("drive".to_string(), 0.62)].into_iter().collect(),
         }),
         fx_chain: [(
-            "01K4F2E001".to_string(),
+            "01M1FPMP00FXSRGE0000000005".to_string(),
             Effect {
-                id: "01K4F2E001".to_string(),
+                id: "01M1FPMP00FXSRGE0000000005".to_string(),
                 provenance: prov(Author::Human, None),
                 version: 1,
                 r#ref: Some(DeviceRef {
@@ -95,7 +95,7 @@ fn build() -> Song {
     };
 
     let master = Track {
-        id: "01K4F2T002".to_string(),
+        id: "01M1FPMP00TRACKMASTER00003".to_string(),
         provenance: prov(Author::Human, None),
         version: 1,
         name: "Master".to_string(),
@@ -114,17 +114,17 @@ fn build() -> Song {
 
     // Bar 17 at 960 PPQ in 4/4: (17 - 1) * 4 * 960.
     let clip = Clip {
-        id: "01K4F2QN8B".to_string(),
+        id: "01M1FPMP00CPCHRS0000000006".to_string(),
         provenance: prov(Author::Model, Some("call_01B")),
         version: 2,
-        track_id: "01K4F2T001".to_string(),
+        track_id: "01M1FPMP00TRACKBASS0000002".to_string(),
         start_tick: 61_440,
         length_ticks: 7_680,
         loop_length_ticks: None,
         content: Some(clip::Content::NoteClip(NoteClip {
             notes: [
-                ("01K4F2N001".to_string(), note("01K4F2N001", 43, 0, &[])),
-                ("01K4F2N002".to_string(), note("01K4F2N002", 38, 1_440, &[("timbre", 0.62)])),
+                ("01M1FPMP00NTEG100000000007".to_string(), note("01M1FPMP00NTEG100000000007", 43, 0, &[])),
+                ("01M1FPMP00NTED200000000008".to_string(), note("01M1FPMP00NTED200000000008", 38, 1_440, &[("timbre", 0.62)])),
             ]
             .into_iter()
             .collect(),
@@ -132,27 +132,27 @@ fn build() -> Song {
     };
 
     let automation = Automation {
-        id: "01K4F2U001".to_string(),
+        id: "01M1FPMP00ATCTFF000000000A".to_string(),
         provenance: prov(Author::Human, None),
         version: 1,
         target: Some(ParamRef {
-            device_id: "01K4F2A000".to_string(),
+            device_id: "01M1FPMP00NSTSBBASS0000004".to_string(),
             param: "cutoff".to_string(),
         }),
         points: [
             (
-                "01K4F2P001".to_string(),
+                "01M1FPMP00ATPT00000000000B".to_string(),
                 AutomationPoint {
-                    id: "01K4F2P001".to_string(),
+                    id: "01M1FPMP00ATPT00000000000B".to_string(),
                     tick: 61_440,
                     value: 0.2,
                     curve: Curve::Linear as i32,
                 },
             ),
             (
-                "01K4F2P002".to_string(),
+                "01M1FPMP00ATPT00000000000C".to_string(),
                 AutomationPoint {
-                    id: "01K4F2P002".to_string(),
+                    id: "01M1FPMP00ATPT00000000000C".to_string(),
                     tick: 69_120,
                     value: 0.8,
                     curve: Curve::Hold as i32,
@@ -164,23 +164,23 @@ fn build() -> Song {
     };
 
     Song {
-        id: "01K4F2S000".to_string(),
+        id: "01M1FPMP00SNG0000000000001".to_string(),
         provenance: prov(Author::Human, None),
         version: 214,
         schema_version: 1,
         tempo_map: Some(TempoMap {
             events: [(
-                "01K4F2M001".to_string(),
-                TempoEvent { id: "01K4F2M001".to_string(), tick: 0, bpm: 92.0 },
+                "01M1FPMP00TEMP00000000000E".to_string(),
+                TempoEvent { id: "01M1FPMP00TEMP00000000000E".to_string(), tick: 0, bpm: 92.0 },
             )]
             .into_iter()
             .collect(),
         }),
         time_signature_map: Some(TimeSignatureMap {
             events: [(
-                "01K4F2M002".to_string(),
+                "01M1FPMP00TMESG0000000000F".to_string(),
                 TimeSignatureEvent {
-                    id: "01K4F2M002".to_string(),
+                    id: "01M1FPMP00TMESG0000000000F".to_string(),
                     tick: 0,
                     numerator: 4,
                     denominator: 4,
@@ -190,9 +190,9 @@ fn build() -> Song {
             .collect(),
         }),
         sections: [(
-            "01K4F2C003".to_string(),
+            "01M1FPMP00SECTCHRS00000009".to_string(),
             Section {
-                id: "01K4F2C003".to_string(),
+                id: "01M1FPMP00SECTCHRS00000009".to_string(),
                 provenance: prov(Author::Model, Some("call_01C")),
                 version: 1,
                 name: "Chorus".to_string(),
@@ -207,9 +207,9 @@ fn build() -> Song {
         clips: [(clip.id.clone(), clip)].into_iter().collect(),
         automation: [(automation.id.clone(), automation)].into_iter().collect(),
         generators: [(
-            "01K4F2G001".to_string(),
+            "01M1FPMP00GENCHRS00000000D".to_string(),
             Generator {
-                id: "01K4F2G001".to_string(),
+                id: "01M1FPMP00GENCHRS00000000D".to_string(),
                 provenance: prov(Author::Model, Some("call_01D")),
                 version: 1,
                 kind: GeneratorKind::Python as i32,
@@ -218,7 +218,7 @@ fn build() -> Song {
                 // survives every language's parser.
                 seed: 9_007_199_254_740_993,
                 toolchain_version: "0.4.1".to_string(),
-                target: Some(generator::Target::ClipId("01K4F2QN8B".to_string())),
+                target: Some(generator::Target::ClipId("01M1FPMP00CPCHRS0000000006".to_string())),
                 params: BTreeMap::new(),
             },
         )]
@@ -242,17 +242,17 @@ fn ops_json() -> serde_json::Value {
     serde_json::json!([
         {
             "op": "replace",
-            "path": "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch",
+            "path": "/clips/01M1FPMP00CPCHRS0000000006/note_clip/notes/01M1FPMP00NTEG100000000007/pitch",
             "value": 43
         },
         {
             // 64-bit fields are JSON strings in the canonical form, so an op that writes
             // one must carry a string or the value is silently rounded by some parsers.
             "op": "replace",
-            "path": "/generators/01K4F2G001/seed",
+            "path": "/generators/01M1FPMP00GENCHRS00000000D/seed",
             "value": "9007199254740993"
         },
-        { "op": "remove", "path": "/clips/01K4F2QN8B/note_clip/notes/01K4F2N002" }
+        { "op": "remove", "path": "/clips/01M1FPMP00CPCHRS0000000006/note_clip/notes/01M1FPMP00NTED200000000008" }
     ])
 }
 
@@ -359,8 +359,8 @@ fn refs_round_trip() {
     let refs = Refs {
         head: "main".to_string(),
         refs: [
-            ("main".to_string(), "01K4F31M2T".to_string()),
-            ("try-darker-chorus".to_string(), "01K4F2Z10Q".to_string()),
+            ("main".to_string(), "01M1FPMP00PATCHSETNTES000G".to_string()),
+            ("try-darker-chorus".to_string(), "01M1FPMP00PATCHDARKER0000H".to_string()),
         ]
         .into_iter()
         .collect(),
@@ -391,19 +391,19 @@ fn a_patch_applied_by_an_ordinary_library_leaves_a_document_core_can_read() {
         .expect("core must be able to read the document its own patch produced");
 
     let clip::Content::NoteClip(notes) =
-        patched.clips["01K4F2QN8B"].content.clone().unwrap()
+        patched.clips["01M1FPMP00CPCHRS0000000006"].content.clone().unwrap()
     else {
         unreachable!()
     };
     assert_eq!(notes.notes.len(), 1, "the removed note is gone");
-    assert_eq!(notes.notes["01K4F2N001"].pitch, 43);
-    assert_eq!(patched.generators["01K4F2G001"].seed, 9_007_199_254_740_993);
+    assert_eq!(notes.notes["01M1FPMP00NTEG100000000007"].pitch, 43);
+    assert_eq!(patched.generators["01M1FPMP00GENCHRS00000000D"].seed, 9_007_199_254_740_993);
 }
 
 #[test]
 fn an_op_writing_a_float_into_an_integer_field_is_rejected_rather_than_truncated() {
     let mut doc: serde_json::Value = serde_json::from_str(&canonical(&build())).unwrap();
-    let path = "/clips/01K4F2QN8B/note_clip/notes/01K4F2N001/pitch";
+    let path = "/clips/01M1FPMP00CPCHRS0000000006/note_clip/notes/01M1FPMP00NTEG100000000007/pitch";
     *doc.pointer_mut(path).unwrap() = serde_json::json!(43.5);
     assert!(
         serde_json::from_value::<Song>(doc).is_err(),
@@ -415,8 +415,8 @@ fn an_op_writing_a_float_into_an_integer_field_is_rejected_rather_than_truncated
 fn patch_entry_carries_its_ops_verbatim_over_the_wire() {
     use prost::Message;
     let entry = PatchEntry {
-        id: "01K4F31M2T".to_string(),
-        parents: vec!["01K4F2QN8B".to_string()],
+        id: "01M1FPMP00PATCHSETNTES000G".to_string(),
+        parents: vec!["01M1FPMP00CPCHRS0000000006".to_string()],
         tool: "set_notes".to_string(),
         ops: ops_text().into_bytes(),
         provenance: prov(Author::Model, Some("call_01B")),

@@ -28,32 +28,32 @@ class TestSongFixture(unittest.TestCase):
 
     def test_reads_canonical_fixture(self) -> None:
         self.assertEqual(self.song.schema_version, 1)
-        self.assertEqual(self.song.tracks["01K4F2T001"].name, "Bass")
+        self.assertEqual(self.song.tracks["01M1FPMP00TRACKBASS0000002"].name, "Bass")
         self.assertEqual(
-            self.song.tracks["01K4F2T001"].instrument.ref.cmajor.source_hash,
+            self.song.tracks["01M1FPMP00TRACKBASS0000002"].instrument.ref.cmajor.source_hash,
             "8b31c0de4f9c00000000000000000000",
         )
-        self.assertEqual(self.song.sections["01K4F2C003"].start_tick, 61440)
+        self.assertEqual(self.song.sections["01M1FPMP00SECTCHRS00000009"].start_tick, 61440)
 
     def test_tempo_events_are_keyed_not_positional(self) -> None:
-        self.assertEqual(list(self.song.tempo_map.events), ["01K4F2M001"])
-        self.assertEqual(self.song.tempo_map.events["01K4F2M001"].bpm, 92.0)
+        self.assertEqual(list(self.song.tempo_map.events), ["01M1FPMP00TEMP00000000000E"])
+        self.assertEqual(self.song.tempo_map.events["01M1FPMP00TEMP00000000000E"].bpm, 92.0)
         self.assertEqual(
-            self.song.time_signature_map.events["01K4F2M002"].numerator, 4
+            self.song.time_signature_map.events["01M1FPMP00TMESG0000000000F"].numerator, 4
         )
 
     def test_oneof_and_optional_presence(self) -> None:
-        clip = self.song.clips["01K4F2QN8B"]
+        clip = self.song.clips["01M1FPMP00CPCHRS0000000006"]
         self.assertEqual(clip.start_tick, 61440)
         self.assertIsNotNone(clip.note_clip)
         self.assertIsNone(clip.audio_clip)
         self.assertIsNone(clip.loop_length_ticks, "unset optional stays absent")
         self.assertEqual(len(clip.note_clip.notes), 2)
-        self.assertEqual(clip.note_clip.notes["01K4F2N001"].pitch, 43)
-        self.assertEqual(clip.note_clip.notes["01K4F2N002"].expression["timbre"], 0.62)
+        self.assertEqual(clip.note_clip.notes["01M1FPMP00NTEG100000000007"].pitch, 43)
+        self.assertEqual(clip.note_clip.notes["01M1FPMP00NTED200000000008"].expression["timbre"], 0.62)
 
     def test_64_bit_seed_survives_the_json_string_encoding(self) -> None:
-        self.assertEqual(self.song.generators["01K4F2G001"].seed, 9007199254740993)
+        self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].seed, 9007199254740993)
 
     def test_binary_round_trip(self) -> None:
         self.assertEqual(Song.parse(bytes(self.song)), self.song)

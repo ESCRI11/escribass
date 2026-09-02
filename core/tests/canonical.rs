@@ -15,12 +15,12 @@ fn fixture_text() -> String {
 
 fn song_with_gain(gain_db: f64) -> Song {
     let track = Track {
-        id: "01K4F2T001".to_string(),
+        id: "01M1FPMP00TRACKBASS0000002".to_string(),
         mix: Some(Mix { gain_db, pan: 0.0, mute: false, solo: false }),
         ..Default::default()
     };
     Song {
-        id: "01K4F2S000".to_string(),
+        id: "01M1FPMP00SNG0000000000001".to_string(),
         schema_version: 1,
         tracks: [(track.id.clone(), track)].into_iter().collect(),
         ..Default::default()
@@ -61,7 +61,7 @@ fn non_finite_doubles_are_rejected_and_the_error_names_the_field() {
         let err = to_canonical_json(&song_with_gain(bad)).unwrap_err();
         assert_eq!(
             err,
-            CanonicalError::Unrepresentable { path: "/tracks/01K4F2T001/mix/gain_db".to_string() },
+            CanonicalError::Unrepresentable { path: "/tracks/01M1FPMP00TRACKBASS0000002/mix/gain_db".to_string() },
             "{bad} must be rejected at its path"
         );
         assert!(err.to_string().contains("gain_db"));
@@ -92,7 +92,7 @@ fn doubles_survive_the_round_trip_bit_for_bit() {
         }
         let text = to_canonical_json(&song_with_gain(v)).unwrap();
         let back = from_canonical_json(&text).unwrap();
-        let got = back.tracks["01K4F2T001"].mix.as_ref().unwrap().gain_db;
+        let got = back.tracks["01M1FPMP00TRACKBASS0000002"].mix.as_ref().unwrap().gain_db;
         assert_eq!(got.to_bits(), v.to_bits(), "{v:e} did not survive as {text}");
         checked += 1;
     }
@@ -119,7 +119,11 @@ fn unknown_fields_are_rejected_rather_than_dropped() {
 #[test]
 fn map_keys_are_written_in_sorted_order() {
     let mut tracks = BTreeMap::new();
-    for id in ["01K4F2T009", "01K4F2T001", "01K4F2T005"] {
+    for id in [
+        "01M1FPMP00TRACKZZZ00000009",
+        "01M1FPMP00TRACKAAA00000001",
+        "01M1FPMP00TRACKMMM00000005",
+    ] {
         tracks.insert(
             id.to_string(),
             Track { id: id.to_string(), mix: Some(Mix::default()), ..Default::default() },
@@ -127,5 +131,5 @@ fn map_keys_are_written_in_sorted_order() {
     }
     let text = to_canonical_json(&Song { tracks, ..Default::default() }).unwrap();
     let at = |k: &str| text.find(k).unwrap();
-    assert!(at("01K4F2T001") < at("01K4F2T005") && at("01K4F2T005") < at("01K4F2T009"));
+    assert!(at("TRACKAAA") < at("TRACKMMM") && at("TRACKMMM") < at("TRACKZZZ"));
 }

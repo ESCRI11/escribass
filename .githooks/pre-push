@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Refuses a direct push to main (CLAUDE.md, Working style).
+#
+# This is client-side. GitHub branch protection and rulesets both require Pro on a private
+# repository, so the server will accept a direct push; this is what stops one from being sent.
+# `git push --no-verify` bypasses it deliberately — a guard rail, not a permission system.
+set -euo pipefail
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [[ "$remote_ref" == "refs/heads/main" ]]; then
+    cat >&2 <<'MSG'
+refusing to push directly to main.
+
+  git switch -c <branch> && git push -u origin <branch> && gh pr create --fill
+
+See /AGENTS.md, "Working by pull request". Use --no-verify only to fix a broken main.
+MSG
+    exit 1
+  fi
+done

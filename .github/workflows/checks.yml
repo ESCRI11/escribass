@@ -66,4 +66,10 @@ jobs:
       # wire break. Only meaningful against a different ref, so pull requests only.
       - name: Wire compatibility
         if: github.event_name == 'pull_request'
-        run: schema/node_modules/.bin/buf breaking --against ".git#branch=${GITHUB_BASE_REF}"
+        run: |
+          # actions/checkout leaves no local ref for the base branch on a pull_request event,
+          # even at fetch-depth 0, so buf's `.git#branch=...` cannot resolve it. Fetch it into
+          # a local ref first.
+          git fetch --no-tags origin \
+            "+refs/heads/${GITHUB_BASE_REF}:refs/heads/${GITHUB_BASE_REF}"
+          schema/node_modules/.bin/buf breaking --against ".git#branch=${GITHUB_BASE_REF}"
