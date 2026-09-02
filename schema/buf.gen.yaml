@@ -5,13 +5,13 @@ plugins:
   # Rust: prost types, then the pbjson serde impls that produce the canonical JSON of
   # ADR 0002 §4 — proto field names, defaults emitted, map keys sorted (BTreeMap).
   - local: protoc-gen-prost
-    out: gen/rust/src
+    out: gen/rust
     opt:
       - btree_map=.
       - compile_well_known_types
       - extern_path=.google.protobuf=::pbjson_types
   - local: protoc-gen-prost-serde
-    out: gen/rust/src
+    out: gen/rust
     opt:
       - btree_map=.
       - emit_fields

@@ -16,7 +16,9 @@ done
 # Hash the inputs and outputs so --check can tell "codegen would produce something else"
 # apart from "you have uncommitted work" — git state is not the question being asked.
 snapshot() {
-  { find gen -type f -exec sha256sum {} + 2>/dev/null; sha256sum ./*.proto; } | sort -k2
+  # __pycache__ is excluded: running the Python tests writes .pyc files under gen/python,
+  # and rm -rf below would otherwise turn them into false drift.
+  { find gen -type f -not -path '*/__pycache__/*' -exec sha256sum {} + 2>/dev/null; sha256sum ./*.proto; } | sort -k2
 }
 
 before=""
@@ -25,9 +27,9 @@ before=""
 buf format -w
 buf lint
 
-# These two trees are wholly generated, so stale files from a previous layout must go.
-# gen/rust is not cleaned: its Cargo.toml, src/lib.rs and tests/ are hand-written.
-rm -rf gen/python gen/ts
+# gen/ is wholly generated, so stale files from a previous layout must go. Hand-written
+# files live outside it: Cargo.toml, src/lib.rs, package.json, pyproject.toml, tests/.
+rm -rf gen
 
 buf generate
 

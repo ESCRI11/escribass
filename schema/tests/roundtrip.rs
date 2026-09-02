@@ -14,7 +14,7 @@ use escribass_schema::song::*;
 use std::collections::BTreeMap;
 
 const SONG_FIXTURE: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tests/fixtures/song/minimal.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/song/minimal.json");
 
 /// Fixed instant so the fixture is byte-stable: 2026-09-02T00:00:00Z.
 const CREATED_AT: i64 = 1_788_307_200;

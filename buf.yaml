@@ -1,6 +1,9 @@
+# Workspace root, not schema/: buf v2 wants one buf.yaml at the common ancestor of every
+# module, and docs/specs.md §13 puts the gRPC service definitions (M0.3) in /proto, which
+# import schema/song.proto. Adding that module is one line here.
 version: v2
 modules:
-  - path: .
+  - path: schema
 lint:
   use:
     - STANDARD

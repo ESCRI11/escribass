@@ -166,7 +166,7 @@ Before merging any change, confirm:
 ## 13. Repository layout
 
 ```
-/schema          song.proto, codegen scripts
+/schema          song.proto, history.proto, codegen scripts, generated types
 /core            Rust: model, validator, tool API, patch log, DAWproject I/O
 /app             Tauri host (Rust) + web frontend
 /ai              Python orchestrator, tool bindings, models
