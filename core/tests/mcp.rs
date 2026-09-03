@@ -338,3 +338,30 @@ fn two_identical_sessions_produce_identical_projects_and_identical_answers() {
     };
     assert_eq!(entries(&first.0), entries(&second.0));
 }
+
+#[test]
+fn a_dry_run_that_is_not_a_boolean_is_refused_rather_than_applied() {
+    // `apply_patch` is decoded by hand, because `patch` is `bytes` and the generated route
+    // wants base64 — so it has to do by hand the strictness every other tool gets for free.
+    // Reading `"true"` as *false* made a preview request write, which is the one failure §9's
+    // approve-then-apply flow cannot tolerate, and a stringly-typed boolean is exactly what a
+    // model sends.
+    let dir = Scratch::new();
+    let ops = json!([{"op": "replace", "path": format!("/tracks/{MASTER}/name"), "value": "Out"}]);
+    let lines = session(
+        &dir.0,
+        &[
+            call(1, "apply_patch", json!({"patch": ops, "dry_run": "true"})),
+            call(2, "apply_patch", json!({"patch": ops, "bogus": 1})),
+            call(3, "get_history", json!({})),
+        ],
+    );
+
+    assert!(response(&lines, 1)["error"].is_object(), "a string `dry_run` was accepted");
+    assert!(response(&lines, 2)["error"].is_object(), "an unknown argument was accepted");
+    let entries = response(&lines, 3)["result"]["structuredContent"]["entries"]
+        .as_object()
+        .unwrap()
+        .len();
+    assert_eq!(entries, 1, "a refused call wrote an entry");
+}

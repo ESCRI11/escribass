@@ -436,9 +436,14 @@ impl History {
     ///
     /// A DAG can have several common ancestors; the one that matters is the latest, meaning the
     /// one no other common ancestor descends from. When two are equally latest there is no
-    /// single base, and picking one would silently choose which of two histories to treat as
-    /// the truth. That is reported instead: `merge_base_ambiguous` needs a criss-cross merge to
-    /// reach, which M0.3 has no way to create, and a wrong answer here would be invisible.
+    /// single base, and picking one would silently choose which of two histories counts as the
+    /// truth — so it is reported as `merge_base_ambiguous` instead.
+    ///
+    /// That is reachable: two branches that each merge a third reach it in four calls. The
+    /// answer is a recursive merge — merge the bases, use the result — which is M2's, alongside
+    /// the interactive resolution ADR 0001 §4 already defers there. Until then the pair is
+    /// merged one branch at a time, and refusing is the honest response rather than a guess
+    /// nobody could see was made.
     pub fn merge_base(&self, ours: &str, theirs: &str) -> Result<String, HistoryError> {
         let mine = self.ancestors(ours)?;
         let yours = self.ancestors(theirs)?;

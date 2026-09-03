@@ -31,7 +31,7 @@ fn bumped_with_disputes(edit: impl FnOnce(&mut Value)) -> (Value, Vec<escribass_
     let before = fixture();
     let mut patched = before.clone();
     edit(&mut patched);
-    let disputed = bump_versions(&before, &mut patched);
+    let disputed = bump_versions(&before, &mut patched, false);
     (patched, disputed)
 }
 
@@ -106,6 +106,31 @@ fn a_removal_bumps_the_container_that_lost_it() {
 }
 
 #[test]
+fn a_merge_resolves_to_the_higher_of_the_two_plus_one_even_when_they_are_adjacent() {
+    // The case a single shared rule got wrong. `max(L, L+1) + 1` is `L + 2`; a rule that
+    // preferred the ordinary answer whenever the caller had already stated it returned `L + 1`
+    // — a number the other branch had handed out for different content.
+    let before = fixture();
+    let mut patched = before.clone();
+    patched["tracks"][BASS]["name"] = json!("Bass (merged)");
+    patched["tracks"][BASS]["version"] = json!(4); // exactly one ahead of ours
+    assert!(bump_versions(&before, &mut patched, true).is_empty());
+    assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 5);
+}
+
+#[test]
+fn an_ordinary_edit_ignores_a_number_the_caller_states() {
+    // The other half of the split: outside a merge, `now` is not an input. A caller cannot
+    // push a version forward by stating a high one.
+    let (patched, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS]["name"] = json!("Renamed");
+        d["tracks"][BASS]["version"] = json!(4_000_000_000u64);
+    });
+    assert_eq!(disputed.first().map(|v| v.rule), Some("version_not_writable"));
+    assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 4);
+}
+
+#[test]
 fn a_merge_resolves_to_the_higher_of_the_two_plus_one() {
     // ADR 0001 §4's rule, which this one produces without a case of its own: the incoming
     // side's ops carry its own number, `before` holds ours, and `max + 1` beats both.
@@ -113,13 +138,12 @@ fn a_merge_resolves_to_the_higher_of_the_two_plus_one() {
     let mut patched = before.clone();
     patched["tracks"][BASS]["name"] = json!("Bass (merged)");
     patched["tracks"][BASS]["version"] = json!(9); // what the other branch had reached
-    let disputed = bump_versions(&before, &mut patched);
+    let disputed = bump_versions(&before, &mut patched, true);
 
     assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 10);
-    // Reported, and ignored on the merge path: these are core's own numbers arriving from the
-    // other branch, which is why `prepare_merge` exists (ADR 0005 §2).
-    assert_eq!(disputed.len(), 1);
-    assert_eq!(disputed[0].rule, "version_not_writable");
+    // Never disputed on the merge path: these are core's own numbers, arriving from the other
+    // branch, which is why the two modes are separate (ADR 0005 §2).
+    assert!(disputed.is_empty(), "{disputed:?}");
 }
 
 #[test]
@@ -130,7 +154,7 @@ fn a_plugin_version_is_not_an_entity_version() {
     let mut patched = before.clone();
     patched["tracks"][BASS]["instrument"]["ref"] =
         json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}});
-    assert!(bump_versions(&before, &mut patched).is_empty(), "a plugin pin is not an entity");
+    assert!(bump_versions(&before, &mut patched, false).is_empty(), "a plugin pin is not an entity");
 
     assert_eq!(patched["tracks"][BASS]["instrument"]["ref"]["plugin"]["version"], json!("1.3.4"));
     assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/instrument/version")), 2);
@@ -155,7 +179,7 @@ fn an_event_without_a_version_field_is_left_alone() {
 fn an_unchanged_document_bumps_nothing() {
     let before = fixture();
     let mut patched = before.clone();
-    assert!(bump_versions(&before, &mut patched).is_empty());
+    assert!(bump_versions(&before, &mut patched, false).is_empty());
     assert_eq!(patched, before);
 }
 

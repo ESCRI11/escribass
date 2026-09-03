@@ -6,9 +6,10 @@
 //! something a person or a model can act on; a silent choice between two edits is a song
 //! nobody wrote.
 //!
-//! The comparison is on RFC 6902 *paths*, which is why the note tools emit one op per note
-//! (§5, `tools.rs`): a coarser patch would make every pair of edits to one clip conflict, and
-//! branching would be useless exactly where people use it.
+//! The comparison is on RFC 6902 *paths*, and the paths compared are the ones `diff` produces
+//! from two documents — never a tool's own ops, which the pipeline discards. `diff` recurses to
+//! leaves, so granularity is the diff's rather than any tool's phrasing, and two branches
+//! editing different notes in one clip do not collide.
 //!
 //! `version` is excluded from conflict detection and from nothing else. Both branches bump it
 //! on every entity they touch, so including it would make every merge conflict by

@@ -42,9 +42,9 @@ pub fn is_entity(map: &Map<String, Value>) -> bool {
 ///
 /// A new entity is exempt: it has no number a client could be holding, and tools build one at
 /// 0 for the rule to take to 1.
-pub fn bump_versions(before: &Value, patched: &mut Value) -> Vec<Violation> {
+pub fn bump_versions(before: &Value, patched: &mut Value, merging: bool) -> Vec<Violation> {
     let mut disputed = Vec::new();
-    walk(Some(before), patched, "", &mut disputed);
+    walk(Some(before), patched, "", merging, &mut disputed);
     disputed
 }
 
@@ -57,6 +57,7 @@ fn walk(
     before: Option<&Value>,
     patched: &mut Value,
     at: &str,
+    merging: bool,
     disputed: &mut Vec<Violation>,
 ) -> bool {
     let Value::Object(map) = patched else {
@@ -84,7 +85,7 @@ fn walk(
         let deeper = format!("{at}/{}", crate::patch::escape_token(&key));
         let was = before_map.and_then(|m| m.get(&key)).cloned();
         let value = map.get_mut(&key).expect("the key came from this map");
-        changed |= walk(was.as_ref(), value, &deeper, disputed);
+        changed |= walk(was.as_ref(), value, &deeper, merging, disputed);
     }
 
     if entity {
@@ -99,34 +100,37 @@ fn walk(
         // Anything that is not a number counts as 0, so a version spelled as a string or left
         // out entirely is replaced rather than taken at face value.
         let now = map.get("version").and_then(Value::as_u64).unwrap_or(0);
-        // Two answers, because two callers arrive here. An ordinary edit bumps by one; a merge
-        // brings the other branch's number in the value and resolves to `max + 1` (ADR 0001
-        // §4). Preferring the ordinary answer when the caller already stated it is what lets a
-        // patch this API returned be applied unchanged — otherwise saying the right number
-        // pushes it one higher, and the round trip §9 needs is impossible by construction.
-        let ordinary = was.unwrap_or(0) + 1;
-        let resolved = was.unwrap_or(0).max(now) + 1;
-        let next = if !changed {
-            was.unwrap_or(now)
-        } else if asked == Some(Value::from(ordinary)) {
-            ordinary
-        } else {
-            resolved
+
+        // Two callers, two rules, stated separately rather than as one heuristic that has to
+        // serve both. An ordinary edit bumps by one and ignores whatever number arrived in the
+        // value; a merge resolves to `max(ours, theirs) + 1`, which is ADR 0001 §4's rule and
+        // is what keeps a client from ever being handed a number it has already seen.
+        //
+        // These were one branch, distinguished by whether the caller had already stated the
+        // ordinary answer. That collapsed silently when the other branch happened to be exactly
+        // one ahead: `max(L, L+1) + 1` should be `L+2`, and the shortcut returned `L+1` — a
+        // number the other branch had already handed out for different content.
+        let next = match (changed, merging) {
+            (false, _) => was.unwrap_or(now),
+            (true, false) => was.unwrap_or(0).saturating_add(1),
+            (true, true) => was.unwrap_or(0).max(now).saturating_add(1),
         };
 
-        // The caller asked for something only if the number changed under their hand, and only
-        // an entity that already existed has a number anyone could be holding.
-        if let Some(held) = held {
-            if asked.as_ref() != Some(held) && asked != Some(Value::from(next)) {
-                disputed.push(Violation {
-                    path: format!("{at}/version"),
-                    rule: "version_not_writable",
-                    message: format!(
-                        "`version` is maintained by core and is never written by a tool op \
-                         (ADR 0005 §3); this asked for {} where core computes {next}",
-                        asked.unwrap_or(Value::Null)
-                    ),
-                });
+        // Only an ordinary edit can dispute: a merge's numbers are core's own, arriving from
+        // the other branch (ADR 0005 §2).
+        if !merging {
+            if let Some(held) = held {
+                if asked.as_ref() != Some(held) && asked != Some(Value::from(next)) {
+                    disputed.push(Violation {
+                        path: format!("{at}/version"),
+                        rule: "version_not_writable",
+                        message: format!(
+                            "`version` is maintained by core and is never written by a tool op \
+                             (ADR 0005 §3); this asked for {} where core computes {next}",
+                            asked.clone().unwrap_or(Value::Null)
+                        ),
+                    });
+                }
             }
         }
         map.insert("version".to_string(), Value::from(next));

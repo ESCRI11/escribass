@@ -75,8 +75,12 @@ fn add(path: String, value: Value) -> Op {
 /// prost keeps an enum value it does not know as the raw `i32`, and the generated serializer
 /// then fails on it. `expect` here would panic *inside the transport's lock*: over gRPC one
 /// request carrying `kind: 99` would take the process down and poison the session for every
-/// later call, while over MCP the JSON deserializer rejects the same value up front. Two
-/// transports must not disagree about what a call means (ADR 0006).
+/// later call.
+///
+/// The two transports still answer such a call differently — MCP's JSON deserializer refuses
+/// the value before it reaches a tool, gRPC's binary decoding cannot — so gRPC returns
+/// `enum_unknown` where MCP returns `invalid_params`. Both are refusals a caller can act on,
+/// which is what ADR 0006 §2 asks for; they are not the *same* refusal.
 fn entity_value<T: serde::Serialize>(path: &str, value: &T) -> Result<Value, Vec<Violation>> {
     serde_json::to_value(value).map_err(|e| {
         refuse(path, "enum_unknown", format!("this is not a value the schema knows: {e}"))
@@ -121,7 +125,10 @@ pub fn add_track(
     }
 
     let id = ids.next_id();
-    let next_index = song.tracks.values().map(|t| t.index).max().map_or(0, |last| last + 1);
+    // Saturating: `index` is a `uint32` a caller can set through `apply_patch`, and a track at
+    // `u32::MAX` would otherwise panic here in a debug build and wrap to 0 in a release one —
+    // a duplicate index committed silently. Saturated, the validator refuses it with a rule.
+    let next_index = song.tracks.values().map(|t| t.index).max().map_or(0, |last| last.saturating_add(1));
     let instrument = is_instrument.then(|| Instrument {
         id: ids.next_id(),
         provenance: Some(provenance(author, clock)),
@@ -200,7 +207,9 @@ pub fn add_effect(
     let id = ids.next_id();
     let index = request
         .index
-        .unwrap_or_else(|| track.fx_chain.values().map(|e| e.index).max().map_or(0, |l| l + 1));
+        .unwrap_or_else(|| {
+            track.fx_chain.values().map(|e| e.index).max().map_or(0, |l| l.saturating_add(1))
+        });
 
     let effect = Effect {
         id: id.clone(),
