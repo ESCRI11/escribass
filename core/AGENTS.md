@@ -23,6 +23,9 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/merge.rs` | Three-way conflict detection by RFC 6902 path (ADR 0001 §4). No content-aware resolution: a structured error is actionable, a silent choice is a song nobody wrote. | done |
 | `tests/tools_merge.rs` | `merge_branch`: both sides of the conflict line, `version` resolution, and the auto-merge that produces an invalid song. | done |
 | `tests/tools_branches.rs` | `create_branch`, `switch_branch`, `delete_branch`. Mostly one claim from several angles: leaving a branch and coming back is byte for byte. | done |
+| `src/grpc.rs` | The gRPC surface: the generated `SongTools` trait over the same `Session`. Translation only. | done |
+| `src/bin/escribass-grpc.rs` | The server binary. Loopback and no TLS — the service edits local files with no authentication. | done |
+| `tests/grpc.rs` | Over a real socket with the generated client: the `Ok(valid=false)` / `Status` line, and the two MCP hazards that do not arise here. | done |
 | `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
 | `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
 | `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
