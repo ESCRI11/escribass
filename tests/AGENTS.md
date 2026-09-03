@@ -8,7 +8,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 |---|---|---|
 | `fixtures/history/patch_entry.json`, `fixtures/history/refs.json` | The on-disk forms of ADR 0001 §1 and §2, written by `core/tests/history.rs`. | `UPDATE_FIXTURES=1 cargo test -p escribass-core` |
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
-| `determinism.rs` | The suite: it drives `escribass-mcp` as a subprocess and compares what two runs produce. | hand |
+| `determinism.rs` | The suite: it drives `escribass-mcp` and `escribass-grpc` as subprocesses and compares what they produce. | hand |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`. | `UPDATE_FIXTURES=1 cargo test` |
 
@@ -20,6 +20,8 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | Determinism goldens come through the tool API. The **schema fixture** does not: it exercises `Generator`, `Marker`, `Instrument.state` and model provenance that no typed tool can produce before M4, and it is a constructed value rather than a mutation, so CLAUDE.md #2 is not in play | CLAUDE.md #2; ADR 0003 |
 | A determinism script names entity ids **literally**. Under `--seed-ids` an id is a pure function of how many were minted before it, so a change in mint order changes what a script means — and should fail loudly rather than quietly still passing | specs §11 |
 | A dry run mints from a discarded fork, so it consumes no id. A script's ids follow its *applied* steps only | ADR 0006 §3 |
+| A script writes `patch` as an RFC 6902 array. Each driver adapts it the way its own transport does — MCP rewrites it to canonical text, the gRPC driver base64s it for the `bytes` field. That asymmetry belongs to the proto, not to what the two transports mean | ADR 0006 §6 |
+| `--author` is passed to both binaries explicitly: `escribass-grpc` defaults to `human` and `escribass-mcp` to `model`, which would show up in every `provenance.author` | `core/src/bin/` |
 | A fixture or a golden changes only in the PR that changes the `.proto`, the canonical form, or a tool's semantics — and its diff is reviewed there. `UPDATE_FIXTURES=1` blesses whatever ran, including a deterministically wrong output; this rule is the only guard against that | specs §17 (same rule for golden renders) |
 | Two runs agreeing catches nondeterminism; only the golden catches **drift**. A dependency that changes how a float is written, or feature unification flipping `serde_json::Map` to insertion order, produces the same wrong bytes twice | specs §11 |
 | Fixture inputs are byte-stable: fixed timestamps, fixed ids, no wall clock, no unseeded randomness | specs §11; ADR 0001 §5 |
@@ -29,7 +31,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 - **A fixture:** a `build_*()` and a `*_FIXTURE` path constant in `schema/tests/roundtrip.rs`; write it with `UPDATE_FIXTURES=1`; read it from the TS and Python tests too.
 - **The three scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing).
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
-- **A tool:** add it to a script, and run the suite — the ids of every later step shift if the new tool mints any.
+- **A tool:** add it to a script, add an arm to the gRPC driver's `call!` (a missing one is a panic naming the tool, not a skipped step), and run the suite — the ids of every later step shift if the new tool mints any.
 
 ## Running it
 

@@ -550,3 +550,230 @@ fn branching_and_merging_are_reproducible() {
     assert_same("branching was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
     assert_matches_golden("branches", &first);
 }
+
+// ---------------------------------------------------------------------------
+// The other transport
+// ---------------------------------------------------------------------------
+
+/// Runs a script against `escribass-grpc` instead, and shapes its answers like MCP's.
+///
+/// "A transport translates and decides nothing" (ADR 0006) is a claim with two
+/// implementations, and the only way to check it is to make both answer the same questions. The
+/// M0.3 reviews found a bug in exactly this seam — MCP's hand-decoded `apply_patch` read
+/// `"dry_run": "true"` as false and applied — so the seam gets a test rather than a comment.
+fn run_over_grpc(name: &str, clock: &str) -> Run {
+    use escribass_proto::tools::song_tools_client::SongToolsClient;
+    use escribass_proto::tools::*;
+
+    let steps = script(name);
+    let directory = Scratch::new(&format!("{name}-grpc"));
+
+    // The port is chosen by binding and letting go, which leaves a moment for something else to
+    // take it. `escribass-grpc` prints the address it was *asked* for rather than the one it
+    // bound, so `--listen 127.0.0.1:0` cannot be read back; serving a listener directly would
+    // need `tokio-stream` as a direct dependency (CLAUDE.md #4) to fix a test-only problem.
+    let address = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("a free port")
+        .local_addr()
+        .expect("its address")
+        .to_string();
+
+    let mut child = Command::new(binary("escribass-grpc"))
+        .args([
+            "--create",
+            "--seed-ids",
+            &format!("{AT}:1"),
+            "--fixed-clock",
+            clock,
+            // Passed rather than defaulted: this binary defaults to `human` and `escribass-mcp`
+            // to `model`, so every `provenance.author` would differ if neither said which.
+            "--author",
+            "model",
+            "--listen",
+            &address,
+        ])
+        .arg(&directory.0)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the server binary runs");
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime");
+
+    let results = runtime.block_on(async {
+        let endpoint = format!("http://{address}");
+        let mut client = None;
+        for _ in 0..200 {
+            if let Ok(connected) = SongToolsClient::connect(endpoint.clone()).await {
+                client = Some(connected);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let mut client = client.unwrap_or_else(|| panic!("the server never came up on {endpoint}"));
+
+        let mut answers = Vec::with_capacity(steps.len());
+        for (position, step) in steps.iter().enumerate() {
+            let id = position + 1;
+            // A script writes `patch` as the RFC 6902 array a model sends. MCP rewrites that
+            // into the canonical text its `bytes` field carries (ADR 0006 §6, `JSON_TEXT_FIELDS`);
+            // the generated pbjson deserializer used here wants base64 for the same field, so
+            // the driver does the same rewrite. The asymmetry is the proto's, not a difference
+            // in what the two transports mean.
+            let args = as_bytes_field(step.args.clone());
+
+            /// One arm per RPC. A tool the service knows but this match does not is a
+            /// compile-time hole, so adding an RPC without teaching the suite about it fails
+            /// loudly rather than being skipped.
+            macro_rules! call {
+                ($($name:literal => $method:ident : $request:ty),* $(,)?) => {
+                    match step.tool.as_str() {
+                        $($name => {
+                            let request: $request = serde_json::from_value(args)
+                                .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
+                            let result = client.$method(request).await.unwrap_or_else(|status| {
+                                panic!("step {id} (`{}`) failed: {status}", step.tool)
+                            });
+                            shaped(&result.into_inner())
+                        })*
+                        "get_song" => song_shaped(
+                            client.get_song(GetSongRequest {}).await.expect("get_song").into_inner(),
+                        ),
+                        "get_song_at" => {
+                            let request: GetSongAtRequest = serde_json::from_value(args).unwrap();
+                            song_shaped(
+                                client.get_song_at(request).await.expect("get_song_at").into_inner(),
+                            )
+                        }
+                        "get_history" => history_shaped(
+                            client
+                                .get_history(GetHistoryRequest {})
+                                .await
+                                .expect("get_history")
+                                .into_inner(),
+                        ),
+                        unknown => panic!("step {id}: the suite does not know `{unknown}`"),
+                    }
+                };
+            }
+
+            let answer = call! {
+                "apply_patch" => apply_patch: ApplyPatchRequest,
+                "add_track" => add_track: AddTrackRequest,
+                "set_track_instrument" => set_track_instrument: SetTrackInstrumentRequest,
+                "add_effect" => add_effect: AddEffectRequest,
+                "set_param" => set_param: SetParamRequest,
+                "add_clip" => add_clip: AddClipRequest,
+                "set_notes" => set_notes: SetNotesRequest,
+                "transpose" => transpose: TransposeRequest,
+                "quantize" => quantize: QuantizeRequest,
+                "add_automation" => add_automation: AddAutomationRequest,
+                "set_tempo" => set_tempo: SetTempoRequest,
+                "add_section" => add_section: AddSectionRequest,
+                "move_section" => move_section: MoveSectionRequest,
+                "create_branch" => create_branch: CreateBranchRequest,
+                "switch_branch" => switch_branch: SwitchBranchRequest,
+                "delete_branch" => delete_branch: DeleteBranchRequest,
+                "merge_branch" => merge_branch: MergeBranchRequest,
+            };
+            check(step, id, &json!({"result": {"structuredContent": answer}}));
+            answers.push(answer);
+        }
+        answers
+    });
+
+    let _ = child.kill();
+    let _ = child.wait();
+    Run { directory, results }
+}
+
+/// Rewrites a `patch` argument from a JSON array into the base64 a `bytes` field decodes from.
+fn as_bytes_field(mut args: Value) -> Value {
+    let Some(object) = args.as_object_mut() else { return args };
+    if let Some(Value::Array(_)) = object.get("patch") {
+        let text = serde_json::to_string_pretty(&object["patch"]).expect("a Value serialises") + "\n";
+        object.insert("patch".to_string(), Value::String(base64(text.as_bytes())));
+    }
+    args
+}
+
+/// Standard base64 with padding, which is what proto3 JSON specifies for `bytes`.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let block =
+            chunk.iter().fold(0u32, |acc, b| (acc << 8) | u32::from(*b)) << (8 * (3 - chunk.len()));
+        for position in 0..4 {
+            if position <= chunk.len() {
+                out.push(ALPHABET[((block >> (18 - 6 * position)) & 0x3f) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// A `ToolResult` in the shape MCP puts on the wire, so the two can be compared directly.
+///
+/// The patch is parsed rather than left as bytes, which is what `core/src/mcp.rs` does — and
+/// the reason it has to: over MCP `patch` is `bytes` and would otherwise arrive base64-encoded.
+fn shaped(result: &escribass_proto::tools::ToolResult) -> Value {
+    json!({
+        "valid": result.valid,
+        "errors": result.errors.iter().map(|e| json!({
+            "path": e.path, "rule": e.rule, "message": e.message,
+        })).collect::<Vec<_>>(),
+        "patch": if result.patch.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&result.patch).expect("the patch is RFC 6902 text")
+        },
+        "summary": result.summary,
+        "entry_id": result.entry_id,
+    })
+}
+
+/// A song, rendered by the canonical writer and parsed — the same document MCP sends as text.
+fn song_shaped(response: escribass_proto::tools::SongResponse) -> Value {
+    let song = response.song.expect("a read returns a song");
+    let text = escribass_core::to_canonical_json(&song).expect("a song serialises");
+    serde_json::from_str(&text).expect("canonical JSON parses")
+}
+
+/// The log, in the on-disk shape — which is what MCP sends, and where dropping a field once
+/// cost `provenance` from the audit trail.
+fn history_shaped(response: escribass_proto::tools::HistoryResponse) -> Value {
+    let entries: serde_json::Map<String, Value> = response
+        .entries
+        .iter()
+        .map(|(id, entry)| {
+            let text = escribass_core::entry_to_json(entry).expect("an entry serialises");
+            (id.clone(), serde_json::from_str(&text).expect("an entry parses"))
+        })
+        .collect();
+    let refs = response.refs.expect("a history has refs");
+    json!({"entries": entries, "head": refs.head, "refs": refs.refs})
+}
+
+#[test]
+fn the_two_transports_answer_the_same_way() {
+    // Both dispatch to one `Session`, so the risk is not that the logic differs — it is that a
+    // transport reshapes, reclassifies or quietly drops something on the way out. That is not
+    // hypothetical: MCP's `get_history` once lost `provenance`, and its hand-decoded
+    // `apply_patch` once read `"dry_run": "true"` as false and applied.
+    for name in ["every_tool", "refusals", "branches"] {
+        let over_mcp = run(name, AT);
+        let over_grpc = run_over_grpc(name, AT);
+        assert_same(
+            &format!("`{name}` came out differently over the two transports"),
+            &Snapshot::of(&over_mcp),
+            &Snapshot::of(&over_grpc),
+        );
+    }
+}
