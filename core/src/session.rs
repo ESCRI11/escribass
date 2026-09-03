@@ -33,16 +33,18 @@ use serde_json::Value;
 /// race the write ordering ADR 0004 depends on (ADR 0006 §5).
 pub struct Session {
     project: Project,
-    ids: Box<dyn IdSource>,
-    clock: Box<dyn Clock>,
+    // `+ Send` so a session can be owned by an async server task. Not `Sync`: there is one
+    // writer (ADR 0001 §2), and the MCP handler holds the session behind a `Mutex`.
+    ids: Box<dyn IdSource + Send>,
+    clock: Box<dyn Clock + Send>,
     author: Author,
 }
 
 impl Session {
     pub fn new(
         project: Project,
-        ids: Box<dyn IdSource>,
-        clock: Box<dyn Clock>,
+        ids: Box<dyn IdSource + Send>,
+        clock: Box<dyn Clock + Send>,
         author: Author,
     ) -> Self {
         Self { project, ids, clock, author }

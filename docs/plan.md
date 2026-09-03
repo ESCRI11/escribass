@@ -76,7 +76,8 @@ inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wi
 | 2 | `m0.3-proto` | `proto/song_tools.proto`, the buf module, prost codegen |
 | 3 | `m0.3-version-bump` | `bump_versions`; `commit` split into pure `prepare` and `record` |
 | 4 | `m0.3-session` | `Session`, `dry_run`, `apply_patch`, `get_song`, `get_song_at`, `get_history` |
-| 5 | `m0.3-mcp` | `rmcp` server binary; `inputSchema` from the protobuf descriptor |
+| 5a | `m0.3-mcp` | Tool schemas derived from the protobuf descriptor |
+| 5b | `m0.3-mcp-server` | The `rmcp` stdio server and `escribass-mcp` |
 | 6 | `m0.3-tools-devices` | `add_track`, `set_track_instrument`, `add_effect`, `set_param` |
 | 7 | `m0.3-tools-clips` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, sections |
 | 8 | `m0.3-branches` | `create_branch`, `switch_branch`, `delete_branch` |
