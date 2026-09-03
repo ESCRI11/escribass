@@ -13,6 +13,7 @@ pub mod mcp;
 pub mod patch;
 pub mod project;
 pub mod session;
+pub mod tools;
 pub mod validate;
 pub mod version;
 
