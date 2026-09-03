@@ -22,9 +22,10 @@ use crate::validate::Violation;
 use crate::tools;
 use escribass_proto::tools::{
     AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
-    ApplyPatchRequest, GetSongAtRequest, HistoryResponse, MoveSectionRequest, QuantizeRequest,
+    ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest, GetSongAtRequest,
+    HistoryResponse, MoveSectionRequest, QuantizeRequest,
     SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
-    ToolResult, TransposeRequest,
+    SwitchBranchRequest, ToolResult, TransposeRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -197,6 +198,65 @@ impl Session {
         self.from_tool("move_section", built, request.dry_run)
     }
 
+    // ---- branches (ADR 0001 §2) ----
+    //
+    // These three do not go through `run`: they append no entry, so there is no patch to
+    // prepare and nothing for the version rule to touch. What they change is `refs.json`, and
+    // for `switch_branch` the document itself. `entry_id` stays empty, which is true rather
+    // than a placeholder — a branch operation is not a commit.
+
+    /// §5 `create_branch`.
+    pub fn create_branch(
+        &mut self,
+        request: &CreateBranchRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let at = match tools::check_create_branch(self.project.history(), request) {
+            Ok(at) => at,
+            Err(violations) => return Ok(refused(violations)),
+        };
+        let summary = format!("branch `{}` at {at}", request.name);
+        if request.dry_run {
+            return Ok(described(summary));
+        }
+        self.project.create_branch(&request.name, &at)?;
+        Ok(described(summary))
+    }
+
+    /// §5 `switch_branch`. Returns the patch that took the document to that branch.
+    pub fn switch_branch(
+        &mut self,
+        request: &SwitchBranchRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let ops =
+            match tools::check_switch_branch(self.project.history(), self.project.song(), request) {
+                Ok(ops) => ops,
+                Err(violations) => return Ok(refused(violations)),
+            };
+        let summary = format!("switch to `{}`: {}", request.name, summarise(&ops));
+        let patch = ops_text(&ops).into_bytes();
+
+        if !request.dry_run {
+            self.project.switch_branch(&request.name)?;
+        }
+        Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id: String::new() })
+    }
+
+    /// §5 `delete_branch`.
+    pub fn delete_branch(
+        &mut self,
+        request: &DeleteBranchRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        if let Err(violations) = tools::check_delete_branch(self.project.history(), request) {
+            return Ok(refused(violations));
+        }
+        let summary = format!("delete `{}`; its entries stay in the log", request.name);
+        if request.dry_run {
+            return Ok(described(summary));
+        }
+        self.project.delete_branch(&request.name)?;
+        Ok(described(summary))
+    }
+
     /// A tool that refused its arguments is refused the same way a patch that will not apply
     /// is: a result, not a failure (ADR 0006 §2). Nothing distinguishes the two for a caller,
     /// which is the point — both are things it can fix by calling differently.
@@ -260,6 +320,18 @@ fn refused(violations: Vec<Violation>) -> ToolResult {
         errors: violations.into_iter().map(wire).collect(),
         patch: Vec::new(),
         summary: String::new(),
+        entry_id: String::new(),
+    }
+}
+
+/// A call that succeeded and produced no patch: the branch tools, which move a ref rather than
+/// the document. An empty `patch` here says "nothing changed in the song", which is true.
+fn described(summary: String) -> ToolResult {
+    ToolResult {
+        valid: true,
+        errors: vec![],
+        patch: Vec::new(),
+        summary,
         entry_id: String::new(),
     }
 }
