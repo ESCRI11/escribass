@@ -14,7 +14,8 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/history.rs` | The on-disk shape of `patches/*.json` and `refs.json`, the ADR 0001 §2 ref-name rules, and `History`: the DAG, `ancestry`, `materialise`, refs and `switch`. No I/O. | done |
 | `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
-| `src/project.rs`, the `.escri` store | ADR 0001 §1–§2; specs §10; ADR 0004 | M0.2, next |
+| `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
+| `Project::create` and `commit` | ADR 0004; specs §5 | M0.2, next |
 | `src/id.rs` | `IdSource`: `UlidSource` (production) and `SeededIds` (deterministic). Crockford base32, monotonic within a millisecond. | done |
 | `src/clock.rs` | `Clock`: `SystemClock` and `FixedClock`. Every clock yields whole milliseconds. | done |
 
@@ -38,6 +39,8 @@ cargo test -p escribass-core
 | RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
 | Never write `patches/*.json` with the generated `PatchEntry` serde impl: `ops` is `bytes`, so it base64-encodes, producing a file that round-trips and still violates ADR 0001 §1 and §2.6. `src/history.rs` owns the disk form | ADR 0002 §11 |
 | Replay starts from a default `Song`, never `{}`: the canonical form emits every no-presence field, so `replace` is legal from the first op | ADR 0002 §4; ADR 0004 |
+| The log is authoritative and `song.json` is a derived cache: `open` replays and compares, reporting a mismatch rather than repairing it | ADR 0004 |
+| Write order is entries, then `song.json`, then `refs.json` — the ref flip is the commit point, so a crash leaves an inert orphan | ADR 0004 |
 | `switch` moves `HEAD` and appends nothing — history that recorded navigation would grow every time somebody looked at a branch | ADR 0001 §2 |
 | `diff` recurses to the leaf. A coarse whole-subtree diff would make every pair of edits to one track collide on the same path and conflict under merge | ADR 0001 §4 |
 | `serde_json` carries the `float_roundtrip` feature | ADR 0002 §4 |
