@@ -176,13 +176,13 @@ fn every_ref_name_rule_from_adr_0001_is_checked() {
 }
 
 #[test]
-fn two_refs_differing_only_by_case_collide() {
-    // Harmless in refs.json, but indistinguishable to a reader and a collision if the store
-    // ever moved to one file per ref (ADR 0001 §2).
+fn two_refs_differing_only_by_case_cannot_both_exist() {
+    // ADR 0001 §2 forbids it, and the charset rule is what enforces it: the only way to write
+    // a second name that folds onto `main` is to use a character the charset already refuses.
     let mut refs = sample_refs();
     refs.refs.insert("MAIN".to_string(), ENTRY_ID.to_string());
     let rules: Vec<_> = check_refs(&refs).into_iter().map(|v| v.rule).collect();
-    assert!(rules.contains(&"ref_name_case_collision"), "{rules:?}");
+    assert!(rules.contains(&"ref_name_charset"), "{rules:?}");
 }
 
 #[test]
