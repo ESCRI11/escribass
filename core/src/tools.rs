@@ -19,11 +19,16 @@ use crate::clock::Clock;
 use crate::id::IdSource;
 use crate::patch::Op;
 use crate::validate::Violation;
+use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
-    AddEffectRequest, AddTrackRequest, SetParamRequest, SetTrackInstrumentRequest,
+    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
+    AddTrackRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest, SetParamRequest,
+    SetTempoRequest, SetTrackInstrumentRequest, TransposeRequest,
 };
+use escribass_schema::song::clip::Content;
 use escribass_schema::song::{
-    Author, Effect, Instrument, Mix, Provenance, Routing, Song, Track, TrackKind,
+    Author, Automation, AutomationPoint, Clip, Effect, Instrument, Mix, Note, NoteClip,
+    Provenance, Routing, Section, Song, TempoEvent, Track, TrackKind,
 };
 use serde_json::{json, Value};
 
@@ -229,4 +234,345 @@ pub fn set_param(song: &Song, request: &SetParamRequest) -> Result<Vec<Op>, Vec<
         format!("{device}/params/{}", crate::patch::escape_token(&request.param)),
         json!(request.value),
     )])
+}
+
+// ---------------------------------------------------------------------------
+// Clips and notes (§5)
+// ---------------------------------------------------------------------------
+
+/// The notes of a clip, or a refusal naming why it has none.
+fn note_clip<'a>(song: &'a Song, clip_id: &str) -> Result<&'a NoteClip, Vec<Violation>> {
+    let Some(clip) = song.clips.get(clip_id) else {
+        return Err(refuse(
+            "/clip_id",
+            "clip_unknown",
+            format!("`{clip_id}` is not a clip in this song"),
+        ));
+    };
+    match &clip.content {
+        Some(Content::NoteClip(notes)) => Ok(notes),
+        _ => Err(refuse(
+            "/clip_id",
+            "clip_kind_mismatch",
+            format!("`{clip_id}` is an audio clip; it has no notes"),
+        )),
+    }
+}
+
+/// The notes a call applies to: the ones named, or all of them when none are.
+///
+/// An unknown id is refused rather than skipped. A caller that misspells a note id and gets a
+/// success back has been told its edit landed when it did not.
+fn selected<'a>(
+    notes: &'a NoteClip,
+    note_ids: &[String],
+) -> Result<Vec<(&'a String, &'a Note)>, Vec<Violation>> {
+    if note_ids.is_empty() {
+        return Ok(notes.notes.iter().collect());
+    }
+    let mut found = Vec::with_capacity(note_ids.len());
+    for id in note_ids {
+        let Some(note) = notes.notes.get_key_value(id) else {
+            return Err(refuse(
+                "/note_ids",
+                "note_unknown",
+                format!("`{id}` is not a note in this clip"),
+            ));
+        };
+        found.push(note);
+    }
+    Ok(found)
+}
+
+/// §5 `add_clip`. Absent content makes an empty note clip.
+pub fn add_clip(
+    song: &Song,
+    request: &AddClipRequest,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    if !song.tracks.contains_key(&request.track_id) {
+        return Err(refuse(
+            "/track_id",
+            "track_unknown",
+            format!("`{}` is not a track in this song", request.track_id),
+        ));
+    }
+
+    let id = ids.next_id();
+    // Notes arriving with a clip are minted the same way `set_notes` mints them: a caller
+    // never supplies an id, provenance or a version (ADR 0006 §4).
+    let content = match &request.content {
+        Some(AddClipContent::AudioClip(audio)) => Some(Content::AudioClip(audio.clone())),
+        Some(AddClipContent::NoteClip(notes)) => {
+            Some(Content::NoteClip(minted_notes(&notes.notes, &Default::default(), ids, clock, author)))
+        }
+        None => Some(Content::NoteClip(NoteClip::default())),
+    };
+
+    let clip = Clip {
+        id: id.clone(),
+        provenance: Some(provenance(author, clock)),
+        version: 0,
+        track_id: request.track_id.clone(),
+        start_tick: request.start_tick,
+        length_ticks: request.length_ticks,
+        loop_length_ticks: None,
+        content,
+    };
+
+    Ok(vec![add(format!("/clips/{id}"), serde_json::to_value(&clip).expect("a Clip serialises"))])
+}
+
+/// Mints ids and provenance for a set of notes, keeping any id the clip already holds.
+fn minted_notes(
+    given: &std::collections::BTreeMap<String, Note>,
+    existing: &std::collections::BTreeMap<String, Note>,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> NoteClip {
+    let mut notes = std::collections::BTreeMap::new();
+    for (key, note) in given {
+        // A key the clip already holds is an edit to that note; anything else is a new note,
+        // whatever the caller called it. Core owns `id`, `provenance` and `version` (§4.3).
+        let id = if existing.contains_key(key) { key.clone() } else { ids.next_id() };
+        notes.insert(
+            id.clone(),
+            Note {
+                id,
+                provenance: Some(provenance(author, clock)),
+                version: 0,
+                ..note.clone()
+            },
+        );
+    }
+    NoteClip { notes }
+}
+
+/// §5 `set_notes`. Replaces the clip's whole note set.
+///
+/// Replacement rather than merge because "the notes are now these" is what an editor and a
+/// generator both mean, and a merge would leave no way to say "and nothing else". A note whose
+/// key the clip already holds keeps its id, so an edit to one note is a change to that note
+/// rather than a delete and an insert — which is what keeps two branches editing different
+/// notes from conflicting (ADR 0001 §4).
+pub fn set_notes(
+    song: &Song,
+    request: &SetNotesRequest,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let existing = note_clip(song, &request.clip_id)?;
+    let notes = minted_notes(&request.notes, &existing.notes, ids, clock, author);
+
+    Ok(vec![add(
+        format!("/clips/{}/note_clip/notes", request.clip_id),
+        serde_json::to_value(&notes.notes).expect("notes serialise"),
+    )])
+}
+
+/// §5 `transpose`.
+///
+/// One op per note, not one for the whole clip: M0.3's merge auto-resolves by comparing op
+/// paths (ADR 0001 §4), so a coarse whole-clip patch would make every pair of edits to one clip
+/// conflict.
+///
+/// A result outside MIDI 0-127 is refused by the validator (`pitch_out_of_range`), not clamped
+/// here. Silently rewriting what a caller asked for is how a tool stops being predictable, and
+/// the rule already exists in the one place §4.4 puts it.
+pub fn transpose(song: &Song, request: &TransposeRequest) -> Result<Vec<Op>, Vec<Violation>> {
+    let notes = note_clip(song, &request.clip_id)?;
+    let chosen = selected(notes, &request.note_ids)?;
+
+    Ok(chosen
+        .into_iter()
+        .map(|(id, note)| Op::Replace {
+            path: format!("/clips/{}/note_clip/notes/{id}/pitch", request.clip_id),
+            // Saturating, so an absurd argument cannot wrap into a legal pitch. The validator
+            // then refuses the result, which is the report the caller wants.
+            value: json!(note.pitch.saturating_add(request.semitones)),
+        })
+        .collect())
+}
+
+/// §5 `quantize`.
+///
+/// Integer arithmetic throughout, and ties round up. Both matter for §11: a float round would
+/// depend on the platform's rounding mode at the halfway point, and an unstated tie rule would
+/// make two implementations of this tool disagree on exactly the notes a musician places
+/// deliberately.
+pub fn quantize(song: &Song, request: &QuantizeRequest) -> Result<Vec<Op>, Vec<Violation>> {
+    if request.grid_ticks <= 0 {
+        return Err(refuse(
+            "/grid_ticks",
+            "grid_not_positive",
+            format!("a grid is a positive number of ticks, not `{}`", request.grid_ticks),
+        ));
+    }
+    let notes = note_clip(song, &request.clip_id)?;
+    let chosen = selected(notes, &request.note_ids)?;
+    let grid = request.grid_ticks;
+
+    Ok(chosen
+        .into_iter()
+        .map(|(id, note)| Op::Replace {
+            path: format!("/clips/{}/note_clip/notes/{id}/start_tick", request.clip_id),
+            value: json!(snap(note.start_tick, grid)),
+        })
+        .collect())
+}
+
+/// Rounds `tick` to the nearest multiple of `grid`, ties away from zero.
+///
+/// Ticks are never negative (§4.4), but the negative branch is here rather than assumed: a
+/// tool that silently did the wrong thing on an input the validator would have caught is a
+/// worse failure than one that does the right thing on it.
+fn snap(tick: i32, grid: i32) -> i32 {
+    let half = grid / 2;
+    if tick >= 0 {
+        (tick + half) / grid * grid
+    } else {
+        -((-tick + half) / grid * grid)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Automation, time base and arrangement (§5)
+// ---------------------------------------------------------------------------
+
+/// §5 `add_automation`.
+pub fn add_automation(
+    song: &Song,
+    request: &AddAutomationRequest,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let Some(target) = request.target.clone() else {
+        return Err(refuse("/target", "required", "an automation lane names a parameter"));
+    };
+    if device_path(song, &target.device_id).is_none() {
+        return Err(refuse(
+            "/target/device_id",
+            "device_unknown",
+            format!("`{}` is not an instrument or effect in this song", target.device_id),
+        ));
+    }
+    for (key, point) in &request.points {
+        if !point.value.is_finite() {
+            return Err(refuse(
+                format!("/points/{key}/value"),
+                "double_not_finite",
+                format!("`{}` is not a finite number (§4.4)", point.value),
+            ));
+        }
+    }
+
+    let id = ids.next_id();
+    // Points carry an id and no provenance (ADR 0002 §2), so only the id is core's to mint.
+    let points = request
+        .points
+        .values()
+        .map(|point| {
+            let point_id = ids.next_id();
+            (point_id.clone(), AutomationPoint { id: point_id, ..point.clone() })
+        })
+        .collect();
+
+    let automation = Automation {
+        id: id.clone(),
+        provenance: Some(provenance(author, clock)),
+        version: 0,
+        target: Some(target),
+        points,
+    };
+
+    Ok(vec![add(
+        format!("/automation/{id}"),
+        serde_json::to_value(&automation).expect("an Automation serialises"),
+    )])
+}
+
+/// §5 `set_tempo`. Upserts the event at `tick`.
+///
+/// Upsert rather than append because two tempo events at one tick have no defined order —
+/// §4.2 derives order from `tick`, and a map has no positions to break the tie with.
+pub fn set_tempo(
+    song: &Song,
+    request: &SetTempoRequest,
+    ids: &mut dyn IdSource,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    if !request.bpm.is_finite() {
+        return Err(refuse(
+            "/bpm",
+            "double_not_finite",
+            format!("`{}` is not a finite number (§4.4)", request.bpm),
+        ));
+    }
+
+    let existing = song
+        .tempo_map
+        .as_ref()
+        .and_then(|map| map.events.values().find(|e| e.tick == request.tick));
+
+    // Replacing only `bpm` on an existing event, rather than the whole event, keeps the patch
+    // path specific enough for a merge to see two branches changing different things.
+    if let Some(event) = existing {
+        return Ok(vec![Op::Replace {
+            path: format!("/tempo_map/events/{}/bpm", event.id),
+            value: json!(request.bpm),
+        }]);
+    }
+
+    let id = ids.next_id();
+    Ok(vec![add(
+        format!("/tempo_map/events/{id}"),
+        serde_json::to_value(TempoEvent { id, tick: request.tick, bpm: request.bpm })
+            .expect("a TempoEvent serialises"),
+    )])
+}
+
+/// §5 `add_section`.
+pub fn add_section(
+    request: &AddSectionRequest,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let id = ids.next_id();
+    let section = Section {
+        id: id.clone(),
+        provenance: Some(provenance(author, clock)),
+        version: 0,
+        name: request.name.clone(),
+        start_tick: request.start_tick,
+        end_tick: request.end_tick,
+    };
+    Ok(vec![add(
+        format!("/sections/{id}"),
+        serde_json::to_value(&section).expect("a Section serialises"),
+    )])
+}
+
+/// §5 `move_section`.
+///
+/// Moves the label, not the music. §4.2 makes a section a name over a range of ticks rather
+/// than a container, so nothing inside it moves — and a tool that quietly dragged clips along
+/// would be inventing an arrangement model the schema does not have.
+pub fn move_section(song: &Song, request: &MoveSectionRequest) -> Result<Vec<Op>, Vec<Violation>> {
+    if !song.sections.contains_key(&request.section_id) {
+        return Err(refuse(
+            "/section_id",
+            "section_unknown",
+            format!("`{}` is not a section in this song", request.section_id),
+        ));
+    }
+    let at = format!("/sections/{}", request.section_id);
+    Ok(vec![
+        Op::Replace { path: format!("{at}/start_tick"), value: json!(request.start_tick) },
+        Op::Replace { path: format!("{at}/end_tick"), value: json!(request.end_tick) },
+    ])
 }
