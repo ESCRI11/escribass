@@ -25,9 +25,12 @@ pub trait IdSource {
     ///
     /// A dry run mints ids to build the patch it previews, and must not consume the real
     /// ones: ADR 0006 §3 promises the patch a dry run returns is the patch a commit records,
-    /// and §9 has a person approve that patch before it is applied. Handing them a preview
-    /// whose ids differ from the ones that land breaks a promise that is small until somebody
-    /// diffs the two.
+    /// and §9 has a person approve that patch before it is applied.
+    ///
+    /// The fork is what makes previewing free. It does not make a preview reproducible across
+    /// time: [`UlidSource`] takes a new millisecond's entropy when the clock moves, so a
+    /// preview and an apply a second apart mint different ids. The approve-then-apply flow
+    /// therefore applies the previewed *patch* (`apply_patch`), not the same tool call again.
     ///
     /// Not `Clone` on the trait, which would make it un-object-safe.
     fn fork(&self) -> Box<dyn IdSource + Send>;

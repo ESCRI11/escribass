@@ -108,6 +108,11 @@ A hand-written request shape mirroring an entity is a second representation of s
 (`CLAUDE.md` #1) wearing a different name, and it fails the way those always fail: a field
 added to `song.proto` never reaches the tool, and nothing breaks loudly enough to notice.
 
+The generated tool schemas therefore **omit** those three fields for an embedded entity
+(decision 6). Advertising an argument that is discarded is worse than omitting it: a model
+fills it in on every call, inventing ids and writing its own provenance, and learns a contract
+that is not real.
+
 ### 5. One project per process, named at launch; there is no `open_project` tool
 
 The project directory is a launch argument, and creating one is a flag on the binary

@@ -38,9 +38,11 @@ use std::sync::{Arc, Mutex};
 
 /// The tools this server implements, in the order it advertises them.
 ///
-/// `song_tools.proto` declares twenty RPCs; the rest arrive in later steps. Advertising a tool
-/// that is not wired up would spend a model's turn on a call that can only fail, so the list
-/// is what works, and a test keeps it equal to what `call_tool` dispatches.
+/// Every RPC the service declares, in the order this server advertises them. It is a list
+/// rather than the descriptor's own order because the order a model sees should be ours to
+/// choose, and because a tool that is declared but not wired up must never appear — a call
+/// that can only fail spends a model's turn. A test keeps it equal to what `call_tool`
+/// dispatches.
 pub const IMPLEMENTED: &[&str] = &[
     "get_song",
     "get_song_at",
@@ -251,13 +253,26 @@ impl ServerHandler for SongTools {
                 complete(history_json(&history), false)
             }
             "apply_patch" => {
-                // Built directly rather than through the proto deserializer: `patch` is
-                // `bytes`, so that route wants base64, and the only way to reach it from the
-                // JSON array a model sends is to encode text we already hold. One field, one
-                // conversion — a codec in between would be a codec to keep correct.
+                // Built by hand rather than through the proto deserializer: `patch` is `bytes`,
+                // so that route wants base64, and the only way to reach it from the JSON array
+                // a model sends is to encode text we already hold.
+                //
+                // Hand-built means hand-validated. `as_bool().unwrap_or(false)` read
+                // `"dry_run": "true"` as *false* and applied for real — a preview that writes,
+                // which is the one failure §9's approve-then-apply flow cannot tolerate, and a
+                // stringly-typed boolean is exactly what a model sends. Every other tool gets
+                // this strictness from the generated deserializer; this one has to say it.
                 let arguments = arguments(&request);
+                for key in arguments.keys() {
+                    if key != "patch" && key != "dry_run" {
+                        return Err(McpError::invalid_params(
+                            format!("`apply_patch` has no argument `{key}`"),
+                            None,
+                        ));
+                    }
+                }
                 let text = match arguments.get("patch") {
-                    Some(Value::Array(_)) | Some(Value::Object(_)) => {
+                    Some(Value::Array(_)) => {
                         serde_json::to_string_pretty(&arguments["patch"]).expect("a Value serialises")
                             + "\n"
                     }
@@ -269,10 +284,17 @@ impl ServerHandler for SongTools {
                         ))
                     }
                 };
-                let call = ApplyPatchRequest {
-                    patch: text.into_bytes(),
-                    dry_run: arguments.get("dry_run").and_then(Value::as_bool).unwrap_or(false),
+                let dry_run = match arguments.get("dry_run") {
+                    None => false,
+                    Some(Value::Bool(chosen)) => *chosen,
+                    Some(other) => {
+                        return Err(McpError::invalid_params(
+                            format!("`dry_run` is a boolean, not {other}"),
+                            None,
+                        ))
+                    }
                 };
+                let call = ApplyPatchRequest { patch: text.into_bytes(), dry_run };
                 tool_result(&session.apply_patch(&call).map_err(broken)?)
             }
             "add_track" => {

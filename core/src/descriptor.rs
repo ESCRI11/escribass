@@ -119,11 +119,28 @@ impl<'a> Index<'a> {
 
 type Entry<'a> = (&'a FileDescriptorProto, Vec<i32>, &'a DescriptorProto);
 
+/// The fields core sets on every entity, whatever a caller sends (§4.3, ADR 0006 §4).
+///
+/// Left in the schema, a model fills them in on every call — inventing ids, writing its own
+/// provenance, choosing versions — and every one of those is discarded. Advertising an
+/// argument that is ignored is worse than omitting it: it spends the model's attention and
+/// teaches it a contract that is not real.
+const OVERWRITTEN: [&str; 3] = ["id", "provenance", "version"];
+
+/// Whether this message is an entity, so its §4.3 fields are core's rather than a caller's.
+fn is_entity(message: &DescriptorProto) -> bool {
+    OVERWRITTEN.iter().all(|owned| message.field.iter().any(|f| f.name() == *owned))
+}
+
 fn object_schema(index: &Index, entry: &Entry, depth: usize) -> Map<String, Value> {
     let (file, path, message) = entry;
     let mut properties = Map::new();
+    let entity = is_entity(message);
 
     for (position, field) in message.field.iter().enumerate() {
+        if entity && OVERWRITTEN.contains(&field.name()) {
+            continue;
+        }
         let mut at = path.clone();
         at.extend([2, position as i32]);
         let mut schema = field_schema(index, field, depth);
