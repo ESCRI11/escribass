@@ -90,8 +90,8 @@ fn create_refuses_an_invalid_song_and_writes_nothing() {
     broken.tracks.get_mut(BASS).unwrap().mix.as_mut().unwrap().pan = 4.0;
 
     let e = Project::create(&dir.0, &broken, &mut ids, &clock).unwrap_err();
-    assert_eq!(e.rule, "song_invalid");
-    assert!(e.message.contains("pan_out_of_range"), "{}", e.message);
+    // The rule that was actually broken, not a generic one: a caller matching on it can act.
+    assert_eq!(e.rule, "pan_out_of_range");
     assert!(!dir.0.join("song.json").exists(), "nothing was written");
 }
 
@@ -171,8 +171,7 @@ fn a_commit_that_fails_validation_leaves_the_project_untouched() {
 
     // 200 is outside MIDI's 0-127.
     let e = project.commit("set_notes", &set_pitch(200), Author::Model, &mut ids, &clock).unwrap_err();
-    assert_eq!(e.rule, "song_invalid");
-    assert!(e.message.contains("pitch_out_of_range"), "{}", e.message);
+    assert_eq!(e.rule, "pitch_out_of_range");
 
     assert_eq!(project.history().entries().len(), 1, "no orphan entry");
     assert_eq!(project.history().head_id().unwrap(), before_head, "the ref did not move");
