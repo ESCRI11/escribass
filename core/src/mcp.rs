@@ -20,7 +20,8 @@ use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
     AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
     ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest, GetSongAtRequest,
-    MoveSectionRequest, QuantizeRequest, SetNotesRequest, SetParamRequest, SetTempoRequest,
+    MergeBranchRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest,
+    SetParamRequest, SetTempoRequest,
     SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
 };
 use rmcp::handler::server::ServerHandler;
@@ -60,6 +61,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "create_branch",
     "switch_branch",
     "delete_branch",
+    "merge_branch",
 ];
 
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so must cross MCP as JSON
@@ -342,6 +344,10 @@ impl ServerHandler for SongTools {
             "delete_branch" => {
                 let arguments: DeleteBranchRequest = decode("delete_branch", &request)?;
                 tool_result(&session.delete_branch(&arguments).map_err(broken)?)
+            }
+            "merge_branch" => {
+                let arguments: MergeBranchRequest = decode("merge_branch", &request)?;
+                tool_result(&session.merge_branch(&arguments).map_err(broken)?)
             }
             unknown => {
                 return Err(McpError::invalid_params(
