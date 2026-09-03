@@ -9,8 +9,8 @@
 //! `escribass_schema` — so `AddClipRequest.note_clip` *is* `escribass_schema::song::NoteClip`,
 //! not a copy of it (CLAUDE.md #1, ADR 0006 §4).
 //!
-//! The gRPC service stubs are not generated yet: this crate is the wire contract, and the
-//! server that speaks it arrives with `tonic` in a later step.
+//! The generated `song_tools_server` module carries the `tonic` service trait `core`
+//! implements, and `song_tools_client` the client that calls it.
 
 pub mod escribass {
     pub mod tools {

@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.cargo/bin:$PWD/../schema/node_modules/.bin:$PATH"
 
-for bin in buf protoc-gen-prost protoc-gen-prost-serde; do
+for bin in buf protoc-gen-prost protoc-gen-prost-serde protoc-gen-tonic; do
   command -v "$bin" >/dev/null || { echo "missing codegen plugin: $bin" >&2; exit 1; }
 done
 
