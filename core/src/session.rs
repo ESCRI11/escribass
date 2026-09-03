@@ -19,8 +19,10 @@ use crate::id::IdSource;
 use crate::patch::Op;
 use crate::project::{Prepared, Project, ProjectError};
 use crate::validate::Violation;
+use crate::tools;
 use escribass_proto::tools::{
-    ApplyPatchRequest, GetSongAtRequest, HistoryResponse, SongResponse, ToolResult,
+    AddEffectRequest, AddTrackRequest, ApplyPatchRequest, GetSongAtRequest, HistoryResponse,
+    SetParamRequest, SetTrackInstrumentRequest, SongResponse, ToolResult,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -102,6 +104,53 @@ impl Session {
         };
         normalise_input(&mut ops);
         self.run("apply_patch", &ops, request.dry_run)
+    }
+
+    // ---- typed tools (§5) ----
+
+    /// §5 `add_track`.
+    pub fn add_track(&mut self, request: &AddTrackRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::add_track(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("add_track", built, request.dry_run)
+    }
+
+    /// §5 `set_track_instrument`.
+    pub fn set_track_instrument(
+        &mut self,
+        request: &SetTrackInstrumentRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let built = tools::set_track_instrument(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("set_track_instrument", built, request.dry_run)
+    }
+
+    /// §5 `add_effect`.
+    pub fn add_effect(&mut self, request: &AddEffectRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::add_effect(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("add_effect", built, request.dry_run)
+    }
+
+    /// §5 `set_param`.
+    pub fn set_param(&mut self, request: &SetParamRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::set_param(self.project.song(), request);
+        self.from_tool("set_param", built, request.dry_run)
+    }
+
+    /// A tool that refused its arguments is refused the same way a patch that will not apply
+    /// is: a result, not a failure (ADR 0006 §2). Nothing distinguishes the two for a caller,
+    /// which is the point — both are things it can fix by calling differently.
+    fn from_tool(
+        &mut self,
+        tool: &str,
+        built: Result<Vec<Op>, Vec<Violation>>,
+        dry_run: bool,
+    ) -> Result<ToolResult, ProjectError> {
+        match built {
+            Ok(ops) => self.run(tool, &ops, dry_run),
+            Err(violations) => Ok(refused(violations)),
+        }
     }
 
     /// Every mutating tool ends here: prepare, and either describe it or record it.
