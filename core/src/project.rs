@@ -23,7 +23,7 @@ use crate::clock::Clock;
 use crate::id::IdSource;
 use crate::patch::{apply, Op};
 use crate::validate::{validate, Violation};
-use crate::version::{bump_versions, version_writes};
+use crate::version::bump_versions;
 use escribass_schema::song::{Author, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
@@ -228,24 +228,13 @@ impl Project {
     fn prepare_inner(&self, ops: &[Op], guard_version: bool) -> Result<Prepared, Vec<Violation>> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
 
-        let writes = if guard_version { version_writes(&before, ops) } else { Vec::new() };
-        if !writes.is_empty() {
-            return Err(writes
-                .into_iter()
-                .map(|path| Violation {
-                    path: path.to_string(),
-                    rule: "version_not_writable",
-                    message: "`version` is maintained by core and is never written by a tool \
-                              op (ADR 0005 §3)"
-                        .to_string(),
-                })
-                .collect());
-        }
-
         let mut patched = apply(&before, ops).map_err(|e| {
             vec![Violation { path: e.path, rule: e.rule, message: e.message }]
         })?;
-        bump_versions(&before, &mut patched);
+        let disputed = bump_versions(&before, &mut patched);
+        if guard_version && !disputed.is_empty() {
+            return Err(disputed);
+        }
 
         let song: Song = serde_json::from_value(patched).map_err(|e| {
             let touched: Vec<&str> = ops.iter().map(Op::path).take(8).collect();
@@ -287,11 +276,18 @@ impl Project {
         let entry = new_entry(id.clone(), parents, tool, &prepared.ops,
             authorship(author, clock), SCHEMA_VERSION);
 
-        // Nothing above this line touched `self`.
-        self.history.append(entry).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.history.advance(&branch, &id).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.song = prepared.song;
-        self.write()?;
+        // The next state is built beside this one and only swapped in once it is on disk.
+        // Mutating first and writing second left a failed write with the session one commit
+        // ahead of the directory: the caller is told nothing happened, and every later call
+        // builds on state the disk never saw (ADR 0004's ordering is about files; this is the
+        // same argument about memory).
+        let mut history = self.history.clone();
+        history.append(entry).map_err(|e| err(&self.root, e.rule, e.message))?;
+        history.advance(&branch, &id).map_err(|e| err(&self.root, e.rule, e.message))?;
+
+        let next = Project { root: self.root.clone(), song: prepared.song, history };
+        next.write()?;
+        *self = next;
         Ok(id)
     }
 
@@ -299,8 +295,9 @@ impl Project {
 
     /// Names a new position in the log and writes `refs.json`. Copies no data.
     pub fn create_branch(&mut self, name: &str, at: &str) -> Result<(), ProjectError> {
-        self.history.create_ref(name, at).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.write()
+        let mut history = self.history.clone();
+        history.create_ref(name, at).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.swap(self.song.clone(), history)
     }
 
     /// Moves `HEAD` to another branch, returning the patch that got there.
@@ -324,16 +321,25 @@ impl Project {
                 format!("`{name}` does not replay into a valid song: {e}"))
         })?;
 
-        self.history.set_head(name).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.song = song;
-        self.write()?;
+        let mut history = self.history.clone();
+        history.set_head(name).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.swap(song, history)?;
         Ok(ops)
     }
 
     /// Discards a branch name. The entries stay in the log, unreferenced and inert.
     pub fn delete_branch(&mut self, name: &str) -> Result<(), ProjectError> {
-        self.history.delete_ref(name).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.write()
+        let mut history = self.history.clone();
+        history.delete_ref(name).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.swap(self.song.clone(), history)
+    }
+
+    /// Writes a proposed state and adopts it only once the write succeeded.
+    fn swap(&mut self, song: Song, history: History) -> Result<(), ProjectError> {
+        let next = Project { root: self.root.clone(), song, history };
+        next.write()?;
+        *self = next;
+        Ok(())
     }
 
     /// Reads a project directory, verifying that `song.json` matches a replay of the log.

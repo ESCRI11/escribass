@@ -17,7 +17,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
-| `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | in progress |
+| `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | done |
 | `tests/tools_devices.rs` | `add_track`, `set_track_instrument`, `add_effect`, `set_param`, driven through `Session`. | done |
 | `tests/tools_clips.rs` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, the two section tools. | done |
 | `src/merge.rs` | Three-way conflict detection by RFC 6902 path (ADR 0001 §4). No content-aware resolution: a structured error is actionable, a silent choice is a song nobody wrote. | done |
@@ -54,12 +54,12 @@ cargo test -p escribass-core
 | Entropy comes from `std`'s `RandomState`, not a crate: ULID's tail is a uniqueness requirement, not a secrecy one. Marked `ponytail:` in `src/id.rs` with the upgrade path | CLAUDE.md #4 |
 | Mutations are JSON Patch through the tool API, in tests too — never a direct field write to a stored song | CLAUDE.md #2; specs §5, §14.3 |
 | `commit` re-deserialises through `Song` before recording. An op can be legal JSON and illegal for the schema; applying it to a `Value` alone would succeed and produce a document `core` cannot read | ADR 0002 §11 |
-| Every check in `commit` happens before `self` is touched, so a rejected commit leaves no orphan entry and no advanced ref | specs §5 |
+| Every check happens before `self` is touched, **and the write happens before it too**: `record` and the branch tools build the next state beside this one and swap it in only once it is on disk. A failed write must not leave the session a commit ahead of the directory | specs §5; ADR 0004 |
 | The `version` bump runs inside `prepare`, between applying the ops and re-deserialising — the only position where it lands in the diff `prepare` re-derives. Anywhere later and the log replays one version behind `song.json` | ADR 0005 §1 |
 | An entity is an object with a string `id` **and a numeric `version`**. Both halves: `PluginRef.version` is a string naming a plugin release, and bumping it would break `set_track_instrument` | ADR 0005 §2 |
-| A tool-authored op that writes an entity `version` is refused, not silently overwritten. `bump_versions` would discard it anyway, which is the reason to say so | ADR 0005 §3 |
+| A caller that asks for a different `version` than core computes is refused with `version_not_writable`. The guard is a **comparison**, not a filter on op paths: a path filter cannot see a version inside a whole-entity value, cannot tell `"1"` from `1`, and refuses this API's own output | ADR 0005 §3, revised |
 | `prepare` fails with `Vec<Violation>`, `record` with `ProjectError`. That *is* ADR 0006 §2's line — `prepare` touches no file, so every way it fails is caller-fixable — so the session needs no classifier over rule names | ADR 0006 §2 |
-| `-0.0` is normalised in `session.rs`, where values enter. The validator's `negative_zero` catches what gets past; it should never fire on tool input | ADR 0002 §4 |
+| `-0.0` is normalised in `Session::run`, through which every mutating tool passes. Normalising only in `apply_patch` left the validator's `negative_zero` firing on typed-tool input, which it should never do | ADR 0002 §4 |
 | Tool schemas are derived from `escribass_proto::DESCRIPTOR`, never hand-written. A hand-written schema drifts, and the only symptom is a model that never learns a field exists | ADR 0006 §6 |
 | A tool with no proto comment has no description. `tests/descriptor.rs` fails on one, so documenting an RPC is not optional | ADR 0006 §6 |
 | `ToolResult.patch` and `PatchEntry.ops` are `bytes`, so the generated serde impl base64s them. MCP payloads are built field by field, with the patch parsed into a JSON array | ADR 0006 §6 |
@@ -78,6 +78,10 @@ cargo test -p escribass-core
 | Merge compares op **paths**, and `version` leaves are excluded. Both branches bump `version` on every entity they touch, so counting it would make every merge conflict by construction | ADR 0001 §4 |
 | A merge goes through `prepare_merge`, not `prepare`: its ops legitimately carry entity versions, which are core's own and are what ADR 0005 §2 resolves to `max + 1`. Stripping them would let a client's version go backwards | ADR 0005 §2, §4 |
 | Every minting tool builds its patch from `self.ids.fork()`; only a real apply installs the advanced fork. A preview that burned an id would return a patch whose ids differ from the ones that land, breaking ADR 0006 §3 exactly where §9 has a person approve a diff | ADR 0006 §3 |
+| Replay follows the **first-parent** chain, not every ancestor. A merge entry's ops are the diff from `parents[0]`, so replaying the other side as well applies its changes twice — invisible for `add`/`replace`, fatal for `remove` | ADR 0001 §1, corrected |
+| A tool never `expect`s on serialisation. prost keeps an unknown enum as a raw `i32` and the generated serializer fails on it; a panic there happens inside a transport's lock and takes the server down for every later call | ADR 0006 |
+| Both servers recover a poisoned lock rather than propagating it. Nothing can leave a session half-mutated, so one panic must not end the process | ADR 0006 |
+| `set_notes` **preserves** provenance and version for a note it recognises and mints them only for a new one. Re-minting rewrites the authorship of every note in the clip on every call — a no-op under a fixed clock, which is why it needs a test that moves one | ADR 0006 §4 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |

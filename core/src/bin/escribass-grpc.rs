@@ -65,8 +65,9 @@ async fn run() -> Result<(), String> {
     };
 
     let server = Server::new(Session::new(project, ids, clock, options.author));
-    // stdout stays clean so a caller can read the address and know the socket is up; anything
-    // else this process has to say goes to stderr.
+    // The address this process was asked for, printed so a caller does not have to re-parse
+    // its own flags. Not a readiness signal — `serve` binds below. stdout carries nothing
+    // else; anything this process has to say goes to stderr.
     println!("{}", options.listen);
 
     tonic::transport::Server::builder()

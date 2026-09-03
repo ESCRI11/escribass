@@ -10,12 +10,12 @@ project file directly (§5), so what is not here cannot be done to a song.
 | Path | Role | Written by |
 |---|---|---|
 | `song_tools.proto` | The `SongTools` service, its request messages, `ToolResult` and `Violation`. | hand |
-| `buf.gen.yaml` | One plugin pair: `protoc-gen-prost` and `protoc-gen-prost-serde`. Rust only. | hand |
+| `buf.gen.yaml` | Three plugins: `protoc-gen-prost`, `protoc-gen-prost-serde`, `protoc-gen-tonic`. Rust only. | hand |
 | `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
 | `gen/descriptor.binpb` | The compiled `FileDescriptorSet`, imports included. `core` turns it into a JSON Schema per tool, so the schemas and the Rust types come from one artefact. Exposed as `escribass_proto::DESCRIPTOR`. | generated |
 | `src/lib.rs` | The hand-written module tree that `include!`s the generated file. Nothing else. | hand |
-| `tests/contract.rs` | The three things about this file a change could break silently. | hand |
+| `tests/contract.rs` | The five things about this file a change could break silently. | hand |
 
 The workspace `buf.yaml` is at the repository root, not here: buf v2 wants one at the common
 ancestor of every module, and `song_tools.proto` imports `schema/song.proto`.
@@ -37,7 +37,7 @@ cargo test -p escribass-proto
 | `Violation` rather than a per-transport error | `Violation`, `PatchError`, `HistoryError` and `ProjectError` in `core` already carry `path`/`rule`/`message`. This transports that shape; it does not add a fifth. | ADR 0006 §2 |
 | `dry_run` on every request, defaulting to false | §5's name and polarity. Inverting it would make the wire disagree with the spec that names it. | ADR 0006 §3 |
 | Rust codegen only | TypeScript's consumer is M2's app, Python's is M3's orchestrator. Neither exists; generating stubs now pulls `grpclib` into `schema/` to satisfy nothing. | ADR 0006 §7 |
-| No `tonic` plugin yet | This module is the contract. The server that speaks it, and its dependencies, arrive at the gRPC step. | `docs/plan.md` |
+| A `tonic` server *and* client | `core` implements the server. The client's first consumer is `core`'s own end-to-end test, which needs something to call with; M2's app is the next. Hand-rolling one would be more code than generating it. | ADR 0006 §7 |
 | Three `buf lint` rules relaxed | `SERVICE_SUFFIX`, `RPC_RESPONSE_STANDARD_NAME` and `RPC_REQUEST_RESPONSE_UNIQUE` all contradict the shape §5 specifies. Scoped to this module in the root `buf.yaml`; `schema/` keeps the full rule set. | ADR 0006 §8 |
 
 ## The trap, named once

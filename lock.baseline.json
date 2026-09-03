@@ -87,7 +87,7 @@
     "Any change here requires an ADR and a full golden-render pass."
   ],
   "schema": {
-    "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md \u00a717, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",
+    "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md §17, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",
     "rust": {
       "toolchain": {
         "version": "1.98.0",
@@ -157,7 +157,7 @@
     }
   },
   "tool_api": {
-    "_note": "The M0.3 tool API: the SongTools gRPC service and the MCP server (ADR 0006). Unlike `schema`, these ship in the built product; \u00a717's registry-package rule covers them, with integrity hashes in Cargo.lock.",
+    "_note": "The M0.3 tool API: the SongTools gRPC service and the MCP server (ADR 0006). Unlike `schema`, these ship in the built product; §17's registry-package rule covers them, with integrity hashes in Cargo.lock.",
     "resolved_at": "2026-09-03",
     "rust": {
       "tonic": {
@@ -169,15 +169,22 @@
       },
       "tokio": {
         "version": "1",
-        "features": ["rt-multi-thread", "macros"]
+        "features": [
+          "rt-multi-thread",
+          "macros",
+          "io-std",
+          "sync",
+          "net",
+          "time"
+        ]
       },
       "prost_types": {
-        "version": "0.14.4",
+        "version": "0.14",
         "note": "direct dependency of the proto crate for FileDescriptorSet decoding; already present transitively via pbjson-types"
       },
       "rmcp": {
         "version": "3.2.0",
-        "note": "official MCP Rust SDK (ADR 0006 \u00a76)"
+        "note": "official MCP Rust SDK (ADR 0006 §6)"
       },
       "protoc_gen_tonic": {
         "version": "0.5.0",
@@ -186,7 +193,7 @@
     }
   },
   "ci": {
-    "_note": "GitHub Actions used by .github/workflows/. Build-time only; pinned by major version per the registry-package rule in docs/specs.md \u00a717.",
+    "_note": "GitHub Actions used by .github/workflows/. Build-time only; pinned by major version per the registry-package rule in docs/specs.md §17.",
     "actions_checkout": {
       "version": "v4"
     },

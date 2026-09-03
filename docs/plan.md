@@ -23,8 +23,8 @@ stale.
 | M0.2 | `core/`: `.escri` project store | done | `d90c8bf` |
 | M0.2 | `core/`: `create` and `commit` | done | `d18bb90` |
 | M0.2 | Four defects found reviewing the stack, fixed at their own PRs | done | `1d97f99`, `0eb6b99`, `4e863ed`, `92d6c74` |
-| M0.3 | ADR 0005 (`version` + undo), ADR 0006 (wire shape), dependency pins | **in progress** | — |
-| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | next | — |
+| M0.3 | ADR 0005 (`version` + undo), ADR 0006 (wire shape), dependency pins | done | PR #12 |
+| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | **in review** | PRs #13–#24 |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 
 C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
@@ -68,7 +68,7 @@ hard requirement, not a nice-to-have.
 
 Shape fixed by ADR 0005 (the bump sits between apply and re-deserialisation; undo appends an
 inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wire error,
-`dry_run` as the pure first half of the apply path, one project per process). Ten PRs:
+`dry_run` as the pure first half of the apply path, one project per process). Twelve PRs, plus a thirteenth for what a review of the whole stack found:
 
 | # | Branch | Adds |
 |---|---|---|
@@ -84,6 +84,7 @@ inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wi
 | 9 | `m0.3-merge` | Merge base, three-way by path, conflicts as `errors[]` |
 | 10 | `m0.3-grpc` | `tonic` service impl and the `escribass-grpc` binary |
 | 11 | `m0.3-dry-run-ids` | A dry run mints from a fork, so a preview burns no ids |
+| 12 | `m0.3-review-fixes` | Ten findings from a whole-stack review, three of them blockers |
 
 Out of M0.3, per ADR 0003: `set_form` (needs `FormRule`, M4), the four `compile_*`/`define_*`
 tools (M4), `render_preview`/`render_export` (M1), interactive conflict resolution (M2), and

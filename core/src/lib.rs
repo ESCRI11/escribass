@@ -30,4 +30,4 @@ pub use project::{Prepared, Project, ProjectError};
 pub use mcp::SongTools;
 pub use session::{new_song, Session};
 pub use validate::{validate, Violation};
-pub use version::{bump_versions, version_writes};
+pub use version::bump_versions;

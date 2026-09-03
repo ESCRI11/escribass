@@ -46,8 +46,14 @@ impl Server {
         SongToolsServer::new(self)
     }
 
+    /// The session, recovered if a previous call panicked while holding it.
+    ///
+    /// Propagating the poison would let one bad request take the process down permanently:
+    /// every later call would panic on the guard. Nothing here can leave a session
+    /// half-mutated — tools and `prepare` are pure, and `record` adopts its new state only
+    /// after the write succeeded — so recovering is safe as well as necessary.
     fn locked(&self) -> std::sync::MutexGuard<'_, Session> {
-        self.session.lock().expect("the session lock is never poisoned")
+        self.session.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
