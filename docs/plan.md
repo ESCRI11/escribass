@@ -24,8 +24,11 @@ stale.
 | M0.2 | `core/`: `create` and `commit` | done | `d18bb90` |
 | M0.2 | Four defects found reviewing the stack, fixed at their own PRs | done | `1d97f99`, `0eb6b99`, `4e863ed`, `92d6c74` |
 | M0.3 | ADR 0005 (`version` + undo), ADR 0006 (wire shape), dependency pins | done | PR #12 |
-| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | **in review** | PRs #13–#24 |
-| M0.4 | Schema fixtures and determinism suite | not started | — |
+| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | done | PRs #13–#23 |
+| M0.3 | Ten findings from a whole-stack review, three of them blockers | done | PR #25 |
+| M0.3 | Six more from an independent final review, two of them blockers | done | PR #26 |
+| M0.3 | Landed on `main` as one integration PR | done | PR #27 |
+| M0.4 | Determinism suite in `tests/` | **next** | — |
 
 C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
 
@@ -99,6 +102,142 @@ Tool semantics not pinned by §5, decided here: `set_notes` replaces a clip's wh
 
 In `tests/`. Drives `core` through the tool API, never the file (`CLAUDE.md` #2). Same input
 → identical canonical JSON and identical patch log, byte for byte.
+
+Planned 2026-09-03 against the M0.3 tip. What follows is the plan in enough detail that it
+does not have to be rediscovered; the reasoning is the expensive part, not the code.
+
+### The claim, and why running it twice is not enough
+
+Two runs in one CI job catch **nondeterminism** — a process-random `HashMap` seed, a wall
+clock, entropy. They cannot catch **drift**: a dependency that changes a serialisation detail,
+or Cargo feature unification that flips `serde_json::Map` to insertion order, produces the
+*same wrong bytes* in both runs, and they agree. Only a **committed golden** catches that.
+
+That is not hypothetical. `rmcp` depends on `indexmap` directly; if any crate in the tree ever
+enables `serde_json/preserve_order`, `Map` becomes insertion-ordered workspace-wide — `diff`
+op order changes, `bump_versions` walk order changes, and every `add` value in the log changes
+key order. Invisible to run-A-vs-run-B. Loud against a golden.
+
+So the suite proves the claim three ways: **two processes against each other**, **each against
+a committed golden**, and **MCP against gRPC**.
+
+### Decisions taken
+
+| Decision | Chosen | Why |
+|---|---|---|
+| Where the suite lives | `tests/` as a Cargo package | `CLAUDE.md`'s M0 step 4 names it, and M1's golden renders land there too |
+| What it drives | The `escribass-mcp` binary as a subprocess, and from PR 4 `escribass-grpc` too | §18.2 makes MCP the surface agents use; the strongest reading of CLAUDE.md #2 is a process, and the library path cannot catch flag parsing, transport serialisation or stdout hygiene |
+| Cross-language | TS and Python replay the golden log with a hand-rolled pointer apply | Demonstrates ADR 0002 §11's "any off-the-shelf patch library can apply the file" in all three languages. No new dependency |
+| Platform matrix | Deferred to M1 | §8 scopes bit-exactness per platform and M1 has audio to compare. Goldens already catch platform differences opportunistically — a macOS developer compares against Linux-produced goldens for free. Choosing runners also touches the `[OPEN]` minimum-OS-versions item |
+| M0 close | M0.4 closes M0, and §11 gains "the determinism suite in `tests/` passes" | A check of the existing requirement, not a new one — but it edits a `[MUST]` section, so it lands in the final PR |
+| ADR needed | **None** | No schema change, no new directory (`tests/` is in §13), no dependency, no pin change |
+
+### What is compared, and how
+
+| Artefact | A vs B | vs golden | MCP vs gRPC |
+|---|---|---|---|
+| `song.json`, `refs.json`, `lock.json`, `patches/*.json` | bytes | bytes | bytes |
+| MCP `get_song` text block | bytes | — | vs `to_canonical_json` of the gRPC `Song` |
+| `ToolResult` per step | structural | structural | structural |
+| `get_history` | structural | structural | structural |
+| `initialize`, `tools/list` frames | not compared | not compared | — |
+
+Bytes where the artefact *is* bytes; structural where the encoding legitimately differs per
+transport. The handshake carries `CARGO_PKG_VERSION` and `tools/list` changes with every proto
+comment — pinning either in a golden would make each version bump a determinism failure, and
+both are already covered by `core/tests/descriptor.rs` and `core/tests/mcp.rs`.
+
+### Scripts and layout
+
+```text
+tests/
+  Cargo.toml            package escribass-tests
+  determinism.rs        driver, comparison, report, tests
+  determinism/
+    every_tool/script.json  expected/{song,refs,lock}.json patches/ responses.json
+    refusals/…
+    branches/…
+  fixtures/             unchanged
+```
+
+A script is a JSON array of `{tool, args}` steps, with an optional `"refused": "<rule>"` that
+makes the step self-checking — a step that fails unexpectedly fails **at the step**, naming the
+tool, rather than surfacing later as a 40 KB golden mismatch. Ids are hard-coded because under
+`--seed-ids` they are a pure function of the script prefix; a change in mint order changes the
+goldens loudly, which is the point. Not generated from a seed: a fuzzer finds more and explains
+nothing.
+
+Three scripts, one claim each: `every_tool` (the whole surface is reproducible and previews
+burn nothing), `refusals` (a refusal leaves no trace in ids, log or document), `branches`
+(navigation and merge are reproducible, and a refused merge writes nothing).
+
+### The comparison must be able to fail
+
+A comparison that cannot fail proves nothing. Two guards:
+
+- **Clock variant** — run `every_tool` at `T` and `T+1000`; the diff must be non-empty *and
+  every differing path must end in `/created_at`*. A wall-clock-leak detector by exclusion, and
+  simultaneously the proof that the comparison detects anything at all.
+- **Map-order guard** — `json!({"b":1,"a":2}).to_string()` is `{"a":2,"b":1}`, naming the
+  `preserve_order` hazard by intent rather than leaving the golden to fail mysteriously.
+
+Failures report `escribass_core::diff` ops between the parsed documents, so a reviewer sees
+paths rather than two 40 KB blobs. Arrays are re-keyed by index first, because `diff` replaces
+an array whole.
+
+### PRs
+
+| # | Branch | Adds |
+|---|---|---|
+| 1 | `m0.4-harness` | The `tests/` package, MCP subprocess driver, script format, `every_tool`, A-vs-B comparison, reopen-through-a-fresh-process check, the report, the clock-variant self-test. Deletes the superseded `core/tests/mcp.rs` determinism test |
+| 2 | `m0.4-golden` | `expected/` for `every_tool`, `UPDATE_FIXTURES=1` writer, golden comparison, the map-order guard, `.gitattributes` |
+| 3 | `m0.4-scripts` | `refusals` and `branches` with goldens |
+| 4 | `m0.4-grpc` | The gRPC subprocess driver; every script over both transports |
+| 5 | `m0.4-close` | `docs/plan.md`, `tests/AGENTS.md` rules, the §11 line, M0 closed |
+| 6 | `m0.4-cross-language` | TS and Python replay the golden log |
+
+The split follows M0.2's and M0.3's lesson: PR 1 is the loud concern (does the plumbing produce
+identical bytes twice), PR 2 the silent one (does today's output equal what was committed), PR
+4 a second silent class (two transports drifting apart). Mixing them gets the silent half
+reviewed as plumbing.
+
+### Traps, found while planning
+
+- **`CARGO_BIN_EXE_<name>` is only set for the package that owns the binary**, so a `tests/`
+  package cannot use it. Locate via `current_exe()` → `deps/` → `target/<profile>/`. Do not
+  nest `cargo build` inside a test: cargo holds the build lock while tests run. The harness
+  must error clearly when the binary is missing rather than hanging.
+- **The two binaries default `--author` differently** — `escribass-grpc` to `human`,
+  `escribass-mcp` to `model`. Every cross-transport golden differs in `provenance.author`
+  unless the harness passes it explicitly.
+- **`escribass-grpc --listen 127.0.0.1:0` is unusable**: it prints the address it was asked
+  for, not the one it bound. Pick the port by bind-and-drop, as `core/tests/grpc.rs` does.
+  Fixing the binary would need `tokio-stream` as a direct dependency (CLAUDE.md #4).
+- **`get_song` has two shapes over MCP** — the text block is canonical, `structuredContent` is
+  an alphabetised `Value`. Byte-compare the text, golden the structured, never one against the
+  other.
+- **Float and timestamp formatting belong to dependencies** (`serde_json`'s float writer,
+  `pbjson`'s `+00:00`). Either changing in an upgrade is invisible to A-vs-B and caught only by
+  the golden.
+- **`assets/` is an empty directory** and git cannot store one; compare files only.
+- **Goldens are LF** — a Windows checkout with `autocrlf` rewrites them, hence `.gitattributes`.
+- **`UPDATE_FIXTURES=1` blesses whatever ran**, including a deterministically wrong output. The
+  only guard is the rule that a golden changes solely in the PR that changes the canonical form
+  or a tool's semantics, with its diff reviewed there — §17's rule for renders, applied here.
+- **A hang is not a failure**: a server that never answers has no timeout. Accepted for now.
+
+### Kept rather than replaced
+
+The library-level determinism tests in `core/tests/` stay as layer guards — they fail nearer
+the cause and cost nothing. Only `core/tests/mcp.rs`'s two-session test moves, because the
+suite is its exact superset.
+
+`tests/fixtures/song/minimal.json` stays a schema fixture written from generated types: it
+exercises `Generator`, `Marker`, `Instrument.state` and model provenance that no typed tool can
+produce before M4, and it is a constructed value rather than a mutation, so CLAUDE.md #2 is not
+in play. `tests/AGENTS.md`'s "from M0.4, fixtures come through the tool API" becomes
+"determinism goldens come through the tool API; the schema fixture is written from generated
+types".
 
 ## After M0
 
