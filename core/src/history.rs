@@ -468,6 +468,40 @@ impl History {
         }
     }
 
+    /// The entries to replay to reach `id`: the **first-parent** chain, root last to first.
+    ///
+    /// Not every ancestor. A merge entry's ops are the diff from `parents[0]`'s document to the
+    /// merged one, so they already carry everything the other side contributed — replaying the
+    /// other side's entries as well and then the merge on top applies the same change twice.
+    /// For `add` and `replace` that is invisible, because both are idempotent. For `remove` it
+    /// is fatal: the incoming entry deletes the path, the merge entry deletes it again, and the
+    /// replay stops with `path_not_found` on a log that was written by a merge the tool
+    /// accepted. The project then will not reopen.
+    ///
+    /// `parents[1..]` is lineage: it is what `merge_base` reads and what makes the log a DAG.
+    /// It is not a replay path.
+    pub fn first_parents(&self, id: &str) -> Result<Vec<&PatchEntry>, HistoryError> {
+        let mut chain = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut at = id.to_string();
+        loop {
+            if !seen.insert(at.clone()) {
+                return Err(err(id, "parent_cycle", "the log contains a cycle and cannot be replayed"));
+            }
+            let entry = self
+                .entries
+                .get(&at)
+                .ok_or_else(|| err(id, "entry_missing", format!("`{at}` is not in the log")))?;
+            chain.push(entry);
+            match entry.parents.first() {
+                Some(parent) => at = parent.clone(),
+                None => break,
+            }
+        }
+        chain.reverse();
+        Ok(chain)
+    }
+
     /// Rebuilds the document at a node by replaying the log (ADR 0004).
     ///
     /// Replay starts from a default `Song`, never from `{}`. The canonical form emits every
@@ -479,7 +513,7 @@ impl History {
     /// document per ref if a large project drags.
     pub fn materialise(&self, id: &str) -> Result<Value, HistoryError> {
         let mut doc = serde_json::to_value(Song::default()).expect("a default Song serialises");
-        for entry in self.ancestry(id)? {
+        for entry in self.first_parents(id)? {
             let ops = ops_of(entry)?;
             doc = apply(&doc, &ops).map_err(|e| {
                 err(&entry.id, "replay_failed", format!("entry `{}` no longer applies: {e}", entry.id))

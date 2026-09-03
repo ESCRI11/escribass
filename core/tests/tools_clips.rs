@@ -647,3 +647,38 @@ fn a_scripted_arrangement_is_reproducible() {
     };
     assert_eq!(build(), build());
 }
+
+#[test]
+fn quantize_does_not_overflow_at_the_top_of_the_tick_range() {
+    // A clip may be `i32::MAX` long, so a note can sit near the top of the range. Rounding in
+    // `i32` overflowed there: a panic in a debug build, and in release a wrap to a negative
+    // tick refused with a rule that describes the wrong problem.
+    let (_dir, mut session, track) = opened();
+    let far = i32::MAX - 300;
+    let added = session
+        .add_clip(&AddClipRequest {
+            track_id: track,
+            start_tick: 0,
+            length_ticks: i32::MAX,
+            content: Some(AddClipContent::NoteClip(NoteClip {
+                notes: notes([("a", note(60, far)), ("b", note(64, 0))]),
+            })),
+            dry_run: false,
+        })
+        .unwrap();
+    assert!(added.valid, "{:?}", added.errors);
+    let clip = session.project().song().clips.keys().next().unwrap().clone();
+
+    // Whatever the outcome, it is a result rather than a panic.
+    let result = session
+        .quantize(&QuantizeRequest {
+            clip_id: clip,
+            grid_ticks: SIXTEENTH,
+            note_ids: vec![],
+            dry_run: false,
+        })
+        .unwrap();
+    if !result.valid {
+        assert!(rules(&result).iter().all(|r| *r != "tick_negative"), "{:?}", rules(&result));
+    }
+}

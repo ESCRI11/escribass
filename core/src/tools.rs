@@ -11,9 +11,10 @@
 //! unspecified enum, a duplicate index, a second master track — is §4.4's job, and duplicating
 //! those rules here would be two places to change and one place to forget.
 //!
-//! Ids are minted before the patch is built, so a dry run consumes them. `ponytail:` ids are
-//! never reused (§4.3) and a burned one costs nothing; the alternative is a second id source
-//! for previews, which is a second thing to keep in step for no gain.
+//! Ids are minted while the patch is built, from a **fork** of the session's source: a dry run
+//! discards the fork, so previewing burns nothing and the apply that follows mints exactly the
+//! ids the preview showed (ADR 0006 §3, which §9 needs since a person approves a patch before
+//! it is applied).
 
 use crate::clock::Clock;
 use crate::history::{History, HistoryError};
@@ -67,6 +68,19 @@ fn refuse(path: impl Into<String>, rule: &'static str, message: impl Into<String
 /// the document which case it is in.
 fn add(path: String, value: Value) -> Op {
     Op::Add { path, value }
+}
+
+/// An entity as a JSON value, or a refusal naming the argument that made it unserialisable.
+///
+/// prost keeps an enum value it does not know as the raw `i32`, and the generated serializer
+/// then fails on it. `expect` here would panic *inside the transport's lock*: over gRPC one
+/// request carrying `kind: 99` would take the process down and poison the session for every
+/// later call, while over MCP the JSON deserializer rejects the same value up front. Two
+/// transports must not disagree about what a call means (ADR 0006).
+fn entity_value<T: serde::Serialize>(path: &str, value: &T) -> Result<Value, Vec<Violation>> {
+    serde_json::to_value(value).map_err(|e| {
+        refuse(path, "enum_unknown", format!("this is not a value the schema knows: {e}"))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +147,7 @@ pub fn add_track(
         allow_overlap: false,
     };
 
-    Ok(vec![add(
-        format!("/tracks/{id}"),
-        serde_json::to_value(&track).expect("a Track serialises"),
-    )])
+    Ok(vec![add(format!("/tracks/{id}"), entity_value("/kind", &track)?)])
 }
 
 /// §5 `set_track_instrument`. Replaces whatever the track had.
@@ -166,7 +177,7 @@ pub fn set_track_instrument(
 
     Ok(vec![add(
         format!("/tracks/{}/instrument", request.track_id),
-        serde_json::to_value(&instrument).expect("an Instrument serialises"),
+        entity_value("/ref", &instrument)?,
     )])
 }
 
@@ -203,7 +214,7 @@ pub fn add_effect(
 
     Ok(vec![add(
         format!("/tracks/{}/fx_chain/{id}", request.track_id),
-        serde_json::to_value(&effect).expect("an Effect serialises"),
+        entity_value("/ref", &effect)?,
     )])
 }
 
@@ -324,7 +335,7 @@ pub fn add_clip(
         content,
     };
 
-    Ok(vec![add(format!("/clips/{id}"), serde_json::to_value(&clip).expect("a Clip serialises"))])
+    Ok(vec![add(format!("/clips/{id}"), entity_value("/content", &clip)?)])
 }
 
 /// Mints ids and provenance for a set of notes, keeping any id the clip already holds.
@@ -337,18 +348,37 @@ fn minted_notes(
 ) -> NoteClip {
     let mut notes = std::collections::BTreeMap::new();
     for (key, note) in given {
-        // A key the clip already holds is an edit to that note; anything else is a new note,
-        // whatever the caller called it. Core owns `id`, `provenance` and `version` (§4.3).
-        let id = if existing.contains_key(key) { key.clone() } else { ids.next_id() };
-        notes.insert(
-            id.clone(),
-            Note {
-                id,
-                provenance: Some(provenance(author, clock)),
-                version: 0,
-                ..note.clone()
-            },
-        );
+        // A key the clip already holds is an edit to *that note*; anything else is a new note,
+        // whatever the caller called it.
+        //
+        // Core mints §4.3's fields for a new entity and **preserves** them for one that
+        // exists. Re-minting provenance would rewrite the author and `created_at` of every
+        // note in the clip on every call — invisible under a fixed clock, and under a real one
+        // it loses authorship, bumps notes nobody touched, and makes two branches that each
+        // call `set_notes` conflict on timestamps for notes neither of them meant to change.
+        match existing.get(key) {
+            Some(held) => notes.insert(
+                key.clone(),
+                Note {
+                    id: key.clone(),
+                    provenance: held.provenance.clone(),
+                    version: held.version,
+                    ..note.clone()
+                },
+            ),
+            None => {
+                let id = ids.next_id();
+                notes.insert(
+                    id.clone(),
+                    Note {
+                        id,
+                        provenance: Some(provenance(author, clock)),
+                        version: 0,
+                        ..note.clone()
+                    },
+                )
+            }
+        };
     }
     NoteClip { notes }
 }
@@ -372,7 +402,7 @@ pub fn set_notes(
 
     Ok(vec![add(
         format!("/clips/{}/note_clip/notes", request.clip_id),
-        serde_json::to_value(&notes.notes).expect("notes serialise"),
+        entity_value("/notes", &notes.notes)?,
     )])
 }
 
@@ -432,8 +462,13 @@ pub fn quantize(song: &Song, request: &QuantizeRequest) -> Result<Vec<Op>, Vec<V
 /// Ticks are never negative (§4.4), but the negative branch is here rather than assumed: a
 /// tool that silently did the wrong thing on an input the validator would have caught is a
 /// worse failure than one that does the right thing on it.
-fn snap(tick: i32, grid: i32) -> i32 {
+fn snap(tick: i32, grid: i32) -> i64 {
+    let (tick, grid) = (i64::from(tick), i64::from(grid));
     let half = grid / 2;
+    // In `i64`, because `tick + half` overflows `i32` for a tick near the top of the range —
+    // which the validator permits, since a clip may be `i32::MAX` long. An out-of-range result
+    // is refused by the schema on re-deserialisation, which is the report the caller wants;
+    // a wrapped one would arrive as a negative tick with a misleading rule.
     if tick >= 0 {
         (tick + half) / grid * grid
     } else {
@@ -492,10 +527,7 @@ pub fn add_automation(
         points,
     };
 
-    Ok(vec![add(
-        format!("/automation/{id}"),
-        serde_json::to_value(&automation).expect("an Automation serialises"),
-    )])
+    Ok(vec![add(format!("/automation/{id}"), entity_value("/points", &automation)?)])
 }
 
 /// §5 `set_tempo`. Upserts the event at `tick`.
@@ -530,11 +562,8 @@ pub fn set_tempo(
     }
 
     let id = ids.next_id();
-    Ok(vec![add(
-        format!("/tempo_map/events/{id}"),
-        serde_json::to_value(TempoEvent { id, tick: request.tick, bpm: request.bpm })
-            .expect("a TempoEvent serialises"),
-    )])
+    let event = TempoEvent { id: id.clone(), tick: request.tick, bpm: request.bpm };
+    Ok(vec![add(format!("/tempo_map/events/{id}"), entity_value("/bpm", &event)?)])
 }
 
 /// §5 `add_section`.
@@ -553,10 +582,7 @@ pub fn add_section(
         start_tick: request.start_tick,
         end_tick: request.end_tick,
     };
-    Ok(vec![add(
-        format!("/sections/{id}"),
-        serde_json::to_value(&section).expect("a Section serialises"),
-    )])
+    Ok(vec![add(format!("/sections/{id}"), entity_value("/name", &section)?)])
 }
 
 /// §5 `move_section`.

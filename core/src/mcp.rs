@@ -130,38 +130,6 @@ fn json_text_input(tool: &str, mut schema: Map<String, Value>) -> Map<String, Va
     schema
 }
 
-/// Turns a JSON-text argument back into the base64 the proto deserializer expects.
-fn json_text_arguments(tool: &str, mut arguments: Map<String, Value>) -> Map<String, Value> {
-    for (_, field) in JSON_TEXT_FIELDS.iter().filter(|(t, _)| *t == tool) {
-        if let Some(value) = arguments.get(*field) {
-            if value.is_array() {
-                let text = serde_json::to_string_pretty(value).expect("a Value serialises") + "\n";
-                arguments.insert((*field).to_string(), Value::String(base64(text.as_bytes())));
-            }
-        }
-    }
-    arguments
-}
-
-/// Standard base64 with padding, which is what proto3 JSON specifies for `bytes`.
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let block = chunk.iter().fold(0u32, |acc, b| (acc << 8) | u32::from(*b))
-            << (8 * (3 - chunk.len()));
-        for position in 0..4 {
-            if position <= chunk.len() {
-                out.push(ALPHABET[((block >> (18 - 6 * position)) & 0x3f) as usize] as char);
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
-}
-
 /// A [`ToolResult`] as MCP carries it.
 ///
 /// Built field by field rather than with `serde_json::to_value(&result)`, which would base64
@@ -225,8 +193,7 @@ fn decode<T: serde::de::DeserializeOwned>(
     tool: &str,
     request: &CallToolRequestParams,
 ) -> Result<T, McpError> {
-    let prepared = json_text_arguments(tool, arguments(request));
-    serde_json::from_value(Value::Object(prepared))
+    serde_json::from_value(Value::Object(arguments(request)))
         .map_err(|e| McpError::invalid_params(format!("`{tool}`: {e}"), None))
 }
 
@@ -265,7 +232,10 @@ impl ServerHandler for SongTools {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
-        let mut session = self.session.lock().expect("the session lock is never poisoned");
+        // A panic in one call must not make every later call fail. Nothing here can leave a
+        // session half-mutated — tools and `prepare` are pure, and `record` swaps state in only
+        // after the write succeeded — so the guard is recovered rather than propagated.
+        let mut session = self.session.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let result = match request.name.as_ref() {
             "get_song" => {
                 let song = session.get_song().song.expect("a session always has a song");
@@ -281,8 +251,29 @@ impl ServerHandler for SongTools {
                 complete(history_json(&history), false)
             }
             "apply_patch" => {
-                let arguments: ApplyPatchRequest = decode("apply_patch", &request)?;
-                tool_result(&session.apply_patch(&arguments).map_err(broken)?)
+                // Built directly rather than through the proto deserializer: `patch` is
+                // `bytes`, so that route wants base64, and the only way to reach it from the
+                // JSON array a model sends is to encode text we already hold. One field, one
+                // conversion — a codec in between would be a codec to keep correct.
+                let arguments = arguments(&request);
+                let text = match arguments.get("patch") {
+                    Some(Value::Array(_)) | Some(Value::Object(_)) => {
+                        serde_json::to_string_pretty(&arguments["patch"]).expect("a Value serialises")
+                            + "\n"
+                    }
+                    Some(Value::String(text)) => text.clone(),
+                    _ => {
+                        return Err(McpError::invalid_params(
+                            "`patch` is an RFC 6902 array".to_string(),
+                            None,
+                        ))
+                    }
+                };
+                let call = ApplyPatchRequest {
+                    patch: text.into_bytes(),
+                    dry_run: arguments.get("dry_run").and_then(Value::as_bool).unwrap_or(false),
+                };
+                tool_result(&session.apply_patch(&call).map_err(broken)?)
             }
             "add_track" => {
                 let arguments: AddTrackRequest = decode("add_track", &request)?;
@@ -360,24 +351,22 @@ impl ServerHandler for SongTools {
     }
 }
 
-/// The log, with each entry's `ops` as the RFC 6902 array it is rather than base64 — the same
-/// reason `patch` is rewritten, applied to the field that carries it on disk.
+/// The log, in the shape it has on disk.
+///
+/// `crate::entry_to_json` already solves this: `ops` as the RFC 6902 array it is rather than
+/// the base64 the generated impl would produce, and every field including `provenance`. Hand
+/// building the object here dropped provenance, which §5 calls the audit trail — and a
+/// transport that drops a field is deciding rather than translating (ADR 0006).
 fn history_json(history: &escribass_proto::tools::HistoryResponse) -> Value {
     let entries: Map<String, Value> = history
         .entries
         .iter()
         .map(|(id, entry)| {
-            let ops: Value = serde_json::from_slice(&entry.ops).unwrap_or(Value::Null);
-            (
-                id.clone(),
-                json!({
-                    "id": entry.id,
-                    "parents": entry.parents,
-                    "tool": entry.tool,
-                    "ops": ops,
-                    "schema_version": entry.schema_version,
-                }),
-            )
+            let shape = crate::entry_to_json(entry)
+                .ok()
+                .and_then(|text| serde_json::from_str(&text).ok())
+                .unwrap_or(Value::Null);
+            (id.clone(), shape)
         })
         .collect();
     let refs = history.refs.as_ref();

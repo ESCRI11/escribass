@@ -6,6 +6,7 @@
 //! ADR 0006 §1 is for.
 
 use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
+const AT: i64 = 1_788_307_200_000;
 use escribass_proto::tools::{
     AddEffectRequest, AddTrackRequest, SetParamRequest, SetTrackInstrumentRequest, ToolResult,
 };
@@ -14,7 +15,6 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const AT: i64 = 1_788_307_200_000;
 
 struct Scratch(PathBuf);
 
@@ -440,4 +440,113 @@ fn a_scripted_session_is_reproducible() {
         (song, refs)
     };
     assert_eq!(build(), build());
+}
+
+#[test]
+fn an_enum_the_schema_does_not_know_is_refused_not_panicked() {
+    // prost keeps an unknown enum as its raw i32 and the generated serializer then fails on
+    // it. Panicking here would happen *inside* a transport's lock: one gRPC request carrying
+    // `kind: 99` would take the process down and poison the session for every later call,
+    // while MCP's JSON deserializer rejects the same value up front. Two transports must not
+    // disagree about what a call means (ADR 0006).
+    let (_dir, mut session) = opened();
+    let result = session
+        .add_track(&AddTrackRequest {
+            name: "Bass".to_string(),
+            kind: 99,
+            r#ref: None,
+            dry_run: false,
+        })
+        .unwrap();
+
+    assert!(!result.valid);
+    assert_eq!(rules(&result), vec!["enum_unknown"]);
+}
+
+#[test]
+fn set_notes_keeps_the_provenance_of_a_note_it_recognises() {
+    // Re-minting provenance would rewrite the author and `created_at` of every note in a clip
+    // on every call. Under a fixed clock that is a no-op, which is exactly why it needs a test
+    // that moves the clock: with a real one it loses authorship, bumps notes nobody touched,
+    // and makes two branches conflict on timestamps for notes neither meant to change.
+    let dir = Scratch::new();
+    let mut ids = SeededIds::default();
+    let created = FixedClock(AT);
+    let song = new_song(&mut ids, &created);
+    let project = Project::create(&dir.0, &song, &mut ids, &created).unwrap();
+    let mut session = Session::new(project, Box::new(ids), Box::new(created), Author::Human);
+    let track = instrument_track(&mut session, "Bass");
+
+    let note = |pitch: i32| escribass_schema::song::Note {
+        pitch,
+        start_tick: 0,
+        length_ticks: 240,
+        velocity: 100,
+        ..Default::default()
+    };
+    session
+        .add_clip(&escribass_proto::tools::AddClipRequest {
+            track_id: track,
+            start_tick: 0,
+            length_ticks: 3840,
+            content: Some(escribass_proto::tools::add_clip_request::Content::NoteClip(
+                escribass_schema::song::NoteClip {
+                    notes: [("a".to_string(), note(60))].into_iter().collect(),
+                },
+            )),
+            dry_run: false,
+        })
+        .unwrap();
+    let clip = session.project().song().clips.keys().next().unwrap().clone();
+    let held = match &session.project().song().clips[&clip].content {
+        Some(escribass_schema::song::clip::Content::NoteClip(n)) => n.notes.clone(),
+        other => panic!("{other:?}"),
+    };
+    let (id, before) = held.iter().next().unwrap();
+
+    // A later session, a minute on, run by a model rather than the person who wrote the note.
+    let reopened = Project::open(&dir.0).unwrap();
+    let mut later = Session::new(
+        reopened,
+        Box::new(SeededIds::new(AT + 60_000, 100)),
+        Box::new(FixedClock(AT + 60_000)),
+        Author::Model,
+    );
+    let result = later
+        .set_notes(&escribass_proto::tools::SetNotesRequest {
+            clip_id: clip.clone(),
+            notes: [(id.clone(), note(60))].into_iter().collect(),
+            dry_run: false,
+        })
+        .unwrap();
+    assert!(result.valid, "{:?}", result.errors);
+
+    let after = match &later.project().song().clips[&clip].content {
+        Some(escribass_schema::song::clip::Content::NoteClip(n)) => n.notes.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(after[id].provenance, before.provenance, "the note's authorship was rewritten");
+    assert_eq!(after[id].version, before.version, "an unchanged note bumped");
+}
+
+#[test]
+fn negative_zero_is_normalised_for_a_typed_tool_too() {
+    // `core/AGENTS.md` says the validator's `negative_zero` should never fire on tool input.
+    // Normalising only in `apply_patch` left every typed tool to be refused by it.
+    let (_dir, mut session) = opened();
+    let track = instrument_track(&mut session, "Bass");
+    let device = session.project().song().tracks[&track].instrument.clone().unwrap().id;
+
+    let result = session
+        .set_param(&SetParamRequest {
+            device_id: device,
+            param: "pan".to_string(),
+            value: -0.0,
+            dry_run: false,
+        })
+        .unwrap();
+
+    assert!(result.valid, "{:?}", result.errors);
+    let text = escribass_core::to_canonical_json(session.project().song()).unwrap();
+    assert!(!text.contains("-0.0"), "a negative zero reached the document");
 }

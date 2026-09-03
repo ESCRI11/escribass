@@ -83,13 +83,26 @@ Otherwise restore the value from `before`. Everything else follows without a spe
 ### 3. A tool-authored op that writes `version` is refused, with rule `version_not_writable`
 
 The typed tools never emit one. The raw `apply_patch` tool — which M0.4 needs in order to
-drive core through the tool API at all (`CLAUDE.md` #2) — could, so it is guarded: any
-operation whose final reference token is `version`, on an object matching decision 2, is
-rejected before the patch is applied.
+drive core through the tool API at all (`CLAUDE.md` #2) — could, so it is guarded.
 
-This is the enforcement of ADR 0001 §4's "never written by a tool-authored op". Decision 2 is
-the backstop, not the guard: it would silently overwrite such an op's value, and silently
-correcting a caller who asked for the wrong thing is how a contract stops being one.
+**Revised 2026-09-03, when the guard met its first caller.** The original text said the check
+was on the operation: "any operation whose final reference token is `version`, on an object
+matching decision 2, is rejected before the patch is applied". Inspecting paths cannot work.
+It does not see a version arriving inside a whole-entity value, it cannot tell `"1"` from `1`
+— the proto3 JSON leniency that made the log disagree with `song.json` in M0.2 — and it
+refuses this API's own output, because a patch `ToolResult` returns carries the bumps it
+caused (ADR 0006 §1). §9 has a person approve a diff and then apply it, so a guard that
+refuses every patch the API produces leaves that flow with no working path.
+
+The guard is therefore a **comparison, not a filter**: decision 2 computes the number, and
+where the caller ended up asking for a different one, that is reported as
+`version_not_writable`. It catches every route in, and it lets a previewed patch be applied
+unchanged, because a patch that states what core computes is disputing nothing.
+
+Two exemptions fall out rather than being written. An entity that did not exist before has no
+number a client could be holding, so a version arriving with a new entity is accepted.  And an
+entity whose `id` changed in place is a *different* entity — `set_track_instrument` replaces
+one wholesale — so the number the old one had is not a claim about the new one.
 
 ### 4. Undo appends an inverse entry; it never rewinds a ref
 

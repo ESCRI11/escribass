@@ -110,8 +110,8 @@ added to `song.proto` never reaches the tool, and nothing breaks loudly enough t
 
 ### 5. One project per process, named at launch; there is no `open_project` tool
 
-The project directory is a launch argument. `create_project` is a subcommand of the binary,
-not a tool.
+The project directory is a launch argument, and creating one is a flag on the binary
+(`--create`), not a tool.
 
 Two reasons converge. MCP's stdio transport is explicit that a server process is not a
 session, so any state spanning requests must be an explicit identifier — a project handle

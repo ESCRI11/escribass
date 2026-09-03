@@ -351,3 +351,37 @@ fn a_dry_run_does_not_advance_the_ids_a_later_call_uses() {
     };
     assert_eq!(with_previews, without);
 }
+
+#[test]
+fn the_patch_this_api_returns_can_be_applied_back_through_it() {
+    // §9 has a user apply, reject or *edit* a proposed diff, and `ApplyPatchRequest.patch` is
+    // documented as the form `ToolResult.patch` returns. That patch carries the version bumps
+    // it caused (ADR 0006 §1), so a guard that refused every op writing a version refused the
+    // API's own output — the round trip had no working path at all.
+    let (_dir, mut session) = opened();
+    let previewed = session.apply_patch(&patch(set_gain(json!(-3.0)), true)).unwrap();
+    assert!(previewed.valid, "{:?}", previewed.errors);
+
+    let applied = session
+        .apply_patch(&ApplyPatchRequest { patch: previewed.patch.clone(), dry_run: false })
+        .unwrap();
+
+    assert!(applied.valid, "{:?}", applied.errors);
+    assert_eq!(applied.patch, previewed.patch, "applying the preview changed it");
+}
+
+#[test]
+fn a_failed_write_leaves_the_session_where_the_disk_is() {
+    // The caller is told nothing happened; the session must agree. Committing in memory and
+    // then failing to write left every later call building on state the disk never saw.
+    let (dir, mut session) = opened();
+    let before = session.get_song().song.unwrap();
+    let entries = session.project().history().entries().len();
+    std::fs::create_dir(dir.0.join(".song.json.tmp")).unwrap();
+
+    let failed = session.apply_patch(&patch(set_gain(json!(-3.0)), false)).unwrap_err();
+    assert_eq!(failed.rule, "unwritable");
+
+    assert_eq!(session.get_song().song.unwrap(), before, "the session committed anyway");
+    assert_eq!(session.project().history().entries().len(), entries, "an entry survived");
+}

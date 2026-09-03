@@ -58,6 +58,15 @@ five keys and a ten-character id. Three corrections, none of them a change of de
 
 A merge entry (§4) carries two entries in `parents`; nothing else about the format changes.
 
+**Corrected 2026-09-03.** A merge entry's `ops` are the patch from **`parents[0]`**'s document
+to the merged one, and replay follows the first-parent chain. The original wording said only
+that a merge names two parents, which left "replay every ancestor topologically" looking
+correct — it is not. The other side's contribution is already inside the merge entry's ops, so
+replaying that side's entries as well applies the same change twice. `add` and `replace` are
+idempotent and hide it; `remove` is not, and the replay stops with `path_not_found` on a log
+written by a merge the tool accepted, leaving the project unopenable. `parents[1..]` is
+lineage: it is what a merge base is computed from, not a replay path.
+
 ### 2. Branches are named refs in a single `refs.json`
 
 ```json
