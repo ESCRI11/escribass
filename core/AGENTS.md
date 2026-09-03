@@ -17,6 +17,8 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
+| `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Both transports dispatch here and decide nothing. | done |
+| `tests/session.rs` | Dry run equals the recorded patch; refusals keep their rule; the `Ok(valid=false)` / `Err` line. | done |
 | `src/version.rs` | `bump_versions` (ADR 0005 §2) and `version_writes`, the guard behind `version_not_writable`. Operates on `Value`, like `patch.rs`. | done |
 | `tests/version.rs` | The rule, one case per test, plus three through the pipeline. | done |
 | `src/id.rs` | `IdSource`: `UlidSource` (production) and `SeededIds` (deterministic). Crockford base32, monotonic within a millisecond. | done |
@@ -42,6 +44,9 @@ cargo test -p escribass-core
 | The `version` bump runs inside `prepare`, between applying the ops and re-deserialising — the only position where it lands in the diff `prepare` re-derives. Anywhere later and the log replays one version behind `song.json` | ADR 0005 §1 |
 | An entity is an object with a string `id` **and a numeric `version`**. Both halves: `PluginRef.version` is a string naming a plugin release, and bumping it would break `set_track_instrument` | ADR 0005 §2 |
 | A tool-authored op that writes an entity `version` is refused, not silently overwritten. `bump_versions` would discard it anyway, which is the reason to say so | ADR 0005 §3 |
+| `prepare` fails with `Vec<Violation>`, `record` with `ProjectError`. That *is* ADR 0006 §2's line — `prepare` touches no file, so every way it fails is caller-fixable — so the session needs no classifier over rule names | ADR 0006 §2 |
+| `-0.0` is normalised in `session.rs`, where values enter. The validator's `negative_zero` catches what gets past; it should never fire on tool input | ADR 0002 §4 |
+| A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
 | RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
