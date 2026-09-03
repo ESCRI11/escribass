@@ -16,14 +16,14 @@
 use crate::clock::Clock;
 use crate::history::{ops_text, HistoryError};
 use crate::id::IdSource;
-use crate::patch::Op;
+use crate::patch::{diff, Op};
 use crate::project::{Prepared, Project, ProjectError};
 use crate::validate::Violation;
 use crate::tools;
 use escribass_proto::tools::{
     AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
     ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest, GetSongAtRequest,
-    HistoryResponse, MoveSectionRequest, QuantizeRequest,
+    HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
     SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
     SwitchBranchRequest, ToolResult, TransposeRequest,
 };
@@ -255,6 +255,93 @@ impl Session {
         }
         self.project.delete_branch(&request.name)?;
         Ok(described(summary))
+    }
+
+    /// §5 `merge_branch` (ADR 0001 §4).
+    ///
+    /// One entry with two parents, or a list of conflicts and nothing written. There is no
+    /// third outcome: interactive resolution is M2's, when there is a UI to resolve in.
+    pub fn merge_branch(
+        &mut self,
+        request: &MergeBranchRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let history = self.project.history();
+        let Some(theirs_head) = history.refs().refs.get(&request.name).cloned() else {
+            return Ok(refused(vec![Violation {
+                path: "/name".to_string(),
+                rule: "ref_missing",
+                message: format!("`{}` is not a branch in this project", request.name),
+            }]));
+        };
+        let Some(ours_head) = history.head_id().map(str::to_string) else {
+            return Err(ProjectError {
+                path: self.project.root().display().to_string(),
+                rule: "head_unset",
+                message: "HEAD names no entry".to_string(),
+            });
+        };
+        if theirs_head == ours_head {
+            return Ok(described(format!("`{}` is already here", request.name)));
+        }
+
+        let base = match history.merge_base(&ours_head, &theirs_head) {
+            Ok(base) => base,
+            Err(e) => {
+                return Ok(refused(vec![Violation {
+                    path: "/name".to_string(),
+                    rule: e.rule,
+                    message: e.message,
+                }]))
+            }
+        };
+
+        // Both sides as patches from the base. `ours` is re-derived from the document rather
+        // than replayed, so a merge sees exactly what is on disk (ADR 0004).
+        let ours_doc = serde_json::to_value(self.project.song()).expect("a Song serialises");
+        let base_doc = history.materialise(&base).map_err(|e| history_error(&e))?;
+        let theirs_doc = history.materialise(&theirs_head).map_err(|e| history_error(&e))?;
+        let ours = diff(&base_doc, &ours_doc);
+        let theirs = diff(&base_doc, &theirs_doc);
+
+        let conflicts = crate::merge::conflicts(&ours, &theirs);
+        if !conflicts.is_empty() {
+            return Ok(refused(conflicts));
+        }
+        if theirs.is_empty() {
+            return Ok(described(format!("`{}` has nothing this branch lacks", request.name)));
+        }
+
+        // The incoming side's ops applied on top of ours. `prepare_merge` rather than
+        // `prepare`: these carry entity versions, which are core's own and are what ADR 0005
+        // §2 resolves to max + 1.
+        let prepared = match self.project.prepare_merge(&theirs) {
+            Ok(prepared) => prepared,
+            Err(violations) => return Ok(refused(violations)),
+        };
+        let patch = ops_text(prepared.ops()).into_bytes();
+        let summary = format!("merge `{}`: {}", request.name, summarise(prepared.ops()));
+
+        if request.dry_run {
+            return Ok(ToolResult {
+                valid: true,
+                errors: vec![],
+                patch,
+                summary,
+                entry_id: String::new(),
+            });
+        }
+
+        // Two parents, which is the only thing that distinguishes a merge from a commit at
+        // this level (ADR 0001 §1).
+        let entry_id = self.project.record(
+            prepared,
+            "merge_branch",
+            vec![ours_head, theirs_head],
+            self.author,
+            &mut *self.ids,
+            &*self.clock,
+        )?;
+        Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
     }
 
     /// A tool that refused its arguments is refused the same way a patch that will not apply

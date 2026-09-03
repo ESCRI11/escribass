@@ -81,7 +81,7 @@ inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wi
 | 6 | `m0.3-tools-devices` | `add_track`, `set_track_instrument`, `add_effect`, `set_param` |
 | 7 | `m0.3-tools-clips` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, sections |
 | 8 | `m0.3-branches` | `create_branch`, `switch_branch`, `delete_branch` |
-| 9 | `m0.3-merge` | LCA, three-way by path, conflicts as `errors[]` |
+| 9 | `m0.3-merge` | Merge base, three-way by path, conflicts as `errors[]` |
 | 10 | `m0.3-grpc` | `tonic` service impl and the `escribass-grpc` binary |
 
 Out of M0.3, per ADR 0003: `set_form` (needs `FormRule`, M4), the four `compile_*`/`define_*`
