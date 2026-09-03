@@ -121,7 +121,27 @@ fn a_commit_records_the_patch_and_advances_the_branch() {
     let entry = project.history().get(&id).unwrap();
     assert_eq!(entry.tool, "set_notes");
     assert_eq!(entry.provenance.as_ref().unwrap().created_at.as_ref().unwrap().seconds, AT / 1000);
-    assert_eq!(escribass_core::ops_of(entry).unwrap(), set_pitch(45));
+
+    // The caller's op plus the version bumps it caused (ADR 0005 §1): the note, its clip, and
+    // the song. The bumps are *in* the entry, which is the whole point of where they happen —
+    // recorded elsewhere, every replay would come out a version behind `song.json`.
+    let recorded = escribass_core::ops_of(entry).unwrap();
+    assert_eq!(recorded[0], set_pitch(45)[0]);
+    let bumps: Vec<(&str, &serde_json::Value)> = recorded[1..]
+        .iter()
+        .map(|op| match op {
+            Op::Replace { path, value } => (path.as_str(), value),
+            other => panic!("a bump is a replace, not {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        bumps,
+        vec![
+            (&*format!("{NOTE}/version"), &json!(2)),
+            ("/clips/01M1FPMP00CPCHRS0000000006/version", &json!(3)),
+            ("/version", &json!(215)),
+        ]
+    );
 }
 
 #[test]

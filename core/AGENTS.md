@@ -15,7 +15,10 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
-| `Project::create`, `Project::commit` | The mutation entry point: apply, re-deserialise, validate, record, advance, write. | done |
+| `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
+| `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
+| `src/version.rs` | `bump_versions` (ADR 0005 §2) and `version_writes`, the guard behind `version_not_writable`. Operates on `Value`, like `patch.rs`. | done |
+| `tests/version.rs` | The rule, one case per test, plus three through the pipeline. | done |
 | `src/id.rs` | `IdSource`: `UlidSource` (production) and `SeededIds` (deterministic). Crockford base32, monotonic within a millisecond. | done |
 | `src/clock.rs` | `Clock`: `SystemClock` and `FixedClock`. Every clock yields whole milliseconds. | done |
 
@@ -36,6 +39,9 @@ cargo test -p escribass-core
 | Mutations are JSON Patch through the tool API, in tests too — never a direct field write to a stored song | CLAUDE.md #2; specs §5, §14.3 |
 | `commit` re-deserialises through `Song` before recording. An op can be legal JSON and illegal for the schema; applying it to a `Value` alone would succeed and produce a document `core` cannot read | ADR 0002 §11 |
 | Every check in `commit` happens before `self` is touched, so a rejected commit leaves no orphan entry and no advanced ref | specs §5 |
+| The `version` bump runs inside `prepare`, between applying the ops and re-deserialising — the only position where it lands in the diff `prepare` re-derives. Anywhere later and the log replays one version behind `song.json` | ADR 0005 §1 |
+| An entity is an object with a string `id` **and a numeric `version`**. Both halves: `PluginRef.version` is a string naming a plugin release, and bumping it would break `set_track_instrument` | ADR 0005 §2 |
+| A tool-authored op that writes an entity `version` is refused, not silently overwritten. `bump_versions` would discard it anyway, which is the reason to say so | ADR 0005 §3 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
 | RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
