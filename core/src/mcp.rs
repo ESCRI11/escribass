@@ -17,7 +17,10 @@
 use crate::descriptor::{tool_schemas, ToolSchema};
 use crate::session::Session;
 use crate::{to_canonical_json, ProjectError};
-use escribass_proto::tools::{ApplyPatchRequest, GetSongAtRequest, ToolResult};
+use escribass_proto::tools::{
+    AddEffectRequest, AddTrackRequest, ApplyPatchRequest, GetSongAtRequest, SetParamRequest,
+    SetTrackInstrumentRequest, ToolResult,
+};
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
@@ -35,7 +38,16 @@ use std::sync::{Arc, Mutex};
 /// `song_tools.proto` declares twenty RPCs; the rest arrive in later steps. Advertising a tool
 /// that is not wired up would spend a model's turn on a call that can only fail, so the list
 /// is what works, and a test keeps it equal to what `call_tool` dispatches.
-pub const IMPLEMENTED: &[&str] = &["get_song", "get_song_at", "get_history", "apply_patch"];
+pub const IMPLEMENTED: &[&str] = &[
+    "get_song",
+    "get_song_at",
+    "get_history",
+    "apply_patch",
+    "add_track",
+    "set_track_instrument",
+    "add_effect",
+    "set_param",
+];
 
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so must cross MCP as JSON
 /// rather than as base64 (ADR 0006 §6).
@@ -256,6 +268,23 @@ impl ServerHandler for SongTools {
             "apply_patch" => {
                 let arguments: ApplyPatchRequest = decode("apply_patch", &request)?;
                 tool_result(&session.apply_patch(&arguments).map_err(broken)?)
+            }
+            "add_track" => {
+                let arguments: AddTrackRequest = decode("add_track", &request)?;
+                tool_result(&session.add_track(&arguments).map_err(broken)?)
+            }
+            "set_track_instrument" => {
+                let arguments: SetTrackInstrumentRequest =
+                    decode("set_track_instrument", &request)?;
+                tool_result(&session.set_track_instrument(&arguments).map_err(broken)?)
+            }
+            "add_effect" => {
+                let arguments: AddEffectRequest = decode("add_effect", &request)?;
+                tool_result(&session.add_effect(&arguments).map_err(broken)?)
+            }
+            "set_param" => {
+                let arguments: SetParamRequest = decode("set_param", &request)?;
+                tool_result(&session.set_param(&arguments).map_err(broken)?)
             }
             unknown => {
                 return Err(McpError::invalid_params(

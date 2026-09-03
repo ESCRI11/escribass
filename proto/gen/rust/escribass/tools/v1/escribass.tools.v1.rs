@@ -97,12 +97,18 @@ pub struct ApplyPatchRequest {
 
 /// Adds a track. `index` is assigned after the current last; the master track already exists
 /// in every song (§4.4).
+///
+/// `ref` is required when `kind` is TRACK_KIND_INSTRUMENT and refused otherwise: ADR 0002
+/// requires an instrument present exactly when the track is one, so an instrument track cannot
+/// be created empty and filled in afterwards — there is no valid song in between.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AddTrackRequest {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
     #[prost(enumeration="::escribass_schema::song::TrackKind", tag="2")]
     pub kind: i32,
+    #[prost(message, optional, tag="4")]
+    pub r#ref: ::core::option::Option<::escribass_schema::song::DeviceRef>,
     #[prost(bool, tag="3")]
     pub dry_run: bool,
 }
