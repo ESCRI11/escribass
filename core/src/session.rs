@@ -21,8 +21,10 @@ use crate::project::{Prepared, Project, ProjectError};
 use crate::validate::Violation;
 use crate::tools;
 use escribass_proto::tools::{
-    AddEffectRequest, AddTrackRequest, ApplyPatchRequest, GetSongAtRequest, HistoryResponse,
-    SetParamRequest, SetTrackInstrumentRequest, SongResponse, ToolResult,
+    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
+    ApplyPatchRequest, GetSongAtRequest, HistoryResponse, MoveSectionRequest, QuantizeRequest,
+    SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
+    ToolResult, TransposeRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -136,6 +138,63 @@ impl Session {
     pub fn set_param(&mut self, request: &SetParamRequest) -> Result<ToolResult, ProjectError> {
         let built = tools::set_param(self.project.song(), request);
         self.from_tool("set_param", built, request.dry_run)
+    }
+
+    /// §5 `add_clip`.
+    pub fn add_clip(&mut self, request: &AddClipRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::add_clip(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("add_clip", built, request.dry_run)
+    }
+
+    /// §5 `set_notes`.
+    pub fn set_notes(&mut self, request: &SetNotesRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::set_notes(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("set_notes", built, request.dry_run)
+    }
+
+    /// §5 `transpose`.
+    pub fn transpose(&mut self, request: &TransposeRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::transpose(self.project.song(), request);
+        self.from_tool("transpose", built, request.dry_run)
+    }
+
+    /// §5 `quantize`.
+    pub fn quantize(&mut self, request: &QuantizeRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::quantize(self.project.song(), request);
+        self.from_tool("quantize", built, request.dry_run)
+    }
+
+    /// §5 `add_automation`.
+    pub fn add_automation(
+        &mut self,
+        request: &AddAutomationRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let built = tools::add_automation(
+            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("add_automation", built, request.dry_run)
+    }
+
+    /// §5 `set_tempo`.
+    pub fn set_tempo(&mut self, request: &SetTempoRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::set_tempo(self.project.song(), request, &mut *self.ids);
+        self.from_tool("set_tempo", built, request.dry_run)
+    }
+
+    /// §5 `add_section`.
+    pub fn add_section(&mut self, request: &AddSectionRequest) -> Result<ToolResult, ProjectError> {
+        let built = tools::add_section(request, &mut *self.ids, &*self.clock, self.author);
+        self.from_tool("add_section", built, request.dry_run)
+    }
+
+    /// §5 `move_section`.
+    pub fn move_section(
+        &mut self,
+        request: &MoveSectionRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let built = tools::move_section(self.project.song(), request);
+        self.from_tool("move_section", built, request.dry_run)
     }
 
     /// A tool that refused its arguments is refused the same way a patch that will not apply
