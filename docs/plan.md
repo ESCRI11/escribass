@@ -81,6 +81,9 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
+| Entity `version` bumping | Core maintains it (ADR 0001 §4), but the bump must be recorded **in the entry's ops** or replay diverges from the live document. No tool drives it until M0.3, so designing it now means designing against no caller | M0.3 | ADR 0001 §4 |
+| Undo/redo policy | §5 calls the log the undo history and ADR 0001 names the mechanism, but nothing chooses between rewinding the ref and appending an inverse entry. ADR-shaped when taken | M0.3 | §5; ADR 0001 |
+| `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
 
 ## Known gaps
 
