@@ -10,6 +10,7 @@ pub mod history;
 pub mod id;
 pub mod patch;
 pub mod project;
+pub mod session;
 pub mod validate;
 pub mod version;
 
@@ -20,5 +21,6 @@ pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use project::{Prepared, Project, ProjectError};
+pub use session::{new_song, Session};
 pub use validate::{validate, Violation};
 pub use version::{bump_versions, version_writes};
