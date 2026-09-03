@@ -311,4 +311,5 @@ pub struct MergeBranchRequest {
     pub dry_run: bool,
 }
 include!("escribass.tools.v1.serde.rs");
+include!("escribass.tools.v1.tonic.rs");
 // @@protoc_insertion_point(module)

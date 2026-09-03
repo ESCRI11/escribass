@@ -7,6 +7,7 @@
 pub mod canonical;
 pub mod clock;
 pub mod descriptor;
+pub mod grpc;
 pub mod history;
 pub mod id;
 pub mod mcp;
