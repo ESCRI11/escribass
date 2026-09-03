@@ -230,18 +230,38 @@ impl History {
 
     /// Rebuilds a history from what was read off disk.
     ///
-    /// Entries are appended in id order, which is a valid topological order because ids are
-    /// ULIDs and a parent is always minted before its child. A log whose parents do not
-    /// resolve is reported rather than partially loaded.
+    /// Parents are resolved against the whole set at the end rather than entry by entry as it
+    /// goes, because a directory listing has no order to trust. `append` needs each parent to
+    /// be present already, which is true while one session mints ids in sequence and stops
+    /// being true the moment a log is imported, merged, or written across a clock adjustment:
+    /// id order is not ancestry, and treating it as such fails `parent_missing` on a DAG that
+    /// is perfectly valid. A log whose parents really do not resolve is reported rather than
+    /// partially loaded.
     pub fn from_parts(
         entries: impl IntoIterator<Item = PatchEntry>,
         refs: Refs,
     ) -> Result<Self, HistoryError> {
         let mut log = Self::new();
-        let mut sorted: Vec<PatchEntry> = entries.into_iter().collect();
-        sorted.sort_by(|a, b| a.id.cmp(&b.id));
-        for entry in sorted {
-            log.append(entry)?;
+        for entry in entries {
+            if log.entries.contains_key(&entry.id) {
+                return Err(err(
+                    &entry.id,
+                    "entry_exists",
+                    "the log is append-only; ids are never reused",
+                ));
+            }
+            log.entries.insert(entry.id.clone(), entry);
+        }
+        for entry in log.entries.values() {
+            for parent in &entry.parents {
+                if !log.entries.contains_key(parent) {
+                    return Err(err(
+                        &entry.id,
+                        "parent_missing",
+                        format!("parent `{parent}` is not in the log"),
+                    ));
+                }
+            }
         }
         for (name, at) in &refs.refs {
             if !log.entries.contains_key(at) {

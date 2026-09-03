@@ -5,6 +5,7 @@
 //! the only exception is where a test deliberately corrupts a file to prove `open` notices.
 
 use escribass_core::{diff, entry, timestamp_from_ms, History, IdSource, Project, SeededIds};
+use escribass_schema::history::Refs;
 use escribass_schema::song::{Author, Provenance, Song};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -246,4 +247,56 @@ fn a_failed_write_leaves_the_previous_file_intact() {
     std::fs::create_dir(dir.0.join(".song.json.tmp")).unwrap();
     assert!(project.write().is_err(), "a directory in the way must fail the write");
     assert_eq!(std::fs::read_to_string(dir.0.join("song.json")).unwrap(), before);
+}
+
+#[test]
+fn a_log_loads_when_a_child_id_sorts_before_its_parent() {
+    // Id order is not ancestry. An entry that arrived from another branch, or one minted
+    // across a clock adjustment, can sort below its own parent — and that log is still a
+    // valid DAG, so loading it must not depend on the ids happening to be monotonic.
+    let later = "01ZZZZZZZZZZZZZZZZZZZZZZZZ";
+    let earlier = "01AAAAAAAAAAAAAAAAAAAAAAAA";
+
+    let empty = serde_json::to_value(Song::default()).unwrap();
+    let mut louder = fixture_value();
+    louder["tracks"][BASS]["mix"]["gain_db"] = json!(-3.0);
+
+    let root = entry(later, vec![], "create", &diff(&empty, &fixture_value()), provenance(), 1);
+    let child = entry(
+        earlier,
+        vec![later.to_string()],
+        "set_param",
+        &diff(&fixture_value(), &louder),
+        provenance(),
+        1,
+    );
+
+    let refs = Refs {
+        head: "main".to_string(),
+        refs: [("main".to_string(), earlier.to_string())].into_iter().collect(),
+    };
+    let log = History::from_parts(vec![child, root], refs).unwrap();
+    assert_eq!(log.head_id(), Some(earlier));
+    assert_eq!(log.materialise(earlier).unwrap(), louder);
+}
+
+#[test]
+fn a_log_missing_a_parent_is_still_refused() {
+    let ghost = "01ZZZZZZZZZZZZZZZZZZZZZZZZ";
+    let empty = serde_json::to_value(Song::default()).unwrap();
+    let orphan = entry(
+        "01AAAAAAAAAAAAAAAAAAAAAAAA",
+        vec![ghost.to_string()],
+        "create",
+        &diff(&empty, &fixture_value()),
+        provenance(),
+        1,
+    );
+    let refs = Refs {
+        head: "main".to_string(),
+        refs: [("main".to_string(), "01AAAAAAAAAAAAAAAAAAAAAAAA".to_string())]
+            .into_iter()
+            .collect(),
+    };
+    assert_eq!(History::from_parts(vec![orphan], refs).unwrap_err().rule, "parent_missing");
 }
