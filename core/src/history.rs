@@ -190,3 +190,204 @@ pub fn check_refs(refs: &Refs) -> Vec<Violation> {
     found.sort();
     found
 }
+
+// ---------------------------------------------------------------------------
+// The DAG (ADR 0001 §1, §2)
+// ---------------------------------------------------------------------------
+
+use crate::patch::{apply, diff};
+use escribass_schema::song::Song;
+use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// The patch DAG and the refs that name positions in it.
+///
+/// Entries are held outright rather than behind a store trait: there is one writer (§3, §5),
+/// entries are a few hundred bytes, and an interface with one implementation would be an
+/// abstraction nothing asked for. The project store serialises this same struct.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct History {
+    entries: BTreeMap<String, PatchEntry>,
+    refs: Refs,
+}
+
+impl History {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn refs(&self) -> &Refs {
+        &self.refs
+    }
+
+    pub fn entries(&self) -> &BTreeMap<String, PatchEntry> {
+        &self.entries
+    }
+
+    pub fn get(&self, id: &str) -> Option<&PatchEntry> {
+        self.entries.get(id)
+    }
+
+    /// The entry the current ref points at. `None` only before the root exists.
+    pub fn head_id(&self) -> Option<&str> {
+        self.refs.refs.get(&self.refs.head).map(String::as_str)
+    }
+
+    /// Adds an entry. Append-only: an id is never reused and an entry is never rewritten.
+    pub fn append(&mut self, entry: PatchEntry) -> Result<(), HistoryError> {
+        if self.entries.contains_key(&entry.id) {
+            return Err(err(&entry.id, "entry_exists", "the log is append-only; ids are never reused"));
+        }
+        for parent in &entry.parents {
+            if !self.entries.contains_key(parent) {
+                return Err(err(
+                    &entry.id,
+                    "parent_missing",
+                    format!("parent `{parent}` is not in the log"),
+                ));
+            }
+        }
+        self.entries.insert(entry.id.clone(), entry);
+        Ok(())
+    }
+
+    /// Names a new position in the log. Branching copies no data (ADR 0001 §2).
+    pub fn create_ref(&mut self, name: &str, at: &str) -> Result<(), HistoryError> {
+        if self.refs.refs.contains_key(name) {
+            return Err(err(name, "ref_exists", "that ref already exists"));
+        }
+        self.point(name, at)
+    }
+
+    /// Moves an existing ref, which is what a commit does to the current branch.
+    pub fn advance(&mut self, name: &str, to: &str) -> Result<(), HistoryError> {
+        if !self.refs.refs.contains_key(name) {
+            return Err(err(name, "ref_missing", "that ref does not exist"));
+        }
+        self.point(name, to)
+    }
+
+    fn point(&mut self, name: &str, at: &str) -> Result<(), HistoryError> {
+        if !self.entries.contains_key(at) {
+            return Err(err(name, "entry_missing", format!("`{at}` is not in the log")));
+        }
+        let mut proposed = self.refs.clone();
+        proposed.refs.insert(name.to_string(), at.to_string());
+        if let Some(bad) = check_refs(&proposed).into_iter().find(|v| v.rule.starts_with("ref_name"))
+        {
+            return Err(err(name, bad.rule, bad.message));
+        }
+        self.refs = proposed;
+        Ok(())
+    }
+
+    /// Discards a branch. Entries stay in the log, unreferenced and inert (ADR 0001 §2).
+    pub fn delete_ref(&mut self, name: &str) -> Result<(), HistoryError> {
+        if name == self.refs.head {
+            return Err(err(name, "delete_head", "HEAD always names a ref; switch away first"));
+        }
+        self.refs
+            .refs
+            .remove(name)
+            .map(|_| ())
+            .ok_or_else(|| err(name, "ref_missing", "that ref does not exist"))
+    }
+
+    /// Points `HEAD` at an existing ref. There is no detached state (ADR 0001 §2).
+    pub fn set_head(&mut self, name: &str) -> Result<(), HistoryError> {
+        if !self.refs.refs.contains_key(name) {
+            return Err(err(name, "ref_missing", "HEAD can only name a ref that exists"));
+        }
+        self.refs.head = name.to_string();
+        Ok(())
+    }
+
+    /// The entries leading to `id`, in the order they must be replayed.
+    ///
+    /// A topological sort, because a merge entry has two parents and its ancestors form a DAG
+    /// rather than a chain. Ties break on id, and ids are ULIDs, so the order is both
+    /// deterministic and chronological — which is what lets a replay be compared byte for
+    /// byte (§11).
+    pub fn ancestry(&self, id: &str) -> Result<Vec<&PatchEntry>, HistoryError> {
+        let mut reachable: BTreeSet<String> = BTreeSet::new();
+        let mut pending = vec![id.to_string()];
+        while let Some(current) = pending.pop() {
+            if !reachable.insert(current.clone()) {
+                continue;
+            }
+            let entry = self
+                .entries
+                .get(&current)
+                .ok_or_else(|| err(id, "entry_missing", format!("`{current}` is not in the log")))?;
+            pending.extend(entry.parents.iter().cloned());
+        }
+
+        let mut remaining: BTreeMap<&str, usize> = BTreeMap::new();
+        let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for key in &reachable {
+            let entry = &self.entries[key];
+            remaining.insert(key, entry.parents.iter().filter(|p| reachable.contains(*p)).count());
+            for parent in &entry.parents {
+                children.entry(parent.as_str()).or_default().push(key);
+            }
+        }
+
+        let mut ready: BTreeSet<&str> =
+            remaining.iter().filter(|(_, n)| **n == 0).map(|(k, _)| *k).collect();
+        let mut order = Vec::with_capacity(reachable.len());
+        while let Some(next) = ready.iter().next().copied() {
+            ready.remove(next);
+            order.push(&self.entries[next]);
+            for child in children.get(next).into_iter().flatten() {
+                let left = remaining.get_mut(child).expect("child is reachable");
+                *left -= 1;
+                if *left == 0 {
+                    ready.insert(child);
+                }
+            }
+        }
+
+        if order.len() != reachable.len() {
+            // Only reachable if an entry is its own ancestor, which append refuses to create.
+            return Err(err(id, "parent_cycle", "the log contains a cycle and cannot be replayed"));
+        }
+        Ok(order)
+    }
+
+    /// Rebuilds the document at a node by replaying the log (ADR 0004).
+    ///
+    /// Replay starts from a default `Song`, never from `{}`. The canonical form emits every
+    /// no-presence field (ADR 0002 §4), so `replace` is legal against a fresh document from
+    /// the first op; starting empty would make the root patch a pile of `add`s that diverge
+    /// from what the tool API produces.
+    ///
+    /// `ponytail:` O(history) per call, as ADR 0001 already accepts. Cache the materialised
+    /// document per ref if a large project drags.
+    pub fn materialise(&self, id: &str) -> Result<Value, HistoryError> {
+        let mut doc = serde_json::to_value(Song::default()).expect("a default Song serialises");
+        for entry in self.ancestry(id)? {
+            let ops = ops_of(entry)?;
+            doc = apply(&doc, &ops).map_err(|e| {
+                err(&entry.id, "replay_failed", format!("entry `{}` no longer applies: {e}", entry.id))
+            })?;
+        }
+        Ok(doc)
+    }
+
+    /// Moves `HEAD` to another branch, returning the patch that takes the caller's document
+    /// to that branch's state.
+    ///
+    /// **Appends nothing.** Switching is navigation, and history that recorded navigation
+    /// would grow every time somebody looked at a branch.
+    pub fn switch(&mut self, name: &str, current: &Value) -> Result<Vec<Op>, HistoryError> {
+        let target = self
+            .refs
+            .refs
+            .get(name)
+            .ok_or_else(|| err(name, "ref_missing", "that ref does not exist"))?
+            .clone();
+        let ops = diff(current, &self.materialise(&target)?);
+        self.refs.head = name.to_string();
+        Ok(ops)
+    }
+}

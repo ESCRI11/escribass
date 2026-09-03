@@ -14,7 +14,7 @@ pub mod validate;
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
-    refs_from_json, refs_to_json, HistoryError};
+    refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use validate::{validate, Violation};

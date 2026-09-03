@@ -17,7 +17,9 @@ stale.
 | M0.2 | `core/`: canonical writer, non-finite rejection | done | `HEAD` |
 | M0.2 | `core/`: validator | done | `HEAD` |
 | M0.2 | `core/`: injectable id source and clock | done | `HEAD` |
-| M0.2 | `core/`: patch log DAG, refs, `.escri` project store | **next** | — |
+| M0.2 | `core/`: RFC 6902 apply, diff | in review | PR #5, #6 |
+| M0.2 | `core/`: on-disk history shape, the patch DAG | in review | PR #7, #8 |
+| M0.2 | `core/`: `.escri` project store, commit | **next** | — |
 | M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 
