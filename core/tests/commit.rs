@@ -270,3 +270,29 @@ fn the_clock_is_the_only_source_of_time() {
     assert_eq!(created.created_at.as_ref().unwrap().seconds, 0);
     assert_eq!(FixedClock(AT).now().seconds, AT / 1000);
 }
+
+#[test]
+fn a_commit_records_the_effect_not_the_callers_spelling() {
+    // Proto3 JSON has more than one spelling for a value: `"64"` is a legal int32, and a
+    // `Song` hands it back as `64`. An entry that kept the caller's spelling would replay to a
+    // document that differs from the `song.json` written beside it, and `open` would refuse a
+    // project that had just been committed cleanly.
+    let dir = Scratch::new();
+    let (mut ids, clock) = sources();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock).unwrap();
+
+    let quoted: Vec<Op> = serde_json::from_value(
+        json!([{"op": "replace", "path": format!("{NOTE}/pitch"), "value": "64"}]),
+    )
+    .unwrap();
+    let id = project.commit("set_pitch", &quoted, Author::Human, &mut ids, &clock).unwrap();
+
+    let recorded: Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.0.join("patches").join(format!("{id}.json"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(recorded["ops"][0]["value"], json!(64), "the log holds the canonical spelling");
+
+    // The invariant that matters: what was written can be read back.
+    assert_eq!(Project::open(&dir.0).unwrap().song(), project.song());
+}
