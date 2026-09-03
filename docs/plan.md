@@ -118,6 +118,7 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
+| A dry run of an id-minting tool consumes ids | `add_track` and the rest mint before building the patch, so a preview and the apply that follows carry different ids — ADR 0006 §3 promises they are the same patch. The document is equivalent either way; the promise is not. Fixed by forking the id source for a preview | immediately after M0.3 PR 10 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
 
