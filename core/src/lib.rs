@@ -6,6 +6,7 @@
 
 pub mod canonical;
 pub mod clock;
+pub mod descriptor;
 pub mod history;
 pub mod id;
 pub mod patch;
@@ -16,6 +17,7 @@ pub mod version;
 
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
+pub use descriptor::{tool_names, tool_schemas, ToolSchema};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
     refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};

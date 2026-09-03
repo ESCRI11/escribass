@@ -10,6 +10,8 @@ description = "Generated Rust types for the escribass tool API (SongTools)"
 # is the one from song.proto, reached through extern_path (ADR 0006 §4).
 escribass-schema = { path = "../schema" }
 prost = "0.14"
+# Decodes gen/descriptor.binpb, which the MCP server turns into tool schemas (ADR 0006 §6).
+prost-types = "0.14"
 pbjson = "0.8"
 pbjson-types = "0.8"
 serde = { version = "1", features = ["derive"] }
