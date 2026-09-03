@@ -215,25 +215,13 @@ async fn a_dry_run_writes_nothing() {
 
 #[tokio::test]
 async fn a_dry_run_returns_the_patch_the_apply_then_records() {
-    // `set_tempo` at an existing tick edits in place and mints nothing, so preview and apply
-    // are byte-identical (ADR 0006 §3).
-    //
-    // A tool that *does* mint — `add_track` and the rest — currently consumes ids on the dry
-    // run, so its second call carries different ones. That is a real gap against ADR 0006 §3
-    // and is fixed in its own step; see `docs/plan.md`.
+    // Including a tool that mints ids: a dry run builds its patch from a fork of the id
+    // source, so previewing never burns one and the apply carries exactly what was approved.
     let dir = Scratch::new();
     let mut client = serving(&dir).await;
 
-    let previewed = client
-        .set_tempo(SetTempoRequest { bpm: 132.0, tick: 0, dry_run: true })
-        .await
-        .unwrap()
-        .into_inner();
-    let applied = client
-        .set_tempo(SetTempoRequest { bpm: 132.0, tick: 0, dry_run: false })
-        .await
-        .unwrap()
-        .into_inner();
+    let previewed = client.add_track(bass(true)).await.unwrap().into_inner();
+    let applied = client.add_track(bass(false)).await.unwrap().into_inner();
 
     assert_eq!(applied.patch, previewed.patch);
     assert_eq!(applied.summary, previewed.summary);

@@ -113,8 +113,10 @@ impl Session {
 
     /// §5 `add_track`.
     pub fn add_track(&mut self, request: &AddTrackRequest) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::add_track(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("add_track", built, request.dry_run)
     }
 
@@ -123,15 +125,19 @@ impl Session {
         &mut self,
         request: &SetTrackInstrumentRequest,
     ) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::set_track_instrument(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("set_track_instrument", built, request.dry_run)
     }
 
     /// §5 `add_effect`.
     pub fn add_effect(&mut self, request: &AddEffectRequest) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::add_effect(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("add_effect", built, request.dry_run)
     }
 
@@ -143,15 +149,19 @@ impl Session {
 
     /// §5 `add_clip`.
     pub fn add_clip(&mut self, request: &AddClipRequest) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::add_clip(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("add_clip", built, request.dry_run)
     }
 
     /// §5 `set_notes`.
     pub fn set_notes(&mut self, request: &SetNotesRequest) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::set_notes(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("set_notes", built, request.dry_run)
     }
 
@@ -172,20 +182,26 @@ impl Session {
         &mut self,
         request: &AddAutomationRequest,
     ) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
         let built = tools::add_automation(
-            self.project.song(), request, &mut *self.ids, &*self.clock, self.author);
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("add_automation", built, request.dry_run)
     }
 
     /// §5 `set_tempo`.
     pub fn set_tempo(&mut self, request: &SetTempoRequest) -> Result<ToolResult, ProjectError> {
-        let built = tools::set_tempo(self.project.song(), request, &mut *self.ids);
+        let mut ids = self.ids.fork();
+        let built = tools::set_tempo(self.project.song(), request, &mut *ids);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("set_tempo", built, request.dry_run)
     }
 
     /// §5 `add_section`.
     pub fn add_section(&mut self, request: &AddSectionRequest) -> Result<ToolResult, ProjectError> {
-        let built = tools::add_section(request, &mut *self.ids, &*self.clock, self.author);
+        let mut ids = self.ids.fork();
+        let built = tools::add_section(request, &mut *ids, &*self.clock, self.author);
+        self.keep_ids(ids, request.dry_run);
         self.from_tool("add_section", built, request.dry_run)
     }
 
@@ -342,6 +358,18 @@ impl Session {
             &*self.clock,
         )?;
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
+    }
+
+    /// Keeps the ids a call minted, but only if the call was going to keep anything else.
+    ///
+    /// Every minting tool builds its patch from a *fork* of the id source. A dry run then
+    /// discards it, so the next real call mints exactly the ids the preview showed — which is
+    /// what ADR 0006 §3 promises and what §9 needs, since a person approves a patch before it
+    /// is applied. An apply installs the advanced fork, so the sequence is unchanged.
+    fn keep_ids(&mut self, ids: Box<dyn IdSource + Send>, dry_run: bool) {
+        if !dry_run {
+            self.ids = ids;
+        }
     }
 
     /// A tool that refused its arguments is refused the same way a patch that will not apply
