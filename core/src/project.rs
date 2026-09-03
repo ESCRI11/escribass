@@ -19,10 +19,16 @@
 //! Mutation lives in the next step. This module reads and writes what it is given.
 
 use crate::canonical::to_canonical_json;
+use crate::clock::Clock;
+use crate::id::IdSource;
+use crate::patch::{apply, Op};
+use crate::validate::validate;
+use escribass_schema::song::{Author, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
 };
 use crate::patch::diff;
+use crate::history::entry as new_entry;
 use escribass_schema::song::Song;
 use escribass_schema::SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
@@ -92,6 +98,97 @@ impl Project {
 
     pub fn history(&self) -> &History {
         &self.history
+    }
+
+    /// Creates a new project directory from an initial song.
+    ///
+    /// The root entry records the patch that builds the song from a default one, so the log
+    /// is complete from the first commit and a replay never needs a special case for the
+    /// beginning (ADR 0004).
+    ///
+    /// The id source and clock are parameters rather than fields: §11 forbids `core` from
+    /// reading the wall clock or taking unseeded randomness on its own. M0.3's session will
+    /// own them, which is where ADR 0001's "session constructor" lands.
+    pub fn create(
+        root: impl Into<PathBuf>,
+        song: &Song,
+        ids: &mut dyn IdSource,
+        clock: &dyn Clock,
+    ) -> Result<Project, ProjectError> {
+        let root = root.into();
+        if root.join(SONG).exists() {
+            return Err(err(root.join(SONG), "project_exists", "a project is already here"));
+        }
+        refuse_if_invalid(&root, song)?;
+
+        let empty = serde_json::to_value(Song::default()).expect("a default Song serialises");
+        let full = serde_json::to_value(song).expect("a Song serialises");
+
+        let id = ids.next_id();
+        let mut history = History::new();
+        history
+            .append(new_entry(id.clone(), vec![], "create", &diff(&empty, &full),
+                authorship(Author::Human, clock), SCHEMA_VERSION))
+            .map_err(|e| err(&root, e.rule, e.message))?;
+        history.create_ref("main", &id).map_err(|e| err(&root, e.rule, e.message))?;
+        history.set_head("main").map_err(|e| err(&root, e.rule, e.message))?;
+
+        let project = Project { root, song: song.clone(), history };
+        project.write()?;
+        Ok(project)
+    }
+
+    /// Applies a patch, records it, and writes the project.
+    ///
+    /// Every check happens before anything is mutated, so a rejected commit leaves no orphan
+    /// entry and no advanced ref — the project is exactly as it was.
+    ///
+    /// The re-deserialisation through `Song` is the step that matters. An operation can be
+    /// legal JSON and illegal for the schema — `43.0` at an `int32` path is the defect ADR
+    /// 0002 §11 records — and applying it to a `Value` would succeed while producing a
+    /// document `core` cannot read back.
+    ///
+    /// `version` is not bumped here. ADR 0001 §4 makes that `core`'s job, but the bump has to
+    /// be recorded *in the ops* or a replay diverges from the live document, and there is no
+    /// tool to drive it before M0.3 (`docs/plan.md`, deferred).
+    pub fn commit(
+        &mut self,
+        tool: &str,
+        ops: &[Op],
+        author: Author,
+        ids: &mut dyn IdSource,
+        clock: &dyn Clock,
+    ) -> Result<String, ProjectError> {
+        let before = serde_json::to_value(&self.song).expect("a Song serialises");
+        let after = apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+
+        let song: Song = serde_json::from_value(after).map_err(|e| {
+            let touched: Vec<&str> = ops.iter().map(Op::path).take(8).collect();
+            err(
+                self.root.join(SONG),
+                "op_illegal_for_schema",
+                // `ponytail:` names the ops rather than the exact field. Reach for
+                // `serde_path_to_error` if that is ever not enough to find it.
+                format!("the patched document is not a valid song: {e}. Ops touched: {}",
+                    touched.join(", ")),
+            )
+        })?;
+        refuse_if_invalid(&self.root, &song)?;
+
+        let Some(head) = self.history.head_id().map(str::to_string) else {
+            return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
+        };
+        let branch = self.history.refs().head.clone();
+        let id = ids.next_id();
+        let record = new_entry(id.clone(), vec![head], tool, ops, authorship(author, clock),
+            SCHEMA_VERSION);
+
+        // Nothing above this line touched `self`.
+        self.history.append(record).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.history.advance(&branch, &id).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.song = song;
+        self.write()?;
+        Ok(id)
     }
 
     /// Reads a project directory, verifying that `song.json` matches a replay of the log.
@@ -208,6 +305,34 @@ impl Project {
         }
         write_atomically(&self.root.join(REFS), &refs_to_json(self.history.refs()))
     }
+}
+
+/// Provenance for a commit. `created_at` comes from the injected clock, never
+/// `SystemTime::now` (§11). The model fields stay unset until M3 produces one.
+fn authorship(author: Author, clock: &dyn Clock) -> Provenance {
+    Provenance {
+        author: author as i32,
+        model_id: None,
+        prompt_id: None,
+        tool_call_id: None,
+        created_at: Some(clock.now()),
+    }
+}
+
+/// §5: every mutation is validated before it is applied, so an invalid song never reaches
+/// the log. Reports every violation, not the first (§6 allows three retries).
+fn refuse_if_invalid(root: &Path, song: &Song) -> Result<(), ProjectError> {
+    let violations = validate(song);
+    if violations.is_empty() {
+        return Ok(());
+    }
+    let summary: Vec<String> =
+        violations.iter().take(8).map(|v| format!("{} [{}]", v.path, v.rule)).collect();
+    Err(err(
+        root.join(SONG),
+        "song_invalid",
+        format!("{} violation(s): {}", violations.len(), summary.join(", ")),
+    ))
 }
 
 fn read(path: &Path) -> Result<String, ProjectError> {

@@ -20,7 +20,8 @@ stale.
 | M0.2 | `core/`: RFC 6902 apply, diff | in review | PR #5, #6 |
 | M0.2 | `core/`: on-disk history shape, the patch DAG | in review | PR #7, #8 |
 | M0.2 | `core/`: `.escri` project store | in review | PR #10 |
-| M0.2 | `core/`: `create` and `commit` | **next** | — |
+| M0.2 | `core/`: `create` and `commit` | in review | PR #11 |
+| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | **next** | — |
 | M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 
@@ -44,11 +45,8 @@ Scope is fixed by decisions already made, not open for redesign:
 - **Canonical writer** (ADR 0002 §4) — `serde_json` with `float_roundtrip`; rejects non-finite
   doubles; normalises `-0.0`; normalises message-field presence; timestamps `Z`-suffixed at
   millisecond precision.
-- **Patch log as a DAG** (ADR 0001) — `parents` on every entry, `refs.json` with `head` and
-  `refs`, `HEAD` always naming a ref. Undo and branch switching share one mechanism:
-  materialise the target, diff against the current document, apply.
-- **Project store** — the `.escri` bundle of §10: `song.json`, `patches/`, `refs.json`,
-  `assets/`, `lock.json`.
+- ~~**Patch log as a DAG**~~ and ~~**project store**~~ — done. Six PRs: apply, diff, the
+  on-disk shape, the DAG, the store, and `create`/`commit`.
 
 ## M0.3 — tool API
 

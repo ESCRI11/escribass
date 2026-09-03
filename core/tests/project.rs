@@ -18,10 +18,6 @@ fn fixture_value() -> Value {
     serde_json::from_str(&std::fs::read_to_string(FIXTURE).expect("fixture")).unwrap()
 }
 
-fn fixture_song() -> Song {
-    serde_json::from_value(fixture_value()).unwrap()
-}
-
 /// A directory of its own per test, removed on drop even when the test fails.
 struct Scratch(PathBuf);
 
