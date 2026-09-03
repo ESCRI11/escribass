@@ -23,6 +23,7 @@ use crate::clock::Clock;
 use crate::id::IdSource;
 use crate::patch::{apply, Op};
 use crate::validate::validate;
+use crate::version::{bump_versions, version_writes};
 use escribass_schema::song::{Author, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
@@ -72,6 +73,28 @@ fn err(path: impl AsRef<Path>, rule: &'static str, message: impl Into<String>) -
 #[serde(deny_unknown_fields)]
 struct Lock {
     schema_version: u32,
+}
+
+/// A change that has been applied, bumped and validated, but not recorded.
+///
+/// Held rather than returned as a tuple because `record` must take exactly what `prepare`
+/// produced: re-deriving either half at the call site is how the two stop agreeing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Prepared {
+    song: Song,
+    ops: Vec<Op>,
+}
+
+impl Prepared {
+    /// The patch this change records — the re-derived diff, version bumps included.
+    pub fn ops(&self) -> &[Op] {
+        &self.ops
+    }
+
+    /// The document this change produces.
+    pub fn song(&self) -> &Song {
+        &self.song
+    }
 }
 
 /// An open project directory.
@@ -156,9 +179,8 @@ impl Project {
     /// beside it, and the next `open` would refuse a project that was committed cleanly. The
     /// re-derived diff cannot say anything `song.json` does not (ADR 0004).
     ///
-    /// `version` is not bumped here. ADR 0001 §4 makes that `core`'s job, but the bump has to
-    /// be recorded *in the ops* or a replay diverges from the live document, and there is no
-    /// tool to drive it before M0.3 (`docs/plan.md`, deferred).
+    /// Entity `version` is bumped inside [`Project::prepare`], which is the only position
+    /// where the bump lands in the recorded ops (ADR 0005 §1).
     pub fn commit(
         &mut self,
         tool: &str,
@@ -167,8 +189,37 @@ impl Project {
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
+        let prepared = self.prepare(ops)?;
+        let Some(head) = self.history.head_id().map(str::to_string) else {
+            return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
+        };
+        self.record(prepared, tool, vec![head], author, ids, clock)
+    }
+
+    /// Everything a commit does *except* commit: apply, bump, validate, re-derive the patch.
+    ///
+    /// Touches nothing and mints nothing, so it is also what `dry_run` returns (ADR 0006 §3).
+    /// A dry run is this function; there is no second implementation of the apply path to
+    /// drift from the real one.
+    pub fn prepare(&self, ops: &[Op]) -> Result<Prepared, ProjectError> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
-        let patched = apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+
+        let writes = version_writes(&before, ops);
+        if let Some(path) = writes.first() {
+            return Err(err(
+                self.root.join(SONG),
+                "version_not_writable",
+                format!(
+                    "`{path}` is maintained by core and is never written by a tool \
+                     (ADR 0005 §3); {} operation(s) do",
+                    writes.len()
+                ),
+            ));
+        }
+
+        let mut patched =
+            apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+        bump_versions(&before, &mut patched);
 
         let song: Song = serde_json::from_value(patched).map_err(|e| {
             let touched: Vec<&str> = ops.iter().map(Op::path).take(8).collect();
@@ -183,19 +234,33 @@ impl Project {
         })?;
         refuse_if_invalid(&self.root, &song)?;
 
-        let Some(head) = self.history.head_id().map(str::to_string) else {
-            return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
-        };
         let after = serde_json::to_value(&song).expect("a Song serialises");
+        Ok(Prepared { ops: diff(&before, &after), song })
+    }
+
+    /// Appends a prepared change to the log and writes the project.
+    ///
+    /// `parents` rather than one parent: a merge appends a single entry naming both sides
+    /// (ADR 0001 §1), and that is the only difference between a merge and a commit at this
+    /// level.
+    pub fn record(
+        &mut self,
+        prepared: Prepared,
+        tool: &str,
+        parents: Vec<String>,
+        author: Author,
+        ids: &mut dyn IdSource,
+        clock: &dyn Clock,
+    ) -> Result<String, ProjectError> {
         let branch = self.history.refs().head.clone();
         let id = ids.next_id();
-        let record = new_entry(id.clone(), vec![head], tool, &diff(&before, &after),
+        let entry = new_entry(id.clone(), parents, tool, &prepared.ops,
             authorship(author, clock), SCHEMA_VERSION);
 
         // Nothing above this line touched `self`.
-        self.history.append(record).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.history.append(entry).map_err(|e| err(&self.root, e.rule, e.message))?;
         self.history.advance(&branch, &id).map_err(|e| err(&self.root, e.rule, e.message))?;
-        self.song = song;
+        self.song = prepared.song;
         self.write()?;
         Ok(id)
     }
