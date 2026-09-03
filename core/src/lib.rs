@@ -7,9 +7,11 @@
 pub mod canonical;
 pub mod clock;
 pub mod id;
+pub mod patch;
 pub mod validate;
 
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
 pub use id::{IdSource, SeededIds, UlidSource};
+pub use patch::{apply, Op, PatchError};
 pub use validate::{validate, Violation};

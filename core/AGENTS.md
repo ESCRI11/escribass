@@ -10,6 +10,7 @@ The schema itself: `/schema/AGENTS.md`.
 |---|---|---|
 | `src/canonical.rs` | Canonical JSON persistence: `to_canonical_json`, `from_canonical_json`, `CanonicalError`. | done |
 | `tests/canonical.rs` | Fixed-point, idempotence, non-finite rejection, seeded double round-trip, key order. Reads `/tests/fixtures/song/minimal.json`. | done |
+| `src/patch.rs` | RFC 6902 `apply` and the RFC 6901 pointers it addresses with. Operates on `serde_json::Value`; knows nothing about `Song`. | done |
 | `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
 | patch log, `refs.json`, `.escri` project store | ADR 0001 §1–§2; specs §10 | M0.2, next |
@@ -32,6 +33,8 @@ cargo test -p escribass-core
 | Entropy comes from `std`'s `RandomState`, not a crate: ULID's tail is a uniqueness requirement, not a secrecy one. Marked `ponytail:` in `src/id.rs` with the upgrade path | CLAUDE.md #4 |
 | Mutations are JSON Patch through the tool API, in tests too — never a direct field write to a stored song | CLAUDE.md #2; specs §5, §14.3 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
+| The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
+| RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
 | `serde_json` carries the `float_roundtrip` feature | ADR 0002 §4 |
 | The writer rejects non-finite doubles; it does not rewrite values. `-0.0` is the tool API's to normalise, presence the validator's, timestamp precision the clock's | ADR 0002 §4, as amended 2026-09-02 |
 | A new dependency needs asking first, then a `lock.baseline.json` entry | CLAUDE.md #4; specs §17 |

@@ -107,15 +107,11 @@ fn check_representable(value: &Value, path: &mut String) -> Result<(), Canonical
 }
 
 /// Appends one RFC 6901 reference token, returning the length to truncate back to.
+///
+/// Escaping lives in `patch`, next to the unescaping that has to be its exact inverse.
 fn push_token(path: &mut String, token: &str) -> usize {
     let len = path.len();
     path.push('/');
-    // RFC 6901: `~` is `~0`, `/` is `~1`. Keys are ULIDs and field names are identifiers, so
-    // this is defensive rather than reachable today.
-    if token.contains(['~', '/']) {
-        path.push_str(&token.replace('~', "~0").replace('/', "~1"));
-    } else {
-        path.push_str(token);
-    }
+    path.push_str(&crate::patch::escape_token(token));
     len
 }

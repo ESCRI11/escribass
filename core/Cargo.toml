@@ -7,6 +7,9 @@ description = "Song model core: canonical persistence, validation, patch log"
 
 [dependencies]
 escribass-schema = { path = "../schema" }
+# Already in the lock via escribass-schema and pinned in lock.baseline.json as
+# schema.rust.serde; declared here for the Op derive.
+serde = { version = "1", features = ["derive"] }
 # float_roundtrip: without it the parser is off by one ULP on ~30% of doubles, so
 # load-then-save is not a fixed point (ADR 0002 §4).
 serde_json = { version = "1", features = ["float_roundtrip"] }
