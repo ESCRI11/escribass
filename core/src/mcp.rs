@@ -18,8 +18,9 @@ use crate::descriptor::{tool_schemas, ToolSchema};
 use crate::session::Session;
 use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
-    AddEffectRequest, AddTrackRequest, ApplyPatchRequest, GetSongAtRequest, SetParamRequest,
-    SetTrackInstrumentRequest, ToolResult,
+    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
+    ApplyPatchRequest, GetSongAtRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest,
+    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, ToolResult, TransposeRequest,
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
@@ -47,6 +48,14 @@ pub const IMPLEMENTED: &[&str] = &[
     "set_track_instrument",
     "add_effect",
     "set_param",
+    "add_clip",
+    "set_notes",
+    "transpose",
+    "quantize",
+    "add_automation",
+    "set_tempo",
+    "add_section",
+    "move_section",
 ];
 
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so must cross MCP as JSON
@@ -285,6 +294,38 @@ impl ServerHandler for SongTools {
             "set_param" => {
                 let arguments: SetParamRequest = decode("set_param", &request)?;
                 tool_result(&session.set_param(&arguments).map_err(broken)?)
+            }
+            "add_clip" => {
+                let arguments: AddClipRequest = decode("add_clip", &request)?;
+                tool_result(&session.add_clip(&arguments).map_err(broken)?)
+            }
+            "set_notes" => {
+                let arguments: SetNotesRequest = decode("set_notes", &request)?;
+                tool_result(&session.set_notes(&arguments).map_err(broken)?)
+            }
+            "transpose" => {
+                let arguments: TransposeRequest = decode("transpose", &request)?;
+                tool_result(&session.transpose(&arguments).map_err(broken)?)
+            }
+            "quantize" => {
+                let arguments: QuantizeRequest = decode("quantize", &request)?;
+                tool_result(&session.quantize(&arguments).map_err(broken)?)
+            }
+            "add_automation" => {
+                let arguments: AddAutomationRequest = decode("add_automation", &request)?;
+                tool_result(&session.add_automation(&arguments).map_err(broken)?)
+            }
+            "set_tempo" => {
+                let arguments: SetTempoRequest = decode("set_tempo", &request)?;
+                tool_result(&session.set_tempo(&arguments).map_err(broken)?)
+            }
+            "add_section" => {
+                let arguments: AddSectionRequest = decode("add_section", &request)?;
+                tool_result(&session.add_section(&arguments).map_err(broken)?)
+            }
+            "move_section" => {
+                let arguments: MoveSectionRequest = decode("move_section", &request)?;
+                tool_result(&session.move_section(&arguments).map_err(broken)?)
             }
             unknown => {
                 return Err(McpError::invalid_params(
