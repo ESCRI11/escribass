@@ -1,0 +1,16 @@
+[package]
+name = "escribass-proto"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Generated Rust types for the escribass tool API (SongTools)"
+
+[dependencies]
+# The service references the model rather than restating it: every entity type in a request
+# is the one from song.proto, reached through extern_path (ADR 0006 §4).
+escribass-schema = { path = "../schema" }
+prost = "0.14"
+pbjson = "0.8"
+pbjson-types = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
