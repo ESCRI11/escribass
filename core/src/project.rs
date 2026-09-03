@@ -279,6 +279,47 @@ impl Project {
         Ok(id)
     }
 
+    // ---- branches (ADR 0001 §2) ----
+
+    /// Names a new position in the log and writes `refs.json`. Copies no data.
+    pub fn create_branch(&mut self, name: &str, at: &str) -> Result<(), ProjectError> {
+        self.history.create_ref(name, at).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.write()
+    }
+
+    /// Moves `HEAD` to another branch, returning the patch that got there.
+    ///
+    /// Appends nothing: switching is navigation, and a log that recorded navigation would grow
+    /// every time somebody looked at a branch (ADR 0001 §2).
+    pub fn switch_branch(&mut self, name: &str) -> Result<Vec<Op>, ProjectError> {
+        let current = serde_json::to_value(&self.song).expect("a Song serialises");
+        let ops = self
+            .history
+            .patch_to(name, &current)
+            .map_err(|e| err(&self.root, e.rule, e.message))?;
+
+        let target = apply(&current, &ops)
+            .map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+        // A branch was validated when it was committed, so a failure here means the log no
+        // longer replays into a song this build can read — an operator's problem, not a
+        // caller's (ADR 0006 §2).
+        let song: Song = serde_json::from_value(target).map_err(|e| {
+            err(self.root.join(SONG), "replay_failed",
+                format!("`{name}` does not replay into a valid song: {e}"))
+        })?;
+
+        self.history.set_head(name).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.song = song;
+        self.write()?;
+        Ok(ops)
+    }
+
+    /// Discards a branch name. The entries stay in the log, unreferenced and inert.
+    pub fn delete_branch(&mut self, name: &str) -> Result<(), ProjectError> {
+        self.history.delete_ref(name).map_err(|e| err(&self.root, e.rule, e.message))?;
+        self.write()
+    }
+
     /// Reads a project directory, verifying that `song.json` matches a replay of the log.
     pub fn open(root: impl AsRef<Path>) -> Result<Project, ProjectError> {
         let root = root.as_ref().to_path_buf();

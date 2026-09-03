@@ -20,6 +20,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | in progress |
 | `tests/tools_devices.rs` | `add_track`, `set_track_instrument`, `add_effect`, `set_param`, driven through `Session`. | done |
 | `tests/tools_clips.rs` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, the two section tools. | done |
+| `tests/tools_branches.rs` | `create_branch`, `switch_branch`, `delete_branch`. Mostly one claim from several angles: leaving a branch and coming back is byte for byte. | done |
 | `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
 | `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
 | `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
@@ -67,6 +68,8 @@ cargo test -p escribass-core
 | A tool that edits notes emits **one op per note**, never one for the clip: merge auto-resolves by comparing op paths, so a coarse patch makes every pair of edits to one clip conflict | ADR 0001 §4 |
 | `quantize` is integer arithmetic with ties rounding up. A float round would depend on the platform's rounding mode exactly where a deliberately placed note sits | specs §11 |
 | A tool refuses an id it does not recognise rather than skipping it. A caller whose misspelled id returns success has been told its edit landed when it did not | specs §5 |
+| `History::patch_to` takes `&self` and `History::switch` takes `&mut self`. A dry-run switch built on the mutating one would move `HEAD` in memory, and the next commit would land on a branch nobody chose. The borrow checker is the guard, not a test | ADR 0001 §2; ADR 0006 §3 |
+| The branch tools append no entry, so they skip `run` entirely. `entry_id` stays empty because a branch operation is not a commit | ADR 0001 §2 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
