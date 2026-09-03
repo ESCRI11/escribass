@@ -16,14 +16,16 @@
 //! for previews, which is a second thing to keep in step for no gain.
 
 use crate::clock::Clock;
+use crate::history::{History, HistoryError};
 use crate::id::IdSource;
 use crate::patch::Op;
 use crate::validate::Violation;
 use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
     AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
-    AddTrackRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest, SetParamRequest,
-    SetTempoRequest, SetTrackInstrumentRequest, TransposeRequest,
+    AddTrackRequest, CreateBranchRequest, DeleteBranchRequest, MoveSectionRequest,
+    QuantizeRequest, SetNotesRequest, SetParamRequest, SetTempoRequest,
+    SetTrackInstrumentRequest, SwitchBranchRequest, TransposeRequest,
 };
 use escribass_schema::song::clip::Content;
 use escribass_schema::song::{
@@ -575,4 +577,57 @@ pub fn move_section(song: &Song, request: &MoveSectionRequest) -> Result<Vec<Op>
         Op::Replace { path: format!("{at}/start_tick"), value: json!(request.start_tick) },
         Op::Replace { path: format!("{at}/end_tick"), value: json!(request.end_tick) },
     ])
+}
+
+// ---------------------------------------------------------------------------
+// Branches (ADR 0001 §2)
+// ---------------------------------------------------------------------------
+
+/// A `HistoryError` as a refusal. Every way these three tools can fail is something the caller
+/// can fix by calling differently, so none of them is an operator error (ADR 0006 §2).
+fn as_violation(e: HistoryError) -> Vec<Violation> {
+    vec![Violation { path: e.path, rule: e.rule, message: e.message }]
+}
+
+/// §5 `create_branch`. An empty `at_entry_id` means the current `HEAD`.
+///
+/// Returns the entry the new ref will point at, so the caller does not resolve `HEAD` twice.
+pub fn check_create_branch(
+    history: &History,
+    request: &CreateBranchRequest,
+) -> Result<String, Vec<Violation>> {
+    let at = if request.at_entry_id.is_empty() {
+        history.head_id().map(str::to_string).ok_or_else(|| {
+            vec![Violation {
+                path: "/at_entry_id".to_string(),
+                rule: "head_unset",
+                message: "HEAD names no entry to branch from".to_string(),
+            }]
+        })?
+    } else {
+        request.at_entry_id.clone()
+    };
+    history.check_create_ref(&request.name, &at).map_err(as_violation)?;
+    Ok(at)
+}
+
+/// §5 `switch_branch`: the patch that would take the current document to that branch.
+///
+/// Uses `History::patch_to`, which does **not** move `HEAD`. `History::switch` does, so a dry
+/// run built on it would leave the next commit landing on a branch nobody chose.
+pub fn check_switch_branch(
+    history: &History,
+    song: &Song,
+    request: &SwitchBranchRequest,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let current = serde_json::to_value(song).expect("a Song serialises");
+    history.patch_to(&request.name, &current).map_err(as_violation)
+}
+
+/// §5 `delete_branch`.
+pub fn check_delete_branch(
+    history: &History,
+    request: &DeleteBranchRequest,
+) -> Result<(), Vec<Violation>> {
+    history.check_delete_ref(&request.name).map_err(as_violation)
 }

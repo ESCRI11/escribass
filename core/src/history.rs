@@ -300,10 +300,48 @@ impl History {
 
     /// Names a new position in the log. Branching copies no data (ADR 0001 §2).
     pub fn create_ref(&mut self, name: &str, at: &str) -> Result<(), HistoryError> {
+        self.check_create_ref(name, at)?;
+        self.point(name, at)
+    }
+
+    /// Whether [`create_ref`](Self::create_ref) would succeed, without doing it.
+    ///
+    /// The mutators here refuse before they change anything, which is enough for a caller that
+    /// intends to act. It is not enough for a dry run, which must be able to ask the question
+    /// and get an answer rather than a state.
+    pub fn check_create_ref(&self, name: &str, at: &str) -> Result<(), HistoryError> {
         if self.refs.refs.contains_key(name) {
             return Err(err(name, "ref_exists", "that ref already exists"));
         }
-        self.point(name, at)
+        self.check_target(name, at)?;
+        self.check_name(name, at)
+    }
+
+    /// Whether [`delete_ref`](Self::delete_ref) would succeed, without doing it.
+    pub fn check_delete_ref(&self, name: &str) -> Result<(), HistoryError> {
+        if name == self.refs.head {
+            return Err(err(name, "delete_head", "HEAD always names a ref; switch away first"));
+        }
+        if !self.refs.refs.contains_key(name) {
+            return Err(err(name, "ref_missing", "that ref does not exist"));
+        }
+        Ok(())
+    }
+
+    fn check_target(&self, name: &str, at: &str) -> Result<(), HistoryError> {
+        if self.entries.contains_key(at) {
+            return Ok(());
+        }
+        Err(err(name, "entry_missing", format!("`{at}` is not in the log")))
+    }
+
+    fn check_name(&self, name: &str, at: &str) -> Result<(), HistoryError> {
+        let mut proposed = self.refs.clone();
+        proposed.refs.insert(name.to_string(), at.to_string());
+        match check_refs(&proposed).into_iter().find(|v| v.rule.starts_with("ref_name")) {
+            Some(bad) => Err(err(name, bad.rule, bad.message)),
+            None => Ok(()),
+        }
     }
 
     /// Moves an existing ref, which is what a commit does to the current branch.
@@ -315,29 +353,17 @@ impl History {
     }
 
     fn point(&mut self, name: &str, at: &str) -> Result<(), HistoryError> {
-        if !self.entries.contains_key(at) {
-            return Err(err(name, "entry_missing", format!("`{at}` is not in the log")));
-        }
-        let mut proposed = self.refs.clone();
-        proposed.refs.insert(name.to_string(), at.to_string());
-        if let Some(bad) = check_refs(&proposed).into_iter().find(|v| v.rule.starts_with("ref_name"))
-        {
-            return Err(err(name, bad.rule, bad.message));
-        }
-        self.refs = proposed;
+        self.check_target(name, at)?;
+        self.check_name(name, at)?;
+        self.refs.refs.insert(name.to_string(), at.to_string());
         Ok(())
     }
 
     /// Discards a branch. Entries stay in the log, unreferenced and inert (ADR 0001 §2).
     pub fn delete_ref(&mut self, name: &str) -> Result<(), HistoryError> {
-        if name == self.refs.head {
-            return Err(err(name, "delete_head", "HEAD always names a ref; switch away first"));
-        }
-        self.refs
-            .refs
-            .remove(name)
-            .map(|_| ())
-            .ok_or_else(|| err(name, "ref_missing", "that ref does not exist"))
+        self.check_delete_ref(name)?;
+        self.refs.refs.remove(name);
+        Ok(())
     }
 
     /// Points `HEAD` at an existing ref. There is no detached state (ADR 0001 §2).
@@ -427,14 +453,23 @@ impl History {
     /// **Appends nothing.** Switching is navigation, and history that recorded navigation
     /// would grow every time somebody looked at a branch.
     pub fn switch(&mut self, name: &str, current: &Value) -> Result<Vec<Op>, HistoryError> {
+        let ops = self.patch_to(name, current)?;
+        self.refs.head = name.to_string();
+        Ok(ops)
+    }
+
+    /// The patch that takes `current` to another branch's state, **without moving `HEAD`**.
+    ///
+    /// The pure half of [`switch`](Self::switch), and the reason it exists is a dry run. A
+    /// preview implemented as "call `switch` and do not write" would still have moved
+    /// `refs.head` in memory, and the next commit would land on a branch nobody chose — a
+    /// failure with no error, visible only later as history on the wrong ref.
+    pub fn patch_to(&self, name: &str, current: &Value) -> Result<Vec<Op>, HistoryError> {
         let target = self
             .refs
             .refs
             .get(name)
-            .ok_or_else(|| err(name, "ref_missing", "that ref does not exist"))?
-            .clone();
-        let ops = diff(current, &self.materialise(&target)?);
-        self.refs.head = name.to_string();
-        Ok(ops)
+            .ok_or_else(|| err(name, "ref_missing", "that ref does not exist"))?;
+        Ok(diff(current, &self.materialise(target)?))
     }
 }
