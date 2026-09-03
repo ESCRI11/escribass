@@ -162,6 +162,9 @@ pub fn check_refs(refs: &Refs) -> Vec<Violation> {
             add(at.clone(), "ref_name_empty", "a ref name is not empty");
             continue;
         }
+        // This also carries ADR 0001 §2's "no two refs differing only by case": the charset
+        // has no uppercase in it, so two names that fold together are the same name, and a
+        // map cannot hold it twice. A separate pass would only ever fire alongside this one.
         if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "._/-".contains(c))
         {
             add(at.clone(), "ref_name_charset", "ref names are ASCII [a-z0-9._/-] (ADR 0001 §2)");
@@ -171,22 +174,6 @@ pub fn check_refs(refs: &Refs) -> Vec<Violation> {
         }
         if name.split('/').any(|part| part == "..") {
             add(at.clone(), "ref_name_dotdot", "a ref name contains no `..` segment");
-        }
-    }
-
-    // Two refs differing only by case are indistinguishable to a reader, and would collide if
-    // the store ever moved to one file per ref (ADR 0001 §2).
-    let mut folded: std::collections::BTreeMap<String, Vec<&String>> = Default::default();
-    for name in refs.refs.keys() {
-        folded.entry(name.to_ascii_lowercase()).or_default().push(name);
-    }
-    for (_, names) in folded.iter().filter(|(_, n)| n.len() > 1) {
-        for name in names {
-            add(
-                format!("/refs/{name}"),
-                "ref_name_case_collision",
-                "two refs may not differ only by case",
-            );
         }
     }
 
