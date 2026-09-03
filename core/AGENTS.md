@@ -15,7 +15,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
-| `Project::create` and `commit` | ADR 0004; specs §5 | M0.2, next |
+| `Project::create`, `Project::commit` | The mutation entry point: apply, re-deserialise, validate, record, advance, write. | done |
 | `src/id.rs` | `IdSource`: `UlidSource` (production) and `SeededIds` (deterministic). Crockford base32, monotonic within a millisecond. | done |
 | `src/clock.rs` | `Clock`: `SystemClock` and `FixedClock`. Every clock yields whole milliseconds. | done |
 
@@ -34,6 +34,8 @@ cargo test -p escribass-core
 | No unseeded randomness and no wall clock: the id source and the clock are constructor parameters, never globals. `SystemClock` is the only place `core` reads wall-clock time; `UlidSource` the only place it takes entropy | specs §11; CLAUDE.md #3; ADR 0001 §5 |
 | Entropy comes from `std`'s `RandomState`, not a crate: ULID's tail is a uniqueness requirement, not a secrecy one. Marked `ponytail:` in `src/id.rs` with the upgrade path | CLAUDE.md #4 |
 | Mutations are JSON Patch through the tool API, in tests too — never a direct field write to a stored song | CLAUDE.md #2; specs §5, §14.3 |
+| `commit` re-deserialises through `Song` before recording. An op can be legal JSON and illegal for the schema; applying it to a `Value` alone would succeed and produce a document `core` cannot read | ADR 0002 §11 |
+| Every check in `commit` happens before `self` is touched, so a rejected commit leaves no orphan entry and no advanced ref | specs §5 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
 | RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
