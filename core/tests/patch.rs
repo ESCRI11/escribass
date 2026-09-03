@@ -77,6 +77,20 @@ fn move_and_copy() {
         err(&doc, json!([{"op": "move", "from": "/a", "path": "/a/inside"}])).rule,
         "move_into_self"
     );
+    // The whole document is a proper prefix of every path.
+    assert_eq!(
+        err(&doc, json!([{"op": "move", "from": "", "path": "/a"}])).rule,
+        "move_into_self"
+    );
+    // A prefix is whole tokens: `/a` is not a prefix of `/ab`, so this is an ordinary move.
+    assert_eq!(
+        apply(
+            &json!({"a": 1, "z": 2}),
+            &ops(json!([{"op": "move", "from": "/a", "path": "/ab"}]))
+        )
+        .unwrap(),
+        json!({"ab": 1, "z": 2})
+    );
 }
 
 // ---- structure, from the deserializer ----

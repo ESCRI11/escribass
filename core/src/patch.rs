@@ -116,9 +116,13 @@ fn apply_one(doc: &mut Value, op: &Op) -> Result<(), OpFailure> {
             set(doc, path, taken)
         }
         Op::Move { from, path } => {
-            // RFC 6902: the source may not be a proper prefix of the destination, or the
-            // operation would move a value inside itself.
-            if path.starts_with(from) && path.len() > from.len() && !from.is_empty() {
+            // RFC 6902: the source may not be a *proper prefix* of the destination, or the
+            // operation would move a value inside itself. Prefix means whole tokens: `/a` is
+            // a prefix of `/a/b` but not of `/ab`, which is a sibling.
+            if path.len() > from.len()
+                && path.starts_with(from)
+                && path.as_bytes()[from.len()] == b'/'
+            {
                 return Err(fail(path, "move_into_self", format!("`{path}` is inside `{from}`")));
             }
             let taken = remove(doc, from)?;
