@@ -77,6 +77,7 @@ name = "escribass-core"
 version = "0.1.0"
 dependencies = [
  "escribass-schema",
+ "serde",
  "serde_json",
 ]
 
