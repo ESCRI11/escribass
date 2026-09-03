@@ -228,6 +228,33 @@ impl History {
         self.entries.get(id)
     }
 
+    /// Rebuilds a history from what was read off disk.
+    ///
+    /// Entries are appended in id order, which is a valid topological order because ids are
+    /// ULIDs and a parent is always minted before its child. A log whose parents do not
+    /// resolve is reported rather than partially loaded.
+    pub fn from_parts(
+        entries: impl IntoIterator<Item = PatchEntry>,
+        refs: Refs,
+    ) -> Result<Self, HistoryError> {
+        let mut log = Self::new();
+        let mut sorted: Vec<PatchEntry> = entries.into_iter().collect();
+        sorted.sort_by(|a, b| a.id.cmp(&b.id));
+        for entry in sorted {
+            log.append(entry)?;
+        }
+        for (name, at) in &refs.refs {
+            if !log.entries.contains_key(at) {
+                return Err(err(name, "entry_missing", format!("ref points at absent `{at}`")));
+            }
+        }
+        if let Some(bad) = check_refs(&refs).into_iter().next() {
+            return Err(err(&bad.path, bad.rule, bad.message));
+        }
+        log.refs = refs;
+        Ok(log)
+    }
+
     /// The entry the current ref points at. `None` only before the root exists.
     pub fn head_id(&self) -> Option<&str> {
         self.refs.refs.get(&self.refs.head).map(String::as_str)
