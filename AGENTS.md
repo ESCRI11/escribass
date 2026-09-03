@@ -9,9 +9,9 @@
 | `schema/` | The song model: `*.proto`, codegen, generated types and per-language round-trip tests. See `schema/AGENTS.md`. | hand + `schema/codegen.sh` |
 | `proto/` | The tool API: `song_tools.proto`, the wire contract of §5. Generated Rust only. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
 | `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
-| `tests/` | Cross-language fixtures now; determinism suite at M0.4. See `tests/AGENTS.md`. | tests |
+| `tests/` | Cross-language fixtures and the determinism suite (`escribass-tests`). See `tests/AGENTS.md`. | hand + tests |
 | `docs/` | `specs.md` (architecture source of truth), `adr/`, `landscape-2026-09.md`, `wireframes.html`, `plan.md`, `roadmap.md`. See `docs/AGENTS.md` and `docs/adr/AGENTS.md`. | hand |
-| `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`. | hand |
+| `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`, `tests`. | hand |
 | `Cargo.lock` | Integrity hashes for crates.io packages (specs §17). Never edit. | cargo |
 | `buf.yaml` | buf workspace: modules `schema` and `proto`; lint and breaking config. `proto` relaxes three STANDARD rules that contradict §5's service shape. At the root, not in `schema/`, because buf v2 wants one `buf.yaml` at the common ancestor of every module. | hand |
 | `rust-toolchain.toml` | Rust 1.98.0; mirrors `lock.baseline.json` `schema.rust.toolchain`. | hand |

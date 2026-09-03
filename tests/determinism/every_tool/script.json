@@ -1,0 +1,70 @@
+[
+  {"tool": "add_track", "args": {"name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}, "dry_run": true}},
+  {"tool": "add_track", "args": {"name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}}},
+
+  {"tool": "set_track_instrument", "args": {"track_id": "01M1FPMP000000000000000006",
+    "ref": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}}, "dry_run": true}},
+  {"tool": "set_track_instrument", "args": {"track_id": "01M1FPMP000000000000000006",
+    "ref": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}}}},
+
+  {"tool": "add_effect", "args": {"track_id": "01M1FPMP000000000000000006",
+    "ref": {"faust": {"source_hash": "3c1de4f98b0000000000000000000000"}}, "dry_run": true}},
+  {"tool": "add_effect", "args": {"track_id": "01M1FPMP000000000000000006",
+    "ref": {"faust": {"source_hash": "3c1de4f98b0000000000000000000000"}}}},
+
+  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "drive", "value": 0.62, "dry_run": true}},
+  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "drive", "value": 0.62}},
+
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840, "dry_run": true}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}},
+
+  {"tool": "set_notes", "args": {"clip_id": "01M1FPMP00000000000000000E",
+    "notes": {
+      "a": {"pitch": 60, "start_tick": 0, "length_ticks": 240, "velocity": 100},
+      "b": {"pitch": 64, "start_tick": 1000, "length_ticks": 240, "velocity": 90}
+    }, "dry_run": true}},
+  {"tool": "set_notes", "args": {"clip_id": "01M1FPMP00000000000000000E",
+    "notes": {
+      "a": {"pitch": 60, "start_tick": 0, "length_ticks": 240, "velocity": 100},
+      "b": {"pitch": 64, "start_tick": 1000, "length_ticks": 240, "velocity": 90}
+    }}},
+
+  {"tool": "quantize", "args": {"clip_id": "01M1FPMP00000000000000000E", "grid_ticks": 240, "dry_run": true}},
+  {"tool": "quantize", "args": {"clip_id": "01M1FPMP00000000000000000E", "grid_ticks": 240}},
+
+  {"tool": "transpose", "args": {"clip_id": "01M1FPMP00000000000000000E", "semitones": -12, "dry_run": true}},
+  {"tool": "transpose", "args": {"clip_id": "01M1FPMP00000000000000000E", "semitones": -12}},
+
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000009", "param": "drive"},
+    "points": {"p": {"tick": 0, "value": 0.2, "curve": "CURVE_LINEAR"},
+               "q": {"tick": 1920, "value": 0.9, "curve": "CURVE_HOLD"}}, "dry_run": true}},
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000009", "param": "drive"},
+    "points": {"p": {"tick": 0, "value": 0.2, "curve": "CURVE_LINEAR"},
+               "q": {"tick": 1920, "value": 0.9, "curve": "CURVE_HOLD"}}}},
+
+  {"tool": "set_tempo", "args": {"bpm": 132.5, "tick": 0, "dry_run": true}},
+  {"tool": "set_tempo", "args": {"bpm": 132.5, "tick": 0}},
+  {"tool": "set_tempo", "args": {"bpm": 90.0, "tick": 3840}},
+
+  {"tool": "add_section", "args": {"name": "Verse", "start_tick": 0, "end_tick": 3840, "dry_run": true}},
+  {"tool": "add_section", "args": {"name": "Verse", "start_tick": 0, "end_tick": 3840}},
+
+  {"tool": "move_section", "args": {"section_id": "01M1FPMP00000000000000000W", "start_tick": 960, "end_tick": 4800, "dry_run": true}},
+  {"tool": "move_section", "args": {"section_id": "01M1FPMP00000000000000000W", "start_tick": 960, "end_tick": 4800}},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/gain_db", "value": -6.5},
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/pan", "value": -0.25}
+  ], "dry_run": true}},
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/gain_db", "value": -6.5},
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/pan", "value": -0.25}
+  ]}},
+
+  {"tool": "get_song", "args": {}},
+  {"tool": "get_history", "args": {}}
+]
