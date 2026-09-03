@@ -256,3 +256,58 @@ fn remove(doc: &mut Value, pointer: &str) -> Result<Value, OpFailure> {
         .remove(&key)
         .ok_or_else(|| fail(pointer, "path_not_found", format!("`{key}` is not present")))
 }
+
+/// Produces a patch that turns `from` into `to`.
+///
+/// Recurses into objects to the leaf rather than replacing a differing subtree wholesale.
+/// The granularity is load-bearing, not tidiness: M0.3's merge auto-resolves by comparing op
+/// *paths* (ADR 0001 §4), so a coarse diff would make every pair of edits to one track
+/// collide on `/tracks/{id}` and conflict.
+///
+/// Emits `add`, `remove` and `replace` only. `move` and `copy` would need rename detection,
+/// and nothing in the model has rename semantics to detect.
+///
+/// Op order is deterministic: `serde_json::Map` is a `BTreeMap` here, so keys are visited in
+/// sorted order and the same pair of documents always produces the same patch.
+pub fn diff(from: &Value, to: &Value) -> Vec<Op> {
+    let mut ops = Vec::new();
+    collect_diff(from, to, &mut String::new(), &mut ops);
+    ops
+}
+
+fn collect_diff(from: &Value, to: &Value, path: &mut String, ops: &mut Vec<Op>) {
+    if from == to {
+        return;
+    }
+    let (Value::Object(before), Value::Object(after)) = (from, to) else {
+        // Different types, or a scalar that changed: one replace. An array reaches here too,
+        // and is replaced whole — the document cannot contain one (ADR 0001 §3), and a
+        // whole-value replace is the safe answer if that assumption ever breaks.
+        ops.push(Op::Replace { path: path.clone(), value: to.clone() });
+        return;
+    };
+
+    for (key, value) in before {
+        let len = push_pointer(path, key);
+        match after.get(key) {
+            Some(updated) => collect_diff(value, updated, path, ops),
+            None => ops.push(Op::Remove { path: path.clone() }),
+        }
+        path.truncate(len);
+    }
+    for (key, value) in after {
+        if !before.contains_key(key) {
+            let len = push_pointer(path, key);
+            ops.push(Op::Add { path: path.clone(), value: value.clone() });
+            path.truncate(len);
+        }
+    }
+}
+
+/// Appends one escaped reference token, returning the length to truncate back to.
+fn push_pointer(path: &mut String, token: &str) -> usize {
+    let len = path.len();
+    path.push('/');
+    path.push_str(&escape_token(token));
+    len
+}
