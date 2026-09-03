@@ -11,6 +11,11 @@ escribass-schema = { path = "../schema" }
 escribass-proto = { path = "../proto" }
 # Decoding the descriptor set into tool schemas (ADR 0006 §6).
 prost = "0.14"
+# The MCP server (§18.2, ADR 0006 §6). `server` brings the handler traits, `transport-io`
+# the stdio transport. `macros` is off: the `#[tool]` macro derives schemas from Rust types
+# with schemars, and ours come from the protobuf descriptor.
+rmcp = { version = "3.2.0", default-features = false, features = ["server", "transport-io"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"] }
 # Already in the lock via escribass-schema and pinned in lock.baseline.json as
 # schema.rust.serde; declared here for the Op derive.
 serde = { version = "1", features = ["derive"] }

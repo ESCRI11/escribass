@@ -17,6 +17,9 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
+| `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
+| `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
+| `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
 | `src/descriptor.rs` | `tool_schemas`: the protobuf descriptor turned into one JSON Schema per tool (ADR 0006 §6). Proto3 JSON's own mapping, with proto field names. | done |
 | `tests/descriptor.rs` | Correspondence with the proto, one mapping rule per test. Every failure here is otherwise silent. | done |
 | `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Both transports dispatch here and decide nothing. | done |
@@ -50,6 +53,10 @@ cargo test -p escribass-core
 | `-0.0` is normalised in `session.rs`, where values enter. The validator's `negative_zero` catches what gets past; it should never fire on tool input | ADR 0002 §4 |
 | Tool schemas are derived from `escribass_proto::DESCRIPTOR`, never hand-written. A hand-written schema drifts, and the only symptom is a model that never learns a field exists | ADR 0006 §6 |
 | A tool with no proto comment has no description. `tests/descriptor.rs` fails on one, so documenting an RPC is not optional | ADR 0006 §6 |
+| `ToolResult.patch` and `PatchEntry.ops` are `bytes`, so the generated serde impl base64s them. MCP payloads are built field by field, with the patch parsed into a JSON array | ADR 0006 §6 |
+| A song sent over MCP is rendered by `to_canonical_json`, never `serde_json::to_value` — the text block carries the model's field order | `src/canonical.rs`; ADR 0002 §4 |
+| Nothing but the transport writes to stdout in `escribass-mcp`. One `println!` desynchronises the JSON-RPC stream; diagnostics go to stderr | §18.2 |
+| `mcp::IMPLEMENTED` advertises only tools that are wired up. Advertising one that is not spends a model's turn on a call that can only fail | ADR 0006 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
