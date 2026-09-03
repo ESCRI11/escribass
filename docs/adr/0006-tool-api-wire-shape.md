@@ -28,7 +28,7 @@ hardest thing in the system to change once anything speaks it.
 
 ## Decisions
 
-### 1. One RPC per tool, all returning a shared `ToolResult`
+### 1. One RPC per tool; every mutating tool returns a shared `ToolResult`
 
 ```proto
 message ToolResult {
@@ -43,10 +43,15 @@ message ToolResult {
 §5 names the first four members; `entry_id` is added because a caller that has just committed
 needs to be able to name what it committed — to undo it, to branch from it, or to report it.
 
-One message for every tool, rather than sixteen near-identical ones, because every tool does
-the same thing: it produces ops, and the pipeline either records them or reports why not.
-Per-tool response messages would be sixteen copies of one shape, differing only in the name,
-and each one an opportunity for them to stop being identical.
+One message for every *mutating* tool, rather than sixteen near-identical ones, because every
+one of them does the same thing: it produces ops, and the pipeline either records them or
+reports why not. Per-tool response messages would be sixteen copies of one shape, differing
+only in the name, and each one an opportunity for them to stop being identical.
+
+Reads are not mutations and do not wear the shape. `GetSong`, `GetSongAt` and `GetHistory`
+return what they read; `valid`, `patch`, `summary` and `entry_id` have no meaning for them,
+and a result whose fields are mostly inapplicable teaches a caller to ignore fields. A read
+that cannot be served fails as `Err` — there is no caller-fixable half.
 
 `patch` is `bytes` holding the canonical JSON text produced by the same function that fills
 `PatchEntry.ops`. This is ADR 0002 §11 applied at a second boundary: the wire carries the same
