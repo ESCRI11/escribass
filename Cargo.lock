@@ -78,6 +78,7 @@ version = "0.1.0"
 dependencies = [
  "escribass-proto",
  "escribass-schema",
+ "prost",
  "serde",
  "serde_json",
 ]
@@ -90,6 +91,7 @@ dependencies = [
  "pbjson",
  "pbjson-types",
  "prost",
+ "prost-types",
  "serde",
  "serde_json",
 ]
