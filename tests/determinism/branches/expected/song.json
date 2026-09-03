@@ -1,0 +1,114 @@
+{
+  "id": "01M1FPMP000000000000000001",
+  "provenance": {
+    "author": "AUTHOR_HUMAN",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "version": 5,
+  "schema_version": 1,
+  "tempo_map": {
+    "events": {
+      "01M1FPMP000000000000000003": {
+        "id": "01M1FPMP000000000000000003",
+        "tick": 0,
+        "bpm": 120.0
+      }
+    }
+  },
+  "time_signature_map": {
+    "events": {
+      "01M1FPMP000000000000000004": {
+        "id": "01M1FPMP000000000000000004",
+        "tick": 0,
+        "numerator": 4,
+        "denominator": 4
+      }
+    }
+  },
+  "sections": {
+    "01M1FPMP000000000000000009": {
+      "id": "01M1FPMP000000000000000009",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Verse",
+      "start_tick": 0,
+      "end_tick": 3840
+    }
+  },
+  "markers": {},
+  "tracks": {
+    "01M1FPMP000000000000000002": {
+      "id": "01M1FPMP000000000000000002",
+      "provenance": {
+        "author": "AUTHOR_HUMAN",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Master",
+      "kind": "TRACK_KIND_MASTER",
+      "index": 0,
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    },
+    "01M1FPMP000000000000000006": {
+      "id": "01M1FPMP000000000000000006",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Bass",
+      "kind": "TRACK_KIND_INSTRUMENT",
+      "index": 1,
+      "instrument": {
+        "id": "01M1FPMP000000000000000007",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "version": 1,
+        "ref": {
+          "cmajor": {
+            "source_hash": "8b31c0de4f9c00000000000000000000"
+          }
+        },
+        "state": "",
+        "params": {}
+      },
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    }
+  },
+  "clips": {},
+  "automation": {},
+  "generators": {},
+  "render_target": {
+    "kind": "RENDER_KIND_MASTER",
+    "sample_rate": 48000,
+    "bit_depth": 24,
+    "dither": false
+  }
+}

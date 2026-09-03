@@ -1,0 +1,982 @@
+[
+  {
+    "entry_id": "01M1FPMP000000000000000008",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/tracks/01M1FPMP000000000000000006",
+        "value": {
+          "allow_overlap": false,
+          "fx_chain": {},
+          "id": "01M1FPMP000000000000000006",
+          "index": 1,
+          "instrument": {
+            "id": "01M1FPMP000000000000000007",
+            "params": {},
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "ref": {
+              "cmajor": {
+                "source_hash": "8b31c0de4f9c00000000000000000000"
+              }
+            },
+            "state": "",
+            "version": 1
+          },
+          "kind": "TRACK_KIND_INSTRUMENT",
+          "mix": {
+            "gain_db": 0.0,
+            "mute": false,
+            "pan": 0.0,
+            "solo": false
+          },
+          "name": "Bass",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "routing": {
+            "sends": {},
+            "sidechains": {}
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 2
+      }
+    ],
+    "summary": "2 ops: /tracks/01M1FPMP000000000000000006, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000A",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/clips/01M1FPMP000000000000000009",
+        "value": {
+          "id": "01M1FPMP000000000000000009",
+          "length_ticks": 3840,
+          "note_clip": {
+            "notes": {}
+          },
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "start_tick": 0,
+          "track_id": "01M1FPMP000000000000000006",
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 3
+      }
+    ],
+    "summary": "2 ops: /clips/01M1FPMP000000000000000009, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000D",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B",
+        "value": {
+          "expression": {},
+          "id": "01M1FPMP00000000000000000B",
+          "length_ticks": 240,
+          "microtonal_cents": 0.0,
+          "pitch": 60,
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "start_tick": 0,
+          "velocity": 100,
+          "version": 1
+        }
+      },
+      {
+        "op": "add",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C",
+        "value": {
+          "expression": {},
+          "id": "01M1FPMP00000000000000000C",
+          "length_ticks": 240,
+          "microtonal_cents": 0.0,
+          "pitch": 64,
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "start_tick": 480,
+          "velocity": 90,
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/clips/01M1FPMP000000000000000009/version",
+        "value": 2
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 4
+      }
+    ],
+    "summary": "4 ops: /clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B, /clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C, /clips/01M1FPMP000000000000000009/version, and 1 more",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "MIDI pitch is 0 to 127",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+        "rule": "pitch_out_of_range"
+      },
+      {
+        "message": "MIDI pitch is 0 to 127",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C/pitch",
+        "rule": "pitch_out_of_range"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`version` is maintained by core and is never written by a tool op (ADR 0005 §3); this asked for 99 where core computes 1",
+        "path": "/tracks/01M1FPMP000000000000000006/version",
+        "rule": "version_not_writable"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`nope` is not present",
+        "path": "/nope",
+        "rule": "path_not_found"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "the patched document is not a valid song: data did not match any variant of untagged enum Content. Ops touched: /clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+        "rule": "op_illegal_for_schema"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "track kind must be set",
+        "path": "/tracks/01M1FPMP00000000000000000E/kind",
+        "rule": "enum_unspecified"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`01ZZZZZZZZZZZZZZZZZZZZZZZZ` is not an instrument or effect in this song",
+        "path": "/device_id",
+        "rule": "device_unknown"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "a grid is a positive number of ticks, not `0`",
+        "path": "/grid_ticks",
+        "rule": "grid_not_positive"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`nope` is not a branch in this project",
+        "path": "/name",
+        "rule": "ref_missing"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000E",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+        "value": 72
+      },
+      {
+        "op": "replace",
+        "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/version",
+        "value": 2
+      },
+      {
+        "op": "replace",
+        "path": "/clips/01M1FPMP000000000000000009/version",
+        "value": 3
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 5
+      }
+    ],
+    "summary": "4 ops: /clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch, /clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/version, /clips/01M1FPMP000000000000000009/version, and 1 more",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000F",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tracks/01M1FPMP000000000000000006/mix/pan",
+        "value": -0.5
+      },
+      {
+        "op": "replace",
+        "path": "/tracks/01M1FPMP000000000000000006/version",
+        "value": 2
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 6
+      }
+    ],
+    "summary": "3 ops: /tracks/01M1FPMP000000000000000006/mix/pan, /tracks/01M1FPMP000000000000000006/version, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000G",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tracks/01M1FPMP000000000000000006/mix/pan",
+        "value": 0.0
+      },
+      {
+        "op": "replace",
+        "path": "/tracks/01M1FPMP000000000000000006/version",
+        "value": 3
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 7
+      }
+    ],
+    "summary": "3 ops: /tracks/01M1FPMP000000000000000006/mix/pan, /tracks/01M1FPMP000000000000000006/version, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000K",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/tracks/01M1FPMP00000000000000000H",
+        "value": {
+          "allow_overlap": false,
+          "fx_chain": {},
+          "id": "01M1FPMP00000000000000000H",
+          "index": 2,
+          "instrument": {
+            "id": "01M1FPMP00000000000000000J",
+            "params": {},
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "ref": {
+              "sampler": {
+                "sfz_hash": "aa31c0de4f9c00000000000000000000"
+              }
+            },
+            "state": "",
+            "version": 1
+          },
+          "kind": "TRACK_KIND_INSTRUMENT",
+          "mix": {
+            "gain_db": 0.0,
+            "mute": false,
+            "pan": 0.0,
+            "solo": false
+          },
+          "name": "Drums",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "routing": {
+            "sends": {},
+            "sidechains": {}
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 8
+      }
+    ],
+    "summary": "2 ops: /tracks/01M1FPMP00000000000000000H, /version",
+    "valid": true
+  },
+  {
+    "automation": {},
+    "clips": {
+      "01M1FPMP000000000000000009": {
+        "id": "01M1FPMP000000000000000009",
+        "length_ticks": 3840,
+        "note_clip": {
+          "notes": {
+            "01M1FPMP00000000000000000B": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000B",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 72,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "velocity": 100,
+              "version": 2
+            },
+            "01M1FPMP00000000000000000C": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000C",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 64,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 480,
+              "velocity": 90,
+              "version": 1
+            }
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 0,
+        "track_id": "01M1FPMP000000000000000006",
+        "version": 3
+      }
+    },
+    "generators": {},
+    "id": "01M1FPMP000000000000000001",
+    "markers": {},
+    "provenance": {
+      "author": "AUTHOR_HUMAN",
+      "created_at": "2026-09-02T00:00:00+00:00"
+    },
+    "render_target": {
+      "bit_depth": 24,
+      "dither": false,
+      "kind": "RENDER_KIND_MASTER",
+      "sample_rate": 48000
+    },
+    "schema_version": 1,
+    "sections": {},
+    "tempo_map": {
+      "events": {
+        "01M1FPMP000000000000000003": {
+          "bpm": 120.0,
+          "id": "01M1FPMP000000000000000003",
+          "tick": 0
+        }
+      }
+    },
+    "time_signature_map": {
+      "events": {
+        "01M1FPMP000000000000000004": {
+          "denominator": 4,
+          "id": "01M1FPMP000000000000000004",
+          "numerator": 4,
+          "tick": 0
+        }
+      }
+    },
+    "tracks": {
+      "01M1FPMP000000000000000002": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000002",
+        "index": 0,
+        "kind": "TRACK_KIND_MASTER",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Master",
+        "provenance": {
+          "author": "AUTHOR_HUMAN",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      },
+      "01M1FPMP000000000000000006": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000006",
+        "index": 1,
+        "instrument": {
+          "id": "01M1FPMP000000000000000007",
+          "params": {},
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "ref": {
+            "cmajor": {
+              "source_hash": "8b31c0de4f9c00000000000000000000"
+            }
+          },
+          "state": "",
+          "version": 1
+        },
+        "kind": "TRACK_KIND_INSTRUMENT",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Bass",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 3
+      },
+      "01M1FPMP00000000000000000H": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP00000000000000000H",
+        "index": 2,
+        "instrument": {
+          "id": "01M1FPMP00000000000000000J",
+          "params": {},
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "ref": {
+            "sampler": {
+              "sfz_hash": "aa31c0de4f9c00000000000000000000"
+            }
+          },
+          "state": "",
+          "version": 1
+        },
+        "kind": "TRACK_KIND_INSTRUMENT",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Drums",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    "version": 8
+  },
+  {
+    "entries": {
+      "01M1FPMP000000000000000005": {
+        "id": "01M1FPMP000000000000000005",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/id",
+            "value": "01M1FPMP000000000000000001"
+          },
+          {
+            "op": "replace",
+            "path": "/schema_version",
+            "value": 1
+          },
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP000000000000000002",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP000000000000000002",
+              "index": 0,
+              "kind": "TRACK_KIND_MASTER",
+              "mix": {
+                "gain_db": 0.0,
+                "mute": false,
+                "pan": 0.0,
+                "solo": false
+              },
+              "name": "Master",
+              "provenance": {
+                "author": "AUTHOR_HUMAN",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 1
+          },
+          {
+            "op": "add",
+            "path": "/provenance",
+            "value": {
+              "author": "AUTHOR_HUMAN",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            }
+          },
+          {
+            "op": "add",
+            "path": "/render_target",
+            "value": {
+              "bit_depth": 24,
+              "dither": false,
+              "kind": "RENDER_KIND_MASTER",
+              "sample_rate": 48000
+            }
+          },
+          {
+            "op": "add",
+            "path": "/tempo_map",
+            "value": {
+              "events": {
+                "01M1FPMP000000000000000003": {
+                  "bpm": 120.0,
+                  "id": "01M1FPMP000000000000000003",
+                  "tick": 0
+                }
+              }
+            }
+          },
+          {
+            "op": "add",
+            "path": "/time_signature_map",
+            "value": {
+              "events": {
+                "01M1FPMP000000000000000004": {
+                  "denominator": 4,
+                  "id": "01M1FPMP000000000000000004",
+                  "numerator": 4,
+                  "tick": 0
+                }
+              }
+            }
+          }
+        ],
+        "parents": [],
+        "provenance": {
+          "author": "AUTHOR_HUMAN",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "create"
+      },
+      "01M1FPMP000000000000000008": {
+        "id": "01M1FPMP000000000000000008",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP000000000000000006",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP000000000000000006",
+              "index": 1,
+              "instrument": {
+                "id": "01M1FPMP000000000000000007",
+                "params": {},
+                "provenance": {
+                  "author": "AUTHOR_MODEL",
+                  "created_at": "2026-09-02T00:00:00+00:00"
+                },
+                "ref": {
+                  "cmajor": {
+                    "source_hash": "8b31c0de4f9c00000000000000000000"
+                  }
+                },
+                "state": "",
+                "version": 1
+              },
+              "kind": "TRACK_KIND_INSTRUMENT",
+              "mix": {
+                "gain_db": 0.0,
+                "mute": false,
+                "pan": 0.0,
+                "solo": false
+              },
+              "name": "Bass",
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 2
+          }
+        ],
+        "parents": [
+          "01M1FPMP000000000000000005"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "add_track"
+      },
+      "01M1FPMP00000000000000000A": {
+        "id": "01M1FPMP00000000000000000A",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/clips/01M1FPMP000000000000000009",
+            "value": {
+              "id": "01M1FPMP000000000000000009",
+              "length_ticks": 3840,
+              "note_clip": {
+                "notes": {}
+              },
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "track_id": "01M1FPMP000000000000000006",
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 3
+          }
+        ],
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "add_clip"
+      },
+      "01M1FPMP00000000000000000D": {
+        "id": "01M1FPMP00000000000000000D",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B",
+            "value": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000B",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 60,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "velocity": 100,
+              "version": 1
+            }
+          },
+          {
+            "op": "add",
+            "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C",
+            "value": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000C",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 64,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 480,
+              "velocity": 90,
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/clips/01M1FPMP000000000000000009/version",
+            "value": 2
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 4
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000A"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "set_notes"
+      },
+      "01M1FPMP00000000000000000E": {
+        "id": "01M1FPMP00000000000000000E",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+            "value": 72
+          },
+          {
+            "op": "replace",
+            "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/version",
+            "value": 2
+          },
+          {
+            "op": "replace",
+            "path": "/clips/01M1FPMP000000000000000009/version",
+            "value": 3
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 5
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000D"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "apply_patch"
+      },
+      "01M1FPMP00000000000000000F": {
+        "id": "01M1FPMP00000000000000000F",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tracks/01M1FPMP000000000000000006/mix/pan",
+            "value": -0.5
+          },
+          {
+            "op": "replace",
+            "path": "/tracks/01M1FPMP000000000000000006/version",
+            "value": 2
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 6
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000E"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "apply_patch"
+      },
+      "01M1FPMP00000000000000000G": {
+        "id": "01M1FPMP00000000000000000G",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tracks/01M1FPMP000000000000000006/mix/pan",
+            "value": 0.0
+          },
+          {
+            "op": "replace",
+            "path": "/tracks/01M1FPMP000000000000000006/version",
+            "value": 3
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 7
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000F"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "apply_patch"
+      },
+      "01M1FPMP00000000000000000K": {
+        "id": "01M1FPMP00000000000000000K",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP00000000000000000H",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP00000000000000000H",
+              "index": 2,
+              "instrument": {
+                "id": "01M1FPMP00000000000000000J",
+                "params": {},
+                "provenance": {
+                  "author": "AUTHOR_MODEL",
+                  "created_at": "2026-09-02T00:00:00+00:00"
+                },
+                "ref": {
+                  "sampler": {
+                    "sfz_hash": "aa31c0de4f9c00000000000000000000"
+                  }
+                },
+                "state": "",
+                "version": 1
+              },
+              "kind": "TRACK_KIND_INSTRUMENT",
+              "mix": {
+                "gain_db": 0.0,
+                "mute": false,
+                "pan": 0.0,
+                "solo": false
+              },
+              "name": "Drums",
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 8
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000G"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "add_track"
+      }
+    },
+    "head": "main",
+    "refs": {
+      "main": "01M1FPMP00000000000000000K"
+    }
+  }
+]

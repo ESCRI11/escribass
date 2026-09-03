@@ -9,7 +9,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `fixtures/history/patch_entry.json`, `fixtures/history/refs.json` | The on-disk forms of ADR 0001 §1 and §2, written by `core/tests/history.rs`. | `UPDATE_FIXTURES=1 cargo test -p escribass-core` |
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
 | `determinism.rs` | The suite: it drives `escribass-mcp` as a subprocess and compares what two runs produce. | hand |
-| `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. | hand |
+| `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`. | `UPDATE_FIXTURES=1 cargo test` |
 
 ## Rules
@@ -27,6 +27,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 ## Adding things
 
 - **A fixture:** a `build_*()` and a `*_FIXTURE` path constant in `schema/tests/roundtrip.rs`; write it with `UPDATE_FIXTURES=1`; read it from the TS and Python tests too.
+- **The three scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing).
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
 - **A tool:** add it to a script, and run the suite — the ids of every later step shift if the new tool mints any.
 
