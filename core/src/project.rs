@@ -210,9 +210,25 @@ impl Project {
     /// That is the `Ok(valid = false)` half of ADR 0006 §2's split, and it falls out of the
     /// signature instead of needing a classifier.
     pub fn prepare(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
+        self.prepare_inner(ops, true)
+    }
+
+    /// [`prepare`](Self::prepare) for a merge, which is the one caller whose operations
+    /// legitimately carry an entity `version`.
+    ///
+    /// A merge's patch is the diff between two states core itself produced, so the versions in
+    /// it are core's own — the incoming branch's numbers, which ADR 0005 §2 needs in order to
+    /// resolve to `max(ours, theirs) + 1`. Refusing them here would silently discard the other
+    /// branch's count and let a client's version go backwards, which is what ADR 0005 §4
+    /// rejected the rewind for.
+    pub fn prepare_merge(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
+        self.prepare_inner(ops, false)
+    }
+
+    fn prepare_inner(&self, ops: &[Op], guard_version: bool) -> Result<Prepared, Vec<Violation>> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
 
-        let writes = version_writes(&before, ops);
+        let writes = if guard_version { version_writes(&before, ops) } else { Vec::new() };
         if !writes.is_empty() {
             return Err(writes
                 .into_iter()

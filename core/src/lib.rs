@@ -10,6 +10,7 @@ pub mod descriptor;
 pub mod history;
 pub mod id;
 pub mod mcp;
+pub mod merge;
 pub mod patch;
 pub mod project;
 pub mod session;

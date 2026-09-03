@@ -20,6 +20,8 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | in progress |
 | `tests/tools_devices.rs` | `add_track`, `set_track_instrument`, `add_effect`, `set_param`, driven through `Session`. | done |
 | `tests/tools_clips.rs` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, the two section tools. | done |
+| `src/merge.rs` | Three-way conflict detection by RFC 6902 path (ADR 0001 §4). No content-aware resolution: a structured error is actionable, a silent choice is a song nobody wrote. | done |
+| `tests/tools_merge.rs` | `merge_branch`: both sides of the conflict line, `version` resolution, and the auto-merge that produces an invalid song. | done |
 | `tests/tools_branches.rs` | `create_branch`, `switch_branch`, `delete_branch`. Mostly one claim from several angles: leaving a branch and coming back is byte for byte. | done |
 | `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
 | `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
@@ -70,6 +72,8 @@ cargo test -p escribass-core
 | A tool refuses an id it does not recognise rather than skipping it. A caller whose misspelled id returns success has been told its edit landed when it did not | specs §5 |
 | `History::patch_to` takes `&self` and `History::switch` takes `&mut self`. A dry-run switch built on the mutating one would move `HEAD` in memory, and the next commit would land on a branch nobody chose. The borrow checker is the guard, not a test | ADR 0001 §2; ADR 0006 §3 |
 | The branch tools append no entry, so they skip `run` entirely. `entry_id` stays empty because a branch operation is not a commit | ADR 0001 §2 |
+| Merge compares op **paths**, and `version` leaves are excluded. Both branches bump `version` on every entity they touch, so counting it would make every merge conflict by construction | ADR 0001 §4 |
+| A merge goes through `prepare_merge`, not `prepare`: its ops legitimately carry entity versions, which are core's own and are what ADR 0005 §2 resolves to `max + 1`. Stripping them would let a client's version go backwards | ADR 0005 §2, §4 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
