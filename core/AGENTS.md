@@ -11,6 +11,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/canonical.rs` | Canonical JSON persistence: `to_canonical_json`, `from_canonical_json`, `CanonicalError`. | done |
 | `tests/canonical.rs` | Fixed-point, idempotence, non-finite rejection, seeded double round-trip, key order. Reads `/tests/fixtures/song/minimal.json`. | done |
 | `src/patch.rs` | RFC 6902 `apply` and `diff`, and the RFC 6901 pointers they address with. Operates on `serde_json::Value`; knows nothing about `Song`. | done |
+| `src/history.rs` | The on-disk shape of `patches/*.json` and `refs.json`, and the ADR 0001 §2 ref-name rules. Serialisation only — no graph, no I/O. | done |
 | `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
 | patch log, `refs.json`, `.escri` project store | ADR 0001 §1–§2; specs §10 | M0.2, next |
@@ -35,6 +36,7 @@ cargo test -p escribass-core
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |
 | RFC 6901 escaping and unescaping live together in `src/patch.rs`; they must stay exact inverses | RFC 6901 |
+| Never write `patches/*.json` with the generated `PatchEntry` serde impl: `ops` is `bytes`, so it base64-encodes, producing a file that round-trips and still violates ADR 0001 §1 and §2.6. `src/history.rs` owns the disk form | ADR 0002 §11 |
 | `diff` recurses to the leaf. A coarse whole-subtree diff would make every pair of edits to one track collide on the same path and conflict under merge | ADR 0001 §4 |
 | `serde_json` carries the `float_roundtrip` feature | ADR 0002 §4 |
 | The writer rejects non-finite doubles; it does not rewrite values. `-0.0` is the tool API's to normalise, presence the validator's, timestamp precision the clock's | ADR 0002 §4, as amended 2026-09-02 |

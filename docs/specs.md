@@ -211,6 +211,7 @@ not in its scope and needs no ADR.
 | Project file extension | `.escri` on the project directory; contents stay `.json` | Bundle gives file association and identity; standard extensions inside keep §2.6 diffability and editor/LLM legibility | 2026-09-02 |
 | Tick integer width | `int32` (960 PPQ, ~559k bars) | proto3 JSON encodes 64-bit ints as strings, which would break §2.6 readable/diffable text (ADR 0002) | 2026-09-02 |
 | Canonical JSON form | snake_case, defaults emitted, map keys sorted, 2-space | Always-present fields make RFC 6902 `replace`/`test` well-defined (ADR 0002) | 2026-09-02 |
+| Patch entry on disk | Six keys including `schema_version`; `patches/<26-char ULID>.json`, flat | The proto's field is an on-disk concern, and ADR 0001's example was one field stale (ADR 0001 §1, corrected) | 2026-09-03 |
 | `song.json` authority | Derived cache; the patch log is authoritative on disk | A commit touches three files and only each is atomic; without an answer a crash leaves them silently diverged (ADR 0004) | 2026-09-03 |
 | Patch op representation | Canonical JSON text on disk; `bytes` on the wire | Modelling RFC 6902 values in protobuf made the patch log nondeterministic and produced documents core could not re-read (ADR 0002 §11) | 2026-09-02 |
 | Tempo/time-signature events | id-keyed maps, like every other collection | An array index is not a stable patch path under concurrent branch inserts (ADR 0001 §3, corrected) | 2026-09-02 |
