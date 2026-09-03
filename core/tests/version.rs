@@ -4,7 +4,7 @@
 //! documents. The last two go through `commit`, because *where* the bump happens is the half
 //! of the decision that a unit test cannot see.
 
-use escribass_core::{bump_versions, version_writes, Op, Project, SeededIds, FixedClock};
+use escribass_core::{bump_versions, FixedClock, Op, Project, SeededIds};
 use escribass_schema::song::{Author, Song};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -22,11 +22,17 @@ fn fixture() -> Value {
 
 /// Applies `edit` to a copy of the fixture, bumps, and hands back the result.
 fn bumped(edit: impl FnOnce(&mut Value)) -> Value {
+    let (patched, disputed) = bumped_with_disputes(edit);
+    assert!(disputed.is_empty(), "unexpected dispute: {disputed:?}");
+    patched
+}
+
+fn bumped_with_disputes(edit: impl FnOnce(&mut Value)) -> (Value, Vec<escribass_core::Violation>) {
     let before = fixture();
     let mut patched = before.clone();
     edit(&mut patched);
-    bump_versions(&before, &mut patched);
-    patched
+    let disputed = bump_versions(&before, &mut patched);
+    (patched, disputed)
 }
 
 fn version_at(doc: &Value, pointer: &str) -> u64 {
@@ -107,9 +113,13 @@ fn a_merge_resolves_to_the_higher_of_the_two_plus_one() {
     let mut patched = before.clone();
     patched["tracks"][BASS]["name"] = json!("Bass (merged)");
     patched["tracks"][BASS]["version"] = json!(9); // what the other branch had reached
-    bump_versions(&before, &mut patched);
+    let disputed = bump_versions(&before, &mut patched);
 
     assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 10);
+    // Reported, and ignored on the merge path: these are core's own numbers arriving from the
+    // other branch, which is why `prepare_merge` exists (ADR 0005 §2).
+    assert_eq!(disputed.len(), 1);
+    assert_eq!(disputed[0].rule, "version_not_writable");
 }
 
 #[test]
@@ -120,7 +130,7 @@ fn a_plugin_version_is_not_an_entity_version() {
     let mut patched = before.clone();
     patched["tracks"][BASS]["instrument"]["ref"] =
         json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}});
-    bump_versions(&before, &mut patched);
+    assert!(bump_versions(&before, &mut patched).is_empty(), "a plugin pin is not an entity");
 
     assert_eq!(patched["tracks"][BASS]["instrument"]["ref"]["plugin"]["version"], json!("1.3.4"));
     assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/instrument/version")), 2);
@@ -145,35 +155,63 @@ fn an_event_without_a_version_field_is_left_alone() {
 fn an_unchanged_document_bumps_nothing() {
     let before = fixture();
     let mut patched = before.clone();
-    bump_versions(&before, &mut patched);
+    assert!(bump_versions(&before, &mut patched).is_empty());
     assert_eq!(patched, before);
 }
 
 // ---- the guard (ADR 0005 §3) ----
 
 #[test]
-fn an_op_writing_an_entity_version_is_named() {
-    let before = fixture();
-    let ops: Vec<Op> = serde_json::from_value(json!([
-        {"op": "replace", "path": format!("/tracks/{BASS}/version"), "value": 9},
-        {"op": "replace", "path": "/version", "value": 300}
-    ]))
-    .unwrap();
-    assert_eq!(version_writes(&before, &ops).len(), 2);
+fn a_version_the_caller_chose_is_disputed() {
+    let (_, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS]["version"] = json!(9);
+        d["version"] = json!(300);
+    });
+    let rules: Vec<&str> = disputed.iter().map(|v| v.rule).collect();
+    assert_eq!(rules, vec!["version_not_writable", "version_not_writable"]);
 }
 
 #[test]
-fn an_op_writing_a_plugin_version_is_not() {
-    let mut before = fixture();
-    before["tracks"][BASS]["instrument"]["ref"] =
-        json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.3"}});
-    let ops: Vec<Op> = serde_json::from_value(json!([{
-        "op": "replace",
-        "path": format!("/tracks/{BASS}/instrument/ref/plugin/version"),
-        "value": "1.3.4"
-    }]))
-    .unwrap();
-    assert!(version_writes(&before, &ops).is_empty());
+fn a_version_spelled_as_a_string_is_disputed() {
+    // Proto3 JSON accepts `"1"` for a `uint32`, so a path-based guard would never see this —
+    // the same leniency that made the log disagree with `song.json` in M0.2.
+    let (patched, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS]["name"] = json!("Renamed");
+        d["tracks"][BASS]["version"] = json!("1");
+    });
+    assert_eq!(disputed.first().map(|v| v.rule), Some("version_not_writable"));
+    assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 4, "and core still wins");
+}
+
+#[test]
+fn a_version_removed_by_the_caller_is_disputed() {
+    let (patched, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS].as_object_mut().unwrap().remove("version");
+    });
+    assert_eq!(disputed.first().map(|v| v.rule), Some("version_not_writable"));
+    // Nothing else about the track changed, so core restores the number rather than bumping.
+    assert_eq!(version_at(&patched, &format!("/tracks/{BASS}/version")), 3);
+}
+
+#[test]
+fn a_plugin_version_is_never_disputed() {
+    let (_, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS]["instrument"]["ref"] =
+            json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}});
+    });
+    assert!(disputed.is_empty(), "{disputed:?}");
+}
+
+#[test]
+fn the_number_core_computes_is_not_disputed() {
+    // The round trip §9 needs: a patch this API returned carries the bumps it caused, and
+    // feeding it back must not be refused for saying what core already said.
+    let (_, disputed) = bumped_with_disputes(|d| {
+        d["tracks"][BASS]["name"] = json!("Renamed");
+        d["tracks"][BASS]["version"] = json!(4);
+        d["version"] = json!(215);
+    });
+    assert!(disputed.is_empty(), "{disputed:?}");
 }
 
 // ---- through the pipeline ----

@@ -426,3 +426,97 @@ fn the_merge_entry_carries_the_ops_that_were_recorded() {
     let returned: Value = serde_json::from_slice(&result.patch).unwrap();
     assert_eq!(recorded, returned);
 }
+
+#[test]
+fn a_merge_that_brings_in_a_removal_leaves_a_replayable_log() {
+    // The defect that made this review worth running. A merge entry's ops are the diff from
+    // `parents[0]`, so replaying *every* ancestor and then the merge applies the incoming
+    // side's changes twice. `add` and `replace` are idempotent and hide it; `remove` is not —
+    // the second one hits `path_not_found`, and the project will not reopen. Replay follows
+    // first parents (ADR 0001 §1, amended).
+    let (dir, mut session) = opened();
+    let bass = track(&mut session, "Bass");
+    let added = session
+        .add_clip(&AddClipRequest {
+            track_id: bass,
+            start_tick: 0,
+            length_ticks: 3840,
+            content: Some(AddClipContent::NoteClip(NoteClip {
+                notes: [("a".to_string(), note(60)), ("b".to_string(), note(64))]
+                    .into_iter()
+                    .collect(),
+            })),
+            dry_run: false,
+        })
+        .unwrap();
+    assert!(added.valid, "{:?}", added.errors);
+    let clip = session.project().song().clips.keys().next().unwrap().clone();
+    let notes = clip_note_ids(&session, &clip);
+
+    branch(&mut session, "other");
+    section(&mut session, "Verse");
+
+    switch(&mut session, "other");
+    let dropped = session
+        .set_notes(&SetNotesRequest {
+            clip_id: clip.clone(),
+            notes: [(notes[1].clone(), note(64))].into_iter().collect(),
+            dry_run: false,
+        })
+        .unwrap();
+    assert!(dropped.valid, "{:?}", dropped.errors);
+
+    switch(&mut session, "main");
+    let merged = merge(&mut session, "other", false);
+    assert!(merged.valid, "{:?}", merged.errors);
+
+    // Every way the log is read back must agree with the document beside it (ADR 0004).
+    let reopened = Project::open(&dir.0).expect("the project reopens");
+    assert_eq!(reopened.song(), session.project().song());
+    assert_eq!(clip_note_ids(&session, &clip).len(), 1, "the note stayed dropped");
+}
+
+#[test]
+fn a_plugin_pin_is_not_auto_resolved_by_the_merge_rule() {
+    // `PluginRef.version` is a *string* pinning a release (§4.4 requires it pinned). Excluding
+    // every path ending `/version` from conflict detection would let one branch's pin silently
+    // win — which ADR 0001 §4 says never happens by heuristic. Both branches change only the
+    // pin here, so the diff is exactly the path the exemption would have swallowed.
+    let (_dir, mut session) = opened();
+    let bass = track(&mut session, "Bass");
+    let at = format!("/tracks/{bass}/instrument/ref");
+    let pin = |v: &str| {
+        serde_json::to_vec(&serde_json::json!([{
+            "op": "replace",
+            "path": format!("{at}/plugin/version"),
+            "value": v
+        }]))
+        .unwrap()
+    };
+    let apply = |session: &mut Session, patch: Vec<u8>| {
+        session
+            .apply_patch(&escribass_proto::tools::ApplyPatchRequest { patch, dry_run: false })
+            .unwrap()
+    };
+
+    // Put a plugin there first, so both branches change only its version.
+    let plugin = serde_json::to_vec(&serde_json::json!([{
+        "op": "replace",
+        "path": at,
+        "value": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.0.0"}}
+    }]))
+    .unwrap();
+    assert!(apply(&mut session, plugin).valid);
+
+    branch(&mut session, "other");
+    assert!(apply(&mut session, pin("2.0.0")).valid);
+    switch(&mut session, "other");
+    assert!(apply(&mut session, pin("3.0.0")).valid);
+    switch(&mut session, "main");
+
+    let result = merge(&mut session, "other", false);
+
+    assert!(!result.valid, "two different pins were merged without a word");
+    assert_eq!(rules(&result), vec!["merge_conflict"]);
+    assert!(result.errors[0].path.ends_with("/plugin/version"), "{}", result.errors[0].path);
+}

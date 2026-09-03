@@ -17,6 +17,7 @@
 
 use crate::patch::Op;
 use crate::validate::Violation;
+use serde_json::Value;
 
 /// Whether `prefix` addresses `path` or something containing it.
 ///
@@ -30,8 +31,14 @@ fn contains(prefix: &str, path: &str) -> bool {
 }
 
 /// An entity's own `version`, which core maintains and neither branch chose.
-fn is_version(path: &str) -> bool {
-    path.rsplit_once('/').is_some_and(|(_, last)| last == "version")
+///
+/// The parent has to be an entity. `PluginRef.version` is a *string* pinning a plugin release
+/// (§4.4 requires it pinned), and two branches pinning different versions is exactly the
+/// disagreement ADR 0001 §4 says is never resolved by a heuristic.
+fn is_version(base: &Value, path: &str) -> bool {
+    let Some((parent, last)) = path.rsplit_once('/') else { return false };
+    last == "version"
+        && base.pointer(parent).and_then(Value::as_object).is_some_and(crate::version::is_entity)
 }
 
 /// Where two patches touch the same part of the document.
@@ -39,10 +46,10 @@ fn is_version(path: &str) -> bool {
 /// Reported as `Violation`s so they arrive in `ToolResult.errors` beside every other refusal:
 /// §6's retry loop and the orchestrator branch on `rule`, and a merge conflict is exactly the
 /// kind of thing §9 puts in front of a person.
-pub fn conflicts(ours: &[Op], theirs: &[Op]) -> Vec<Violation> {
+pub fn conflicts(base: &Value, ours: &[Op], theirs: &[Op]) -> Vec<Violation> {
     let mut found = Vec::new();
-    for mine in ours.iter().filter(|op| !is_version(op.path())) {
-        for yours in theirs.iter().filter(|op| !is_version(op.path())) {
+    for mine in ours.iter().filter(|op| !is_version(base, op.path())) {
+        for yours in theirs.iter().filter(|op| !is_version(base, op.path())) {
             if contains(mine.path(), yours.path()) || contains(yours.path(), mine.path()) {
                 found.push(Violation {
                     path: yours.path().to_string(),

@@ -95,7 +95,7 @@ impl Session {
     /// `core` through the tool API rather than the file (CLAUDE.md #2), and because §9 lets a
     /// user edit a proposed diff before applying it.
     pub fn apply_patch(&mut self, request: &ApplyPatchRequest) -> Result<ToolResult, ProjectError> {
-        let mut ops: Vec<Op> = match serde_json::from_slice(&request.patch) {
+        let ops: Vec<Op> = match serde_json::from_slice(&request.patch) {
             Ok(ops) => ops,
             Err(e) => {
                 return Ok(refused(vec![Violation {
@@ -105,7 +105,6 @@ impl Session {
                 }]))
             }
         };
-        normalise_input(&mut ops);
         self.run("apply_patch", &ops, request.dry_run)
     }
 
@@ -116,8 +115,7 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::add_track(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("add_track", built, request.dry_run)
+        self.from_tool("add_track", built, request.dry_run, ids)
     }
 
     /// §5 `set_track_instrument`.
@@ -128,8 +126,7 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::set_track_instrument(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("set_track_instrument", built, request.dry_run)
+        self.from_tool("set_track_instrument", built, request.dry_run, ids)
     }
 
     /// §5 `add_effect`.
@@ -137,14 +134,13 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::add_effect(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("add_effect", built, request.dry_run)
+        self.from_tool("add_effect", built, request.dry_run, ids)
     }
 
     /// §5 `set_param`.
     pub fn set_param(&mut self, request: &SetParamRequest) -> Result<ToolResult, ProjectError> {
         let built = tools::set_param(self.project.song(), request);
-        self.from_tool("set_param", built, request.dry_run)
+        self.from_tool("set_param", built, request.dry_run, self.ids.fork())
     }
 
     /// §5 `add_clip`.
@@ -152,8 +148,7 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::add_clip(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("add_clip", built, request.dry_run)
+        self.from_tool("add_clip", built, request.dry_run, ids)
     }
 
     /// §5 `set_notes`.
@@ -161,20 +156,19 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::set_notes(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("set_notes", built, request.dry_run)
+        self.from_tool("set_notes", built, request.dry_run, ids)
     }
 
     /// §5 `transpose`.
     pub fn transpose(&mut self, request: &TransposeRequest) -> Result<ToolResult, ProjectError> {
         let built = tools::transpose(self.project.song(), request);
-        self.from_tool("transpose", built, request.dry_run)
+        self.from_tool("transpose", built, request.dry_run, self.ids.fork())
     }
 
     /// §5 `quantize`.
     pub fn quantize(&mut self, request: &QuantizeRequest) -> Result<ToolResult, ProjectError> {
         let built = tools::quantize(self.project.song(), request);
-        self.from_tool("quantize", built, request.dry_run)
+        self.from_tool("quantize", built, request.dry_run, self.ids.fork())
     }
 
     /// §5 `add_automation`.
@@ -185,24 +179,21 @@ impl Session {
         let mut ids = self.ids.fork();
         let built = tools::add_automation(
             self.project.song(), request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("add_automation", built, request.dry_run)
+        self.from_tool("add_automation", built, request.dry_run, ids)
     }
 
     /// §5 `set_tempo`.
     pub fn set_tempo(&mut self, request: &SetTempoRequest) -> Result<ToolResult, ProjectError> {
         let mut ids = self.ids.fork();
         let built = tools::set_tempo(self.project.song(), request, &mut *ids);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("set_tempo", built, request.dry_run)
+        self.from_tool("set_tempo", built, request.dry_run, ids)
     }
 
     /// §5 `add_section`.
     pub fn add_section(&mut self, request: &AddSectionRequest) -> Result<ToolResult, ProjectError> {
         let mut ids = self.ids.fork();
         let built = tools::add_section(request, &mut *ids, &*self.clock, self.author);
-        self.keep_ids(ids, request.dry_run);
-        self.from_tool("add_section", built, request.dry_run)
+        self.from_tool("add_section", built, request.dry_run, ids)
     }
 
     /// §5 `move_section`.
@@ -211,7 +202,7 @@ impl Session {
         request: &MoveSectionRequest,
     ) -> Result<ToolResult, ProjectError> {
         let built = tools::move_section(self.project.song(), request);
-        self.from_tool("move_section", built, request.dry_run)
+        self.from_tool("move_section", built, request.dry_run, self.ids.fork())
     }
 
     // ---- branches (ADR 0001 §2) ----
@@ -319,7 +310,7 @@ impl Session {
         let ours = diff(&base_doc, &ours_doc);
         let theirs = diff(&base_doc, &theirs_doc);
 
-        let conflicts = crate::merge::conflicts(&ours, &theirs);
+        let conflicts = crate::merge::conflicts(&base_doc, &ours, &theirs);
         if !conflicts.is_empty() {
             return Ok(refused(conflicts));
         }
@@ -360,31 +351,33 @@ impl Session {
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
     }
 
-    /// Keeps the ids a call minted, but only if the call was going to keep anything else.
-    ///
-    /// Every minting tool builds its patch from a *fork* of the id source. A dry run then
-    /// discards it, so the next real call mints exactly the ids the preview showed — which is
-    /// what ADR 0006 §3 promises and what §9 needs, since a person approves a patch before it
-    /// is applied. An apply installs the advanced fork, so the sequence is unchanged.
-    fn keep_ids(&mut self, ids: Box<dyn IdSource + Send>, dry_run: bool) {
-        if !dry_run {
-            self.ids = ids;
-        }
-    }
-
     /// A tool that refused its arguments is refused the same way a patch that will not apply
     /// is: a result, not a failure (ADR 0006 §2). Nothing distinguishes the two for a caller,
     /// which is the point — both are things it can fix by calling differently.
+    /// A tool builds its patch from a **fork** of the id source; this decides whether the fork
+    /// is kept.
+    ///
+    /// It is installed for the duration of the call, so the entry `record` mints comes after
+    /// the ids the tool used and the sequence is exactly what it would have been. It is put
+    /// back if the call kept nothing — a dry run, or a refusal — so previewing burns no id and
+    /// the apply that follows mints exactly what the preview showed (ADR 0006 §3, which §9
+    /// needs, since a person approves a patch before it is applied).
     fn from_tool(
         &mut self,
         tool: &str,
         built: Result<Vec<Op>, Vec<Violation>>,
         dry_run: bool,
+        ids: Box<dyn IdSource + Send>,
     ) -> Result<ToolResult, ProjectError> {
-        match built {
-            Ok(ops) => self.run(tool, &ops, dry_run),
-            Err(violations) => Ok(refused(violations)),
+        let Ok(ops) = built else {
+            return Ok(refused(built.expect_err("just matched")));
+        };
+        let previous = std::mem::replace(&mut self.ids, ids);
+        let result = self.run(tool, &ops, dry_run);
+        if dry_run || !matches!(&result, Ok(outcome) if outcome.valid) {
+            self.ids = previous;
         }
+        result
     }
 
     /// Every mutating tool ends here: prepare, and either describe it or record it.
@@ -392,6 +385,14 @@ impl Session {
     /// Private because the typed tools of the next steps are the surface; what they share is
     /// this function, not a trait.
     fn run(&mut self, tool: &str, ops: &[Op], dry_run: bool) -> Result<ToolResult, ProjectError> {
+        // Every mutating tool passes through here, which is what ADR 0002 §4 means by "the
+        // tool API's job, on input". Normalising only in `apply_patch` left `set_param(-0.0)`
+        // to be refused by the validator's `negative_zero` — a rule that should never fire on
+        // input that came through a tool.
+        let mut ops = ops.to_vec();
+        normalise_input(&mut ops);
+        let ops = &ops[..];
+
         let prepared = match self.project.prepare(ops) {
             Ok(prepared) => prepared,
             Err(violations) => return Ok(refused(violations)),
