@@ -20,6 +20,17 @@ const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// shareable when it is not.
 pub trait IdSource {
     fn next_id(&mut self) -> String;
+
+    /// A copy of this source, positioned where it stands.
+    ///
+    /// A dry run mints ids to build the patch it previews, and must not consume the real
+    /// ones: ADR 0006 §3 promises the patch a dry run returns is the patch a commit records,
+    /// and §9 has a person approve that patch before it is applied. Handing them a preview
+    /// whose ids differ from the ones that land breaks a promise that is small until somebody
+    /// diffs the two.
+    ///
+    /// Not `Clone` on the trait, which would make it un-object-safe.
+    fn fork(&self) -> Box<dyn IdSource + Send>;
 }
 
 /// Renders 48 bits of timestamp and 80 further bits as a 26-character Crockford ULID.
@@ -45,7 +56,7 @@ fn render(ms: u64, tail: u128) -> String {
 /// standard library seeds from the OS — no dependency for what is a uniqueness requirement,
 /// not a secrecy one. If ids ever need to be unguessable, or unique across machines with no
 /// coordination, swap this for `getrandom` and pin it in `lock.baseline.json`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UlidSource<C: Clock = SystemClock> {
     clock: C,
     last_ms: u64,
@@ -64,7 +75,7 @@ impl<C: Clock> UlidSource<C> {
     }
 }
 
-impl<C: Clock> IdSource for UlidSource<C> {
+impl<C: Clock + Clone + Send + 'static> IdSource for UlidSource<C> {
     fn next_id(&mut self) -> String {
         let ms = self.clock.now_ms().max(0) as u64;
         if ms == self.last_ms {
@@ -75,6 +86,10 @@ impl<C: Clock> IdSource for UlidSource<C> {
             self.tail = os_entropy();
         }
         render(ms, self.tail)
+    }
+
+    fn fork(&self) -> Box<dyn IdSource + Send> {
+        Box::new(self.clone())
     }
 }
 
@@ -122,5 +137,9 @@ impl IdSource for SeededIds {
         let id = render(self.ms, self.next);
         self.next = self.next.wrapping_add(1);
         id
+    }
+
+    fn fork(&self) -> Box<dyn IdSource + Send> {
+        Box::new(self.clone())
     }
 }

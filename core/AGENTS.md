@@ -77,6 +77,7 @@ cargo test -p escribass-core
 | The branch tools append no entry, so they skip `run` entirely. `entry_id` stays empty because a branch operation is not a commit | ADR 0001 §2 |
 | Merge compares op **paths**, and `version` leaves are excluded. Both branches bump `version` on every entity they touch, so counting it would make every merge conflict by construction | ADR 0001 §4 |
 | A merge goes through `prepare_merge`, not `prepare`: its ops legitimately carry entity versions, which are core's own and are what ADR 0005 §2 resolves to `max + 1`. Stripping them would let a client's version go backwards | ADR 0005 §2, §4 |
+| Every minting tool builds its patch from `self.ids.fork()`; only a real apply installs the advanced fork. A preview that burned an id would return a patch whose ids differ from the ones that land, breaking ADR 0006 §3 exactly where §9 has a person approve a diff | ADR 0006 §3 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |

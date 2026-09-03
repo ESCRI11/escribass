@@ -5,7 +5,7 @@
 
 use escribass_core::{new_song, ops_of, to_canonical_json, validate, Project, Session};
 use escribass_core::{FixedClock, SeededIds};
-use escribass_proto::tools::{ApplyPatchRequest, GetSongAtRequest};
+use escribass_proto::tools::{AddTrackRequest, ApplyPatchRequest, GetSongAtRequest};
 use escribass_schema::song::{Author, Song};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -301,4 +301,53 @@ fn a_session_can_be_driven_from_a_new_song() {
 
     assert!(result.valid, "{:?}", result.errors);
     assert_eq!(Project::open(&dir.0).unwrap().song(), session.project().song());
+}
+
+#[test]
+fn a_dry_run_of_a_minting_tool_returns_the_patch_the_apply_then_records() {
+    // ADR 0006 §3 promises a dry run shows what a commit would record. A tool that mints ids
+    // used to consume them on the preview, so the apply that followed carried different ones —
+    // the documents were equivalent and the promise was not, which matters because §9 has a
+    // person approve the patch before it is applied.
+    let (_dir, mut session) = opened();
+    let request = escribass_proto::tools::AddTrackRequest {
+        name: "Bass".to_string(),
+        kind: escribass_schema::song::TrackKind::Instrument as i32,
+        r#ref: Some(escribass_schema::song::DeviceRef {
+            kind: Some(escribass_schema::song::device_ref::Kind::Cmajor(
+                escribass_schema::song::SourceRef {
+                    source_hash: "8b31c0de4f9c00000000000000000000".to_string(),
+                },
+            )),
+        }),
+        dry_run: true,
+    };
+
+    let previewed = session.add_track(&request).unwrap();
+    let previewed_twice = session.add_track(&request).unwrap();
+    assert_eq!(previewed_twice.patch, previewed.patch, "two previews disagreed");
+
+    let applied = session.add_track(&AddTrackRequest { dry_run: false, ..request }).unwrap();
+    assert_eq!(applied.patch, previewed.patch, "the apply differed from what was approved");
+    assert!(!applied.entry_id.is_empty());
+}
+
+#[test]
+fn a_dry_run_does_not_advance_the_ids_a_later_call_uses() {
+    // The same property from the other side: previewing never burns an id, so a session that
+    // previews twice and applies once produces the same project as one that just applies.
+    let with_previews = {
+        let (dir, mut session) = opened();
+        let ops = set_gain(json!(-3.0));
+        session.apply_patch(&patch(ops.clone(), true)).unwrap();
+        session.apply_patch(&patch(ops.clone(), true)).unwrap();
+        session.apply_patch(&patch(ops, false)).unwrap();
+        std::fs::read_to_string(dir.0.join("song.json")).unwrap()
+    };
+    let without = {
+        let (dir, mut session) = opened();
+        session.apply_patch(&patch(set_gain(json!(-3.0)), false)).unwrap();
+        std::fs::read_to_string(dir.0.join("song.json")).unwrap()
+    };
+    assert_eq!(with_previews, without);
 }

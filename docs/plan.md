@@ -83,6 +83,7 @@ inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wi
 | 8 | `m0.3-branches` | `create_branch`, `switch_branch`, `delete_branch` |
 | 9 | `m0.3-merge` | Merge base, three-way by path, conflicts as `errors[]` |
 | 10 | `m0.3-grpc` | `tonic` service impl and the `escribass-grpc` binary |
+| 11 | `m0.3-dry-run-ids` | A dry run mints from a fork, so a preview burns no ids |
 
 Out of M0.3, per ADR 0003: `set_form` (needs `FormRule`, M4), the four `compile_*`/`define_*`
 tools (M4), `render_preview`/`render_export` (M1), interactive conflict resolution (M2), and
@@ -118,7 +119,6 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
-| A dry run of an id-minting tool consumes ids | `add_track` and the rest mint before building the patch, so a preview and the apply that follows carry different ids — ADR 0006 §3 promises they are the same patch. The document is equivalent either way; the promise is not. Fixed by forking the id source for a preview | immediately after M0.3 PR 10 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
 
