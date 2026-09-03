@@ -276,6 +276,7 @@ impl Snapshot {
     fn of(run: &Run) -> Self {
         let mut named = files(&run.directory.0);
         named.insert("responses.json".to_string(), pretty(&Value::Array(run.results.clone())));
+        named.insert("origin.json".to_string(), origin().into_bytes());
         Snapshot(named)
     }
 
@@ -300,6 +301,22 @@ impl Snapshot {
             std::fs::write(&path, bytes).expect("the golden is writable");
         }
     }
+}
+
+/// The document every replay starts from.
+///
+/// A patch log is not self-contained. `core` replays from a default `Song` rather than from
+/// `{}`, because the canonical form emits every no-presence field (ADR 0002 §4) and that is
+/// what makes `replace` legal from the first operation. Anything else replaying the log —
+/// the TypeScript and Python halves of this claim, or a person with `jq` — needs the same
+/// starting point, and would otherwise fail on the root entry with no idea why.
+///
+/// So it is committed beside the goldens. `ponytail:` a project does not carry its own origin
+/// today; if one ever has to be replayed by something that has never seen this schema, that is
+/// the thing to add to the `.escri` directory.
+fn origin() -> String {
+    escribass_core::to_canonical_json(&escribass_schema::song::Song::default())
+        .expect("a default Song serialises")
 }
 
 fn pretty(value: &Value) -> Vec<u8> {
@@ -776,4 +793,18 @@ fn the_two_transports_answer_the_same_way() {
             &Snapshot::of(&over_grpc),
         );
     }
+}
+
+#[test]
+fn the_origin_is_the_document_a_replay_starts_from() {
+    // Pins what `origin.json` is, so the cross-language replays are checking the same claim
+    // this one is: every field present, every id empty, every collection empty.
+    let document: Value = serde_json::from_str(&origin()).expect("the origin is JSON");
+    assert_eq!(document["id"], json!(""));
+    assert_eq!(document["version"], json!(0));
+    assert_eq!(document["tracks"], json!({}));
+    // Scalars and maps are present at their defaults, which is what makes `replace` legal from
+    // the first operation. A message field that is absent stays absent — `tempo_map` and
+    // `render_target` arrive as `add` operations in the root entry, not as `replace`.
+    assert!(document.get("tempo_map").is_none(), "an unset message is omitted, not defaulted");
 }
