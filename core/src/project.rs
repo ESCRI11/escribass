@@ -148,6 +148,14 @@ impl Project {
     /// 0002 §11 records — and applying it to a `Value` would succeed while producing a
     /// document `core` cannot read back.
     ///
+    /// What the entry records is the patch from the document before to the document after —
+    /// the *effect*, re-derived — not the ops as they arrived. Proto3 JSON has more than one
+    /// spelling for a value: `"1"` is a legal int32, `1` a legal enum. Both deserialise, and
+    /// both come back out of `Song` in one canonical spelling. Recording the caller's spelling
+    /// would leave the log replaying to a document that differs from the `song.json` written
+    /// beside it, and the next `open` would refuse a project that was committed cleanly. The
+    /// re-derived diff cannot say anything `song.json` does not (ADR 0004).
+    ///
     /// `version` is not bumped here. ADR 0001 §4 makes that `core`'s job, but the bump has to
     /// be recorded *in the ops* or a replay diverges from the live document, and there is no
     /// tool to drive it before M0.3 (`docs/plan.md`, deferred).
@@ -160,9 +168,9 @@ impl Project {
         clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
-        let after = apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+        let patched = apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
 
-        let song: Song = serde_json::from_value(after).map_err(|e| {
+        let song: Song = serde_json::from_value(patched).map_err(|e| {
             let touched: Vec<&str> = ops.iter().map(Op::path).take(8).collect();
             err(
                 self.root.join(SONG),
@@ -178,10 +186,11 @@ impl Project {
         let Some(head) = self.history.head_id().map(str::to_string) else {
             return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
         };
+        let after = serde_json::to_value(&song).expect("a Song serialises");
         let branch = self.history.refs().head.clone();
         let id = ids.next_id();
-        let record = new_entry(id.clone(), vec![head], tool, ops, authorship(author, clock),
-            SCHEMA_VERSION);
+        let record = new_entry(id.clone(), vec![head], tool, &diff(&before, &after),
+            authorship(author, clock), SCHEMA_VERSION);
 
         // Nothing above this line touched `self`.
         self.history.append(record).map_err(|e| err(&self.root, e.rule, e.message))?;
