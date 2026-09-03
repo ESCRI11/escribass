@@ -33,6 +33,13 @@ rm -rf gen
 
 buf generate
 
+# The descriptor set is what the MCP server turns into tool `inputSchema` (ADR 0006 §6).
+# Generated from the same .proto as the Rust types, so a field cannot exist in one and not the
+# other. Imports are included by default — the request messages reference song.proto, and a
+# schema without those types would describe half a tool.
+mkdir -p gen
+buf build --as-file-descriptor-set -o gen/descriptor.binpb
+
 if [[ "${1:-}" == "--check" ]]; then
   if [[ "$before" != "$(snapshot)" ]]; then
     echo "generated code or proto formatting is out of date — commit the result of proto/codegen.sh:" >&2

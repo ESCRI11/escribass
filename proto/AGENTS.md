@@ -13,6 +13,7 @@ project file directly (§5), so what is not here cannot be done to a song.
 | `buf.gen.yaml` | One plugin pair: `protoc-gen-prost` and `protoc-gen-prost-serde`. Rust only. | hand |
 | `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
+| `gen/descriptor.binpb` | The compiled `FileDescriptorSet`, imports included. `core` turns it into a JSON Schema per tool, so the schemas and the Rust types come from one artefact. Exposed as `escribass_proto::DESCRIPTOR`. | generated |
 | `src/lib.rs` | The hand-written module tree that `include!`s the generated file. Nothing else. | hand |
 | `tests/contract.rs` | The three things about this file a change could break silently. | hand |
 
@@ -58,7 +59,8 @@ parse the patch from its canonical text.
 ## Adding things
 
 - **An RPC:** add the request message and the `rpc` line, keeping `ToolResult` as the return
-  unless it is a read. `./proto/codegen.sh`. Update the count in
+  unless it is a read. **Give it a leading comment** — that comment is the tool's description
+  over MCP, and a test fails if any tool has none. `./proto/codegen.sh`. Update the count in
   `tests/contract.rs::every_mutating_rpc_returns_the_shared_result`. Commit `gen/` with the
   `.proto`.
 - **A field on an existing request:** additive, so `buf breaking` is satisfied. Never renumber.
