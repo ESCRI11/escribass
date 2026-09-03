@@ -147,6 +147,7 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
 
 - Project directory, named `<name>.escri/` and presented by the OS as a single item where the platform supports package bundles: `song.json` (canonical model), `patches/` (append-only DAG of patch entries), `refs.json` (branch pointers and `HEAD`), `assets/` (content-addressed samples, compiled plugins, models), `lock.json` (pinned versions of every toolchain, plugin, and model; the platform baseline is in §17 and `lock.baseline.json`).
 - Import/export: **DAWproject** (lossless for layer 2 + plugin references), MIDI (layer 2 notes), WAV/stems.
+- `song.json` is a **derived cache** of `patches/`: the log is authoritative, and opening a project replays it and reports any mismatch rather than silently preferring either side (ADR 0004). The snapshot is kept because §2.6 requires the project be readable, diffable text.
 - Assets referenced by hash; missing assets are reported by the validator, never silently substituted.
 
 ## 11. Determinism checklist [MUST]
@@ -210,6 +211,7 @@ not in its scope and needs no ADR.
 | Project file extension | `.escri` on the project directory; contents stay `.json` | Bundle gives file association and identity; standard extensions inside keep §2.6 diffability and editor/LLM legibility | 2026-09-02 |
 | Tick integer width | `int32` (960 PPQ, ~559k bars) | proto3 JSON encodes 64-bit ints as strings, which would break §2.6 readable/diffable text (ADR 0002) | 2026-09-02 |
 | Canonical JSON form | snake_case, defaults emitted, map keys sorted, 2-space | Always-present fields make RFC 6902 `replace`/`test` well-defined (ADR 0002) | 2026-09-02 |
+| `song.json` authority | Derived cache; the patch log is authoritative on disk | A commit touches three files and only each is atomic; without an answer a crash leaves them silently diverged (ADR 0004) | 2026-09-03 |
 | Patch op representation | Canonical JSON text on disk; `bytes` on the wire | Modelling RFC 6902 values in protobuf made the patch log nondeterministic and produced documents core could not re-read (ADR 0002 §11) | 2026-09-02 |
 | Tempo/time-signature events | id-keyed maps, like every other collection | An array index is not a stable patch path under concurrent branch inserts (ADR 0001 §3, corrected) | 2026-09-02 |
 | Entity `version` on merge | Maintained by core, never in a tool op; resolved as max+1 | Otherwise every merge conflicts by construction on `/…/version` (ADR 0001 §4) | 2026-09-02 |
