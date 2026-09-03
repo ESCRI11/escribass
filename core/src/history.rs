@@ -427,6 +427,47 @@ impl History {
         Ok(order)
     }
 
+    /// Every entry `id` reaches, including itself.
+    pub fn ancestors(&self, id: &str) -> Result<BTreeSet<String>, HistoryError> {
+        Ok(self.ancestry(id)?.into_iter().map(|e| e.id.clone()).collect())
+    }
+
+    /// The entry two branches last had in common — a merge's base (ADR 0001 §4).
+    ///
+    /// A DAG can have several common ancestors; the one that matters is the latest, meaning the
+    /// one no other common ancestor descends from. When two are equally latest there is no
+    /// single base, and picking one would silently choose which of two histories to treat as
+    /// the truth. That is reported instead: `merge_base_ambiguous` needs a criss-cross merge to
+    /// reach, which M0.3 has no way to create, and a wrong answer here would be invisible.
+    pub fn merge_base(&self, ours: &str, theirs: &str) -> Result<String, HistoryError> {
+        let mine = self.ancestors(ours)?;
+        let yours = self.ancestors(theirs)?;
+        let common: BTreeSet<&String> = mine.intersection(&yours).collect();
+        if common.is_empty() {
+            return Err(err(ours, "merge_unrelated", "the two branches share no history"));
+        }
+
+        let mut latest: Vec<String> = Vec::new();
+        for candidate in &common {
+            let descended_from = common.iter().any(|other| {
+                other != candidate
+                    && self.ancestors(other).is_ok_and(|a| a.contains(candidate.as_str()))
+            });
+            if !descended_from {
+                latest.push((*candidate).clone());
+            }
+        }
+
+        match latest.len() {
+            1 => Ok(latest.remove(0)),
+            _ => Err(err(
+                ours,
+                "merge_base_ambiguous",
+                format!("{} equally recent common ancestors; there is no single base", latest.len()),
+            )),
+        }
+    }
+
     /// Rebuilds the document at a node by replaying the log (ADR 0004).
     ///
     /// Replay starts from a default `Song`, never from `{}`. The canonical form emits every
