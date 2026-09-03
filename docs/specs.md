@@ -96,8 +96,10 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
   - `define_generator`, `compile_generator`, `define_instrument_source`, `compile_instrument`
   - `render_preview`, `render_export`
   - `create_branch`, `switch_branch`, `delete_branch`, `merge_branch`
-- Every tool supports `dry_run=true` returning `{ valid, errors[], patch, summary }` without applying.
-- Every tool call is validated against §4.4 before apply. Invalid calls return structured errors the LLM can act on.
+- Every tool supports `dry_run=true` returning `{ valid, errors[], patch, summary, entry_id }` without applying. `dry_run` is the first half of the apply path, never a second implementation of it (ADR 0006 §3).
+- Every tool call is validated against §4.4 before apply. Invalid calls return structured errors the LLM can act on. An invalid call is a result, not a transport failure — §6's retry loop has to be able to see it (ADR 0006 §2).
+- **Undo appends an inverse entry; it never rewinds a ref.** Rewinding would decrement entity `version`, and §4.3's optimistic concurrency needs it monotonic (ADR 0005 §4).
+- Entity `version` is bumped by core inside the commit pipeline, before the recorded patch is derived, so the bump is *in* the entry (ADR 0005 §1).
 - Agents never read or write the project file directly. Use the tool API.
 
 ## 6. AI orchestrator (`ai` process)
@@ -218,6 +220,11 @@ not in its scope and needs no ADR.
 | Entity `version` on merge | Maintained by core, never in a tool op; resolved as max+1 | Otherwise every merge conflicts by construction on `/…/version` (ADR 0001 §4) | 2026-09-02 |
 | Milestone scope | §16 authoritative; eight unplaced items placed; neural runtime in v1 at M4 | Unplaced scope is invisible scope, and §16 had fallen behind decisions binding elsewhere (ADR 0003) | 2026-09-02 |
 | `FormRule` | Deferred to M4 | Least-specified entity in §4 and nothing consumes it before the generative compiler; additive to add (ADR 0002) | 2026-09-02 |
+| Entity `version` bumping | In the commit pipeline, between applying ops and re-deserialising | A bump taken after the patch is derived lives only in `song.json`, so every replay is one version behind the file beside it (ADR 0005 §1, §2) | 2026-09-03 |
+| Undo mechanism | Append an inverse entry; never rewind a ref | A rewind decrements `version`, so §4.3's concurrency check can see one number with two different contents (ADR 0005 §4) | 2026-09-03 |
+| Tool API wire shape | One RPC per tool, one shared `ToolResult`, `Violation` as the only wire error | Per-tool response messages are copies of one contract, free to drift; and an invalid call must stay inside §6's retry loop rather than becoming a transport failure (ADR 0006 §1, §2) | 2026-09-03 |
+| MCP server | `rmcp` SDK; tool `inputSchema` generated from the protobuf descriptor | A hand-written schema is a second description of the model, and it drifts silently — the only symptom is that the model never learns a new field exists (ADR 0006 §6) | 2026-09-03 |
+| Project identity | One project per process, named at launch; no `open_project` tool | An MCP stdio process is not a session, and two writers on one `.escri` break ADR 0004's write ordering (ADR 0006 §5) | 2026-09-03 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process — must be resolved before M4, ADR 0003 §7); minimum supported OS versions; symbolic model choice for v1 melody/drum generation; whether §6's analysis features and symbolic generation are v1 scope at all (ADR 0003, Still unplaced).
 
@@ -260,7 +267,7 @@ Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags
 
 Rules:
 - `lock.baseline.json` is the only place these values live in code; CI fails if a submodule or vendored dependency drifts from it.
-- **Registry packages** (crates.io, npm, PyPI) have no commit to pin. They are recorded by exact version, and their integrity hashes live in `Cargo.lock`, `package-lock.json` and `uv.lock`, which are committed. This applies only to build-time tooling that does not ship in the product; anything vendored or linked is still pinned by commit.
+- **Registry packages** (crates.io, npm, PyPI) have no commit to pin. They are recorded by exact version, and their integrity hashes live in `Cargo.lock`, `package-lock.json` and `uv.lock`, which are committed. This covers build-time tooling and **Rust dependencies that ship in the product**: a crates.io release is immutable and its hash is verified on every build, which is at least as strong as a git commit. Anything vendored or linked from source — C++ libraries, plugins, engines — is still pinned by commit (ADR 0006).
 - Golden-render fixtures are regenerated **only** in the same PR that changes a pin, and the diff must be explained in the ADR.
 - JUCE is never upgraded independently of Tracktion Engine.
 

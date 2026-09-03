@@ -156,6 +156,35 @@
       }
     }
   },
+  "tool_api": {
+    "_note": "The M0.3 tool API: the SongTools gRPC service and the MCP server (ADR 0006). Unlike `schema`, these ship in the built product; \u00a717's registry-package rule covers them, with integrity hashes in Cargo.lock.",
+    "resolved_at": "2026-09-03",
+    "rust": {
+      "tonic": {
+        "version": "0.14.6"
+      },
+      "tonic_prost": {
+        "version": "0.14.6",
+        "note": "requires prost ^0.14 and tonic ^0.14.6; tonic 0.13 pairs with prost 0.13 and would put a second prost::Message in the tree, which the generated Song would not satisfy"
+      },
+      "tokio": {
+        "version": "1",
+        "features": ["rt-multi-thread", "macros"]
+      },
+      "prost_types": {
+        "version": "0.14.4",
+        "note": "direct dependency of the proto crate for FileDescriptorSet decoding; already present transitively via pbjson-types"
+      },
+      "rmcp": {
+        "version": "3.2.0",
+        "note": "official MCP Rust SDK (ADR 0006 \u00a76)"
+      },
+      "protoc_gen_tonic": {
+        "version": "0.5.0",
+        "note": "codegen plugin, cargo install; requires protoc-gen-prost ^0.5.0, which is the pinned one. Adding it changes the plugin set cached by .github/workflows/checks.yml, so the cache key must change with it"
+      }
+    }
+  },
   "ci": {
     "_note": "GitHub Actions used by .github/workflows/. Build-time only; pinned by major version per the registry-package rule in docs/specs.md \u00a717.",
     "actions_checkout": {

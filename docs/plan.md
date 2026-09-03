@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-02. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-03. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -14,18 +14,20 @@ stale.
 | M0.1 | Two determinism defects found by review, fixed | done | `b402dc0` |
 | M0.1 | `schema/` restructured; AGENTS.md files | done | `5fe160c` |
 | — | CI running the four checks; §13 scoped to source directories | done | `89aead1` |
-| M0.2 | `core/`: canonical writer, non-finite rejection | done | `HEAD` |
-| M0.2 | `core/`: validator | done | `HEAD` |
-| M0.2 | `core/`: injectable id source and clock | done | `HEAD` |
-| M0.2 | `core/`: RFC 6902 apply, diff | in review | PR #5, #6 |
-| M0.2 | `core/`: on-disk history shape, the patch DAG | in review | PR #7, #8 |
-| M0.2 | `core/`: `.escri` project store | in review | PR #10 |
-| M0.2 | `core/`: `create` and `commit` | in review | PR #11 |
-| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | **next** | — |
-| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | not started | — |
+| M0.2 | `core/`: canonical writer, non-finite rejection | done | `1487a55` |
+| M0.2 | `core/`: validator | done | `709ec5b` |
+| M0.2 | `core/`: injectable id source and clock | done | `aa789b8` |
+| M0.2 | ADR 0004: `song.json` is a derived cache | done | `2840e81` |
+| M0.2 | `core/`: RFC 6902 apply, diff | done | `e51a3d9`, `087fdff` |
+| M0.2 | `core/`: on-disk history shape, the patch DAG | done | `b079d5f`, `282d0b9` |
+| M0.2 | `core/`: `.escri` project store | done | `d90c8bf` |
+| M0.2 | `core/`: `create` and `commit` | done | `d18bb90` |
+| M0.2 | Four defects found reviewing the stack, fixed at their own PRs | done | `1d97f99`, `0eb6b99`, `4e863ed`, `92d6c74` |
+| M0.3 | ADR 0005 (`version` + undo), ADR 0006 (wire shape), dependency pins | **in progress** | — |
+| M0.3 | `proto/SongTools` gRPC with `dry_run`, and the same tools over MCP | next | — |
 | M0.4 | Schema fixtures and determinism suite | not started | — |
 
-Nothing is pushed. C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
+C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
 
 ## M0.2 — `core/`
 
@@ -48,13 +50,46 @@ Scope is fixed by decisions already made, not open for redesign:
 - ~~**Patch log as a DAG**~~ and ~~**project store**~~ — done. Six PRs: apply, diff, the
   on-disk shape, the DAG, the store, and `create`/`commit`.
 
+**Closed 2026-09-03.** A review of the six-PR stack found four defects; each was fixed on the
+PR that introduced it rather than at the top, so no PR merged a known one. The one that
+mattered: `commit` recorded the caller's ops but stored the round-tripped song, so a legal
+alternative spelling (`"64"` for an `int32`) left the log replaying to a document `song.json`
+did not match, and the next `open` refused a project that had committed cleanly. Entries now
+carry `diff(before, after)`, re-derived from the same `Song` the file is written from.
+
 ## M0.3 — tool API
 
 `proto/SongTools` (a new top-level directory, already allowed by §13; add `- path: proto` to
 `buf.yaml`). Every tool takes `dry_run`. Beyond §5's list: `create_branch`, `switch_branch`,
 `delete_branch`, `merge_branch` (ADR 0001 §4 — auto-merge disjoint paths, structured error on
-conflict). The same tools are exposed over MCP in the same step; §18.2 calls that a hard
-requirement, not a nice-to-have.
+conflict), and `apply_patch`, which M0.4 needs in order to drive core through the tool API at
+all (`CLAUDE.md` #2). The same tools are exposed over MCP in the same step; §18.2 calls that a
+hard requirement, not a nice-to-have.
+
+Shape fixed by ADR 0005 (the bump sits between apply and re-deserialisation; undo appends an
+inverse entry) and ADR 0006 (one shared `ToolResult`, `Violation` as the only wire error,
+`dry_run` as the pure first half of the apply path, one project per process). Ten PRs:
+
+| # | Branch | Adds |
+|---|---|---|
+| 1 | `m0.3-adrs` | ADR 0005, ADR 0006, dependency pins, §5/§15/§17 rows. No code |
+| 2 | `m0.3-proto` | `proto/song_tools.proto`, the buf module, prost codegen |
+| 3 | `m0.3-version-bump` | `bump_versions`; `commit` split into pure `prepare` and `record` |
+| 4 | `m0.3-session` | `Session`, `dry_run`, `apply_patch`, `get_song`, `get_song_at`, `get_history` |
+| 5 | `m0.3-mcp` | `rmcp` server binary; `inputSchema` from the protobuf descriptor |
+| 6 | `m0.3-tools-devices` | `add_track`, `set_track_instrument`, `add_effect`, `set_param` |
+| 7 | `m0.3-tools-clips` | `add_clip`, `set_notes`, `transpose`, `quantize`, `add_automation`, `set_tempo`, sections |
+| 8 | `m0.3-branches` | `create_branch`, `switch_branch`, `delete_branch` |
+| 9 | `m0.3-merge` | LCA, three-way by path, conflicts as `errors[]` |
+| 10 | `m0.3-grpc` | `tonic` service impl and the `escribass-grpc` binary |
+
+Out of M0.3, per ADR 0003: `set_form` (needs `FormRule`, M4), the four `compile_*`/`define_*`
+tools (M4), `render_preview`/`render_export` (M1), interactive conflict resolution (M2), and
+TypeScript/Python codegen for `proto/` (M2, M3 — nothing consumes it before then).
+
+Tool semantics not pinned by §5, decided here: `set_notes` replaces a clip's whole note set;
+`transpose` refuses an out-of-range result rather than clamping it; `quantize` snaps
+`start_tick` with integer arithmetic and a fixed tie rule.
 
 ## M0.4 — determinism suite
 
@@ -75,23 +110,24 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler | M4 | ADR 0002 §7 |
 | `Instrument.state` as a content hash instead of inline `bytes` | Plugin states are large base64 in a file §2.6 wants diffable — but adding a hash field and deprecating `state` is additive, not breaking | before M1 renders a plugin | review, 2026-09-02 |
 | `ParamRef` reaching track mix params (gain, pan, mute) | The commonest automation in any DAW is not addressable today; additive to fix | M2, when the mixer exists | review, 2026-09-02 |
-| Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document | M0.3, with merge | review, 2026-09-02 |
+| Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document. Deferred again at M0.3: the merge pipeline makes that failure loud (the validator refuses it) rather than silent, and closing it properly is a `song.proto` change with its own ADR | M2, with the mixer | review, 2026-09-03 |
 | Interactive merge conflict resolution | Designing the API with no UI and no real conflicts | M2 | ADR 0001 §4 |
 | Garbage collection of orphaned patch entries | Entries are small and inert | only if a real project makes it a problem | ADR 0001 Deferred |
 | `SourceRef.export_hash`, `Generator` compiled-source hash | Needed for "export pending" and "compiled · stale"; nothing produces either yet | M4 | ADR 0002 Consequences |
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
-| Entity `version` bumping | Core maintains it (ADR 0001 §4), but the bump must be recorded **in the entry's ops** or replay diverges from the live document. No tool drives it until M0.3, so designing it now means designing against no caller | M0.3 | ADR 0001 §4 |
-| Undo/redo policy | §5 calls the log the undo history and ADR 0001 names the mechanism, but nothing chooses between rewinding the ref and appending an inverse entry. ADR-shaped when taken | M0.3 | §5; ADR 0001 |
+| Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
 
 ## Known gaps
 
-- **CI has never run.** `.github/workflows/checks.yml` exists as of `89aead1` and every
-  command in it is verified from a clean clone, but nothing is pushed, so GitHub has not
-  executed it once. `setup-node` resolving `"25"`, the cache action and the `GITHUB_BASE_REF`
-  substitution are unproven until the first push.
+- **`Project::write` rewrites every entry file on every commit** — O(history) I/O per call.
+  Invisible while histories are short; the tool API is what will make it visible.
+- **No lock file on an `.escri` directory.** ADR 0001 §2 assumes a single writer and ADR 0004's
+  commit is three renames; two processes on one project would race them. M0.3 makes it
+  structural (one project per process, ADR 0006 §5) rather than enforced. Revisit at M2, when
+  `app` supervises the processes.
 
 ## Open — not ours to decide
 
