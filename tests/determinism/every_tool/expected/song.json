@@ -1,0 +1,210 @@
+{
+  "id": "01M1FPMP000000000000000001",
+  "provenance": {
+    "author": "AUTHOR_HUMAN",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "version": 15,
+  "schema_version": 1,
+  "tempo_map": {
+    "events": {
+      "01M1FPMP000000000000000003": {
+        "id": "01M1FPMP000000000000000003",
+        "tick": 0,
+        "bpm": 132.5
+      },
+      "01M1FPMP00000000000000000T": {
+        "id": "01M1FPMP00000000000000000T",
+        "tick": 3840,
+        "bpm": 90.0
+      }
+    }
+  },
+  "time_signature_map": {
+    "events": {
+      "01M1FPMP000000000000000004": {
+        "id": "01M1FPMP000000000000000004",
+        "tick": 0,
+        "numerator": 4,
+        "denominator": 4
+      }
+    }
+  },
+  "sections": {
+    "01M1FPMP00000000000000000W": {
+      "id": "01M1FPMP00000000000000000W",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 2,
+      "name": "Verse",
+      "start_tick": 960,
+      "end_tick": 4800
+    }
+  },
+  "markers": {},
+  "tracks": {
+    "01M1FPMP000000000000000002": {
+      "id": "01M1FPMP000000000000000002",
+      "provenance": {
+        "author": "AUTHOR_HUMAN",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Master",
+      "kind": "TRACK_KIND_MASTER",
+      "index": 0,
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    },
+    "01M1FPMP000000000000000006": {
+      "id": "01M1FPMP000000000000000006",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 5,
+      "name": "Bass",
+      "kind": "TRACK_KIND_INSTRUMENT",
+      "index": 1,
+      "instrument": {
+        "id": "01M1FPMP000000000000000009",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "version": 2,
+        "ref": {
+          "plugin": {
+            "plugin_id": "com.surge-synth.surge-xt",
+            "version": "1.3.4"
+          }
+        },
+        "state": "",
+        "params": {
+          "drive": 0.62
+        }
+      },
+      "fx_chain": {
+        "01M1FPMP00000000000000000B": {
+          "id": "01M1FPMP00000000000000000B",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "version": 1,
+          "ref": {
+            "faust": {
+              "source_hash": "3c1de4f98b0000000000000000000000"
+            }
+          },
+          "state": "",
+          "params": {},
+          "index": 0
+        }
+      },
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": -6.5,
+        "pan": -0.25,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    }
+  },
+  "clips": {
+    "01M1FPMP00000000000000000E": {
+      "id": "01M1FPMP00000000000000000E",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 4,
+      "track_id": "01M1FPMP000000000000000006",
+      "start_tick": 0,
+      "length_ticks": 3840,
+      "note_clip": {
+        "notes": {
+          "01M1FPMP00000000000000000G": {
+            "id": "01M1FPMP00000000000000000G",
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "version": 2,
+            "pitch": 48,
+            "microtonal_cents": 0.0,
+            "start_tick": 0,
+            "length_ticks": 240,
+            "velocity": 100,
+            "expression": {}
+          },
+          "01M1FPMP00000000000000000H": {
+            "id": "01M1FPMP00000000000000000H",
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "version": 3,
+            "pitch": 52,
+            "microtonal_cents": 0.0,
+            "start_tick": 960,
+            "length_ticks": 240,
+            "velocity": 90,
+            "expression": {}
+          }
+        }
+      }
+    }
+  },
+  "automation": {
+    "01M1FPMP00000000000000000N": {
+      "id": "01M1FPMP00000000000000000N",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "target": {
+        "device_id": "01M1FPMP000000000000000009",
+        "param": "drive"
+      },
+      "points": {
+        "01M1FPMP00000000000000000P": {
+          "id": "01M1FPMP00000000000000000P",
+          "tick": 0,
+          "value": 0.2,
+          "curve": "CURVE_LINEAR"
+        },
+        "01M1FPMP00000000000000000Q": {
+          "id": "01M1FPMP00000000000000000Q",
+          "tick": 1920,
+          "value": 0.9,
+          "curve": "CURVE_HOLD"
+        }
+      }
+    }
+  },
+  "generators": {},
+  "render_target": {
+    "kind": "RENDER_KIND_MASTER",
+    "sample_rate": 48000,
+    "bit_depth": 24,
+    "dither": false
+  }
+}

@@ -238,10 +238,16 @@ fn speak(flags: &[&str], project: &Path, requests: &[Value]) -> Vec<Value> {
 // Comparing
 // ---------------------------------------------------------------------------
 
-/// Every file in a project, by path relative to its root.
+/// Everything one run produced, as named bytes: the project's files, plus the answers.
 ///
+/// One shape for both comparisons. Two runs against each other and a run against a committed
+/// golden are the same question asked of different sources, and giving them one representation
+/// means one report, one diff, and no chance of the two drifting into checking different
+/// things.
+struct Snapshot(BTreeMap<String, Vec<u8>>);
+
 /// Files only: `assets/` is created empty and git cannot store an empty directory, so its
-/// absence would be a difference between a fresh run and a checkout.
+/// absence would read as a difference between a fresh run and a checkout.
 fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut found = BTreeMap::new();
     let mut pending = vec![root.to_path_buf()];
@@ -266,40 +272,62 @@ fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
     found
 }
 
-/// The differences between two runs, as something a person can act on.
+impl Snapshot {
+    fn of(run: &Run) -> Self {
+        let mut named = files(&run.directory.0);
+        named.insert("responses.json".to_string(), pretty(&Value::Array(run.results.clone())));
+        Snapshot(named)
+    }
+
+    fn read(name: &str) -> Self {
+        let at = PathBuf::from(SCRIPTS).join(name).join("expected");
+        assert!(
+            at.exists(),
+            "`{name}` has no golden at {}.\n\
+             Write one with `UPDATE_FIXTURES=1 cargo test`, then read the diff before committing.",
+            at.display()
+        );
+        Snapshot(files(&at))
+    }
+
+    fn write(&self, name: &str) {
+        let at = PathBuf::from(SCRIPTS).join(name).join("expected");
+        let _ = std::fs::remove_dir_all(&at);
+        for (relative, bytes) in &self.0 {
+            let path = at.join(relative);
+            std::fs::create_dir_all(path.parent().expect("a file has a parent"))
+                .expect("the golden directory is writable");
+            std::fs::write(&path, bytes).expect("the golden is writable");
+        }
+    }
+}
+
+fn pretty(value: &Value) -> Vec<u8> {
+    let mut text = serde_json::to_string_pretty(value).expect("a Value serialises");
+    text.push('\n');
+    text.into_bytes()
+}
+
+fn updating() -> bool {
+    std::env::var("UPDATE_FIXTURES").is_ok()
+}
+
+/// The differences between two snapshots, as something a person can act on.
 ///
 /// A determinism failure that says only `left != right` over two 40 KB documents is a test
 /// nobody can use. This reports RFC 6902 operations between the parsed documents, so the
 /// output names paths.
-fn differences(left: &Run, right: &Run) -> Vec<String> {
+fn differences(left: &Snapshot, right: &Snapshot) -> Vec<String> {
     let mut report = Vec::new();
-
-    let (ours, theirs) = (files(&left.directory.0), files(&right.directory.0));
-    for name in ours.keys().chain(theirs.keys()).collect::<std::collections::BTreeSet<_>>() {
-        match (ours.get(name), theirs.get(name)) {
+    let names: std::collections::BTreeSet<&String> = left.0.keys().chain(right.0.keys()).collect();
+    for name in names {
+        match (left.0.get(name), right.0.get(name)) {
             (Some(a), Some(b)) if a == b => {}
             (Some(a), Some(b)) => report.push(format!("  {name}\n{}", ops(a, b))),
-            (Some(_), None) => report.push(format!("  {name}\n      only in the first run")),
-            (None, Some(_)) => report.push(format!("  {name}\n      only in the second run")),
+            (Some(_), None) => report.push(format!("  {name}\n      only on the left")),
+            (None, Some(_)) => report.push(format!("  {name}\n      only on the right")),
             (None, None) => unreachable!("the name came from one of them"),
         }
-    }
-
-    for (position, (a, b)) in left.results.iter().zip(&right.results).enumerate() {
-        if a != b {
-            report.push(format!(
-                "  response to step {}\n{}",
-                position + 1,
-                ops(&serde_json::to_vec(a).unwrap(), &serde_json::to_vec(b).unwrap())
-            ));
-        }
-    }
-    if left.results.len() != right.results.len() {
-        report.push(format!(
-            "  step count: {} and {}",
-            left.results.len(),
-            right.results.len()
-        ));
     }
     report
 }
@@ -347,9 +375,36 @@ fn summarise(op: &escribass_core::Op, before: &Value, after: &Value) -> String {
     format!("{} -> {}", shown(before.pointer(op.path())), shown(after.pointer(op.path())))
 }
 
-fn assert_same(claim: &str, left: &Run, right: &Run) {
+fn assert_same(claim: &str, left: &Snapshot, right: &Snapshot) {
     let report = differences(left, right);
     assert!(report.is_empty(), "{claim}\n{}", report.join("\n"));
+}
+
+/// Compares a run with what was committed, or writes the golden when asked to.
+///
+/// This is the half that catches **drift**. Two runs in one job agree even when a dependency
+/// has changed a serialisation detail underneath them, because both produce the same wrong
+/// bytes; only something committed earlier disagrees.
+///
+/// `UPDATE_FIXTURES=1` blesses whatever ran, including a deterministically wrong output. The
+/// guard is the rule in `tests/AGENTS.md`: a golden changes only in the pull request that
+/// changes the canonical form or a tool's semantics, and its diff is reviewed there — §17's
+/// rule for golden renders, applied here.
+fn assert_matches_golden(name: &str, run: &Run) {
+    let produced = Snapshot::of(run);
+    if updating() {
+        produced.write(name);
+        return;
+    }
+    let report = differences(&Snapshot::read(name), &produced);
+    assert!(
+        report.is_empty(),
+        "`{name}` no longer produces what was committed.\n\
+         Left is the golden, right is this run.\n{}\n\n\
+         If the change is intended, `UPDATE_FIXTURES=1 cargo test` rewrites it — and the diff \
+         belongs in the pull request that changes the canonical form or a tool's semantics.",
+        report.join("\n")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +442,11 @@ fn every_tool_twice_is_the_same_bytes() {
     // script covering every tool this milestone implements.
     let first = run("every_tool", AT);
     let second = run("every_tool", AT);
-    assert_same("the same script produced different projects", &first, &second);
+    assert_same(
+        "the same script produced different projects",
+        &Snapshot::of(&first),
+        &Snapshot::of(&second),
+    );
 }
 
 #[test]
@@ -401,7 +460,7 @@ fn the_comparison_notices_a_clock() {
     let fixed = run("every_tool", AT);
     let later = run("every_tool", "1788307260000");
 
-    let report = differences(&fixed, &later);
+    let report = differences(&Snapshot::of(&fixed), &Snapshot::of(&later));
     assert!(!report.is_empty(), "a minute of clock made no difference; the comparison is blind");
 
     for line in report.join("\n").lines().filter(|line| line.trim_start().starts_with('/')) {
@@ -446,4 +505,24 @@ fn a_project_reopens_in_a_fresh_process() {
     let on_disk = std::fs::read_to_string(session.directory.0.join("song.json"))
         .expect("the project has a song");
     assert_eq!(text, on_disk, "a fresh process read a different song than the file holds");
+}
+
+#[test]
+fn every_tool_still_produces_what_was_committed() {
+    // The half two runs cannot prove. A dependency that changes how a float is written, or
+    // feature unification that flips `serde_json::Map` to insertion order, produces the same
+    // wrong bytes in both runs of the test above — and only something committed earlier
+    // disagrees.
+    assert_matches_golden("every_tool", &run("every_tool", AT));
+}
+
+#[test]
+fn json_objects_are_still_written_in_key_order() {
+    // Naming the hazard rather than letting the golden fail mysteriously. `serde_json::Map` is
+    // a `BTreeMap` unless the `preserve_order` feature is on anywhere in the tree, and feature
+    // unification means any crate can turn it on for everyone: `rmcp` already depends on
+    // `indexmap` directly. If that happens, `diff` op order changes, `bump_versions` walks in a
+    // different order, and every `add` value in the log changes key order — a workspace-wide
+    // change to the canonical form with no local cause to find.
+    assert_eq!(json!({"b": 1, "a": 2}).to_string(), r#"{"a":2,"b":1}"#);
 }

@@ -1,0 +1,28 @@
+{
+  "id": "01M1FPMP00000000000000000V",
+  "parents": [
+    "01M1FPMP00000000000000000S"
+  ],
+  "tool": "set_tempo",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/tempo_map/events/01M1FPMP00000000000000000T",
+      "value": {
+        "bpm": 90.0,
+        "id": "01M1FPMP00000000000000000T",
+        "tick": 3840
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 12
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}
