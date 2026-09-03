@@ -7,6 +7,7 @@
 
 use escribass_core::{tool_names, tool_schemas, ToolSchema};
 use escribass_proto::DESCRIPTOR;
+use prost::Message;
 use serde_json::{json, Value};
 
 fn tools() -> Vec<ToolSchema> {
@@ -125,14 +126,54 @@ fn a_repeated_field_is_an_array() {
 }
 
 #[test]
-fn a_timestamp_is_a_date_time_string_not_its_fields() {
-    // Structurally expanding `seconds` and `nanos` would be wrong as well as useless: proto3
-    // JSON writes a Timestamp as RFC 3339 text (ADR 0002 §4).
-    let created = property(&tool("set_notes"), "notes")["additionalProperties"]["properties"]
-        ["provenance"]["properties"]["created_at"]
-        .clone();
-    assert_eq!(created["type"], json!("string"));
-    assert_eq!(created["format"], json!("date-time"));
+fn an_embedded_entity_does_not_ask_for_the_fields_core_overwrites() {
+    // ADR 0006 §4: core sets `id`, `provenance` and `version` on the way in, and "a caller
+    // cannot set them and is not asked to". Left in the schema, a model fills them in on every
+    // call — inventing ids, writing provenance, choosing versions — and every one is
+    // discarded. An advertised argument that is ignored is worse than an absent one.
+    let note = property(&tool("set_notes"), "notes")["additionalProperties"].clone();
+    let properties = note["properties"].as_object().expect("a note is an object");
+
+    for owned in ["id", "provenance", "version"] {
+        assert!(properties.get(owned).is_none(), "`{owned}` is still advertised: {properties:?}");
+    }
+    // The musical fields a caller *does* choose are still there.
+    assert_eq!(properties["pitch"]["type"], json!("integer"));
+    assert_eq!(properties["start_tick"]["type"], json!("integer"));
+}
+
+#[test]
+fn a_request_field_that_is_not_overwritten_has_a_schema_property() {
+    // ADR 0006 §6 claims this test exists; it did not. Without it a field added to a request
+    // reaches the wire and never reaches a model, which is the drift the whole module is for.
+    let set = escribass_proto::prost_types::FileDescriptorSet::decode(DESCRIPTOR)
+        .expect("the descriptor decodes");
+    let requests: std::collections::BTreeMap<&str, &escribass_proto::prost_types::DescriptorProto> =
+        set.file
+            .iter()
+            .flat_map(|f| f.message_type.iter())
+            .map(|m| (m.name(), m))
+            .collect();
+
+    for tool in tools() {
+        let name = format!(
+            "{}Request",
+            tool.name.split('_').map(|part| {
+                let mut c = part.chars();
+                c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+            }).collect::<String>()
+        );
+        let Some(message) = requests.get(name.as_str()) else { panic!("no message {name}") };
+        let properties = tool.input_schema["properties"].as_object().expect("an object");
+        for field in &message.field {
+            assert!(
+                properties.contains_key(field.name()),
+                "`{}` has no schema property for `{}`",
+                tool.name,
+                field.name()
+            );
+        }
+    }
 }
 
 #[test]

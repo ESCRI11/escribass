@@ -520,3 +520,40 @@ fn a_plugin_pin_is_not_auto_resolved_by_the_merge_rule() {
     assert_eq!(rules(&result), vec!["merge_conflict"]);
     assert!(result.errors[0].path.ends_with("/plugin/version"), "{}", result.errors[0].path);
 }
+
+#[test]
+fn a_merge_beats_a_branch_that_is_exactly_one_version_ahead() {
+    // `max(L, L+1) + 1` is `L + 2`. A rule that preferred the ordinary bump whenever the caller
+    // had already stated it returned `L + 1` — a number the other branch had handed out for
+    // different content, which is the repeat §4.3's concurrency check cannot survive.
+    let (_dir, mut session) = opened();
+    section(&mut session, "Verse");
+    let id = session.project().song().sections.keys().next().unwrap().clone();
+    let at = |s: &Session| s.project().song().sections[&id].version;
+    // Disjoint paths, so the merge itself resolves; only the numbers are the question.
+    let edit = |s: &mut Session, field: &str, value: serde_json::Value| {
+        let ops = serde_json::to_vec(&serde_json::json!([
+            {"op": "replace", "path": format!("/sections/{id}/{field}"), "value": value}
+        ]))
+        .unwrap();
+        let r = s
+            .apply_patch(&escribass_proto::tools::ApplyPatchRequest { patch: ops, dry_run: false })
+            .unwrap();
+        assert!(r.valid, "{:?}", r.errors);
+    };
+
+    branch(&mut session, "other");
+    edit(&mut session, "name", serde_json::json!("Chorus")); // main: one edit
+    let ours = at(&session);
+
+    switch(&mut session, "other");
+    edit(&mut session, "start_tick", serde_json::json!(480));
+    edit(&mut session, "start_tick", serde_json::json!(960)); // two edits: exactly one ahead
+    let theirs = at(&session);
+    assert_eq!(theirs, ours + 1, "the branches are adjacent, which is the case that broke");
+
+    switch(&mut session, "main");
+    let merged = merge(&mut session, "other", false);
+    assert!(merged.valid, "{:?}", merged.errors);
+    assert_eq!(at(&session), theirs + 1, "the merge repeated a number the other branch used");
+}

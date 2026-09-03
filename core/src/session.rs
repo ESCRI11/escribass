@@ -398,6 +398,12 @@ impl Session {
             Err(violations) => return Ok(refused(violations)),
         };
 
+        // A call that changes nothing records nothing. An entry with no operations is a claim
+        // that something happened, and `merge_branch` already answers this case that way.
+        if prepared.ops().is_empty() {
+            return Ok(described("no change".to_string()));
+        }
+
         // Built from `prepared` before anything is written, so a dry run and the commit that
         // follows it cannot describe different patches.
         let patch = ops_text(prepared.ops()).into_bytes();

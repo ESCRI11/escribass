@@ -231,8 +231,8 @@ impl Project {
         let mut patched = apply(&before, ops).map_err(|e| {
             vec![Violation { path: e.path, rule: e.rule, message: e.message }]
         })?;
-        let disputed = bump_versions(&before, &mut patched);
-        if guard_version && !disputed.is_empty() {
+        let disputed = bump_versions(&before, &mut patched, !guard_version);
+        if !disputed.is_empty() {
             return Err(disputed);
         }
 

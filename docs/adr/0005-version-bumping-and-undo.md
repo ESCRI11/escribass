@@ -99,6 +99,15 @@ where the caller ended up asking for a different one, that is reported as
 `version_not_writable`. It catches every route in, and it lets a previewed patch be applied
 unchanged, because a patch that states what core computes is disputing nothing.
 
+**The two modes are separate rules, not one rule with a shortcut.** An ordinary edit bumps by
+one and ignores whatever number arrived in the value; a merge resolves to `max(ours, theirs) +
+1` and disputes nothing, because those numbers are core's own arriving from the other branch.
+Written as a single rule that preferred the ordinary answer whenever the caller had already
+stated it, the two collapsed exactly when the other branch was one ahead: `max(L, L+1) + 1` is
+`L+2`, and the shortcut returned `L+1` — a number the other branch had already handed out for
+different content, which is the repeat §4.3's concurrency check cannot survive. Two short
+rules beat one clever one.
+
 Two exemptions fall out rather than being written. An entity that did not exist before has no
 number a client could be holding, so a version arriving with a new entity is accepted.  And an
 entity whose `id` changed in place is a *different* entity — `set_track_instrument` replaces
