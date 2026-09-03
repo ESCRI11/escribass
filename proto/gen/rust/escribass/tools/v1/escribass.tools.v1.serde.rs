@@ -626,6 +626,9 @@ impl serde::Serialize for AddTrackRequest {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.AddTrackRequest", len)?;
         if true {
             struct_ser.serialize_field("name", &self.name)?;
@@ -634,6 +637,9 @@ impl serde::Serialize for AddTrackRequest {
             let v = ::escribass_schema::song::TrackKind::try_from(self.kind)
                 .map_err(|_| serde::ser::Error::custom(format!("Invalid variant {}", self.kind)))?;
             struct_ser.serialize_field("kind", &v)?;
+        }
+        if let Some(v) = self.r#ref.as_ref() {
+            struct_ser.serialize_field("ref", v)?;
         }
         if true {
             struct_ser.serialize_field("dry_run", &self.dry_run)?;
@@ -650,6 +656,7 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
         const FIELDS: &[&str] = &[
             "name",
             "kind",
+            "ref",
             "dry_run",
             "dryRun",
         ];
@@ -658,6 +665,7 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
         enum GeneratedField {
             Name,
             Kind,
+            Ref,
             DryRun,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
@@ -682,6 +690,7 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
                         match value {
                             "name" => Ok(GeneratedField::Name),
                             "kind" => Ok(GeneratedField::Kind),
+                            "ref" => Ok(GeneratedField::Ref),
                             "dryRun" | "dry_run" => Ok(GeneratedField::DryRun),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
@@ -704,6 +713,7 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
             {
                 let mut name__ = None;
                 let mut kind__ = None;
+                let mut r#ref__ = None;
                 let mut dry_run__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
@@ -719,6 +729,12 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
                             }
                             kind__ = Some(map_.next_value::<::escribass_schema::song::TrackKind>()? as i32);
                         }
+                        GeneratedField::Ref => {
+                            if r#ref__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("ref"));
+                            }
+                            r#ref__ = map_.next_value()?;
+                        }
                         GeneratedField::DryRun => {
                             if dry_run__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("dryRun"));
@@ -730,6 +746,7 @@ impl<'de> serde::Deserialize<'de> for AddTrackRequest {
                 Ok(AddTrackRequest {
                     name: name__.unwrap_or_default(),
                     kind: kind__.unwrap_or_default(),
+                    r#ref: r#ref__,
                     dry_run: dry_run__.unwrap_or_default(),
                 })
             }
