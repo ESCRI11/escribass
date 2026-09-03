@@ -14,8 +14,11 @@ prost = "0.14"
 # The MCP server (§18.2, ADR 0006 §6). `server` brings the handler traits, `transport-io`
 # the stdio transport. `macros` is off: the `#[tool]` macro derives schemas from Rust types
 # with schemars, and ours come from the protobuf descriptor.
+# The gRPC surface (§5). `tonic-prost` is the codec the generated service uses.
+tonic = "0.14.6"
+tonic-prost = "0.14.6"
 rmcp = { version = "3.2.0", default-features = false, features = ["server", "transport-io"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "sync", "net", "time"] }
 # Already in the lock via escribass-schema and pinned in lock.baseline.json as
 # schema.rust.serde; declared here for the Op derive.
 serde = { version = "1", features = ["derive"] }
