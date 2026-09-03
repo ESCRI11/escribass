@@ -82,6 +82,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "escribass-proto"
+version = "0.1.0"
+dependencies = [
+ "escribass-schema",
+ "pbjson",
+ "pbjson-types",
+ "prost",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "escribass-schema"
 version = "0.1.0"
 dependencies = [

@@ -4,6 +4,23 @@
 version: v2
 modules:
   - path: schema
+  - path: proto
+    lint:
+      use:
+        - STANDARD
+      except:
+        # As above: §13 fixes this file at proto/song_tools.proto, not
+        # proto/escribass/tools/v1/.
+        - PACKAGE_DIRECTORY_MATCH
+        - DIRECTORY_SAME_PACKAGE
+        # §5 names the service `SongTools`, and ADR 0006 §1 gives every mutating RPC one
+        # shared `ToolResult`. STANDARD wants `SongToolsService`, a response message per RPC
+        # named after it, and no response shared between two RPCs. All three contradict the
+        # specified shape, and satisfying them means ~20 wrapper messages that exist only to
+        # quiet a linter.
+        - SERVICE_SUFFIX
+        - RPC_RESPONSE_STANDARD_NAME
+        - RPC_REQUEST_RESPONSE_UNIQUE
 lint:
   use:
     - STANDARD

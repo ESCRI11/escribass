@@ -1,0 +1,30 @@
+version: v2
+inputs:
+  - directory: .
+plugins:
+  # Rust only. The service's consumers are M2's Tauri app and M3's Python orchestrator, and
+  # neither exists; generating stubs for them today would pull grpclib into schema/'s
+  # environment to satisfy nothing (ADR 0006 §7). TypeScript at M2, Python at M3.
+  #
+  # No tonic plugin yet: this module is the wire contract, and the gRPC server that speaks it
+  # arrives with its dependencies in a later step.
+  - local: protoc-gen-prost
+    out: gen/rust
+    opt:
+      - btree_map=.
+      - compile_well_known_types
+      - extern_path=.google.protobuf=::pbjson_types
+      # Without these two the generated code would name song and history types by a relative
+      # `super::super::` path, assuming they live in this crate — and any attempt to fix that
+      # by generating them here would put a second `Song` in the tree (CLAUDE.md #1).
+      - extern_path=.escribass.song.v1=::escribass_schema::song
+      - extern_path=.escribass.history.v1=::escribass_schema::history
+  - local: protoc-gen-prost-serde
+    out: gen/rust
+    opt:
+      - btree_map=.
+      - emit_fields
+      - preserve_proto_field_names
+      - extern_path=.google.protobuf=::pbjson_types
+      - extern_path=.escribass.song.v1=::escribass_schema::song
+      - extern_path=.escribass.history.v1=::escribass_schema::history

@@ -42,9 +42,12 @@ jobs:
           npm ci
           uv sync --locked
 
-      # 1/4 — generated code matches the protos (schema/codegen.sh --check)
+      # 1/4 — generated code matches the protos. Two modules, two scripts: the model
+      # generates Rust, TypeScript and Python; the service generates Rust only (ADR 0006 §7).
       - name: Generated code is in sync
-        run: ./schema/codegen.sh --check
+        run: |
+          ./schema/codegen.sh --check
+          ./proto/codegen.sh --check
 
       # 2/4
       - name: Rust

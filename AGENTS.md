@@ -7,15 +7,17 @@
 | Path | Role | Written by |
 |---|---|---|
 | `schema/` | The song model: `*.proto`, codegen, generated types and per-language round-trip tests. See `schema/AGENTS.md`. | hand + `schema/codegen.sh` |
+| `proto/` | The tool API: `song_tools.proto`, the wire contract of §5. Generated Rust only. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
+| `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
 | `tests/` | Cross-language fixtures now; determinism suite at M0.4. See `tests/AGENTS.md`. | tests |
 | `docs/` | `specs.md` (architecture source of truth), `adr/`, `landscape-2026-09.md`, `wireframes.html`, `plan.md`, `roadmap.md`. See `docs/AGENTS.md` and `docs/adr/AGENTS.md`. | hand |
-| `Cargo.toml` | Cargo workspace. Members: `schema`; `core` joins at M0.2. | hand |
+| `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`. | hand |
 | `Cargo.lock` | Integrity hashes for crates.io packages (specs §17). Never edit. | cargo |
-| `buf.yaml` | buf workspace: module `schema` now, `proto` at M0.3; lint and breaking config. At the root, not in `schema/`, because buf v2 wants one `buf.yaml` at the common ancestor of every module. | hand |
+| `buf.yaml` | buf workspace: modules `schema` and `proto`; lint and breaking config. `proto` relaxes three STANDARD rules that contradict §5's service shape. At the root, not in `schema/`, because buf v2 wants one `buf.yaml` at the common ancestor of every module. | hand |
 | `rust-toolchain.toml` | Rust 1.98.0; mirrors `lock.baseline.json` `schema.rust.toolchain`. | hand |
 | `lock.baseline.json` | Every pinned dependency and toolchain (specs §17). | hand |
 
-Top-level directories are fixed by specs §13. `core/`, `proto/`, `app/`, `ai/`, `compilers/`, `engine/` do not exist yet; M0 creates only `core/` (M0.2) and `proto/` (M0.3). Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
+Top-level directories are fixed by specs §13. `app/`, `ai/`, `compilers/`, `engine/` do not exist yet; M0 created `core/` (M0.2) and `proto/` (M0.3). Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
 
 Never at the root: source code, generated code, project files, or any representation of song state other than `schema/song.proto` (CLAUDE.md #1).
 
@@ -25,6 +27,7 @@ Never at the root: source code, generated code, project files, or any representa
 |---|---|---|---|
 | Rust | 1.98.0 | `rustup` reads `rust-toolchain.toml` | `lock.baseline.json` → `schema.rust` |
 | `protoc-gen-prost`, `protoc-gen-prost-serde` | 0.5.0, 0.4.0 | `cargo install protoc-gen-prost@0.5.0 protoc-gen-prost-serde@0.4.0` | same |
+| `buf` | also drives `proto/`; the workspace `buf.yaml` covers both modules | `cd schema && npm ci` | `schema/package-lock.json` |
 | Node | 25.6.1 (`protoc-gen-es` needs ≥ 22) | — | `schema.typescript.node` |
 | `buf`, `protoc-gen-es`, `tsx`, `typescript` | see lock | `cd schema && npm ci` | `schema/package-lock.json` |
 | Python, `uv`, `betterproto2-compiler` | 3.12 | `cd schema && uv sync` | `schema/uv.lock` |
@@ -34,6 +37,7 @@ Never at the root: source code, generated code, project files, or any representa
 ```
 export PATH="$HOME/.cargo/bin:$PATH"
 ./schema/codegen.sh --check
+./proto/codegen.sh --check
 cargo test
 cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 cd schema && uv run python -m unittest discover -s tests
