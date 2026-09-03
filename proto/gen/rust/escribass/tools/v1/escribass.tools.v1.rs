@@ -45,9 +45,11 @@ pub struct ToolResult {
 // Reads (ADR 0006 §1)
 // ---------------------------------------------------------------------------
 
+/// The song as it stands on the current branch.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSongRequest {
 }
+/// The song as it stood at one entry in the log, rebuilt by replay (ADR 0001 §2).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSongAtRequest {
     /// A patch entry id. Materialised by replaying the log to that entry (ADR 0001 §2).
@@ -59,6 +61,7 @@ pub struct SongResponse {
     #[prost(message, optional, tag="1")]
     pub song: ::core::option::Option<::escribass_schema::song::Song>,
 }
+/// The whole patch log and the refs that name positions in it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetHistoryRequest {
 }
@@ -92,6 +95,8 @@ pub struct ApplyPatchRequest {
 // Tracks and devices (§5)
 // ---------------------------------------------------------------------------
 
+/// Adds a track. `index` is assigned after the current last; the master track already exists
+/// in every song (§4.4).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AddTrackRequest {
     #[prost(string, tag="1")]
@@ -101,6 +106,7 @@ pub struct AddTrackRequest {
     #[prost(bool, tag="3")]
     pub dry_run: bool,
 }
+/// Sets the instrument on an instrument track. Replaces whatever was there.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SetTrackInstrumentRequest {
     #[prost(string, tag="1")]
@@ -111,6 +117,7 @@ pub struct SetTrackInstrumentRequest {
     #[prost(bool, tag="3")]
     pub dry_run: bool,
 }
+/// Adds an effect to a track's chain.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AddEffectRequest {
     #[prost(string, tag="1")]
@@ -123,6 +130,7 @@ pub struct AddEffectRequest {
     #[prost(bool, tag="4")]
     pub dry_run: bool,
 }
+/// Sets one parameter on an instrument or effect.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetParamRequest {
     /// An Instrument or Effect id. Ids are globally unique, so no track id is needed
@@ -140,6 +148,7 @@ pub struct SetParamRequest {
 // Clips, notes and automation (§5)
 // ---------------------------------------------------------------------------
 
+/// Adds a clip to a track.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddClipRequest {
     #[prost(string, tag="1")]
@@ -203,6 +212,7 @@ pub struct QuantizeRequest {
     #[prost(bool, tag="4")]
     pub dry_run: bool,
 }
+/// Adds an automation lane for one device parameter, with its points.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddAutomationRequest {
     #[prost(message, optional, tag="1")]
@@ -226,6 +236,7 @@ pub struct SetTempoRequest {
     #[prost(bool, tag="3")]
     pub dry_run: bool,
 }
+/// Adds a named section over a range of ticks. Sections label time; they contain nothing.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AddSectionRequest {
     #[prost(string, tag="1")]
@@ -254,6 +265,7 @@ pub struct MoveSectionRequest {
 // Branches (ADR 0001 §2, §4)
 // ---------------------------------------------------------------------------
 
+/// Names a new position in the log. Branching copies no data (ADR 0001 §2).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CreateBranchRequest {
     /// ASCII \[a-z0-9._/-\], no leading or trailing slash, no `..` segment (ADR 0001 §2).
