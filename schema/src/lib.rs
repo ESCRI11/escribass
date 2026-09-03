@@ -34,5 +34,9 @@ pub mod escribass {
 /// Re-exported so consumers can name the well-known types without adding the dep.
 pub use pbjson_types;
 
+/// The schema version this crate generates. Written into `Song.schema_version` and
+/// every `PatchEntry`, and checked against a project's `lock.json` at load (§11).
+pub const SCHEMA_VERSION: u32 = 1;
+
 pub use escribass::history::v1 as history;
 pub use escribass::song::v1 as song;

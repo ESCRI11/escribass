@@ -179,9 +179,16 @@ Both follow from trying to model a dynamically typed format in a statically type
 - **`patches/*.json` is a literal RFC 6902 document**, written by `core`'s canonical writer
   from `serde_json::Value`. `serde_json::Map` is a `BTreeMap`, so object keys sort; integers
   stay integers. Any off-the-shelf patch library can apply the file, and the result parses.
-- **`history.proto` is transport.** `PatchEntry.ops` is `bytes`, carrying that canonical JSON
-  text verbatim, so the bytes on the wire are the bytes on disk. M0.3's `dry_run` responses
-  return the same bytes.
+- **`history.proto` is transport.** `PatchEntry.ops` is `bytes`, carrying the operations
+  array as canonical JSON text. M0.3's `dry_run` responses return the same text.
+
+  *Amended 2026-09-03:* this said "the bytes on the wire are the bytes on disk", which cannot
+  hold — in the file the array is a member of an object and indented one level, while on the
+  wire it stands alone. The guarantee that was actually being protected is that **both carry
+  the same canonical JSON document, never a protobuf re-encoding of it**, and that is what
+  prevents the two defects recorded above. Note the consequence for the writer: the generated
+  serde impl base64-encodes a `bytes` field, so `patches/*.json` cannot be written with it —
+  see `core/src/history.rs`.
 - **Ops targeting a 64-bit field carry a JSON string**, matching the canonical form. Written
   as a number, a seed above 2^53 is exact in Rust and Python and lossy in TypeScript.
 

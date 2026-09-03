@@ -31,15 +31,30 @@ root, one normally, two for a merge (a repeated field rather than a scalar, so d
 below needs no second shape). The log stays append-only (§10 unchanged); entries are never rewritten or deleted.
 
 ```
-patches/01K4F31M2T.json
+patches/01M1FPMP00PTCHSTNTS00000016.json
 {
-  "id":     "01K4F31M2T",
-  "parents": ["01K4F2QN8B"],
-  "tool":   "set_notes",
-  "ops":    [ { "op": "replace", "path": "/clips/…/notes/…/pitch", "value": 43 } ],
-  "provenance": { "author": "model", "model_id": "…", "tool_call_id": "…", "created_at": "…" }
+  "id":       "01M1FPMP00PTCHSTNTS00000016",
+  "parents":  ["01M1FPMP00CPCHRS0000000006"],
+  "tool":     "set_notes",
+  "ops":      [ { "op": "replace", "path": "/clips/…/note_clip/notes/…/pitch", "value": 43 } ],
+  "provenance": { "author": "AUTHOR_MODEL", "model_id": "…", "tool_call_id": "…", "created_at": "…" },
+  "schema_version": 1
 }
 ```
+
+**Amended 2026-09-03, while implementing the store.** The example above previously showed
+five keys and a ten-character id. Three corrections, none of them a change of decision:
+
+- `schema_version` is the sixth key. ADR 0002 §12 added it to `PatchEntry` so a replay from
+  the root can tell when it crosses a schema boundary — which is an on-disk concern by
+  definition, so the field belongs in the file and not only on the wire.
+- The filename is `patches/<id>.json` where `<id>` is the entry's full 26-character ULID.
+  Flat, no sharding: ULIDs sort lexicographically in creation order so the directory lists
+  chronologically, the alphabet is uppercase-only so no case-insensitive filesystem collides,
+  and 31 characters is safe everywhere. A loader ignores anything not ending `.json` and
+  errors if a file's stem disagrees with the `id` inside it. `ponytail:` shard on the first
+  two characters only if a directory ever gets slow.
+- The example's path omitted the `note_clip` segment of the `Clip.content` oneof.
 
 A merge entry (§4) carries two entries in `parents`; nothing else about the format changes.
 
