@@ -22,7 +22,7 @@ use crate::canonical::to_canonical_json;
 use crate::clock::Clock;
 use crate::id::IdSource;
 use crate::patch::{apply, Op};
-use crate::validate::validate;
+use crate::validate::{validate, Violation};
 use crate::version::{bump_versions, version_writes};
 use escribass_schema::song::{Author, Provenance};
 use crate::history::{
@@ -189,7 +189,7 @@ impl Project {
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
-        let prepared = self.prepare(ops)?;
+        let prepared = self.prepare(ops).map_err(|v| refusal(&self.root, &v))?;
         let Some(head) = self.history.head_id().map(str::to_string) else {
             return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
         };
@@ -201,38 +201,52 @@ impl Project {
     /// Touches nothing and mints nothing, so it is also what `dry_run` returns (ADR 0006 §3).
     /// A dry run is this function; there is no second implementation of the apply path to
     /// drift from the real one.
-    pub fn prepare(&self, ops: &[Op]) -> Result<Prepared, ProjectError> {
+    /// Fails with **every** reason it failed, never the first: §5 promises errors a model can
+    /// act on and §6 gives it three retries, which one-problem-per-round-trip spends on a
+    /// document that had four.
+    ///
+    /// The error type is `Vec<Violation>` rather than `ProjectError` because `prepare` touches
+    /// no file: every way it can fail is something the caller can fix by calling differently.
+    /// That is the `Ok(valid = false)` half of ADR 0006 §2's split, and it falls out of the
+    /// signature instead of needing a classifier.
+    pub fn prepare(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
 
         let writes = version_writes(&before, ops);
-        if let Some(path) = writes.first() {
-            return Err(err(
-                self.root.join(SONG),
-                "version_not_writable",
-                format!(
-                    "`{path}` is maintained by core and is never written by a tool \
-                     (ADR 0005 §3); {} operation(s) do",
-                    writes.len()
-                ),
-            ));
+        if !writes.is_empty() {
+            return Err(writes
+                .into_iter()
+                .map(|path| Violation {
+                    path: path.to_string(),
+                    rule: "version_not_writable",
+                    message: "`version` is maintained by core and is never written by a tool \
+                              op (ADR 0005 §3)"
+                        .to_string(),
+                })
+                .collect());
         }
 
-        let mut patched =
-            apply(&before, ops).map_err(|e| err(self.root.join(SONG), e.rule, e.message))?;
+        let mut patched = apply(&before, ops).map_err(|e| {
+            vec![Violation { path: e.path, rule: e.rule, message: e.message }]
+        })?;
         bump_versions(&before, &mut patched);
 
         let song: Song = serde_json::from_value(patched).map_err(|e| {
             let touched: Vec<&str> = ops.iter().map(Op::path).take(8).collect();
-            err(
-                self.root.join(SONG),
-                "op_illegal_for_schema",
+            vec![Violation {
                 // `ponytail:` names the ops rather than the exact field. Reach for
                 // `serde_path_to_error` if that is ever not enough to find it.
-                format!("the patched document is not a valid song: {e}. Ops touched: {}",
+                path: touched.first().map(|p| (*p).to_string()).unwrap_or_default(),
+                rule: "op_illegal_for_schema",
+                message: format!("the patched document is not a valid song: {e}. Ops touched: {}",
                     touched.join(", ")),
-            )
+            }]
         })?;
-        refuse_if_invalid(&self.root, &song)?;
+
+        let violations = validate(&song);
+        if !violations.is_empty() {
+            return Err(violations);
+        }
 
         let after = serde_json::to_value(&song).expect("a Song serialises");
         Ok(Prepared { ops: diff(&before, &after), song })
@@ -400,13 +414,28 @@ fn refuse_if_invalid(root: &Path, song: &Song) -> Result<(), ProjectError> {
     if violations.is_empty() {
         return Ok(());
     }
+    Err(refusal(root, &violations))
+}
+
+/// Collapses a refusal into the single error `commit` reports.
+///
+/// The library API keeps one error type; the tool API keeps all of them (ADR 0006 §2). The
+/// first violation's `rule` is carried through rather than replaced with a generic one, so a
+/// caller matching on `version_not_writable` still sees it.
+fn refusal(root: &Path, violations: &[Violation]) -> ProjectError {
+    let Some(first) = violations.first() else {
+        return err(root.join(SONG), "song_invalid", "refused with no reason given");
+    };
+    if violations.len() == 1 {
+        return err(root.join(SONG), first.rule, first.message.clone());
+    }
     let summary: Vec<String> =
         violations.iter().take(8).map(|v| format!("{} [{}]", v.path, v.rule)).collect();
-    Err(err(
+    err(
         root.join(SONG),
-        "song_invalid",
+        first.rule,
         format!("{} violation(s): {}", violations.len(), summary.join(", ")),
-    ))
+    )
 }
 
 fn read(path: &Path) -> Result<String, ProjectError> {
