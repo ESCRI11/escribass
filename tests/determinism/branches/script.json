@@ -1,0 +1,31 @@
+[
+  {"tool": "add_track", "args": {"name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}}},
+
+  {"tool": "create_branch", "args": {"name": "try-darker-chorus", "dry_run": true}},
+  {"tool": "create_branch", "args": {"name": "try-darker-chorus"}},
+
+  {"tool": "add_section", "args": {"name": "Verse", "start_tick": 0, "end_tick": 3840}},
+
+  {"tool": "switch_branch", "args": {"name": "try-darker-chorus", "dry_run": true}},
+  {"tool": "switch_branch", "args": {"name": "try-darker-chorus"}},
+  {"tool": "set_tempo", "args": {"bpm": 88.0, "tick": 0}},
+
+  {"tool": "switch_branch", "args": {"name": "main"}},
+  {"tool": "merge_branch", "args": {"name": "try-darker-chorus", "dry_run": true}},
+  {"tool": "merge_branch", "args": {"name": "try-darker-chorus"}},
+
+  {"tool": "create_branch", "args": {"name": "scratch"}},
+  {"tool": "switch_branch", "args": {"name": "scratch"}},
+  {"tool": "set_tempo", "args": {"bpm": 100.0, "tick": 0}},
+  {"tool": "switch_branch", "args": {"name": "main"}},
+  {"tool": "set_tempo", "args": {"bpm": 120.0, "tick": 0}},
+  {"tool": "merge_branch", "args": {"name": "scratch"}, "refused": "merge_conflict"},
+
+  {"tool": "delete_branch", "args": {"name": "scratch", "dry_run": true}},
+  {"tool": "delete_branch", "args": {"name": "scratch"}},
+
+  {"tool": "get_song_at", "args": {"entry_id": "01M1FPMP000000000000000005"}},
+  {"tool": "get_song", "args": {}},
+  {"tool": "get_history", "args": {}}
+]

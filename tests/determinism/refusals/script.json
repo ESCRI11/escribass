@@ -1,0 +1,51 @@
+[
+  {"tool": "add_track", "args": {"name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}},
+  {"tool": "set_notes", "args": {"clip_id": "01M1FPMP000000000000000009",
+    "notes": {
+      "a": {"pitch": 60, "start_tick": 0, "length_ticks": 240, "velocity": 100},
+      "b": {"pitch": 64, "start_tick": 480, "length_ticks": 240, "velocity": 90}
+    }}},
+
+  {"tool": "transpose", "args": {"clip_id": "01M1FPMP000000000000000009", "semitones": 100},
+    "refused": "pitch_out_of_range"},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/version", "value": 99}]},
+    "refused": "version_not_writable"},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/nope", "value": 1}]},
+    "refused": "path_not_found"},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch", "value": 43.5}]},
+    "refused": "op_illegal_for_schema"},
+
+  {"tool": "add_track", "args": {"name": "Nameless", "kind": "TRACK_KIND_UNSPECIFIED"},
+    "refused": "enum_unspecified"},
+
+  {"tool": "set_param", "args": {"device_id": "01ZZZZZZZZZZZZZZZZZZZZZZZZ", "param": "drive", "value": 0.5},
+    "refused": "device_unknown"},
+
+  {"tool": "quantize", "args": {"clip_id": "01M1FPMP000000000000000009", "grid_ticks": 0},
+    "refused": "grid_not_positive"},
+
+  {"tool": "merge_branch", "args": {"name": "nope"}, "refused": "ref_missing"},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch", "value": "72"}]}},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/pan", "value": -0.5}]}},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/pan", "value": -0.0}]}},
+
+  {"tool": "add_track", "args": {"name": "Drums", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"sampler": {"sfz_hash": "aa31c0de4f9c00000000000000000000"}}}},
+
+  {"tool": "get_song", "args": {}},
+  {"tool": "get_history", "args": {}}
+]

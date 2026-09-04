@@ -1,0 +1,29 @@
+{
+  "id": "01M1FPMP00000000000000000G",
+  "parents": [
+    "01M1FPMP00000000000000000F"
+  ],
+  "tool": "apply_patch",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/mix/pan",
+      "value": 0.0
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/version",
+      "value": 3
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 7
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

@@ -526,3 +526,27 @@ fn json_objects_are_still_written_in_key_order() {
     // change to the canonical form with no local cause to find.
     assert_eq!(json!({"b": 1, "a": 2}).to_string(), r#"{"a":2,"b":1}"#);
 }
+
+#[test]
+fn a_refusal_leaves_no_trace() {
+    // The claim: a call that was refused changes nothing at all — not the document, not the
+    // log, and not the ids the *next* call mints. That last one is the subtle half, and it is
+    // why this script ends with a second `add_track`: its ids are pinned in the golden, so a
+    // refusal that quietly burned one would move them and fail here.
+    let first = run("refusals", AT);
+    let second = run("refusals", AT);
+    assert_same("refusals were not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
+    assert_matches_golden("refusals", &first);
+}
+
+#[test]
+fn branching_and_merging_are_reproducible() {
+    // The claim: navigation is reproducible and records nothing, a merge records one entry with
+    // two parents, and a merge that conflicts writes nothing at all. The script ends by
+    // replaying the root entry, so the golden also pins what the song looked like before any of
+    // it — which is the property a discarded branch depends on (ADR 0001 §2).
+    let first = run("branches", AT);
+    let second = run("branches", AT);
+    assert_same("branching was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
+    assert_matches_golden("branches", &first);
+}

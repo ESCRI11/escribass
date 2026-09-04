@@ -1,0 +1,788 @@
+[
+  {
+    "entry_id": "01M1FPMP000000000000000008",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/tracks/01M1FPMP000000000000000006",
+        "value": {
+          "allow_overlap": false,
+          "fx_chain": {},
+          "id": "01M1FPMP000000000000000006",
+          "index": 1,
+          "instrument": {
+            "id": "01M1FPMP000000000000000007",
+            "params": {},
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "ref": {
+              "cmajor": {
+                "source_hash": "8b31c0de4f9c00000000000000000000"
+              }
+            },
+            "state": "",
+            "version": 1
+          },
+          "kind": "TRACK_KIND_INSTRUMENT",
+          "mix": {
+            "gain_db": 0.0,
+            "mute": false,
+            "pan": 0.0,
+            "solo": false
+          },
+          "name": "Bass",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "routing": {
+            "sends": {},
+            "sidechains": {}
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 2
+      }
+    ],
+    "summary": "2 ops: /tracks/01M1FPMP000000000000000006, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": null,
+    "summary": "branch `try-darker-chorus` at 01M1FPMP000000000000000008",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": null,
+    "summary": "branch `try-darker-chorus` at 01M1FPMP000000000000000008",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000A",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/sections/01M1FPMP000000000000000009",
+        "value": {
+          "end_tick": 3840,
+          "id": "01M1FPMP000000000000000009",
+          "name": "Verse",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "start_tick": 0,
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 3
+      }
+    ],
+    "summary": "2 ops: /sections/01M1FPMP000000000000000009, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [
+      {
+        "op": "remove",
+        "path": "/sections/01M1FPMP000000000000000009"
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 2
+      }
+    ],
+    "summary": "switch to `try-darker-chorus`: 2 ops: /sections/01M1FPMP000000000000000009, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [
+      {
+        "op": "remove",
+        "path": "/sections/01M1FPMP000000000000000009"
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 2
+      }
+    ],
+    "summary": "switch to `try-darker-chorus`: 2 ops: /sections/01M1FPMP000000000000000009, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000B",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 88.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 3
+      }
+    ],
+    "summary": "2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/sections/01M1FPMP000000000000000009",
+        "value": {
+          "end_tick": 3840,
+          "id": "01M1FPMP000000000000000009",
+          "name": "Verse",
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "start_tick": 0,
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 120.0
+      }
+    ],
+    "summary": "switch to `main`: 2 ops: /sections/01M1FPMP000000000000000009, /tempo_map/events/01M1FPMP000000000000000003/bpm",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 88.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 4
+      }
+    ],
+    "summary": "merge `try-darker-chorus`: 2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000C",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 88.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 4
+      }
+    ],
+    "summary": "merge `try-darker-chorus`: 2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": null,
+    "summary": "branch `scratch` at 01M1FPMP00000000000000000C",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [],
+    "summary": "switch to `scratch`: no change",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000D",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 100.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 5
+      }
+    ],
+    "summary": "2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 88.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 4
+      }
+    ],
+    "summary": "switch to `main`: 2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000E",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 120.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 5
+      }
+    ],
+    "summary": "2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "both branches changed `/tempo_map/events/01M1FPMP000000000000000003/bpm`: this branch set `/tempo_map/events/01M1FPMP000000000000000003/bpm` to 120.0, the other set `/tempo_map/events/01M1FPMP000000000000000003/bpm` to 100.0",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "rule": "merge_conflict"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": null,
+    "summary": "delete `scratch`; its entries stay in the log",
+    "valid": true
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": null,
+    "summary": "delete `scratch`; its entries stay in the log",
+    "valid": true
+  },
+  {
+    "automation": {},
+    "clips": {},
+    "generators": {},
+    "id": "01M1FPMP000000000000000001",
+    "markers": {},
+    "provenance": {
+      "author": "AUTHOR_HUMAN",
+      "created_at": "2026-09-02T00:00:00+00:00"
+    },
+    "render_target": {
+      "bit_depth": 24,
+      "dither": false,
+      "kind": "RENDER_KIND_MASTER",
+      "sample_rate": 48000
+    },
+    "schema_version": 1,
+    "sections": {},
+    "tempo_map": {
+      "events": {
+        "01M1FPMP000000000000000003": {
+          "bpm": 120.0,
+          "id": "01M1FPMP000000000000000003",
+          "tick": 0
+        }
+      }
+    },
+    "time_signature_map": {
+      "events": {
+        "01M1FPMP000000000000000004": {
+          "denominator": 4,
+          "id": "01M1FPMP000000000000000004",
+          "numerator": 4,
+          "tick": 0
+        }
+      }
+    },
+    "tracks": {
+      "01M1FPMP000000000000000002": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000002",
+        "index": 0,
+        "kind": "TRACK_KIND_MASTER",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Master",
+        "provenance": {
+          "author": "AUTHOR_HUMAN",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    "version": 1
+  },
+  {
+    "automation": {},
+    "clips": {},
+    "generators": {},
+    "id": "01M1FPMP000000000000000001",
+    "markers": {},
+    "provenance": {
+      "author": "AUTHOR_HUMAN",
+      "created_at": "2026-09-02T00:00:00+00:00"
+    },
+    "render_target": {
+      "bit_depth": 24,
+      "dither": false,
+      "kind": "RENDER_KIND_MASTER",
+      "sample_rate": 48000
+    },
+    "schema_version": 1,
+    "sections": {
+      "01M1FPMP000000000000000009": {
+        "end_tick": 3840,
+        "id": "01M1FPMP000000000000000009",
+        "name": "Verse",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 0,
+        "version": 1
+      }
+    },
+    "tempo_map": {
+      "events": {
+        "01M1FPMP000000000000000003": {
+          "bpm": 120.0,
+          "id": "01M1FPMP000000000000000003",
+          "tick": 0
+        }
+      }
+    },
+    "time_signature_map": {
+      "events": {
+        "01M1FPMP000000000000000004": {
+          "denominator": 4,
+          "id": "01M1FPMP000000000000000004",
+          "numerator": 4,
+          "tick": 0
+        }
+      }
+    },
+    "tracks": {
+      "01M1FPMP000000000000000002": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000002",
+        "index": 0,
+        "kind": "TRACK_KIND_MASTER",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Master",
+        "provenance": {
+          "author": "AUTHOR_HUMAN",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      },
+      "01M1FPMP000000000000000006": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000006",
+        "index": 1,
+        "instrument": {
+          "id": "01M1FPMP000000000000000007",
+          "params": {},
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "ref": {
+            "cmajor": {
+              "source_hash": "8b31c0de4f9c00000000000000000000"
+            }
+          },
+          "state": "",
+          "version": 1
+        },
+        "kind": "TRACK_KIND_INSTRUMENT",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Bass",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    "version": 5
+  },
+  {
+    "entries": {
+      "01M1FPMP000000000000000005": {
+        "id": "01M1FPMP000000000000000005",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/id",
+            "value": "01M1FPMP000000000000000001"
+          },
+          {
+            "op": "replace",
+            "path": "/schema_version",
+            "value": 1
+          },
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP000000000000000002",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP000000000000000002",
+              "index": 0,
+              "kind": "TRACK_KIND_MASTER",
+              "mix": {
+                "gain_db": 0.0,
+                "mute": false,
+                "pan": 0.0,
+                "solo": false
+              },
+              "name": "Master",
+              "provenance": {
+                "author": "AUTHOR_HUMAN",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 1
+          },
+          {
+            "op": "add",
+            "path": "/provenance",
+            "value": {
+              "author": "AUTHOR_HUMAN",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            }
+          },
+          {
+            "op": "add",
+            "path": "/render_target",
+            "value": {
+              "bit_depth": 24,
+              "dither": false,
+              "kind": "RENDER_KIND_MASTER",
+              "sample_rate": 48000
+            }
+          },
+          {
+            "op": "add",
+            "path": "/tempo_map",
+            "value": {
+              "events": {
+                "01M1FPMP000000000000000003": {
+                  "bpm": 120.0,
+                  "id": "01M1FPMP000000000000000003",
+                  "tick": 0
+                }
+              }
+            }
+          },
+          {
+            "op": "add",
+            "path": "/time_signature_map",
+            "value": {
+              "events": {
+                "01M1FPMP000000000000000004": {
+                  "denominator": 4,
+                  "id": "01M1FPMP000000000000000004",
+                  "numerator": 4,
+                  "tick": 0
+                }
+              }
+            }
+          }
+        ],
+        "parents": [],
+        "provenance": {
+          "author": "AUTHOR_HUMAN",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "create"
+      },
+      "01M1FPMP000000000000000008": {
+        "id": "01M1FPMP000000000000000008",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP000000000000000006",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP000000000000000006",
+              "index": 1,
+              "instrument": {
+                "id": "01M1FPMP000000000000000007",
+                "params": {},
+                "provenance": {
+                  "author": "AUTHOR_MODEL",
+                  "created_at": "2026-09-02T00:00:00+00:00"
+                },
+                "ref": {
+                  "cmajor": {
+                    "source_hash": "8b31c0de4f9c00000000000000000000"
+                  }
+                },
+                "state": "",
+                "version": 1
+              },
+              "kind": "TRACK_KIND_INSTRUMENT",
+              "mix": {
+                "gain_db": 0.0,
+                "mute": false,
+                "pan": 0.0,
+                "solo": false
+              },
+              "name": "Bass",
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 2
+          }
+        ],
+        "parents": [
+          "01M1FPMP000000000000000005"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "add_track"
+      },
+      "01M1FPMP00000000000000000A": {
+        "id": "01M1FPMP00000000000000000A",
+        "ops": [
+          {
+            "op": "add",
+            "path": "/sections/01M1FPMP000000000000000009",
+            "value": {
+              "end_tick": 3840,
+              "id": "01M1FPMP000000000000000009",
+              "name": "Verse",
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 3
+          }
+        ],
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "add_section"
+      },
+      "01M1FPMP00000000000000000B": {
+        "id": "01M1FPMP00000000000000000B",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+            "value": 88.0
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 3
+          }
+        ],
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "set_tempo"
+      },
+      "01M1FPMP00000000000000000C": {
+        "id": "01M1FPMP00000000000000000C",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+            "value": 88.0
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 4
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000A",
+          "01M1FPMP00000000000000000B"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "merge_branch"
+      },
+      "01M1FPMP00000000000000000D": {
+        "id": "01M1FPMP00000000000000000D",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+            "value": 100.0
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 5
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000C"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "set_tempo"
+      },
+      "01M1FPMP00000000000000000E": {
+        "id": "01M1FPMP00000000000000000E",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+            "value": 120.0
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 5
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000C"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "set_tempo"
+      }
+    },
+    "head": "main",
+    "refs": {
+      "main": "01M1FPMP00000000000000000E",
+      "try-darker-chorus": "01M1FPMP00000000000000000B"
+    }
+  }
+]
