@@ -224,8 +224,11 @@ name = "escribass-tests"
 version = "0.1.0"
 dependencies = [
  "escribass-core",
+ "escribass-proto",
  "serde",
  "serde_json",
+ "tokio",
+ "tonic",
 ]
 
 [[package]]

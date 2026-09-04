@@ -19,5 +19,10 @@ path = "determinism.rs"
 # documents. Nothing here reaches into `core` to mutate a song — that goes through the
 # server binary, as CLAUDE.md #2 requires.
 escribass-core = { path = "../core" }
+# The generated client, so the same scripts can be driven over the other transport. Already
+# pinned in lock.baseline.json under `tool_api`; this is a new consumer, not a new dependency.
+escribass-proto = { path = "../proto" }
+tonic = "0.14.6"
+tokio = { version = "1", features = ["rt", "net", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
