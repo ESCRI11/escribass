@@ -373,6 +373,65 @@ two pins that must agree. Build-time generation makes it one pin and makes drift
 error in the engine job, which is a stronger gate than a hash. This changes `schema/AGENTS.md`'s
 "C++ at M1: one plugin entry in `buf.gen.yaml`" line, written before that coupling was seen.
 
+### What the spike found (PR 0, run 2026-09-04)
+
+Run on Ubuntu 24.04 x86-64, g++ 13.3, Tracktion `0e02f70` — the image ADR 0009 proposes. The
+spike renders two seconds of a built-in tone generator to WAV, headless.
+
+**The finding that matters: the render is deterministic and the file is not.** Three separate
+processes produced byte-identical **PCM** — 576,000 bytes, `30fafbdc…` every time — and three
+different *file* hashes. JUCE's WAV writer emits a `bext` chunk (Broadcast Wave Extension)
+carrying `OriginationDate` and `OriginationTime`, and the third run crossed a second boundary:
+
+```
+OriginationDate  run1='2026-09-04'   run3='2026-09-04'
+OriginationTime  run1='18:43:11'     run3='18:43:12'
+```
+
+A golden that hashed the file would have failed roughly once per second of build time, and it
+would have arrived as flakiness rather than as a finding. **Compare the `data` chunk, never the
+file**, and `RenderResult`'s hash is a hash of the payload. Trap 2 was a guess; it is now
+evidence, and ADR 0009 cites it.
+
+**A render is asynchronous.** Tracktion's own test utilities use `EditRenderer::render(params,
+callback)` and pump a dispatch loop until it fires. `Renderer::renderToFile` — the
+synchronous-looking wrapper — silently produced nothing: right preconditions, no error, empty
+file. So the engine binary's `main()` runs a message loop; it is not "call a function and
+exit", which is the shape ADR 0008 would otherwise have described.
+
+**`Renderer::Parameters::tracksToDo` documents itself as "if this is empty, all tracks will be
+rendered"**, and the implementation requires `countNumberOfSetBits() > 0`, returning an empty
+`File` with no error when it is not met. Set the bits explicitly.
+
+**Headless works and needs no display.** `EngineBehaviour::autoInitialiseDeviceManager()`,
+`addSystemAudioIODeviceTypes()` and `shouldOpenAudioInputByDefault()` all return `false`, and
+the binary rendered with `DISPLAY` and `WAYLAND_DISPLAY` unset. The device manager turned out
+not to be the blocker either way — enabling it changed nothing.
+
+X11 **headers** are still required to *build*: JUCE compiles `juceaide` (which links
+`juce_gui_basics`) during configure, before any `JUCE_USE_XRANDR=0` of ours applies. The CI apt
+list is not optional. `webkit2gtk` and `gtk+` are *not* needed — they are reported missing and
+the configure succeeds — so the list is shorter than JUCE's documented desktop set.
+
+Four more, each of which would have cost a CI round trip:
+
+| Found | Consequence |
+|---|---|
+| Tracktion declares JUCE as `git@github.com:…` — an **SSH URL no keyless runner can clone**. `insteadOf` did *not* take; overriding `submodule.modules/juce.url` did | A required step in the engine job |
+| Linux needs **`-latomic`**: `tracktion_engine_playback` references `__atomic_store` for 16-byte atomics GCC does not lower inline | One line in the engine's CMake |
+| **`juce::SHA256` lives in `juce_cryptography`**, which Tracktion does not pull in | The engine need not hash at all — core has `sha2` approved, so one hasher in the system rather than two |
+| **`sfizz` 1.2.3 builds no VST3** — its CMake produces a library and a JACK client; the plugin is in `sfztools/sfizz-ui` | Trap 11 confirmed: `lock.baseline.json`'s `sfizz` pin yields no plugin, and ADR 0010 adds `sfizz_ui` |
+
+**Verified rather than assumed:** Tracktion `0e02f70` pins JUCE at exactly the commit in
+`lock.baseline.json`, so §17's "use the commit Tracktion pins, not JUCE latest" holds today.
+
+**Build cost:** 2 minutes wall, 23 minutes CPU, on 24 cores from cold with no ccache — well
+inside the budget §7 assumed.
+
+**Still open, and only CI can answer it:** whether the same binary hashes identically on two
+different runner CPUs. That decides whether ADR 0009 claims cross-CPU on one OS, or retreats to
+same-machine. Everything else the spike was for is answered.
+
 ### ADRs, before code
 
 | ADR | Records |
@@ -421,7 +480,8 @@ prevent; a feature is absent where it cannot run and loud where it must.
 1. **Two runs agree, the golden differs, and the cause is the CPU.** sfizz and JUCE dispatch
    SIMD at runtime; AVX2 on one runner and SSE4 on another round differently. Reads as
    flakiness. Pin the ISA; bless a golden only after the spike hashes identically on two CPUs.
-2. **The WAV header carries a date or a software tag** while the samples are identical.
+2. ~~**The WAV header carries a date or a software tag**~~ — **confirmed by the spike**: JUCE
+   emits a `bext` chunk with `OriginationDate` and `OriginationTime`. Compare the `data` chunk.
 3. **Denormals** — without FTZ/DAZ a filter tail is 100× slower and its bits depend on a
    per-thread flag.
 4. **Summation order under a thread pool** — float addition is not associative. Single-threaded.
@@ -434,9 +494,10 @@ prevent; a feature is absent where it cannot run and loud where it must.
    embeds the submodule commits it was built from and the suite compares them.
 9. **JUCE `add_subdirectory` twice** — target collision between Surge's JUCE and Tracktion's.
    Plugins are separate CMake projects. Hit on day one.
-10. **Headless JUCE may need a display** to instantiate a VST3 on Linux. Works on a desktop,
-    dies in CI.
-11. **sfizz's VST3 lives in `sfizz-ui`** — vendoring `sfizz` alone yields a library, no plugin.
+10. **Headless JUCE may need a display to instantiate a VST3.** The spike rendered with no
+    display, but it hosted no VST3 — that half is still untested.
+11. ~~**sfizz's VST3 lives in `sfizz-ui`**~~ — **confirmed by the spike**: `sfizz` 1.2.3's CMake
+    builds a library and a JACK client, no VST3.
 12. **`ubuntu-latest` moves** — an image update changes the compiler and every golden drifts
     with no PR to blame.
 13. **`every_tool`'s plugin id is invented.** Once the validator resolves plugin ids,
