@@ -8,8 +8,8 @@
 //! **Two runs agreeing is not the whole claim.** They catch nondeterminism — a process-random
 //! `HashMap` seed, a wall clock, entropy — and they cannot catch *drift*: a dependency that
 //! changes a serialisation detail produces the same wrong bytes twice, and the two runs agree.
-//! That is what the committed goldens are for, and they arrive in the next step. This one
-//! builds the harness and proves it can tell two runs apart at all.
+//! That is what the committed goldens are for. So the claim is checked three ways: two
+//! processes against each other, each against what was committed, and MCP against gRPC.
 //!
 //! Every script is deterministic only because the binary is told to be: `--seed-ids` and
 //! `--fixed-clock` are the sole route by which `core` is permitted to be reproducible (§11,
@@ -64,7 +64,52 @@ fn binary(name: &str) -> PathBuf {
          `cargo test -p escribass-tests` on its own cannot.",
         path.display()
     );
+    refuse_if_stale(name, &path);
     path
+}
+
+/// Refuses to run against a binary older than the source it was built from.
+///
+/// `cargo test -p escribass-tests` builds this package and the *libraries* it depends on — not
+/// `escribass-core`'s binary targets, which is what the suite actually drives. Without this
+/// check the suite happily validates a build from before your change and passes, which is worse
+/// than failing: a determinism suite that green-lights stale bytes is the one kind of test that
+/// must never be quietly wrong.
+///
+/// Found the hard way. Two deliberate mutations to `core` both "passed" here until the binary
+/// was rebuilt by hand.
+fn refuse_if_stale(name: &str, path: &Path) {
+    let built = std::fs::metadata(path).and_then(|m| m.modified()).expect("the binary has a time");
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("a workspace root");
+
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+    let mut pending = vec![workspace.join("core").join("src")];
+    while let Some(directory) = pending.pop() {
+        let Ok(listing) = std::fs::read_dir(&directory) else { continue };
+        for entry in listing.flatten() {
+            let at = entry.path();
+            if at.is_dir() {
+                pending.push(at);
+            } else if at.extension().and_then(|e| e.to_str()) == Some("rs") {
+                if let Ok(when) = entry.metadata().and_then(|m| m.modified()) {
+                    if newest.as_ref().is_none_or(|(latest, _)| when > *latest) {
+                        newest = Some((when, at));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some((when, source)) = newest {
+        assert!(
+            built >= when,
+            "`{name}` is older than {}.\n\
+             The suite drives the binary, and `cargo test -p escribass-tests` does not rebuild \
+             it — only the libraries it links. Run `cargo test` from the workspace root, or \
+             `cargo build` first. Passing against a stale build is worse than failing.",
+            source.strip_prefix(workspace).unwrap_or(&source).display()
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -167,9 +212,12 @@ fn check(step: &Step, id: usize, frame: &Value) -> Value {
         .map(|errors| errors.iter().filter_map(|e| e["rule"].as_str()).collect())
         .unwrap_or_default();
 
+    const READS: [&str; 3] = ["get_song", "get_song_at", "get_history"];
     match (&step.refused, content.get("valid").and_then(Value::as_bool)) {
-        // A read has no `valid`; nothing to check beyond it having answered.
-        (None, None) => {}
+        // A read has no `valid`. Matched by name rather than by the field's absence, so a
+        // mutating tool whose result lost its shape fails here instead of passing quietly.
+        (None, None) if READS.contains(&step.tool.as_str()) => {}
+        (None, None) => panic!("step {id} (`{}`) answered without `valid`: {content}", step.tool),
         (None, Some(true)) => {}
         (None, Some(false)) => {
             panic!("step {id} (`{}`) was refused: {rules:?}", step.tool)
@@ -385,7 +433,13 @@ fn summarise(op: &escribass_core::Op, before: &Value, after: &Value) -> String {
     let shown = |value: Option<&Value>| match value {
         Some(value) => {
             let text = value.to_string();
-            if text.len() > 60 { format!("{}…", &text[..60]) } else { text }
+            // By characters, not bytes: `Value::to_string` does not escape non-ASCII, and a
+            // byte slice through a `é` panics — while building the report that explains a
+            // failure, which is the worst possible moment.
+            match text.char_indices().nth(60) {
+                Some((at, _)) => format!("{}…", &text[..at]),
+                None => text,
+            }
         }
         None => "absent".to_string(),
     };
@@ -480,22 +534,44 @@ fn the_comparison_notices_a_clock() {
     let report = differences(&Snapshot::of(&fixed), &Snapshot::of(&later));
     assert!(!report.is_empty(), "a minute of clock made no difference; the comparison is blind");
 
-    for line in report.join("\n").lines().filter(|line| line.trim_start().starts_with('/')) {
-        let path = line.trim().split_whitespace().next().unwrap_or_default();
+    let text = report.join("\n");
+    for line in text.lines() {
+        let trimmed = line.trim();
+        // A file that appears or vanishes with the clock, or one that stopped being JSON, is
+        // reported as prose rather than as a path — so it would slip past a loop that only
+        // inspected paths, which is exactly the blind spot a leak would hide in.
         assert!(
-            path.ends_with("/created_at") || path.ends_with("/seconds"),
-            "the clock changed something that is not a timestamp: {path}\n{}",
-            report.join("\n")
+            !trimmed.starts_with("only on the") && !trimmed.starts_with("not JSON"),
+            "the clock changed which files exist, or their shape:\n{text}"
         );
+        if trimmed.starts_with('/') {
+            let path = trimmed.split_whitespace().next().unwrap_or_default();
+            assert!(
+                path.ends_with("/created_at"),
+                "the clock changed something that is not a timestamp: {path}\n{text}"
+            );
+        }
     }
 }
 
 #[test]
-fn a_project_reopens_in_a_fresh_process() {
+fn every_project_reopens_in_a_fresh_process() {
     // ADR 0004's invariant, asserted through the binary: `Project::open` replays the log and
     // compares it with `song.json`, so a server that starts at all has agreed the two match.
     // A second process also proves the first left nothing in memory that the directory needs.
-    let session = run("every_tool", AT);
+    for name in ["every_tool", "refusals", "branches"] {
+        reopens(name);
+    }
+}
+
+/// Starts a second server on a project and reads it back.
+///
+/// `Project::open` replays the log and compares it with `song.json`, so a server that starts at
+/// all has agreed the two match — which is where ADR 0004's `song_diverged` and `replay_failed`
+/// surface. Every script is reopened rather than one: a merge that produced an unreplayable log
+/// only shows up on the script that merges.
+fn reopens(name: &str) {
+    let session = run(name, AT);
 
     let frames = speak(
         &["--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT, "--author", "model"],
@@ -515,13 +591,13 @@ fn a_project_reopens_in_a_fresh_process() {
     let reopened = frames
         .iter()
         .find(|frame| frame["id"] == json!(1))
-        .expect("the reopened server answered");
+        .unwrap_or_else(|| panic!("`{name}` did not reopen"));
     let text = reopened["result"]["content"][0]["text"]
         .as_str()
-        .expect("get_song returns canonical text");
+        .unwrap_or_else(|| panic!("`{name}` reopened without a song: {reopened}"));
     let on_disk = std::fs::read_to_string(session.directory.0.join("song.json"))
         .expect("the project has a song");
-    assert_eq!(text, on_disk, "a fresh process read a different song than the file holds");
+    assert_eq!(text, on_disk, "`{name}`: a fresh process read a different song than the file");
 }
 
 #[test]
@@ -595,7 +671,7 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
         .expect("its address")
         .to_string();
 
-    let mut child = Command::new(binary("escribass-grpc"))
+    let child = Command::new(binary("escribass-grpc"))
         .args([
             "--create",
             "--seed-ids",
@@ -614,6 +690,9 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the server binary runs");
+    // `Child` has no `Drop`, so a panic in any step below would leave this server running and
+    // still bound to its port — which the next test's bind-and-drop could then be handed.
+    let _served = Served(child);
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -635,50 +714,48 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
         let mut answers = Vec::with_capacity(steps.len());
         for (position, step) in steps.iter().enumerate() {
             let id = position + 1;
-            // A script writes `patch` as the RFC 6902 array a model sends. MCP rewrites that
-            // into the canonical text its `bytes` field carries (ADR 0006 §6, `JSON_TEXT_FIELDS`);
-            // the generated pbjson deserializer used here wants base64 for the same field, so
-            // the driver does the same rewrite. The asymmetry is the proto's, not a difference
-            // in what the two transports mean.
-            let args = as_bytes_field(step.args.clone());
+            let args = step.args.clone();
 
-            /// One arm per RPC. A tool the service knows but this match does not is a
-            /// compile-time hole, so adding an RPC without teaching the suite about it fails
-            /// loudly rather than being skipped.
+            /// One arm per RPC. A tool this match does not know panics naming it, rather
+            /// than being silently skipped — but only if a script calls it, which is why
+            /// `every_implemented_tool_is_scripted` exists as well.
             macro_rules! call {
                 ($($name:literal => $method:ident : $request:ty),* $(,)?) => {
                     match step.tool.as_str() {
                         $($name => {
                             let request: $request = serde_json::from_value(args)
                                 .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
-                            let result = client.$method(request).await.unwrap_or_else(|status| {
-                                panic!("step {id} (`{}`) failed: {status}", step.tool)
-                            });
-                            shaped(&result.into_inner())
+                            shaped(&answered(client.$method(request)).await)
                         })*
-                        "get_song" => song_shaped(
-                            client.get_song(GetSongRequest {}).await.expect("get_song").into_inner(),
-                        ),
+                        // Built directly rather than through the deserializer: `patch` is
+                        // `bytes`, so that route wants base64, and a script writes the RFC 6902
+                        // array a model sends. `core/src/mcp.rs` does the same for the same
+                        // reason — the asymmetry is the proto's, not a difference in what the
+                        // two transports mean.
+                        "apply_patch" => {
+                            let text = serde_json::to_string_pretty(&args["patch"])
+                                .expect("a Value serialises")
+                                + "\n";
+                            let request = ApplyPatchRequest {
+                                patch: text.into_bytes(),
+                                dry_run: args.get("dry_run").and_then(Value::as_bool).unwrap_or(false),
+                            };
+                            shaped(&answered(client.apply_patch(request)).await)
+                        }
+                        "get_song" => song_shaped(answered(client.get_song(GetSongRequest {})).await),
                         "get_song_at" => {
                             let request: GetSongAtRequest = serde_json::from_value(args).unwrap();
-                            song_shaped(
-                                client.get_song_at(request).await.expect("get_song_at").into_inner(),
-                            )
+                            song_shaped(answered(client.get_song_at(request)).await)
                         }
-                        "get_history" => history_shaped(
-                            client
-                                .get_history(GetHistoryRequest {})
-                                .await
-                                .expect("get_history")
-                                .into_inner(),
-                        ),
+                        "get_history" => {
+                            history_shaped(answered(client.get_history(GetHistoryRequest {})).await)
+                        }
                         unknown => panic!("step {id}: the suite does not know `{unknown}`"),
                     }
                 };
             }
 
             let answer = call! {
-                "apply_patch" => apply_patch: ApplyPatchRequest,
                 "add_track" => add_track: AddTrackRequest,
                 "set_track_instrument" => set_track_instrument: SetTrackInstrumentRequest,
                 "add_effect" => add_effect: AddEffectRequest,
@@ -702,38 +779,31 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
         answers
     });
 
-    let _ = child.kill();
-    let _ = child.wait();
     Run { directory, results }
 }
 
-/// Rewrites a `patch` argument from a JSON array into the base64 a `bytes` field decodes from.
-fn as_bytes_field(mut args: Value) -> Value {
-    let Some(object) = args.as_object_mut() else { return args };
-    if let Some(Value::Array(_)) = object.get("patch") {
-        let text = serde_json::to_string_pretty(&object["patch"]).expect("a Value serialises") + "\n";
-        object.insert("patch".to_string(), Value::String(base64(text.as_bytes())));
+/// A server that dies with the harness, however the harness ends.
+struct Served(std::process::Child);
+
+impl Drop for Served {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
     }
-    args
 }
 
-/// Standard base64 with padding, which is what proto3 JSON specifies for `bytes`.
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let block =
-            chunk.iter().fold(0u32, |acc, b| (acc << 8) | u32::from(*b)) << (8 * (3 - chunk.len()));
-        for position in 0..4 {
-            if position <= chunk.len() {
-                out.push(ALPHABET[((block >> (18 - 6 * position)) & 0x3f) as usize] as char);
-            } else {
-                out.push('=');
-            }
-        }
+/// Awaits one call, or fails rather than waiting for ever.
+///
+/// A server that never answers would otherwise hang the test, and a hung test inherits CI's
+/// six-hour default — a failure that costs a runner and reports nothing.
+async fn answered<T>(
+    call: impl std::future::Future<Output = Result<tonic::Response<T>, tonic::Status>>,
+) -> T {
+    match tokio::time::timeout(std::time::Duration::from_secs(30), call).await {
+        Ok(Ok(response)) => response.into_inner(),
+        Ok(Err(status)) => panic!("the call failed: {status}"),
+        Err(_) => panic!("the call did not answer within 30s"),
     }
-    out
 }
 
 /// A `ToolResult` in the shape MCP puts on the wire, so the two can be compared directly.
@@ -807,4 +877,20 @@ fn the_origin_is_the_document_a_replay_starts_from() {
     // the first operation. A message field that is absent stays absent — `tempo_map` and
     // `render_target` arrive as `add` operations in the root entry, not as `replace`.
     assert!(document.get("tempo_map").is_none(), "an unset message is omitted, not defaulted");
+}
+
+#[test]
+fn every_implemented_tool_is_scripted() {
+    // The `call!` macro panics on a tool it does not know, but only if a script calls one — so
+    // an RPC could be implemented, advertised, and never exercised here. This is what makes
+    // `tests/AGENTS.md`'s "add it to a script" a rule rather than a suggestion.
+    let scripted: std::collections::BTreeSet<String> = ["every_tool", "refusals", "branches"]
+        .iter()
+        .flat_map(|name| script(name))
+        .map(|step| step.tool)
+        .collect();
+
+    for tool in escribass_core::mcp::IMPLEMENTED {
+        assert!(scripted.contains(*tool), "`{tool}` is implemented and no script calls it");
+    }
 }

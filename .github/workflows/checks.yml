@@ -10,6 +10,9 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # The determinism suite drives server subprocesses over pipes and sockets. One that never
+    # answers would otherwise hold a runner for GitHub's six-hour default and report nothing.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
