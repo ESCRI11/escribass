@@ -14,17 +14,24 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 ## Repo layout
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
 
-## Current milestone: M0 — Schema & core
+## Current milestone: M1 — Render engine
 
-Live status, deferred items and known gaps: `docs/plan.md`.
+M0 is complete: schema, `core`, the tool API over gRPC and MCP, and the determinism suite.
+See `docs/plan.md` for what each step delivered and `docs/specs.md` §16 for what M1 is.
 
-Deliver, in this order, each as a separate PR with tests:
-1. `schema/song.proto` implementing §4, plus codegen for Rust, TypeScript, Python (C++ later).
-2. `core/`: Rust crate with model types (generated), validator (§4.4), JSON Patch log, canonical JSON persistence.
-3. `proto/SongTools` gRPC service (§5) with `dry_run`, implemented in `core`, and the same tools exposed as an MCP server (§18.2).
-4. `tests/`: schema fixtures and a determinism suite (same input → identical canonical JSON and patch log).
+Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16 and
+ADR 0003 before starting a step; they place what M1 owns and what it does not.
 
-Out of scope for M0: engine, UI, AI orchestrator, compilers. Do not scaffold them.
+## Completed: M0 — Schema & core
+
+1. `schema/song.proto` and `history.proto`, with codegen for Rust, TypeScript and Python.
+2. `core/`: model types, validator (§4.4), the patch DAG, canonical JSON persistence, the
+   `.escri` project store.
+3. `proto/SongTools` with `dry_run`, implemented in `core` and served over both gRPC and MCP.
+4. `tests/`: the determinism suite — same input, identical canonical JSON and patch log,
+   checked against a committed golden and across both transports.
+
+C++ codegen was deferred from step 1 to M1, where the engine gives it a consumer.
 
 ## Toolchain
 - Rust stable, `cargo`; Protobuf via `prost`/`tonic`.
