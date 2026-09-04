@@ -8,7 +8,8 @@
 //! Flags, all optional:
 //!
 //! ```text
-//! --author human|model     provenance on everything this process writes (default: model)
+//! --author human|model     provenance on everything this process writes, the project it
+//!                          creates included (default: model)
 //! --seed-ids <ms>:<n>      deterministic ids instead of ULIDs from the clock and entropy
 //! --fixed-clock <ms>       a fixed instant instead of the system clock
 //! ```
@@ -60,8 +61,8 @@ async fn run() -> Result<(), String> {
     };
 
     let project = if options.create {
-        let song = new_song(&mut *ids, &*clock);
-        Project::create(&options.project, &song, &mut *ids, &*clock)
+        let song = new_song(&mut *ids, &*clock, options.author);
+        Project::create(&options.project, &song, &mut *ids, &*clock, options.author)
             .map_err(|e| format!("cannot create {}: {e}", options.project.display()))?
     } else {
         Project::open(&options.project)

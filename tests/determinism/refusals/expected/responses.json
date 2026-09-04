@@ -428,7 +428,7 @@
     "id": "01M1FPMP000000000000000001",
     "markers": {},
     "provenance": {
-      "author": "AUTHOR_HUMAN",
+      "author": "AUTHOR_MODEL",
       "created_at": "2026-09-02T00:00:00+00:00"
     },
     "render_target": {
@@ -473,7 +473,7 @@
         },
         "name": "Master",
         "provenance": {
-          "author": "AUTHOR_HUMAN",
+          "author": "AUTHOR_MODEL",
           "created_at": "2026-09-02T00:00:00+00:00"
         },
         "routing": {
@@ -593,7 +593,7 @@
               },
               "name": "Master",
               "provenance": {
-                "author": "AUTHOR_HUMAN",
+                "author": "AUTHOR_MODEL",
                 "created_at": "2026-09-02T00:00:00+00:00"
               },
               "routing": {
@@ -612,7 +612,7 @@
             "op": "add",
             "path": "/provenance",
             "value": {
-              "author": "AUTHOR_HUMAN",
+              "author": "AUTHOR_MODEL",
               "created_at": "2026-09-02T00:00:00+00:00"
             }
           },
@@ -656,7 +656,7 @@
         ],
         "parents": [],
         "provenance": {
-          "author": "AUTHOR_HUMAN",
+          "author": "AUTHOR_MODEL",
           "created_at": "2026-09-02T00:00:00+00:00"
         },
         "schema_version": 1,

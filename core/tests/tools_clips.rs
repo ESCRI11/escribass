@@ -55,8 +55,8 @@ fn opened() -> (Scratch, Session, String) {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let song = new_song(&mut ids, &clock);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock).unwrap();
+    let song = new_song(&mut ids, &clock, Author::Model);
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
 
     let added = session

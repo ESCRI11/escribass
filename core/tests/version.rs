@@ -265,7 +265,7 @@ fn opened() -> (Scratch, Project, SeededIds, FixedClock) {
     let dir = Scratch::new();
     let (mut ids, clock) = (SeededIds::default(), FixedClock(1_788_307_200_000));
     let song: Song = serde_json::from_value(fixture()).unwrap();
-    let project = Project::create(&dir.0, &song, &mut ids, &clock).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
     (dir, project, ids, clock)
 }
 

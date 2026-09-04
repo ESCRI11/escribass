@@ -534,13 +534,15 @@ fn normalise(value: &mut Value) {
 ///
 /// Ids and the timestamp come from the caller's sources, never from `SystemTime::now` or an
 /// unseeded generator (§11, CLAUDE.md #3), which is what lets two scripted sessions create
-/// byte-identical projects.
-pub fn new_song(ids: &mut dyn IdSource, clock: &dyn Clock) -> Song {
+/// byte-identical projects. So does `author`: a project a model created should not record a
+/// person as having written its first entry, which is what hardcoding `Author::Human` here did
+/// while both binaries documented `--author` as covering everything they write.
+pub fn new_song(ids: &mut dyn IdSource, clock: &dyn Clock, author: Author) -> Song {
     use escribass_schema::song::*;
     use escribass_schema::SCHEMA_VERSION;
 
     let made = || Provenance {
-        author: Author::Human as i32,
+        author: author as i32,
         model_id: None,
         prompt_id: None,
         tool_call_id: None,
