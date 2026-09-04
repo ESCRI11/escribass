@@ -16,7 +16,7 @@ import unittest
 
 GOLDEN = pathlib.Path(__file__).resolve().parents[2] / "tests" / "determinism"
 
-SCRIPTS = ("every_tool", "branches")
+SCRIPTS = ("every_tool", "refusals", "branches")
 
 
 def golden(script: str, name: str):

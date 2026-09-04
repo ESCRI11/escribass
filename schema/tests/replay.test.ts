@@ -71,7 +71,7 @@ function chain(script: string): Entry[] {
   return entries.reverse();
 }
 
-for (const name of ["every_tool", "branches"]) {
+for (const name of ["every_tool", "refusals", "branches"]) {
 test(`replays the committed \`${name}\` log into the committed song`, () => {
   const entries = chain(name);
   assert.ok(entries.length > 1, "the golden has a log to replay");

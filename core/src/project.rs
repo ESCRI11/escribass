@@ -137,6 +137,7 @@ impl Project {
         song: &Song,
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
+        author: Author,
     ) -> Result<Project, ProjectError> {
         let root = root.into();
         if root.join(SONG).exists() {
@@ -151,7 +152,7 @@ impl Project {
         let mut history = History::new();
         history
             .append(new_entry(id.clone(), vec![], "create", &diff(&empty, &full),
-                authorship(Author::Human, clock), SCHEMA_VERSION))
+                authorship(author, clock), SCHEMA_VERSION))
             .map_err(|e| err(&root, e.rule, e.message))?;
         history.create_ref("main", &id).map_err(|e| err(&root, e.rule, e.message))?;
         history.set_head("main").map_err(|e| err(&root, e.rule, e.message))?;

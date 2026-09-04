@@ -83,7 +83,18 @@ fn refuse_if_stale(name: &str, path: &Path) {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("a workspace root");
 
     let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    let mut pending = vec![workspace.join("core").join("src")];
+    // Every crate the binaries embed, not just `core`: the canonical writer lives in
+    // `schema/`, and it is the thing the goldens exist to pin. `Cargo.lock` is watched too,
+    // because §11's own drift example — a dependency changing how a float is written — moves
+    // the lock and nothing else, and would otherwise be validated against the old binary.
+    let mut pending = vec![
+        workspace.join("core").join("src"),
+        workspace.join("schema").join("src"),
+        workspace.join("proto").join("src"),
+    ];
+    if let Ok(when) = std::fs::metadata(workspace.join("Cargo.lock")).and_then(|m| m.modified()) {
+        newest = Some((when, workspace.join("Cargo.lock")));
+    }
     while let Some(directory) = pending.pop() {
         let Ok(listing) = std::fs::read_dir(&directory) else { continue };
         for entry in listing.flatten() {
@@ -230,6 +241,19 @@ fn check(step: &Step, id: usize, frame: &Value) -> Value {
         (Some(expected), _) => {
             panic!("step {id} (`{}`) expected `{expected}` and was accepted", step.tool)
         }
+    }
+    // `isError` is what ADR 0006 §2's table gives a model's retry loop, and it is carried
+    // beside `valid` rather than derived from it — so the two can disagree, and nothing else
+    // here would notice. The gRPC driver builds a synthetic frame without one, which is why
+    // this is conditional rather than required.
+    if let Some(flagged) = frame["result"].get("isError") {
+        let expected = content.get("valid").is_some_and(|valid| valid != &json!(true));
+        assert_eq!(
+            flagged,
+            &json!(expected),
+            "step {id} (`{}`): `isError` disagrees with `valid`",
+            step.tool
+        );
     }
     content.clone()
 }
@@ -570,6 +594,11 @@ fn every_project_reopens_in_a_fresh_process() {
 /// all has agreed the two match — which is where ADR 0004's `song_diverged` and `replay_failed`
 /// surface. Every script is reopened rather than one: a merge that produced an unreplayable log
 /// only shows up on the script that merges.
+///
+/// One limit worth knowing: `switch_branch` rewrites `song.json` from a replay, so a script
+/// that switches *after* the point where a log and a document could diverge has already
+/// reconciled them by the time this runs. On such a script the golden is what catches a
+/// divergence, not this.
 fn reopens(name: &str) {
     let session = run(name, AT);
 
@@ -702,7 +731,7 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
     let results = runtime.block_on(async {
         let endpoint = format!("http://{address}");
         let mut client = None;
-        for _ in 0..200 {
+        for _ in 0..750 {
             if let Ok(connected) = SongToolsClient::connect(endpoint.clone()).await {
                 client = Some(connected);
                 break;

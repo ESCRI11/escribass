@@ -48,8 +48,8 @@ impl Drop for Scratch {
 async fn serving(dir: &Scratch) -> SongToolsClient<Channel> {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let song = new_song(&mut ids, &clock);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock).unwrap();
+    let song = new_song(&mut ids, &clock, Author::Model);
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
     let server = Server::new(Session::new(project, Box::new(ids), Box::new(clock), Author::Model));
 
     let address: SocketAddr = std::net::TcpListener::bind("127.0.0.1:0")

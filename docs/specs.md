@@ -251,7 +251,7 @@ is `docs/roadmap.md`. Both defer to this section.
 
 ## 17. Pinned toolchain baseline [MUST]
 
-Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json` and copied into every new project's `lock.json`.
+Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json`. A project's `lock.json` records only `schema_version` until M1 and M4 give it something else to pin — plugins, models and compiled artefacts (ADR 0003 §3); the table is copied into it as those arrive.
 
 | Component | Version / tag | Commit | Date | Notes |
 |---|---|---|---|---|

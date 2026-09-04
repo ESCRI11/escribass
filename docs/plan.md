@@ -28,7 +28,7 @@ stale.
 | M0.3 | Ten findings from a whole-stack review, three of them blockers | done | PR #25 |
 | M0.3 | Six more from an independent final review, two of them blockers | done | PR #26 |
 | M0.3 | Landed on `main` as one integration PR | done | PR #27 |
-| M0.4 | Determinism suite in `tests/` | done | PRs #29–#34 |
+| M0.4 | Determinism suite in `tests/` | done | PRs #29–#36 |
 | — | **M0 complete.** Schema, core, tool API, determinism suite | done | — |
 
 C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
@@ -138,7 +138,7 @@ a committed golden**, and **MCP against gRPC**.
 | Artefact | A vs B | vs golden | MCP vs gRPC |
 |---|---|---|---|
 | `song.json`, `refs.json`, `lock.json`, `patches/*.json` | bytes | bytes | bytes |
-| MCP `get_song` text block | bytes | — | vs `to_canonical_json` of the gRPC `Song` |
+| MCP `get_song` text block | in the reopen check, against `song.json` | — | via `song.json`, which is byte-compared |
 | `ToolResult` per step | structural | structural | structural |
 | `get_history` | structural | structural | structural |
 | `initialize`, `tools/list` frames | not compared | not compared | — |
@@ -176,7 +176,7 @@ burn nothing), `refusals` (a refusal leaves no trace in ids, log or document), `
 
 A comparison that cannot fail proves nothing. Two guards:
 
-- **Clock variant** — run `every_tool` at `T` and `T+1000`; the diff must be non-empty *and
+- **Clock variant** — run `every_tool` a minute apart; the diff must be non-empty *and
   every differing path must end in `/created_at`*. A wall-clock-leak detector by exclusion, and
   simultaneously the proof that the comparison detects anything at all.
 - **Map-order guard** — `json!({"b":1,"a":2}).to_string()` is `{"a":2,"b":1}`, naming the
@@ -255,7 +255,7 @@ types".
 
 ## M0, closed
 
-Four steps, twenty-eight pull requests, four whole-stack reviews. What M0 delivers: one
+Four steps, thirty-odd pull requests, five whole-stack reviews. What M0 delivers: one
 representation of a song (`schema/song.proto`), a `core` that validates it and records every
 change as a patch in a DAG, a tool API those changes must go through — served over gRPC and
 MCP — and a suite that proves the same input gives the same bytes.

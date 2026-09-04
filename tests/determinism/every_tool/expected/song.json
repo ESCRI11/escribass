@@ -1,10 +1,10 @@
 {
   "id": "01M1FPMP000000000000000001",
   "provenance": {
-    "author": "AUTHOR_HUMAN",
+    "author": "AUTHOR_MODEL",
     "created_at": "2026-09-02T00:00:00+00:00"
   },
-  "version": 15,
+  "version": 17,
   "schema_version": 1,
   "tempo_map": {
     "events": {
@@ -48,7 +48,7 @@
     "01M1FPMP000000000000000002": {
       "id": "01M1FPMP000000000000000002",
       "provenance": {
-        "author": "AUTHOR_HUMAN",
+        "author": "AUTHOR_MODEL",
         "created_at": "2026-09-02T00:00:00+00:00"
       },
       "version": 1,
@@ -134,7 +134,7 @@
         "author": "AUTHOR_MODEL",
         "created_at": "2026-09-02T00:00:00+00:00"
       },
-      "version": 4,
+      "version": 6,
       "track_id": "01M1FPMP000000000000000006",
       "start_tick": 0,
       "length_ticks": 3840,
@@ -146,26 +146,26 @@
               "author": "AUTHOR_MODEL",
               "created_at": "2026-09-02T00:00:00+00:00"
             },
-            "version": 2,
-            "pitch": 48,
+            "version": 3,
+            "pitch": 50,
             "microtonal_cents": 0.0,
             "start_tick": 0,
             "length_ticks": 240,
             "velocity": 100,
             "expression": {}
           },
-          "01M1FPMP00000000000000000H": {
-            "id": "01M1FPMP00000000000000000H",
+          "01M1FPMP000000000000000010": {
+            "id": "01M1FPMP000000000000000010",
             "provenance": {
               "author": "AUTHOR_MODEL",
               "created_at": "2026-09-02T00:00:00+00:00"
             },
-            "version": 3,
-            "pitch": 52,
+            "version": 2,
+            "pitch": 67,
             "microtonal_cents": 0.0,
-            "start_tick": 960,
+            "start_tick": 1200,
             "length_ticks": 240,
-            "velocity": 90,
+            "velocity": 80,
             "expression": {}
           }
         }

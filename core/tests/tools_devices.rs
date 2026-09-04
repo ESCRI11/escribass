@@ -42,8 +42,8 @@ fn opened() -> (Scratch, Session) {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let song = new_song(&mut ids, &clock);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock).unwrap();
+    let song = new_song(&mut ids, &clock, Author::Model);
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
     (dir, Session::new(project, Box::new(ids), Box::new(clock), Author::Model))
 }
 
@@ -472,8 +472,8 @@ fn set_notes_keeps_the_provenance_of_a_note_it_recognises() {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let created = FixedClock(AT);
-    let song = new_song(&mut ids, &created);
-    let project = Project::create(&dir.0, &song, &mut ids, &created).unwrap();
+    let song = new_song(&mut ids, &created, Author::Model);
+    let project = Project::create(&dir.0, &song, &mut ids, &created, Author::Human).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(created), Author::Human);
     let track = instrument_track(&mut session, "Bass");
 

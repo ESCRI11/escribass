@@ -49,7 +49,7 @@ fn opened() -> (Scratch, Session) {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock).unwrap();
+    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
     let session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
     (dir, session)
 }
@@ -262,7 +262,7 @@ fn the_summary_is_derived_from_the_patch_and_is_stable() {
 fn a_new_song_is_the_smallest_valid_document() {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let song = new_song(&mut ids, &clock);
+    let song = new_song(&mut ids, &clock, Author::Model);
 
     assert!(validate(&song).is_empty(), "{:?}", validate(&song));
     assert_eq!(song.tracks.len(), 1, "a master track and nothing else");
@@ -277,7 +277,7 @@ fn two_new_songs_from_the_same_sources_are_identical() {
     // sessions byte for byte.
     let build = || {
         let mut ids = SeededIds::default();
-        to_canonical_json(&new_song(&mut ids, &FixedClock(AT))).unwrap()
+        to_canonical_json(&new_song(&mut ids, &FixedClock(AT), Author::Model)).unwrap()
     };
     assert_eq!(build(), build());
 }
@@ -287,8 +287,8 @@ fn a_session_can_be_driven_from_a_new_song() {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let song = new_song(&mut ids, &clock);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock).unwrap();
+    let song = new_song(&mut ids, &clock, Author::Model);
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
 
     let master = song.tracks.keys().next().unwrap().clone();
