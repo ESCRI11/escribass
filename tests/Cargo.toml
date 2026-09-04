@@ -22,6 +22,7 @@ escribass-core = { path = "../core" }
 # The generated client, so the same scripts can be driven over the other transport. Already
 # pinned in lock.baseline.json under `tool_api`; this is a new consumer, not a new dependency.
 escribass-proto = { path = "../proto" }
+escribass-schema = { path = "../schema" }
 tonic = "0.14.6"
 tokio = { version = "1", features = ["rt", "net", "time"] }
 serde = { version = "1", features = ["derive"] }
