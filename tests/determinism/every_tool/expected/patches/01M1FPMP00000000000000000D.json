@@ -1,0 +1,34 @@
+{
+  "id": "01M1FPMP00000000000000000D",
+  "parents": [
+    "01M1FPMP00000000000000000C"
+  ],
+  "tool": "set_param",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/params/drive",
+      "value": 0.62
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/version",
+      "value": 2
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/version",
+      "value": 4
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 5
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

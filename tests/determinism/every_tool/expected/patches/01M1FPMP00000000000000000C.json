@@ -1,0 +1,44 @@
+{
+  "id": "01M1FPMP00000000000000000C",
+  "parents": [
+    "01M1FPMP00000000000000000A"
+  ],
+  "tool": "add_effect",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP000000000000000006/fx_chain/01M1FPMP00000000000000000B",
+      "value": {
+        "id": "01M1FPMP00000000000000000B",
+        "index": 0,
+        "params": {},
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "ref": {
+          "faust": {
+            "source_hash": "3c1de4f98b0000000000000000000000"
+          }
+        },
+        "state": "",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/version",
+      "value": 3
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 4
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

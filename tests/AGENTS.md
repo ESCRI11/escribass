@@ -10,6 +10,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
 | `determinism.rs` | The suite: it drives `escribass-mcp` as a subprocess and compares what two runs produce. | hand |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. | hand |
+| `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`. | `UPDATE_FIXTURES=1 cargo test` |
 
 ## Rules
 
@@ -19,7 +20,8 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | Determinism goldens come through the tool API. The **schema fixture** does not: it exercises `Generator`, `Marker`, `Instrument.state` and model provenance that no typed tool can produce before M4, and it is a constructed value rather than a mutation, so CLAUDE.md #2 is not in play | CLAUDE.md #2; ADR 0003 |
 | A determinism script names entity ids **literally**. Under `--seed-ids` an id is a pure function of how many were minted before it, so a change in mint order changes what a script means — and should fail loudly rather than quietly still passing | specs §11 |
 | A dry run mints from a discarded fork, so it consumes no id. A script's ids follow its *applied* steps only | ADR 0006 §3 |
-| A fixture changes only in the PR that changes the `.proto` or the canonical form, and its diff is reviewed there | specs §17 (same rule for golden renders) |
+| A fixture or a golden changes only in the PR that changes the `.proto`, the canonical form, or a tool's semantics — and its diff is reviewed there. `UPDATE_FIXTURES=1` blesses whatever ran, including a deterministically wrong output; this rule is the only guard against that | specs §17 (same rule for golden renders) |
+| Two runs agreeing catches nondeterminism; only the golden catches **drift**. A dependency that changes how a float is written, or feature unification flipping `serde_json::Map` to insertion order, produces the same wrong bytes twice | specs §11 |
 | Fixture inputs are byte-stable: fixed timestamps, fixed ids, no wall clock, no unseeded randomness | specs §11; ADR 0001 §5 |
 
 ## Adding things
