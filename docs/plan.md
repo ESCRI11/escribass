@@ -271,6 +271,26 @@ looked correct in review and was wrong in a way only a test or a mutation could 
 Planned 2026-09-04 against `main` at `e2dc08e`. As with M0.4, the reasoning is the expensive
 part and none of it is in code yet.
 
+### Decisions taken, 2026-09-04
+
+Eight questions the plan raised, answered before code:
+
+| Question | Decided | Consequence |
+|---|---|---|
+| Airwindows, whose pinned repo may not build a Linux VST3 | **Defer to M4**, with clap-wrapper | Amends ADR 0003 §4. §11's "a golden per bundled instrument" is met by the three synths; Airwindows is an effect |
+| Audio clips in M1 | **Yes, in full**: gain, fades *and* time-stretch | Triggers exactly the clause ADR 0002 §8 wrote for it — "when M1 renders audio clips". A `song.proto` change, so an ADR precedes it (CLAUDE.md #5), and Rubber Band is vendored (already pinned at 4.0.0) |
+| A project pinning a plugin this build lacks | **Refuse to open**, `lock_mismatch` | The strict reading of §11. Same shape as `schema_version_mismatch`: an operator error, not something a model retries into. Re-pinning becomes explicit, never a side effect |
+| Minimum supported OS versions (§15 `[OPEN]`) | **Linux x86-64 only in M1** | ADR 0009 names the image and compiler its goldens are valid for. macOS and Windows stay unclaimed; §15's item stays open |
+| Engine transport, given §3 says gRPC | **Define `Render` now, speak stdio in M1, implement gRPC at M2** | ADR 0006 §7's precedent: the `.proto` is the artefact that must be right. `buf breaking` guards it from M1; grpc++ is not vendored for a client that would be itself |
+| Render tail | **End at the last clip or section** | No schema change. A `RenderTarget.tail` field waits for someone who wants release tails |
+| Hashing for `add_asset` | **`sha2` 0.10** | The alternative — the engine computing it — puts the engine in the project-writing path, contradicting CLAUDE.md #6 |
+| Still unplaced | **User VST3 plugins** belong to no milestone (§8 says "VST3 host"; §16 never says user plugins) | ADR 0003's lesson is that unplaced scope is invisible scope. Decide at M2, when `app` could show a plugin browser |
+
+Audio clips are the one that grows M1. `AudioClip` is `{ asset_hash }` today, so rendering one
+needs the fields §8 deferred, and time-stretch adds a **second DSP surface** to pin and golden
+alongside the three plugins — Rubber Band is a phase vocoder with its own modes and threading,
+and it gets a determinism note of its own in ADR 0009, exactly as each plugin does.
+
 ### What was already decided, so M1 does not re-decide it
 
 | Decided | Where | Consequence |
@@ -312,8 +332,8 @@ rendering as nothing.
 
 M1 **refuses** with `render_unsupported`: Cmajor, Faust and neural device refs (M4 — but the
 *validator* still accepts them, since validity and renderability are different questions);
-`AudioClip` (no tool can create an audio asset, and no gain/fade/stretch fields exist);
 `Routing` sends, sidechains and bus outputs (M2's mixer); a plugin not in the bundled manifest.
+Audio clips are rendered, not refused (decision above).
 
 ### What "deterministic" means for a render
 
@@ -361,28 +381,32 @@ error in the engine job, which is a stronger gate than a hash. This changes `sch
 | 0008 | The engine is a fresh subprocess per render, over stdio until M2 gives gRPC a consumer |
 | 0009 | A render is bit-exact for one pinned toolchain on one platform, and the golden is the WAV |
 | 0010 | `lock.json` pins the engine and every referenced plugin, added on first reference, compared at load |
+| 0011 | `AudioClip` gains gain, fades and stretch, and M1 renders it |
 
-Four rather than one, because each answers a different reviewer question — what crosses, how it
-runs, what "same" means, what is pinned — and the M0.2–M0.4 lesson is that a PR mixing concerns
-gets reviewed for the loud one.
+Five rather than one, because each answers a different reviewer question — what crosses, how it
+runs, what "same" means, what is pinned, and what an audio clip is — and the M0.2–M0.4 lesson
+is that a PR mixing concerns gets reviewed for the loud one. **0011 is a schema ADR**, so it
+precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 
 ### PRs
 
 | # | Branch | Adds |
 |---|---|---|
 | 0 | `m1.0-spike` (**never merged**) | Headless Tracktion render of one note through Surge on the CI image. Answers the questions the ADRs cannot honestly be written without |
-| 1 | `m1.1-adrs` | ADR 0007–0010, spec amendments, resolved pins. No code |
-| 2 | `m1.2-render-proto` | `render.proto`; `RenderExport` and `AddAsset` on `SongTools` |
-| 3 | `m1.3-compile` | `core/src/render.rs`, the field-coverage guard, the plan golden |
-| 4 | `m1.4-engine-skeleton` | `engine/` CMake, submodules, the CI job — rendering **silence of the right length** |
-| 5 | `m1.5-plugins` | Three plugin submodules, manifests, the bundle cache |
-| 6 | `m1.6-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
-| 7 | `m1.7-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
-| 8 | `m1.8-render-export` | `Session::render_export` and `add_asset` over both transports |
-| 9 | `m1.9-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs |
-| 10 | `m1.10-locality` | The bar-17 demo as a test |
-| 11 | `m1.11-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone |
-| 12 | `m1.12-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
+| 1 | `m1.1-adrs` | ADR 0007–0011, spec amendments, resolved pins. No code |
+| 2 | `m1.2-audio-clip` | `AudioClip` gains gain, fades and stretch; codegen; the `schema/` fixture and its three round-trip suites. **A schema change, alone** |
+| 3 | `m1.3-render-proto` | `render.proto`; `RenderExport` and `AddAsset` on `SongTools` |
+| 4 | `m1.4-compile` | `core/src/render.rs`, the field-coverage guard, the plan golden |
+| 5 | `m1.5-engine-skeleton` | `engine/` CMake, submodules, the CI job — rendering **silence of the right length** |
+| 6 | `m1.6-plugins` | Three plugin submodules, manifests, the bundle cache |
+| 7 | `m1.7-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
+| 8 | `m1.8-audio` | Asset playback, gain and fades, Rubber Band vendored and pinned for stretch |
+| 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
+| 10 | `m1.10-render-export` | `Session::render_export` and `add_asset` over both transports |
+| 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip |
+| 12 | `m1.12-locality` | The bar-17 demo as a test |
+| 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone |
+| 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
 
 PR 0 is a spike that is thrown away: the ADRs cannot be written honestly without knowing
 Tracktion's API for device-less construction, whether JUCE needs X11 to instantiate a VST3
@@ -419,6 +443,13 @@ prevent; a feature is absent where it cannot run and loud where it must.
     `com.surge-synth.surge-xt` must be a real manifest id or `checks` goes red.
 14. **`Instrument.state` must not join `JSON_TEXT_FIELDS`** — it is opaque binary, and the
     comment there already names it as the counter-example.
+15. **Rubber Band is a second DSP surface.** A phase vocoder has modes, a threading option and
+    internal buffering; the same input at two settings is two different outputs, and its
+    threading is a summation-order hazard of its own. Pin the mode explicitly in the plan,
+    force single-threaded, and give it a determinism note in ADR 0009 as each plugin gets.
+16. **An audio asset makes `assets/` non-empty for the first time.** `Project::write` creates
+    the directory and M0's comparison ignores it because git cannot store an empty one; a
+    golden that now contains an asset changes what the determinism suite compares.
 
 ### Deferred again, with reasons
 
@@ -450,6 +481,8 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
+| User VST3 plugins | §8 says "VST3 host" and §16 never says user plugins, so nothing places them. M1 refuses a plugin outside the bundled manifest, which makes the gap loud rather than silent | M2, when `app` could show a plugin browser | M1 planning, 2026-09-04 |
+| `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated | when someone exports something with a long release | M1 planning, 2026-09-04 |
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result — the same shape as the interactive resolution already deferred there | M2 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
