@@ -1,0 +1,23 @@
+[package]
+name = "escribass-tests"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Cross-cutting suites: determinism now, golden renders at M1"
+publish = false
+
+# No library and no `src/`: this package exists to hold suites and their inputs, and
+# `autotests` off keeps cargo from looking for a `tests/tests/` directory.
+autotests = false
+
+[[test]]
+name = "determinism"
+path = "determinism.rs"
+
+[dev-dependencies]
+# `diff` builds the failure report, so a mismatch names paths rather than printing two
+# documents. Nothing here reaches into `core` to mutate a song — that goes through the
+# server binary, as CLAUDE.md #2 requires.
+escribass-core = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
