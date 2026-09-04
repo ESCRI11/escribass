@@ -1,14 +1,42 @@
 {
   "id": "01M1FPMP00000000000000000E",
   "parents": [
-    "01M1FPMP00000000000000000C"
+    "01M1FPMP00000000000000000A",
+    "01M1FPMP00000000000000000D"
   ],
-  "tool": "set_tempo",
+  "tool": "merge_branch",
   "ops": [
     {
       "op": "replace",
       "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
-      "value": 120.0
+      "value": 88.0
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/id",
+      "value": "01M1FPMP00000000000000000C"
+    },
+    {
+      "op": "remove",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/cmajor"
+    },
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/plugin",
+      "value": {
+        "plugin_id": "com.surge-synth.surge-xt",
+        "version": "1.3.4"
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/version",
+      "value": 2
+    },
+    {
+      "op": "replace",
+      "path": "/tracks/01M1FPMP000000000000000006/version",
+      "value": 3
     },
     {
       "op": "replace",

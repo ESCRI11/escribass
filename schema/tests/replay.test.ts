@@ -12,8 +12,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const golden = (p: string) =>
-  readFileSync(new URL(`../../tests/determinism/every_tool/expected/${p}`, import.meta.url), "utf8");
+const golden = (script: string, p: string) =>
+  readFileSync(new URL(`../../tests/determinism/${script}/expected/${p}`, import.meta.url), "utf8");
 
 type Op = { op: string; path: string; value?: unknown; from?: string };
 type Entry = { id: string; parents: string[]; ops: Op[] };
@@ -38,9 +38,18 @@ function apply(document: unknown, ops: Op[]): unknown {
       assert.ok(at !== undefined, `no ${op.path}`);
     }
     const last = path[path.length - 1];
-    if (op.op === "remove") delete at[last];
-    else if (op.op === "add" || op.op === "replace") at[last] = op.value;
-    else assert.fail(`the log should not contain \`${op.op}\``);
+    // RFC 6902 distinguishes these, and so does core's `diff`. Treating `replace` as
+    // assignment would accept a log a strict library rejects — which is the very thing this
+    // file claims can read it.
+    if (op.op === "remove") {
+      assert.ok(last in at, `remove of absent ${op.path}`);
+      delete at[last];
+    } else if (op.op === "replace") {
+      assert.ok(last in at, `replace of absent ${op.path}`);
+      at[last] = op.value;
+    } else if (op.op === "add") {
+      at[last] = op.value;
+    } else assert.fail(`the log should not contain \`${op.op}\``);
   }
   return root;
 }
@@ -50,26 +59,27 @@ function apply(document: unknown, ops: Op[]): unknown {
 /// Not every ancestor: a merge entry's operations are the diff from `parents[0]`, so they
 /// already carry what the other side contributed. Replaying that side as well applies its
 /// changes twice, which is invisible for `add` and fatal for `remove`.
-function chain(): Entry[] {
-  const refs = JSON.parse(golden("refs.json")) as { head: string; refs: Record<string, string> };
+function chain(script: string): Entry[] {
+  const refs = JSON.parse(golden(script, "refs.json")) as { head: string; refs: Record<string, string> };
   const entries: Entry[] = [];
   let at: string | undefined = refs.refs[refs.head];
   while (at) {
-    const entry = JSON.parse(golden(`patches/${at}.json`)) as Entry;
+    const entry = JSON.parse(golden(script, `patches/${at}.json`)) as Entry;
     entries.push(entry);
     at = entry.parents[0];
   }
   return entries.reverse();
 }
 
-test("replays the committed patch log into the committed song", () => {
-  const entries = chain();
+for (const name of ["every_tool", "branches"]) {
+test(`replays the committed \`${name}\` log into the committed song`, () => {
+  const entries = chain(name);
   assert.ok(entries.length > 1, "the golden has a log to replay");
 
   // Not `{}`. A patch log is not self-contained: the canonical form emits every no-presence
   // scalar and map, so `replace` is legal from the first operation only against a document
   // that already has them. `origin.json` is that starting point, committed beside the log.
-  let document: unknown = JSON.parse(golden("origin.json"));
+  let document: unknown = JSON.parse(golden(name, "origin.json"));
   for (const entry of entries) document = apply(document, entry.ops);
 
   // Compared as documents, not as text. This side's serialiser is not the canonical writer:
@@ -77,14 +87,15 @@ test("replays the committed patch log into the committed song", () => {
   // writes `90` where it writes `90.0` (ADR 0002 §4). That the *bytes* are canonical is Rust's
   // claim and Rust's test. The claim here is the one ADR 0002 §11 makes — that the log is
   // ordinary RFC 6902 over ordinary JSON, so anything can replay it into the same document.
-  assert.deepEqual(document, JSON.parse(golden("song.json")));
+  assert.deepEqual(document, JSON.parse(golden(name, "song.json")));
 });
+}
 
 test("the log is RFC 6902 that needs no schema to read", () => {
   // Nothing above imported a generated type. The entries are plain JSON, which is what §2.6
   // means by a project being readable and diffable, and what makes the log recoverable by
   // something that has never seen this schema.
-  for (const entry of chain()) {
+  for (const entry of chain("branches")) {
     for (const op of entry.ops) {
       assert.ok(["add", "replace", "remove"].includes(op.op), `unexpected \`${op.op}\``);
       assert.ok(op.path === "" || op.path.startsWith("/"), `not a pointer: ${op.path}`);

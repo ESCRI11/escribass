@@ -1,20 +1,19 @@
 {
-  "id": "01M1FPMP00000000000000000C",
+  "id": "01M1FPMP00000000000000000F",
   "parents": [
-    "01M1FPMP00000000000000000A",
-    "01M1FPMP00000000000000000B"
+    "01M1FPMP00000000000000000E"
   ],
-  "tool": "merge_branch",
+  "tool": "set_tempo",
   "ops": [
     {
       "op": "replace",
       "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
-      "value": 88.0
+      "value": 100.0
     },
     {
       "op": "replace",
       "path": "/version",
-      "value": 4
+      "value": 6
     }
   ],
   "provenance": {

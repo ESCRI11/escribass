@@ -120,6 +120,13 @@ pipeline under the tool name `undo`. `redo` is the same operation against the en
 undone. The session holds the stack of undone entry ids, and any other commit clears it —
 the model every editor already implements.
 
+**A caveat this decision only argues for one branch.** `version` counts per branch, so two
+branches can hold the same number over different content — switching between them is not a
+rewind, and no operation lies, but a client checking a version has to know which ref it is on.
+The merge rule (`max + 1`) is what makes the number monotonic again once the branches join. A
+concurrency check that spans branches would need the ref alongside the number; nothing needs
+one before M2.
+
 Rewinding the branch ref was the cheaper option and is rejected because it breaks §4.3. A
 rewind *decrements* every version it touches, so a client holding version 5 of a track can
 later be handed a different version 5. Optimistic concurrency built on a number that repeats

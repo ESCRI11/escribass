@@ -224,13 +224,25 @@ reviewed as plumbing.
 - **`UPDATE_FIXTURES=1` blesses whatever ran**, including a deterministically wrong output. The
   only guard is the rule that a golden changes solely in the PR that changes the canonical form
   or a tool's semantics, with its diff reviewed there — §17's rule for renders, applied here.
-- **A hang is not a failure**: a server that never answers has no timeout. Accepted for now.
+- **A hang is not a failure** unless one is imposed: every gRPC call is wrapped in a 30-second
+  timeout and the CI job carries `timeout-minutes`, because a hung test otherwise inherits
+  GitHub's six-hour default and reports nothing.
+- **`cargo test -p escribass-tests` does not rebuild the binaries** — only the libraries they
+  link. The suite drives the binary, so it can validate a build from *before* your change and
+  pass. It refuses to run against one older than `core/src`. This was found by two deliberate
+  mutations that both "passed" until the binary was rebuilt by hand.
 
 ### Kept rather than replaced
 
 The library-level determinism tests in `core/tests/` stay as layer guards — they fail nearer
 the cause and cost nothing. Only `core/tests/mcp.rs`'s two-session test moves, because the
 suite is its exact superset.
+
+**Everything else in that file stays**, and one of them matters: the regression test for
+`apply_patch` reading `"dry_run": "true"` as false and applying a request meant as a preview.
+The suite structurally cannot replace it — a script step is a tool call whose arguments are
+valid, and a malformed argument is a *protocol* error the harness treats as a broken script
+rather than an outcome to record. It was deleted by accident once; the review caught it.
 
 `tests/fixtures/song/minimal.json` stays a schema fixture written from generated types: it
 exercises `Generator`, `Marker`, `Instrument.state` and model provenance that no typed tool can

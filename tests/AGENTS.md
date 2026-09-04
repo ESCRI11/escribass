@@ -33,7 +33,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 - **The three scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing).
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
 - **A cross-language check:** `schema/tests/replay.test.ts` and `schema/tests/test_replay.py` read the golden and replay it. They compare *documents*, not bytes — neither side's serialiser is the canonical writer, and that the bytes are canonical is Rust's claim.
-- **A tool:** add it to a script, add an arm to the gRPC driver's `call!` (a missing one is a panic naming the tool, not a skipped step), and run the suite — the ids of every later step shift if the new tool mints any.
+- **A tool:** add it to a script — `every_implemented_tool_is_scripted` enforces this — add an arm to the gRPC driver's `call!`, and run the suite — the ids of every later step shift if the new tool mints any.
 
 ## Running it
 
@@ -42,4 +42,4 @@ cargo test                      # from the workspace root: builds the binaries, 
 cargo test -p escribass-tests   # only works if the binaries are already built
 ```
 
-`CARGO_BIN_EXE_<name>` is not set for a package that does not own the binary, so the suite finds `escribass-mcp` from the test executable's own path. It cannot build it: cargo holds the build lock while tests run.
+`CARGO_BIN_EXE_<name>` is not set for a package that does not own the binary, so the suite finds the binaries from the test executable's own path. It cannot build them — cargo holds the build lock while tests run — and it **refuses to run against one older than `core/src`**, because `cargo test -p escribass-tests` rebuilds the libraries and not the binaries, and a suite that validates a stale build and passes is worse than one that fails.
