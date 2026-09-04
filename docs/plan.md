@@ -28,7 +28,8 @@ stale.
 | M0.3 | Ten findings from a whole-stack review, three of them blockers | done | PR #25 |
 | M0.3 | Six more from an independent final review, two of them blockers | done | PR #26 |
 | M0.3 | Landed on `main` as one integration PR | done | PR #27 |
-| M0.4 | Determinism suite in `tests/` | **next** | — |
+| M0.4 | Determinism suite in `tests/` | done | PRs #29–#34 |
+| — | **M0 complete.** Schema, core, tool API, determinism suite | done | — |
 
 C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
 
@@ -193,8 +194,9 @@ an array whole.
 | 2 | `m0.4-golden` | `expected/` for `every_tool`, `UPDATE_FIXTURES=1` writer, golden comparison, the map-order guard, `.gitattributes` |
 | 3 | `m0.4-scripts` | `refusals` and `branches` with goldens |
 | 4 | `m0.4-grpc` | The gRPC subprocess driver; every script over both transports |
-| 5 | `m0.4-close` | `docs/plan.md`, `tests/AGENTS.md` rules, the §11 line, M0 closed |
-| 6 | `m0.4-cross-language` | TS and Python replay the golden log |
+| 5 | `m0.4-cross-language` | TS and Python replay the golden log |
+| 6 | `m0.4-review-fixes` | One blocker and four should-fixes from a whole-stack review |
+| 7 | `m0.4-close` | `docs/plan.md`, the §11 line, M0 closed |
 
 The split follows M0.2's and M0.3's lesson: PR 1 is the loud concern (does the plumbing produce
 identical bytes twice), PR 2 the silent one (does today's output equal what was committed), PR
@@ -250,6 +252,19 @@ produce before M4, and it is a constructed value rather than a mutation, so CLAU
 in play. `tests/AGENTS.md`'s "from M0.4, fixtures come through the tool API" becomes
 "determinism goldens come through the tool API; the schema fixture is written from generated
 types".
+
+## M0, closed
+
+Four steps, twenty-eight pull requests, four whole-stack reviews. What M0 delivers: one
+representation of a song (`schema/song.proto`), a `core` that validates it and records every
+change as a patch in a DAG, a tool API those changes must go through — served over gRPC and
+MCP — and a suite that proves the same input gives the same bytes.
+
+The reviews earned their place. Between them they found a merge that made a project
+unopenable, an unknown enum that killed the gRPC server permanently, an approve-then-apply
+flow with no working path, a merge that repeated a version number, a preview that wrote for
+real, and a determinism suite that could validate a stale binary and pass. Every one of those
+looked correct in review and was wrong in a way only a test or a mutation could show.
 
 ## After M0
 

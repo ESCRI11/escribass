@@ -159,6 +159,11 @@ Before merging any change, confirm:
 - No wall-clock dependence in compilation or rendering.
 - All external tool versions recorded in `lock.json` and checked at load.
 - A golden-render test exists for every bundled instrument (render fixture → hash compare).
+- **The determinism suite in `tests/` passes.** It drives `core` through the tool API over a
+  real server process and checks the claim three ways: two runs against each other, each
+  against a committed golden, and one transport against the other. Two runs agreeing catches
+  nondeterminism; only the golden catches drift, where a dependency changes a serialisation
+  detail and both runs are wrong together (M0.4).
 
 ## 12. Licensing
 
@@ -220,6 +225,7 @@ not in its scope and needs no ADR.
 | Entity `version` on merge | Maintained by core, never in a tool op; resolved as max+1 | Otherwise every merge conflicts by construction on `/…/version` (ADR 0001 §4) | 2026-09-02 |
 | Milestone scope | §16 authoritative; eight unplaced items placed; neural runtime in v1 at M4 | Unplaced scope is invisible scope, and §16 had fallen behind decisions binding elsewhere (ADR 0003) | 2026-09-02 |
 | `FormRule` | Deferred to M4 | Least-specified entity in §4 and nothing consumes it before the generative compiler; additive to add (ADR 0002) | 2026-09-02 |
+| Determinism, how it is checked | A suite in `tests/` driving a real server process, compared against a committed golden | Two runs in one job agree even when a dependency has changed a serialisation detail underneath them; only something committed earlier disagrees (M0.4) | 2026-09-03 |
 | Entity `version` bumping | In the commit pipeline, between applying ops and re-deserialising | A bump taken after the patch is derived lives only in `song.json`, so every replay is one version behind the file beside it (ADR 0005 §1, §2) | 2026-09-03 |
 | Undo mechanism | Append an inverse entry; never rewind a ref | A rewind decrements `version`, so §4.3's concurrency check can see one number with two different contents (ADR 0005 §4) | 2026-09-03 |
 | Tool API wire shape | One RPC per tool, one shared `ToolResult`, `Violation` as the only wire error | Per-tool response messages are copies of one contract, free to drift; and an invalid call must stay inside §6's retry loop rather than becoming a transport failure (ADR 0006 §1, §2) | 2026-09-03 |
