@@ -52,6 +52,15 @@ class TestSongFixture(unittest.TestCase):
         self.assertEqual(clip.note_clip.notes["01M1FPMP00NTEG100000000007"].pitch, 43)
         self.assertEqual(clip.note_clip.notes["01M1FPMP00NTED200000000008"].expression["timbre"], 0.62)
 
+    def test_audio_clip_gain_fades_and_stretch(self) -> None:
+        clip = self.song.clips["01M1FPMP00CPGTR0000000000H"]
+        self.assertIsNone(clip.note_clip)
+        self.assertEqual(clip.audio_clip.asset_hash, "3f7a9c1e5b2d00000000000000000000")
+        self.assertEqual(clip.audio_clip.gain_db, -4.5)
+        self.assertEqual(clip.audio_clip.fade_in_ticks, 240)
+        self.assertEqual(clip.audio_clip.fade_out_ticks, 480)
+        self.assertIs(clip.audio_clip.time_stretch, True)
+
     def test_64_bit_seed_survives_the_json_string_encoding(self) -> None:
         self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].seed, 9007199254740993)
 
