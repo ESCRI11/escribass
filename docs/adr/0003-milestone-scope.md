@@ -40,6 +40,15 @@ compilers do.
 fresh install produce usable sound, and §11 requires a golden-render test per bundled
 instrument. One synth proves the render path; the set is what M1 delivers.
 
+- **Amended 2026-09-05:** all four, minus Airwindows, which moves to **M4**. This decision read
+  §8's candidate list as four bundled *instruments*; three of them are. Airwindows is a set of
+  effects, so §11's "a golden-render test for every bundled instrument" is met in full by Surge
+  XT, sfizz and Dexed — and the spike found its pinned repository may not build a Linux VST3 at
+  all. M4 already vendors clap-wrapper (§7.2, and §16's M4 line), which turns its packaging from
+  a build investigation inside the render milestone into the CLAP→VST3 path M4 uses anyway.
+  M1's deliverable was never "four plugins"; it was a render path with a golden per instrument,
+  and it still delivers that (ADR 0010 §5).
+
 ### 5. M2 carries the mixer and the history view
 
 §16 listed timeline and piano roll. §9 lists seven views. The mixer and the patch-log history

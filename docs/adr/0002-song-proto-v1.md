@@ -136,7 +136,7 @@ it against a real caller. `Marker` is two fields and §4.2 names it, so it stays
 | §4.2 says | v1 has | Upgrade path |
 |---|---|---|
 | `SampleMap` (SFZ-compatible) | `SamplerRef { sfz_hash }` | The SFZ file is the sample map; a structured form can be added when a tool needs to edit one. |
-| `AudioClip` | `{ asset_hash }` | Gain, fades and time-stretch when M1 renders audio clips. |
+| `AudioClip` | `{ asset_hash }` | Gain, fades and time-stretch when M1 renders audio clips. **Taken 2026-09-05: ADR 0011** adds `gain_db`, `fade_in_ticks`, `fade_out_ticks` and `time_stretch`. |
 | `Routing { sends, sidechains }` | `sends: map<track_id, double>` (dB), `sidechains: map<effect_id, track_id>` | Send messages if pre/post-fader or per-send params are needed. |
 | `points: [{tick, value, curve}]` | `curve` enum with `LINEAR` and `HOLD` only | Any other interpolation formula is renderer-specific and would put bit-exactness (§11) at the mercy of the renderer. Add shapes with a defined formula. |
 | `Generator.kind (strudel \| python \| …)` | `GENERATOR_KIND_PYTHON` only | §15 already defers Strudel. |
