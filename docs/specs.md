@@ -40,6 +40,8 @@ Five tiers, top to bottom:
 
 Inter-process communication: `app` ↔ `ai` over gRPC; `app` ↔ `engine` over gRPC (control and transport only). Preview audio plays directly from the `engine` process to the audio device; audio is never streamed over IPC. All three processes ship in one installer and are supervised by `app`.
 
+That is the steady state, reached at M2. In M1 there is no `app`: the `Render` service is **defined** in `/proto` so `buf breaking` guards it, and the engine is driven by `core` as a fresh subprocess per render over stdio — one `RenderPlan` in, one `RenderResult` out. M2 implements the gRPC server and deletes the stdio path rather than keeping both (ADR 0008 §1).
+
 ## 4. Song model [MUST]
 
 ### 4.1 Schema definition
@@ -133,11 +135,13 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
 
 - **Tracktion Engine** (C++, GPL/commercial, built on JUCE 8 AGPL) provides timeline, tempo map, tracks, clips, automation, VST3 hosting, real-time playback, and offline rendering.
 - Plugin format policy: the engine hosts **VST3 only** in v1. Everything produced in-house (Cmajor/Faust instruments, neural wrappers) is emitted as CLAP and wrapped to VST3 with clap-wrapper. Native CLAP hosting is a later optimisation, never a dependency.
-- Time-stretch: Rubber Band (GPL). Elastique is not used.
-- Receives a materialised layer 2 + layer 3 snapshot, builds a Tracktion edit, and either streams preview audio or renders offline.
-- Offline render must be **bit-exact across runs** on the same platform; cross-platform differences are documented per plugin.
-- Bundled open-source instruments and effects (candidates: Surge XT, sfizz, Dexed, Airwindows) so a fresh install produces usable sound.
-- The engine has **no knowledge of the schema beyond the materialised snapshot**; it never reads project files.
+- Time-stretch: Rubber Band (GPL). Elastique is not used. Its configuration is pinned, not defaulted — offline processing, the R3 engine, threading disabled, and every other option group written out explicitly — because a pinned version of a phase vocoder is not a pinned output (ADR 0011 §3).
+- Receives a **`RenderPlan`**: the materialised layer 2 + layer 3 snapshot, compiled by `core`, flat, ordered and already resolved. It builds a Tracktion edit from it and either streams preview audio or renders offline. It never receives a `Song` (ADR 0007 §1).
+- **One render, one process.** The engine is spawned per render and exits with its answer; nothing is pooled, warmed or reused, because a resident plugin instance makes a render depend on the render before it (ADR 0008 §2). A live process for preview playback is M2's.
+- Offline render must be **bit-exact across runs** on the same platform. Precisely: same `.escri` + same engine binary + same plugin binaries + same OS and CPU → identical PCM. In M1 that is Linux x86-64 on the image and compiler §17 pins; macOS, Windows and cross-CPU are unclaimed, not contradicted (ADR 0009 §1).
+- Bundled open-source instruments: **Surge XT, sfizz and Dexed**, each with the golden-render test §11 requires. Airwindows is a set of effects and moves to M4 with clap-wrapper (ADR 0010 §5).
+- Every surface that computes audio carries a determinism note, not only the plugins: Dexed (pure FM, expected exact), Surge XT (random start phase, unison detune and noise disabled in fixtures), sfizz (resamples, dispatches SIMD at run time), Rubber Band (see above), and sample-rate conversion for an asset that does not match the render rate (ADR 0009 §4). Cross-platform differences are documented per surface.
+- The engine has **no knowledge of the schema beyond the materialised snapshot**; it never reads project files. A path it is handed — an asset to read, a WAV to write — is input or output, not a project file (ADR 0007 §2, ADR 0008 §1).
 
 ## 9. Desktop UI (`app` process)
 
@@ -157,8 +161,16 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
 Before merging any change, confirm:
 - No unseeded randomness anywhere in `core`, compilers, or `engine`.
 - No wall-clock dependence in compilation or rendering.
-- All external tool versions recorded in `lock.json` and checked at load.
+- All external tool versions recorded in `lock.json` and checked at load. From M1 that is the
+  engine's submodule commits and one entry per plugin the song references, added on first
+  reference and never removed; a referenced plugin this build cannot match refuses to open with
+  `lock_mismatch`, and re-pinning a plugin is always explicit. The engine block re-pins on open
+  instead: a newer engine still renders the song, and what a render was made with travels with
+  the render (ADR 0010 §1–§3, ADR 0008 §5).
 - A golden-render test exists for every bundled instrument (render fixture → hash compare).
+  **The comparison is over the WAV's `data` chunk, never the whole file**, and the committed
+  `.sha256` hashes the PCM payload: JUCE writes a `bext` chunk carrying `OriginationDate` and
+  `OriginationTime`, so the audio is deterministic and the file is not (ADR 0009 §2).
 - **The determinism suite in `tests/` passes.** It drives `core` through the tool API over a
   real server process and checks the claim three ways: two runs against each other, each
   against a committed golden, and one transport against the other. Two runs agreeing catches
@@ -231,6 +243,18 @@ not in its scope and needs no ADR.
 | Tool API wire shape | One RPC per tool, one shared `ToolResult`, `Violation` as the only wire error | Per-tool response messages are copies of one contract, free to drift; and an invalid call must stay inside §6's retry loop rather than becoming a transport failure (ADR 0006 §1, §2) | 2026-09-03 |
 | MCP server | `rmcp` SDK; tool `inputSchema` generated from the protobuf descriptor | A hand-written schema is a second description of the model, and it drifts silently — the only symptom is that the model never learns a new field exists (ADR 0006 §6) | 2026-09-03 |
 | Project identity | One project per process, named at launch; no `open_project` tool | An MCP stdio process is not a session, and two writers on one `.escri` break ADR 0004's write ordering (ADR 0006 §5) | 2026-09-03 |
+| Engine input | A `RenderPlan` compiled by `core` — flat, ordered, resolved — never a `Song` | "Schema-agnostic" cannot mean the engine links nothing from the model; it means nothing needing the model's structure crosses, or its semantics get reimplemented in C++ (ADR 0007 §1) | 2026-09-04 |
+| Plan vs. model | Leaf messages reused by value with §4.3 blanked; structural messages plan-local and `repeated` | A plan-local `PlanNote` is the mirrored shape ADR 0006 §4 forbids, and a plan is never patched, so ADR 0001 §3's map rule has nothing to protect (ADR 0007 §2, §5) | 2026-09-04 |
+| Engine process shape | A fresh subprocess per render over stdio in M1; `Render` defined now, implemented over gRPC at M2 | A reused plugin instance ramps from its previous value, so render N depends on render N−1; and grpc++ would be vendored for a client that is its own parent (ADR 0008 §1, §2) | 2026-09-05 |
+| Engine C++ codegen | Generated at build time by the engine's CMake; never committed | A committed `.pb.cc` pins a `protoc` that must equal the vendored runtime — two pins that must agree, with the stale one silent (ADR 0008 §4) | 2026-09-05 |
+| What a render golden compares | The WAV's `data` chunk; the committed `.sha256` hashes the PCM payload | Three spike runs produced identical PCM and three different file hashes — JUCE writes `bext` with `OriginationDate`/`OriginationTime`, so a file hash would fail about once per second of build time and read as flakiness (ADR 0009 §2) | 2026-09-05 |
+| Render determinism, scope | Linux x86-64 on a pinned image and compiler; cross-CPU unproven until CI measures it | A pin fixes the source; the bits also depend on what the compiler emitted and what the CPU chose at run time, and sfizz and JUCE dispatch SIMD at run time (ADR 0009 §1, §6) | 2026-09-05 |
+| `lock.json` v2 | The engine's submodule commits plus one entry per referenced plugin, added on first reference and never removed | A block derived purely from the current song loses a pin on an ordinary delete, and undo (ADR 0005 §4) then re-pins from the running build — a silent re-pin caused by pressing undo (ADR 0010 §1, §2) | 2026-09-05 |
+| A referenced plugin this build cannot match | Refuse to open, `lock_mismatch`; re-pinning is always explicit | The strict reading of §11, in the shape `schema_version_mismatch` already has. Rendering silence or substituting produces a wrong render that hashes differently with no error anywhere (ADR 0010 §3) | 2026-09-05 |
+| A newer engine than the project pins | Re-pin on open, do not refuse | A missing plugin makes a song unrenderable; a newer engine renders it fine and only risks bit-exactness. There is one engine and a project cannot choose it, so refusing would refuse every project at once, and §17's golden-render pass belongs on the PR that moves the pin (ADR 0010 §3) | 2026-09-05 |
+| `plugin_unknown`, `param_unknown` | Validator rules, resolved against a build manifest the engine generates and `core` requires | §4.4 has wanted both since M0.2 and neither could resolve without knowing what this build hosts; an optional manifest would give both rules a silent skip arm (ADR 0010 §4) | 2026-09-05 |
+| `AudioClip` | Gains `gain_db`, `fade_in_ticks`, `fade_out_ticks`, `time_stretch`; the fade formula is ours and stretch is a flag | An audio track has no device, so no `ParamRef` can reach a clip's level; and a stretch *ratio* would have to be computed by a caller that cannot read the asset (ADR 0011 §1, §3) | 2026-09-05 |
+| Airwindows | Deferred to M4, with clap-wrapper | Its pinned repository may not build a Linux VST3, and §11's golden per bundled *instrument* is met by the three synths; M4 already has the CLAP→VST3 path (ADR 0003 §4, amended; ADR 0010 §5) | 2026-09-05 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process — must be resolved before M4, ADR 0003 §7); minimum supported OS versions; symbolic model choice for v1 melody/drum generation; whether §6's analysis features and symbolic generation are v1 scope at all (ADR 0003, Still unplaced).
 
@@ -251,7 +275,7 @@ is `docs/roadmap.md`. Both defer to this section.
 
 ## 17. Pinned toolchain baseline [MUST]
 
-Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json`. A project's `lock.json` records only `schema_version` until M1 and M4 give it something else to pin — plugins, models and compiled artefacts (ADR 0003 §3); the table is copied into it as those arrive.
+Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json`. A project's `lock.json` recorded only `schema_version` until M1. From M1 it also records the engine's submodule commits and one entry per plugin the song references, added on first reference and compared at load, with the engine block re-pinned rather than refused (ADR 0010 §1–§3); M4 adds the compiled artefacts and model hashes (ADR 0003 §3). Only what a project uses is copied into it, never the whole table.
 
 | Component | Version / tag | Commit | Date | Notes |
 |---|---|---|---|---|
@@ -263,13 +287,16 @@ Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags
 | ONNX Runtime | v1.29.0 | `2e2543fbe9fae542f921d47a72d21d5a4ef0b710` | 2026-08-11 | Neural runtime. |
 | Rubber Band | v4.0.0 | `1d95888bec3ae0a17c0c4af791810d5a63f6bc35` | 2024-10-25 | Time-stretch (GPL). |
 | Faust | 2.85.9 | tag `2.85.9` | — | Import path only; pin hash when vendored. |
-| Surge XT | release_xt_1.3.4 | tag `release_xt_1.3.4` | — | Bundled instrument. |
-| sfizz | 1.2.3 | tag `1.2.3` | — | Bundled sampler (SFZ). |
-| Dexed | v1.0.1 | tag `v1.0.1` | — | Bundled FM synth. |
-| Airwindows | `main` | `ab0d1df871b8` | 2026-09-02 | No release tags upstream; pin by commit. |
+| Surge XT | release_xt_1.3.4 | `f7b97c682ade0b87da85ca5968b63d5c7c98e68d` | 2024-08-11 | Bundled instrument, `surge-synthesizer/surge`. Resolved 2026-09-05. |
+| sfizz | 1.2.3 | `4e70dc0bef53b41f2853ed46e26f5911114c92d0` | 2024-01-14 | SFZ engine, **library only**: its CMake builds a library and a JACK client, no VST3 (spike, 2026-09-04). |
+| sfizz-ui | 1.2.3 | `6ef7b89b6e5aa914593c7f3ca19b859915c30337` | 2024-01-14 | **The bundled sampler plugin.** `sfztools/sfizz-ui` is where the VST3 is built; the `sfizz` pin alone yields none (ADR 0010). |
+| Dexed | v1.0.1 | `bce5deee7c41bf5515b806d0b7de8b5c0bb49467` | 2025-11-29 | Bundled FM synth, `asb2m10/dexed`. Resolved 2026-09-05. |
+| Airwindows | `main` | `ab0d1df871b8` | 2026-09-02 | No release tags upstream; pin by commit. **Deferred to M4** with clap-wrapper (ADR 0010 §5). |
 | Tauri | tauri-v2.11.5 / CLI 2.11.4 | tag | — | Desktop shell. |
 | Python (`ai`) | 3.12.x | — | — | Pin exact patch in `ai/.python-version`; lock deps with `uv`. |
 | LLM provider | OpenRouter | — | — | Model ids pinned per project in `lock.json` under `ai.model`. |
+| CI image (golden renders) | `ubuntu-24.04` | — | — | The image every M1 golden render is valid for. `ubuntu-latest` moves, and every golden would drift with no PR to blame (ADR 0009 §5). |
+| C++ compiler (golden renders) | g++ 13.3 | — | — | What the spike ran and what the goldens are blessed under. `engine/`'s CMake pins the compile-time `-march`, sets `-ffp-contract=off`, and fails on `-ffast-math` (ADR 0009 §3). |
 
 Rules:
 - `lock.baseline.json` is the only place these values live in code; CI fails if a submodule or vendored dependency drifts from it.
