@@ -21,6 +21,10 @@ modules:
         - SERVICE_SUFFIX
         - RPC_RESPONSE_STANDARD_NAME
         - RPC_REQUEST_RESPONSE_UNIQUE
+        # `Render.Render` takes the `RenderPlan` itself. The same message is what the
+        # engine reads from stdin in M1 (ADR 0008 §1), and a `RenderRequest` envelope for
+        # gRPC would make the shape M2 implements differ from the one M1 reviewed.
+        - RPC_REQUEST_STANDARD_NAME
 lint:
   use:
     - STANDARD

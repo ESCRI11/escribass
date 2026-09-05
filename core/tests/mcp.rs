@@ -178,6 +178,45 @@ fn the_json_text_exception_names_real_bytes_fields() {
 }
 
 #[test]
+fn an_opaque_bytes_field_stays_base64() {
+    // The other half of the `JSON_TEXT_FIELDS` decision. An asset's bytes are what
+    // `Instrument.state` is — opaque binary — and proto3 JSON's base64 is the right encoding
+    // for them; only canonical JSON text wearing a `bytes` field is rewritten (ADR 0006 §6).
+    // Pinned so that a well-meant "every bytes field is really JSON" never corrupts one.
+    let dir = Scratch::new();
+    let lines = session(&dir.0, &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})]);
+    let tools = response(&lines, 1)["result"]["tools"].clone();
+    let add = tools.as_array().unwrap().iter().find(|t| t["name"] == json!("add_asset")).unwrap();
+
+    let content = &add["inputSchema"]["properties"]["content"];
+    assert_eq!(content["type"], json!("string"));
+    assert_eq!(content["contentEncoding"], json!("base64"), "{content}");
+}
+
+#[test]
+fn an_asset_crosses_as_base64_and_comes_back_as_its_hash() {
+    // "abc" is the SHA-256 test vector everybody knows, so the number below is checkable
+    // without trusting this code. The dry run first: the same hash, and the file must not
+    // exist until the real call.
+    const ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let dir = Scratch::new();
+    let lines = session(
+        &dir.0,
+        &[
+            call(1, "add_asset", json!({"content": "YWJj", "dry_run": true})),
+            call(2, "add_asset", json!({"content": "YWJj"})),
+        ],
+    );
+    for id in [1, 2] {
+        let result = response(&lines, id)["result"].clone();
+        assert_eq!(result["isError"], json!(false));
+        assert_eq!(result["structuredContent"], json!({"asset_hash": ABC}));
+    }
+    let stored = std::fs::read(dir.0.join("assets").join(ABC)).expect("the asset is on disk");
+    assert_eq!(stored, b"abc");
+}
+
+#[test]
 fn a_canonical_json_field_is_advertised_as_an_array_not_base64() {
     // Left as the proto describes it, `apply_patch` would ask a model to base64-encode an RFC
     // 6902 array. ADR 0006 §6 makes the patch cross as JSON in both directions.

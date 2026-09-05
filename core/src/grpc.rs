@@ -16,9 +16,12 @@
 //! because §6's retry loop has to be able to see it. Only an operator's problem becomes a
 //! `Status`.
 //!
-//! Every RPC in `song_tools.proto` is implemented here. The tools §5 lists that are missing
-//! are missing from the *contract* too, named in a comment there with the milestone each waits
-//! for — so there is no stub answering `UNIMPLEMENTED` and no way to call one by accident.
+//! Every RPC in `song_tools.proto` is implemented here but one. The tools §5 lists that are
+//! missing are missing from the *contract* too, named in a comment there with the milestone
+//! each waits for. The exception is `render_export`: its RPC is defined in M1 PR 3 so that
+//! `buf breaking` guards the shape from the first PR that could break it, and it answers
+//! `UNIMPLEMENTED` until the engine that would serve it exists (PR 10). Over MCP it is not
+//! advertised at all.
 
 use crate::session::Session;
 use crate::ProjectError;
@@ -70,8 +73,8 @@ fn status(e: ProjectError) -> Status {
     }
 }
 
-/// The whole service, so the seventeen mutating RPCs are written once rather than seventeen
-/// times.
+/// The whole service, so the seventeen `ToolResult` RPCs are written once rather than
+/// seventeen times.
 ///
 /// The macro wraps the entire `impl` rather than generating one method at a time, because
 /// `#[tonic::async_trait]` rewrites `async fn` into a boxed future and attribute macros run
@@ -105,6 +108,27 @@ macro_rules! service {
                 _request: Request<GetHistoryRequest>,
             ) -> Result<Response<HistoryResponse>, Status> {
                 Ok(Response::new(self.locked().get_history()))
+            }
+
+            // Its own method rather than a macro arm: it returns the asset's address, not a
+            // `ToolResult` (song_tools.proto, `AssetResponse`). Over this transport `content`
+            // is bytes and arrives as bytes.
+            async fn add_asset(
+                &self,
+                request: Request<AddAssetRequest>,
+            ) -> Result<Response<AssetResponse>, Status> {
+                let response = self.locked().add_asset(&request.into_inner()).map_err(status)?;
+                Ok(Response::new(response))
+            }
+
+            // Defined so `buf breaking` guards it; served when the engine exists (M1 PR 10).
+            // `UNIMPLEMENTED` rather than a refusal: there is nothing a caller could say
+            // differently, so it does not belong inside §6's retry loop (ADR 0006 §2).
+            async fn render_export(
+                &self,
+                _request: Request<RenderExportRequest>,
+            ) -> Result<Response<ToolResult>, Status> {
+                Err(Status::unimplemented("render_export waits for the engine (M1 PR 10)"))
             }
 
             $(

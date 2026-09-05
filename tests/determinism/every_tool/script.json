@@ -72,6 +72,9 @@
     }}},
   {"tool": "quantize", "args": {"clip_id": "01M1FPMP00000000000000000E", "grid_ticks": 240}},
 
+  {"tool": "add_asset", "args": {"content": "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAOAAAA==", "dry_run": true}},
+  {"tool": "add_asset", "args": {"content": "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAOAAAA=="}},
+
   {"tool": "get_song", "args": {}},
   {"tool": "get_history", "args": {}}
 ]

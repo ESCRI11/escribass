@@ -18,11 +18,11 @@ use crate::descriptor::{tool_schemas, ToolSchema};
 use crate::session::Session;
 use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
-    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
-    ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest, GetSongAtRequest,
-    MergeBranchRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest,
-    SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
+    AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
+    AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
+    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest,
+    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SwitchBranchRequest,
+    ToolResult, TransposeRequest,
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
@@ -57,6 +57,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "transpose",
     "quantize",
     "add_automation",
+    "add_asset",
     "set_tempo",
     "add_section",
     "move_section",
@@ -69,10 +70,12 @@ pub const IMPLEMENTED: &[&str] = &[
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so must cross MCP as JSON
 /// rather than as base64 (ADR 0006 §6).
 ///
-/// Deliberately a short explicit list rather than a heuristic: `Instrument.state` and
-/// `Effect.state` are also `bytes` and *are* opaque binary, so a rule like "every bytes field
-/// is really JSON" would corrupt them. `tests/mcp.rs` checks each entry names a real `bytes`
-/// field, so the list cannot rot silently.
+/// Deliberately a short explicit list rather than a heuristic: `Instrument.state`,
+/// `Effect.state` and `AddAssetRequest.content` are also `bytes` and *are* opaque binary, so
+/// a rule like "every bytes field is really JSON" would corrupt them. An asset crosses as the
+/// base64 proto3 JSON gives every `bytes` field, decoded by the generated deserializer like
+/// any other argument. `tests/mcp.rs` checks each entry names a real `bytes` field, so the
+/// list cannot rot silently.
 pub const JSON_TEXT_FIELDS: &[(&str, &str)] = &[("apply_patch", "patch")];
 
 /// One open project, served over MCP.
@@ -333,6 +336,14 @@ impl ServerHandler for SongTools {
             "add_automation" => {
                 let arguments: AddAutomationRequest = decode("add_automation", &request)?;
                 tool_result(&session.add_automation(&arguments).map_err(broken)?)
+            }
+            "add_asset" => {
+                // Through the generated deserializer, which is what turns the base64 a model
+                // sends into bytes. Its answer is an address, not a `ToolResult`, so it is
+                // shaped like a read's.
+                let arguments: AddAssetRequest = decode("add_asset", &request)?;
+                let response = session.add_asset(&arguments).map_err(broken)?;
+                complete(json!({"asset_hash": response.asset_hash}), false)
             }
             "set_tempo" => {
                 let arguments: SetTempoRequest = decode("set_tempo", &request)?;

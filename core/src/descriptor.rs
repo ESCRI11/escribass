@@ -39,6 +39,14 @@ pub struct ToolSchema {
 /// that adding one is a shallower schema rather than a stack overflow at start-up.
 const MAX_DEPTH: usize = 8;
 
+/// The service whose RPCs are tools: §5's `SongTools`, and only it.
+///
+/// The descriptor also carries `Render` (`proto/render.proto`), the engine's boundary. It is
+/// not a tool — a model never calls the engine; `render_export` on `SongTools` is how a
+/// render is asked for — and advertising it would hand a model a `RenderPlan` to fill in,
+/// which is exactly the thing ADR 0007 §1 keeps out of every process but core.
+const TOOL_SERVICE: &str = "SongTools";
+
 /// Every tool in the service, in declaration order.
 pub fn tool_schemas(descriptor: &[u8]) -> Result<Vec<ToolSchema>, String> {
     let set = FileDescriptorSet::decode(descriptor)
@@ -48,6 +56,9 @@ pub fn tool_schemas(descriptor: &[u8]) -> Result<Vec<ToolSchema>, String> {
     let mut tools = Vec::new();
     for file in &set.file {
         for (position, service) in file.service.iter().enumerate() {
+            if service.name() != TOOL_SERVICE {
+                continue;
+            }
             for (method_position, method) in service.method.iter().enumerate() {
                 let request = index
                     .message(method.input_type())

@@ -11,6 +11,11 @@
 //!
 //! The generated `song_tools_server` module carries the `tonic` service trait `core`
 //! implements, and `song_tools_client` the client that calls it.
+//!
+//! `render` is the engine's boundary (`proto/render.proto`, ADR 0007 and 0008): the
+//! `RenderPlan` core compiles, the `RenderResult` the engine answers with, and a `Render`
+//! service nobody implements before M2. Its leaf messages are `song.proto`'s by the same
+//! `extern_path`, which is what makes a plan carry *the* `Note` rather than a copy of it.
 
 pub mod escribass {
     pub mod tools {
@@ -23,8 +28,17 @@ pub mod escribass {
             ));
         }
     }
+    pub mod render {
+        pub mod v1 {
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/gen/rust/escribass/render/v1/escribass.render.v1.rs"
+            ));
+        }
+    }
 }
 
+pub use escribass::render::v1 as render;
 pub use escribass::tools::v1 as tools;
 
 /// The compiled `FileDescriptorSet` for this module and everything it imports.
