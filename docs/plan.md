@@ -266,6 +266,261 @@ flow with no working path, a merge that repeated a version number, a preview tha
 real, and a determinism suite that could validate a stale binary and pass. Every one of those
 looked correct in review and was wrong in a way only a test or a mutation could show.
 
+## M1 — render engine
+
+Planned 2026-09-04 against `main` at `e2dc08e`. As with M0.4, the reasoning is the expensive
+part and none of it is in code yet.
+
+### Decisions taken, 2026-09-04
+
+Eight questions the plan raised, answered before code:
+
+| Question | Decided | Consequence |
+|---|---|---|
+| Airwindows, whose pinned repo may not build a Linux VST3 | **Defer to M4**, with clap-wrapper | Amends ADR 0003 §4. §11's "a golden per bundled instrument" is met by the three synths; Airwindows is an effect |
+| Audio clips in M1 | **Yes, in full**: gain, fades *and* time-stretch | Triggers exactly the clause ADR 0002 §8 wrote for it — "when M1 renders audio clips". A `song.proto` change, so an ADR precedes it (CLAUDE.md #5), and Rubber Band is vendored (already pinned at 4.0.0) |
+| A project pinning a plugin this build lacks | **Refuse to open**, `lock_mismatch` | The strict reading of §11. Same shape as `schema_version_mismatch`: an operator error, not something a model retries into. Re-pinning becomes explicit, never a side effect |
+| Minimum supported OS versions (§15 `[OPEN]`) | **Linux x86-64 only in M1** | ADR 0009 names the image and compiler its goldens are valid for. macOS and Windows stay unclaimed; §15's item stays open |
+| Engine transport, given §3 says gRPC | **Define `Render` now, speak stdio in M1, implement gRPC at M2** | ADR 0006 §7's precedent: the `.proto` is the artefact that must be right. `buf breaking` guards it from M1; grpc++ is not vendored for a client that would be itself |
+| Render tail | **End at the last clip or section** | No schema change. A `RenderTarget.tail` field waits for someone who wants release tails |
+| Hashing for `add_asset` | **`sha2` 0.10** | The alternative — the engine computing it — puts the engine in the project-writing path, contradicting CLAUDE.md #6 |
+| Still unplaced | **User VST3 plugins** belong to no milestone (§8 says "VST3 host"; §16 never says user plugins) | ADR 0003's lesson is that unplaced scope is invisible scope. Decide at M2, when `app` could show a plugin browser |
+
+Audio clips are the one that grows M1. `AudioClip` is `{ asset_hash }` today, so rendering one
+needs the fields §8 deferred, and time-stretch adds a **second DSP surface** to pin and golden
+alongside the three plugins — Rubber Band is a phase vocoder with its own modes and threading,
+and it gets a determinism note of its own in ADR 0009, exactly as each plugin does.
+
+### What was already decided, so M1 does not re-decide it
+
+| Decided | Where | Consequence |
+|---|---|---|
+| The engine receives a materialised layer 2 + layer 3 snapshot, builds a Tracktion edit, never reads project files | §8 | Something compiles the song into that snapshot, and it is not the engine |
+| M1 defines the snapshot as its own message under `proto/` and strips provenance | ADR 0002 Consequences | `proto/render.proto`; not a `Song` |
+| History metadata — patch ids, refs, `HEAD`, `created_at` — never reaches the engine | ADR 0001 Consequences | The snapshot carries no provenance and no version |
+| Automation is limited to `LINEAR` and `HOLD` with defined formulas | ADR 0002 §8 | The engine implements *our* formulas, not Tracktion's curve shapes |
+| `lock.json` is `schema_version` only until M1/M4 give it something to pin | ADR 0003 §3; §17 | M1 adds plugins and the engine pin |
+| The validator cannot resolve a `DeviceRef` to a pinned plugin, or a `ParamRef` to a real parameter, "until the engine arrives (M1)" | `core/src/validate.rs`; `core/AGENTS.md` | **M1 closes both**, which means M1 produces a plugin manifest |
+
+### The central question: how a schema-agnostic engine renders a song
+
+`CLAUDE.md` #6 says the engine is schema-agnostic. That cannot mean it links nothing from
+`song.proto`; it means **the engine never receives a `Song`** — no id-keyed map, no
+`Clip.track_id` to resolve, no `solo` to resolve against other tracks, no loop to expand, no
+history field.
+
+It receives `RenderPlan` (`proto/render.proto`): flat, ordered, already resolved. Leaf
+messages — `Note`, `Mix`, `AutomationPoint`, `TempoEvent`, `RenderTarget`, `DeviceRef` — are
+reused **by value** with `provenance` and `version` blanked, because a plan-local `Note` is the
+mirrored shape ADR 0006 §4 forbids. Structural messages are plan-local: `repeated`, not maps,
+since ADR 0001 §3's rule is about RFC 6902 path stability and a plan is never patched.
+
+Time crosses as **ticks plus tempo events**, and the engine converts. One owner of tick→sample
+is one fewer boundary; the fallback — core computing sample positions in integer arithmetic —
+is recorded in the ADR if the spike shows Tracktion's conversion is unstable.
+
+`core::render::compile(song, assets) -> Result<RenderPlan, Vec<Violation>>`. Pure. The error
+type is `Vec<Violation>` because every failure is caller-fixable — ADR 0006 §2's line by
+signature, as `prepare` already does it.
+
+**Not a second representation of song state** (CLAUDE.md #1): the plan is derived, never
+persisted, never edited, never read back — the same standing as a WAV. Backed by a test, not
+prose: a descriptor-driven guard walks every field of every `song.v1` message and requires each
+to be carried into the plan or on an explicit allowlist with a reason. A field added to
+`song.proto` that affects sound and never reaches the plan fails that test instead of silently
+rendering as nothing.
+
+M1 **refuses** with `render_unsupported`: Cmajor, Faust and neural device refs (M4 — but the
+*validator* still accepts them, since validity and renderability are different questions);
+`Routing` sends, sidechains and bus outputs (M2's mixer); a plugin not in the bundled manifest.
+Audio clips are rendered, not refused (decision above).
+
+### What "deterministic" means for a render
+
+**Claimed:** same `.escri` + same engine binary + same plugin binaries + same OS and CPU
+architecture → byte-identical PCM. In M1 that is **Linux x86-64 on the pinned image and
+compiler**, which is §8's "bit-exact across runs on the same platform".
+
+**Not claimed:** cross-OS, cross-architecture, or cross-CPU on the same OS — that last only
+after the spike measures it, because runtime SIMD dispatch is real (trap 1 below).
+
+The golden is the **WAV, compared byte for byte on the PCM payload**, with a `.sha256` beside
+it: the file gives the diff, the hash gives the release note. No tolerance by default; a plugin
+that proves non-deterministic gets a documented tolerance *and* a §8 per-plugin note. On
+mismatch the report names the first differing sample, the count, and the max absolute
+difference — the audio equivalent of M0.4's "paths, not two 40 KB blobs".
+
+Honestly about plugins: Dexed is pure FM and should be exact. sfizz resamples and has runtime
+SIMD dispatch. Surge XT has random start phase, unison detune randomisation and noise sources;
+a fixture must disable them, and whether its global RNG is seeded from a constant is a spike
+question.
+
+### Process shape
+
+`engine/` is a CMake project linking Tracktion Engine, JUCE and protobuf C++, building one
+binary. In M1 it is driven as **a fresh subprocess per render** reading one `RenderPlan` on
+stdin and writing a `RenderResult` on stdout — no plugin instance reuse, no warm smoothers, no
+state between renders, which is the cheapest determinism guarantee available.
+
+The `Render` gRPC service is **defined** in `render.proto` in M1 so `buf breaking` guards it,
+and **implemented** at M2 when `app` exists to hold a live connection. That is ADR 0006 §7's
+own precedent — the `.proto` is the artefact that must be right — and it avoids vendoring
+grpc++ for a client that would be itself.
+
+C++ codegen runs at **build time** via CMake, not committed. Generated `.pb.cc` embeds a
+runtime-version check, so committing it pins a `protoc` that must equal the vendored runtime —
+two pins that must agree. Build-time generation makes it one pin and makes drift a compile
+error in the engine job, which is a stronger gate than a hash. This changes `schema/AGENTS.md`'s
+"C++ at M1: one plugin entry in `buf.gen.yaml`" line, written before that coupling was seen.
+
+### What the spike found (PR 0, run 2026-09-04)
+
+Run on Ubuntu 24.04 x86-64, g++ 13.3, Tracktion `0e02f70` — the image ADR 0009 proposes. The
+spike renders two seconds of a built-in tone generator to WAV, headless.
+
+**The finding that matters: the render is deterministic and the file is not.** Three separate
+processes produced byte-identical **PCM** — 576,000 bytes, `30fafbdc…` every time — and three
+different *file* hashes. JUCE's WAV writer emits a `bext` chunk (Broadcast Wave Extension)
+carrying `OriginationDate` and `OriginationTime`, and the third run crossed a second boundary:
+
+```
+OriginationDate  run1='2026-09-04'   run3='2026-09-04'
+OriginationTime  run1='18:43:11'     run3='18:43:12'
+```
+
+A golden that hashed the file would have failed roughly once per second of build time, and it
+would have arrived as flakiness rather than as a finding. **Compare the `data` chunk, never the
+file**, and `RenderResult`'s hash is a hash of the payload. Trap 2 was a guess; it is now
+evidence, and ADR 0009 cites it.
+
+**A render is asynchronous.** Tracktion's own test utilities use `EditRenderer::render(params,
+callback)` and pump a dispatch loop until it fires. `Renderer::renderToFile` — the
+synchronous-looking wrapper — silently produced nothing: right preconditions, no error, empty
+file. So the engine binary's `main()` runs a message loop; it is not "call a function and
+exit", which is the shape ADR 0008 would otherwise have described.
+
+**`Renderer::Parameters::tracksToDo` documents itself as "if this is empty, all tracks will be
+rendered"**, and the implementation requires `countNumberOfSetBits() > 0`, returning an empty
+`File` with no error when it is not met. Set the bits explicitly.
+
+**Headless works and needs no display.** `EngineBehaviour::autoInitialiseDeviceManager()`,
+`addSystemAudioIODeviceTypes()` and `shouldOpenAudioInputByDefault()` all return `false`, and
+the binary rendered with `DISPLAY` and `WAYLAND_DISPLAY` unset. The device manager turned out
+not to be the blocker either way — enabling it changed nothing.
+
+X11 **headers** are still required to *build*: JUCE compiles `juceaide` (which links
+`juce_gui_basics`) during configure, before any `JUCE_USE_XRANDR=0` of ours applies. The CI apt
+list is not optional. `webkit2gtk` and `gtk+` are *not* needed — they are reported missing and
+the configure succeeds — so the list is shorter than JUCE's documented desktop set.
+
+Four more, each of which would have cost a CI round trip:
+
+| Found | Consequence |
+|---|---|
+| Tracktion declares JUCE as `git@github.com:…` — an **SSH URL no keyless runner can clone**. `insteadOf` did *not* take; overriding `submodule.modules/juce.url` did | A required step in the engine job |
+| Linux needs **`-latomic`**: `tracktion_engine_playback` references `__atomic_store` for 16-byte atomics GCC does not lower inline | One line in the engine's CMake |
+| **`juce::SHA256` lives in `juce_cryptography`**, which Tracktion does not pull in | The engine need not hash at all — core has `sha2` approved, so one hasher in the system rather than two |
+| **`sfizz` 1.2.3 builds no VST3** — its CMake produces a library and a JACK client; the plugin is in `sfztools/sfizz-ui` | Trap 11 confirmed: `lock.baseline.json`'s `sfizz` pin yields no plugin, and ADR 0010 adds `sfizz_ui` |
+
+**Verified rather than assumed:** Tracktion `0e02f70` pins JUCE at exactly the commit in
+`lock.baseline.json`, so §17's "use the commit Tracktion pins, not JUCE latest" holds today.
+
+**Build cost:** 2 minutes wall, 23 minutes CPU, on 24 cores from cold with no ccache — well
+inside the budget §7 assumed.
+
+**Still open, and only CI can answer it:** whether the same binary hashes identically on two
+different runner CPUs. That decides whether ADR 0009 claims cross-CPU on one OS, or retreats to
+same-machine. Everything else the spike was for is answered.
+
+### ADRs, before code
+
+| ADR | Records |
+|---|---|
+| 0007 | The engine renders a `RenderPlan` compiled by core, never a `Song` |
+| 0008 | The engine is a fresh subprocess per render, over stdio until M2 gives gRPC a consumer |
+| 0009 | A render is bit-exact for one pinned toolchain on one platform, and the golden is the WAV |
+| 0010 | `lock.json` pins the engine and every referenced plugin, added on first reference, compared at load |
+| 0011 | `AudioClip` gains gain, fades and stretch, and M1 renders it |
+
+Five rather than one, because each answers a different reviewer question — what crosses, how it
+runs, what "same" means, what is pinned, and what an audio clip is — and the M0.2–M0.4 lesson
+is that a PR mixing concerns gets reviewed for the loud one. **0011 is a schema ADR**, so it
+precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
+
+### PRs
+
+| # | Branch | Adds |
+|---|---|---|
+| 0 | `m1.0-spike` (**never merged**) | Headless Tracktion render of one note through Surge on the CI image. Answers the questions the ADRs cannot honestly be written without |
+| 1 | `m1.1-adrs` | ADR 0007–0011, spec amendments, resolved pins. No code |
+| 2 | `m1.2-audio-clip` | `AudioClip` gains gain, fades and stretch; codegen; the `schema/` fixture and its three round-trip suites. **A schema change, alone** |
+| 3 | `m1.3-render-proto` | `render.proto`; `RenderExport` and `AddAsset` on `SongTools` |
+| 4 | `m1.4-compile` | `core/src/render.rs`, the field-coverage guard, the plan golden |
+| 5 | `m1.5-engine-skeleton` | `engine/` CMake, submodules, the CI job — rendering **silence of the right length** |
+| 6 | `m1.6-plugins` | Three plugin submodules, manifests, the bundle cache |
+| 7 | `m1.7-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
+| 8 | `m1.8-audio` | Asset playback, gain and fades, Rubber Band vendored and pinned for stretch |
+| 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
+| 10 | `m1.10-render-export` | `Session::render_export` and `add_asset` over both transports |
+| 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip |
+| 12 | `m1.12-locality` | The bar-17 demo as a test |
+| 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone |
+| 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
+
+PR 0 is a spike that is thrown away: the ADRs cannot be written honestly without knowing
+Tracktion's API for device-less construction, whether JUCE needs X11 to instantiate a VST3
+headlessly, and whether the same binary hashes identically on two runner CPUs.
+
+The render suite is a **cargo feature** on `escribass-tests`, so `cargo test` from the root
+compiles it away. A `#[test]` that returned early would be the quiet skip M0.4 exists to
+prevent; a feature is absent where it cannot run and loud where it must.
+
+### Traps
+
+1. **Two runs agree, the golden differs, and the cause is the CPU.** sfizz and JUCE dispatch
+   SIMD at runtime; AVX2 on one runner and SSE4 on another round differently. Reads as
+   flakiness. Pin the ISA; bless a golden only after the spike hashes identically on two CPUs.
+2. ~~**The WAV header carries a date or a software tag**~~ — **confirmed by the spike**: JUCE
+   emits a `bext` chunk with `OriginationDate` and `OriginationTime`. Compare the `data` chunk.
+3. **Denormals** — without FTZ/DAZ a filter tail is 100× slower and its bits depend on a
+   per-thread flag.
+4. **Summation order under a thread pool** — float addition is not associative. Single-threaded.
+5. **`-ffp-contract`** — both compilers fuse `a*b+c` on a capable `-march`; a vendored
+   `CMakeLists` adding `-ffast-math` changes bits.
+6. **`setState` then `setParam`, in a fresh process** — params applied before state are
+   overwritten, and smoothing ramps from the previous value in a reused instance.
+7. **Randomness inside the fixture** — Surge start phase and unison detune, sfizz `*_random`.
+8. **The suite validates a stale engine** — M0.4's exact defect, one language over. The engine
+   embeds the submodule commits it was built from and the suite compares them.
+9. **JUCE `add_subdirectory` twice** — target collision between Surge's JUCE and Tracktion's.
+   Plugins are separate CMake projects. Hit on day one.
+10. **Headless JUCE may need a display to instantiate a VST3.** The spike rendered with no
+    display, but it hosted no VST3 — that half is still untested.
+11. ~~**sfizz's VST3 lives in `sfizz-ui`**~~ — **confirmed by the spike**: `sfizz` 1.2.3's CMake
+    builds a library and a JACK client, no VST3.
+12. **`ubuntu-latest` moves** — an image update changes the compiler and every golden drifts
+    with no PR to blame.
+13. **`every_tool`'s plugin id is invented.** Once the validator resolves plugin ids,
+    `com.surge-synth.surge-xt` must be a real manifest id or `checks` goes red.
+14. **`Instrument.state` must not join `JSON_TEXT_FIELDS`** — it is opaque binary, and the
+    comment there already names it as the counter-example.
+15. **Rubber Band is a second DSP surface.** A phase vocoder has modes, a threading option and
+    internal buffering; the same input at two settings is two different outputs, and its
+    threading is a summation-order hazard of its own. Pin the mode explicitly in the plan,
+    force single-threaded, and give it a determinism note in ADR 0009 as each plugin gets.
+16. **An audio asset makes `assets/` non-empty for the first time.** `Project::write` creates
+    the directory and M0's comparison ignores it because git cannot store an empty one; a
+    golden that now contains an asset changes what the determinism suite compares.
+
+### Deferred again, with reasons
+
+`Instrument.state` as a content hash: nothing in M1 *writes* a state — fixtures use factory
+defaults plus `params` — so an ADR now would design against no producer, which is ADR 0002 §7's
+reason. Revisit at M2 with the first plugin editor.
+
+Render tail: `length_ticks` ends at the last clip or section. A `RenderTarget.tail` field is a
+`song.proto` change with its own ADR when someone wants release tails.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -287,6 +542,8 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
+| User VST3 plugins | §8 says "VST3 host" and §16 never says user plugins, so nothing places them. M1 refuses a plugin outside the bundled manifest, which makes the gap loud rather than silent | M2, when `app` could show a plugin browser | M1 planning, 2026-09-04 |
+| `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated | when someone exports something with a long release | M1 planning, 2026-09-04 |
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result — the same shape as the interactive resolution already deferred there | M2 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
