@@ -102,6 +102,29 @@
       },
       "allow_overlap": false
     },
+    "01M1FPMP00TRACKGTR0000000G": {
+      "id": "01M1FPMP00TRACKGTR0000000G",
+      "provenance": {
+        "author": "AUTHOR_HUMAN",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Guitar",
+      "kind": "TRACK_KIND_AUDIO",
+      "index": 2,
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.3,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    },
     "01M1FPMP00TRACKMASTER00003": {
       "id": "01M1FPMP00TRACKMASTER00003",
       "provenance": {
@@ -176,6 +199,24 @@
             "expression": {}
           }
         }
+      }
+    },
+    "01M1FPMP00CPGTR0000000000H": {
+      "id": "01M1FPMP00CPGTR0000000000H",
+      "provenance": {
+        "author": "AUTHOR_HUMAN",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "track_id": "01M1FPMP00TRACKGTR0000000G",
+      "start_tick": 61440,
+      "length_ticks": 15360,
+      "audio_clip": {
+        "asset_hash": "3f7a9c1e5b2d00000000000000000000",
+        "gain_db": -4.5,
+        "fade_in_ticks": 240,
+        "fade_out_ticks": 480,
+        "time_stretch": true
       }
     }
   },

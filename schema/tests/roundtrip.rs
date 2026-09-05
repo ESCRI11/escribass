@@ -43,9 +43,9 @@ fn note(id: &str, pitch: i32, start_tick: i32, expression: &[(&str, f64)]) -> No
     }
 }
 
-/// Two tracks, one clip of two notes, automation, tempo, a section and a generator.
-/// Exercises every construct the schema has: maps, both oneofs, `optional` presence,
-/// a well-known type, and a 64-bit integer.
+/// Three tracks, a clip of two notes, an audio clip, automation, tempo, a section and a
+/// generator. Exercises every construct the schema has: maps, both oneofs, `optional`
+/// presence, a well-known type, and a 64-bit integer.
 fn build() -> Song {
     let bass = Track {
         id: "01M1FPMP00TRACKBASS0000002".to_string(),
@@ -94,6 +94,24 @@ fn build() -> Song {
         allow_overlap: false,
     };
 
+    let guitar = Track {
+        id: "01M1FPMP00TRACKGTR0000000G".to_string(),
+        provenance: prov(Author::Human, None),
+        version: 1,
+        name: "Guitar".to_string(),
+        kind: TrackKind::Audio as i32,
+        index: 2,
+        instrument: None,
+        fx_chain: BTreeMap::new(),
+        routing: Some(Routing {
+            output_track_id: None,
+            sends: BTreeMap::new(),
+            sidechains: BTreeMap::new(),
+        }),
+        mix: Some(Mix { gain_db: 0.0, pan: 0.3, mute: false, solo: false }),
+        allow_overlap: false,
+    };
+
     let master = Track {
         id: "01M1FPMP00TRACKMASTER00003".to_string(),
         provenance: prov(Author::Human, None),
@@ -128,6 +146,25 @@ fn build() -> Song {
             ]
             .into_iter()
             .collect(),
+        })),
+    };
+
+    // Every AudioClip field off its default, so the fixture proves each one is written and
+    // read, not merely that the message parses (ADR 0011 §1).
+    let audio = Clip {
+        id: "01M1FPMP00CPGTR0000000000H".to_string(),
+        provenance: prov(Author::Human, None),
+        version: 1,
+        track_id: "01M1FPMP00TRACKGTR0000000G".to_string(),
+        start_tick: 61_440,
+        length_ticks: 15_360,
+        loop_length_ticks: None,
+        content: Some(clip::Content::AudioClip(AudioClip {
+            asset_hash: "3f7a9c1e5b2d00000000000000000000".to_string(),
+            gain_db: -4.5,
+            fade_in_ticks: 240,
+            fade_out_ticks: 480,
+            time_stretch: true,
         })),
     };
 
@@ -203,8 +240,10 @@ fn build() -> Song {
         .into_iter()
         .collect(),
         markers: BTreeMap::new(),
-        tracks: [(bass.id.clone(), bass), (master.id.clone(), master)].into_iter().collect(),
-        clips: [(clip.id.clone(), clip)].into_iter().collect(),
+        tracks: [(bass.id.clone(), bass), (guitar.id.clone(), guitar), (master.id.clone(), master)]
+            .into_iter()
+            .collect(),
+        clips: [(clip.id.clone(), clip), (audio.id.clone(), audio)].into_iter().collect(),
         automation: [(automation.id.clone(), automation)].into_iter().collect(),
         generators: [(
             "01M1FPMP00GENCHRS00000000D".to_string(),

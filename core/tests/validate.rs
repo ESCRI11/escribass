@@ -11,6 +11,7 @@ const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/so
 const BASS: &str = "01M1FPMP00TRACKBASS0000002";
 const MASTER: &str = "01M1FPMP00TRACKMASTER00003";
 const CLIP: &str = "01M1FPMP00CPCHRS0000000006";
+const AUDIO_CLIP: &str = "01M1FPMP00CPGTR0000000000H";
 const NOTE_G1: &str = "01M1FPMP00NTEG100000000007";
 
 fn valid_song() -> Song {
@@ -123,6 +124,23 @@ fn ticks_are_never_negative_and_tempo_is_positive() {
     assert_fires("tempo_not_positive", |s| {
         s.tempo_map.as_mut().unwrap().events.values_mut().for_each(|e| e.bpm = 0.0);
     });
+}
+
+#[test]
+fn an_audio_clips_fades_are_ticks_and_its_gain_is_a_double_like_any_other() {
+    // No rule of its own (ADR 0011 is silent on validation): §4.4's "ticks non-negative" and
+    // ADR 0002's "all doubles finite" reach the new fields the way they reach every other.
+    fn audio(s: &mut Song) -> &mut AudioClip {
+        let Some(clip::Content::AudioClip(a)) = &mut s.clips.get_mut(AUDIO_CLIP).unwrap().content
+        else {
+            unreachable!()
+        };
+        a
+    }
+    assert_fires("tick_negative", |s| audio(s).fade_in_ticks = -1);
+    assert_fires("tick_negative", |s| audio(s).fade_out_ticks = -1);
+    assert_fires("double_not_finite", |s| audio(s).gain_db = f64::INFINITY);
+    assert_fires("negative_zero", |s| audio(s).gain_db = -0.0);
 }
 
 #[test]

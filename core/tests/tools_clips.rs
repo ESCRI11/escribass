@@ -238,6 +238,7 @@ fn set_notes_on_an_audio_clip_is_refused() {
             length_ticks: 3840,
             content: Some(AddClipContent::AudioClip(escribass_schema::song::AudioClip {
                 asset_hash: "8b31c0de4f9c00000000000000000000".to_string(),
+                ..Default::default()
             })),
             dry_run: false,
         })

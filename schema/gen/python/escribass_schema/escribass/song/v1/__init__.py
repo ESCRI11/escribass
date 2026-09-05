@@ -215,9 +215,41 @@ class TrackKind(betterproto2.Enum):
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class AudioClip(betterproto2.Message):
+    """
+    An asset in assets/ by content hash (§10), and how to play it. Every default is the
+    behaviour from before fields 2-5 existed, so a document written without them means
+    exactly what it meant (ADR 0011 §1, §4).
+    """
+
     asset_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
         1, betterproto2.TYPE_STRING
     )
+
+    gain_db: "float" = betterproto2.field(2, betterproto2.TYPE_DOUBLE)
+    """
+    Clip gain. 0.0 is unity. An audio track has no device, so no ParamRef can reach this;
+    without it a hot clip has no fix short of editing the asset (ADR 0011 §1).
+    """
+
+    fade_in_ticks: "typing.Annotated[int, pydantic.Field(ge=-2**31, le=2**31 - 1)]" = (
+        betterproto2.field(3, betterproto2.TYPE_INT32)
+    )
+    """
+    Ramps at the clip's edges, clip-relative, in ticks — the model's one time base (§4.2).
+    0 is no fade. Linear in amplitude, and the two ramps multiply, so fades that overlap
+    need no rule (ADR 0011 §2).
+    """
+
+    fade_out_ticks: "typing.Annotated[int, pydantic.Field(ge=-2**31, le=2**31 - 1)]" = (
+        betterproto2.field(4, betterproto2.TYPE_INT32)
+    )
+
+    time_stretch: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+    """
+    Stretch the asset, pitch unchanged, to fill the clip's musical length: loop_length_ticks
+    if it loops, length_ticks otherwise. A flag rather than a ratio, because the ratio
+    derives from the asset's duration and core reads no file (ADR 0011 §3).
+    """
 
 
 default_message_pool.register_message("escribass.song.v1", "AudioClip", AudioClip)

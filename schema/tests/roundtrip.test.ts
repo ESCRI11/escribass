@@ -41,6 +41,17 @@ test("reads both oneofs and distinguishes an unset optional", () => {
   assert.equal(clip.content.value.notes["01M1FPMP00NTED200000000008"].expression["timbre"], 0.62);
 });
 
+test("reads an audio clip with its gain, fades and stretch flag", () => {
+  const clip = song().clips["01M1FPMP00CPGTR0000000000H"];
+  assert.equal(clip.content.case, "audioClip");
+  if (clip.content.case !== "audioClip") throw new Error("unreachable");
+  assert.equal(clip.content.value.assetHash, "3f7a9c1e5b2d00000000000000000000");
+  assert.equal(clip.content.value.gainDb, -4.5);
+  assert.equal(clip.content.value.fadeInTicks, 240);
+  assert.equal(clip.content.value.fadeOutTicks, 480);
+  assert.equal(clip.content.value.timeStretch, true);
+});
+
 test("a 64-bit field crosses as a string and lands as an exact bigint", () => {
   // Written as a JSON number this would round to 9007199254740992 here, which is why the
   // canonical form encodes 64-bit integers as strings.

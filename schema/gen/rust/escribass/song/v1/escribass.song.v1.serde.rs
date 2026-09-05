@@ -10,9 +10,33 @@ impl serde::Serialize for AudioClip {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.song.v1.AudioClip", len)?;
         if true {
             struct_ser.serialize_field("asset_hash", &self.asset_hash)?;
+        }
+        if true {
+            struct_ser.serialize_field("gain_db", &self.gain_db)?;
+        }
+        if true {
+            struct_ser.serialize_field("fade_in_ticks", &self.fade_in_ticks)?;
+        }
+        if true {
+            struct_ser.serialize_field("fade_out_ticks", &self.fade_out_ticks)?;
+        }
+        if true {
+            struct_ser.serialize_field("time_stretch", &self.time_stretch)?;
         }
         struct_ser.end()
     }
@@ -26,11 +50,23 @@ impl<'de> serde::Deserialize<'de> for AudioClip {
         const FIELDS: &[&str] = &[
             "asset_hash",
             "assetHash",
+            "gain_db",
+            "gainDb",
+            "fade_in_ticks",
+            "fadeInTicks",
+            "fade_out_ticks",
+            "fadeOutTicks",
+            "time_stretch",
+            "timeStretch",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             AssetHash,
+            GainDb,
+            FadeInTicks,
+            FadeOutTicks,
+            TimeStretch,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -53,6 +89,10 @@ impl<'de> serde::Deserialize<'de> for AudioClip {
                     {
                         match value {
                             "assetHash" | "asset_hash" => Ok(GeneratedField::AssetHash),
+                            "gainDb" | "gain_db" => Ok(GeneratedField::GainDb),
+                            "fadeInTicks" | "fade_in_ticks" => Ok(GeneratedField::FadeInTicks),
+                            "fadeOutTicks" | "fade_out_ticks" => Ok(GeneratedField::FadeOutTicks),
+                            "timeStretch" | "time_stretch" => Ok(GeneratedField::TimeStretch),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -73,6 +113,10 @@ impl<'de> serde::Deserialize<'de> for AudioClip {
                     V: serde::de::MapAccess<'de>,
             {
                 let mut asset_hash__ = None;
+                let mut gain_db__ = None;
+                let mut fade_in_ticks__ = None;
+                let mut fade_out_ticks__ = None;
+                let mut time_stretch__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::AssetHash => {
@@ -81,10 +125,44 @@ impl<'de> serde::Deserialize<'de> for AudioClip {
                             }
                             asset_hash__ = Some(map_.next_value()?);
                         }
+                        GeneratedField::GainDb => {
+                            if gain_db__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("gainDb"));
+                            }
+                            gain_db__ = 
+                                Some(map_.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::FadeInTicks => {
+                            if fade_in_ticks__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("fadeInTicks"));
+                            }
+                            fade_in_ticks__ = 
+                                Some(map_.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::FadeOutTicks => {
+                            if fade_out_ticks__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("fadeOutTicks"));
+                            }
+                            fade_out_ticks__ = 
+                                Some(map_.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::TimeStretch => {
+                            if time_stretch__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("timeStretch"));
+                            }
+                            time_stretch__ = Some(map_.next_value()?);
+                        }
                     }
                 }
                 Ok(AudioClip {
                     asset_hash: asset_hash__.unwrap_or_default(),
+                    gain_db: gain_db__.unwrap_or_default(),
+                    fade_in_ticks: fade_in_ticks__.unwrap_or_default(),
+                    fade_out_ticks: fade_out_ticks__.unwrap_or_default(),
+                    time_stretch: time_stretch__.unwrap_or_default(),
                 })
             }
         }

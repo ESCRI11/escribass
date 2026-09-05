@@ -444,9 +444,21 @@ impl Violations {
                 None => self.add(format!("{at}/content"), "oneof_unset",
                     "a clip holds notes or audio"),
                 Some(clip::Content::AudioClip(a)) => {
+                    let aat = format!("{at}/audio_clip");
                     if a.asset_hash.is_empty() {
-                        self.add(format!("{at}/audio_clip/asset_hash"), "asset_hash_empty",
+                        self.add(format!("{aat}/asset_hash"), "asset_hash_empty",
                             "an audio clip references an asset by hash");
+                    }
+                    self.check_finite(&format!("{aat}/gain_db"), a.gain_db);
+                    // ADR 0011 §2's fade formula is total only over non-negative lengths: a
+                    // negative one makes `n / f` negative and flips the signal's sign.
+                    let fades =
+                        [("fade_in_ticks", a.fade_in_ticks), ("fade_out_ticks", a.fade_out_ticks)];
+                    for (field, ticks) in fades {
+                        if ticks < 0 {
+                            self.add(format!("{aat}/{field}"), "tick_negative",
+                                "ticks are never negative");
+                        }
                     }
                 }
                 Some(clip::Content::NoteClip(n)) => {

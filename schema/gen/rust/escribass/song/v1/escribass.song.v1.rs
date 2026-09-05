@@ -285,10 +285,29 @@ pub struct NoteClip {
     #[prost(btree_map="string, message", tag="1")]
     pub notes: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, Note>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+/// An asset in assets/ by content hash (§10), and how to play it. Every default is the
+/// behaviour from before fields 2-5 existed, so a document written without them means
+/// exactly what it meant (ADR 0011 §1, §4).
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AudioClip {
     #[prost(string, tag="1")]
     pub asset_hash: ::prost::alloc::string::String,
+    /// Clip gain. 0.0 is unity. An audio track has no device, so no ParamRef can reach this;
+    /// without it a hot clip has no fix short of editing the asset (ADR 0011 §1).
+    #[prost(double, tag="2")]
+    pub gain_db: f64,
+    /// Ramps at the clip's edges, clip-relative, in ticks — the model's one time base (§4.2).
+    /// 0 is no fade. Linear in amplitude, and the two ramps multiply, so fades that overlap
+    /// need no rule (ADR 0011 §2).
+    #[prost(int32, tag="3")]
+    pub fade_in_ticks: i32,
+    #[prost(int32, tag="4")]
+    pub fade_out_ticks: i32,
+    /// Stretch the asset, pitch unchanged, to fill the clip's musical length: loop_length_ticks
+    /// if it loops, length_ticks otherwise. A flag rather than a ratio, because the ratio
+    /// derives from the asset's duration and core reads no file (ADR 0011 §3).
+    #[prost(bool, tag="5")]
+    pub time_stretch: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Clip {
