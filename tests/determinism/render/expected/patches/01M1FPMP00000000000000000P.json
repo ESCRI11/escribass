@@ -1,0 +1,66 @@
+{
+  "id": "01M1FPMP00000000000000000P",
+  "parents": [
+    "01M1FPMP00000000000000000J"
+  ],
+  "tool": "add_clip",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP00000000000000000K",
+      "value": {
+        "id": "01M1FPMP00000000000000000K",
+        "length_ticks": 3840,
+        "note_clip": {
+          "notes": {
+            "01M1FPMP00000000000000000M": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000M",
+              "length_ticks": 480,
+              "microtonal_cents": 0.0,
+              "pitch": 60,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "velocity": 100,
+              "version": 1
+            },
+            "01M1FPMP00000000000000000N": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000N",
+              "length_ticks": 480,
+              "microtonal_cents": 0.0,
+              "pitch": 67,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 960,
+              "velocity": 90,
+              "version": 1
+            }
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 3840,
+        "track_id": "01M1FPMP000000000000000006",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 8
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

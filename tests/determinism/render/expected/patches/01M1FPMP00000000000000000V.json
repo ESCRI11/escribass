@@ -1,0 +1,80 @@
+{
+  "id": "01M1FPMP00000000000000000V",
+  "parents": [
+    "01M1FPMP00000000000000000P"
+  ],
+  "tool": "add_clip",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP00000000000000000Q",
+      "value": {
+        "id": "01M1FPMP00000000000000000Q",
+        "length_ticks": 3000,
+        "note_clip": {
+          "notes": {
+            "01M1FPMP00000000000000000R": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000R",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 60,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 0,
+              "velocity": 100,
+              "version": 1
+            },
+            "01M1FPMP00000000000000000S": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000S",
+              "length_ticks": 400,
+              "microtonal_cents": 0.0,
+              "pitch": 64,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 800,
+              "velocity": 90,
+              "version": 1
+            },
+            "01M1FPMP00000000000000000T": {
+              "expression": {},
+              "id": "01M1FPMP00000000000000000T",
+              "length_ticks": 240,
+              "microtonal_cents": 0.0,
+              "pitch": 67,
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00"
+              },
+              "start_tick": 1200,
+              "velocity": 80,
+              "version": 1
+            }
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 0,
+        "track_id": "01M1FPMP000000000000000006",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 9
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

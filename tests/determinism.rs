@@ -356,6 +356,7 @@ impl Snapshot {
         let mut named = files(&run.directory.0);
         named.insert("responses.json".to_string(), pretty(&Value::Array(run.results.clone())));
         named.insert("origin.json".to_string(), origin().into_bytes());
+        named.insert("plan.json".to_string(), plan(&run.directory.0));
         Snapshot(named)
     }
 
@@ -402,6 +403,47 @@ fn pretty(value: &Value) -> Vec<u8> {
     let mut text = serde_json::to_string_pretty(value).expect("a Value serialises");
     text.push('\n');
     text.into_bytes()
+}
+
+/// What `compile` says about the project a run produced: the plan, or every reason there is
+/// none (ADR 0007 §4, §6).
+///
+/// The plan joins every golden because it is where M0's claim and M1's meet — same input,
+/// same bytes, same plan — and a render mismatch later splits into "core changed the plan"
+/// and "the engine changed the rendering" by comparing this file first. A refusal is golden
+/// too: `every_tool` holds a Faust effect, and that M1 says so, naming the field, is a claim.
+///
+/// The asset index is built from the directory listing under a fixed root. `compile` reads no
+/// file, so the path is opaque to it, and a run's temporary directory in a golden would be
+/// the one kind of input this suite exists to keep out.
+fn plan(root: &Path) -> Vec<u8> {
+    let project = escribass_core::Project::open(root).expect("a run leaves a project that opens");
+    let assets: BTreeMap<String, PathBuf> = std::fs::read_dir(root.join("assets"))
+        .map(|listing| {
+            listing
+                .map(|entry| {
+                    let name = entry.expect("an entry").file_name().to_string_lossy().into_owned();
+                    (name.clone(), Path::new("/escri/assets").join(name))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    match escribass_core::compile(project.song(), &assets) {
+        // Serialised from the plan itself, never through a `Value`, which would sort struct
+        // fields and lose the proto's order (`core/src/canonical.rs`).
+        Ok(plan) => {
+            let mut text = serde_json::to_string_pretty(&plan).expect("a plan serialises");
+            text.push('\n');
+            text.into_bytes()
+        }
+        Err(refused) => {
+            let reasons: Vec<Value> = refused
+                .iter()
+                .map(|v| json!({"path": v.path, "rule": v.rule, "message": v.message}))
+                .collect();
+            pretty(&json!({"refused": reasons}))
+        }
+    }
 }
 
 fn updating() -> bool {
@@ -590,7 +632,7 @@ fn every_project_reopens_in_a_fresh_process() {
     // ADR 0004's invariant, asserted through the binary: `Project::open` replays the log and
     // compares it with `song.json`, so a server that starts at all has agreed the two match.
     // A second process also proves the first left nothing in memory that the directory needs.
-    for name in ["every_tool", "refusals", "branches"] {
+    for name in ["every_tool", "refusals", "branches", "render"] {
         reopens(name);
     }
 }
@@ -678,6 +720,20 @@ fn branching_and_merging_are_reproducible() {
     let second = run("branches", AT);
     assert_same("branching was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
     assert_matches_golden("branches", &first);
+}
+
+#[test]
+fn the_plan_is_reproducible() {
+    // ADR 0007 §4's claim: the plan is a pure function of the document and the asset index.
+    // The script is what compile resolves — clips added out of order, a chain out of index
+    // order, a note loop with a short last iteration, a stretched audio loop, a muted track
+    // with automation on its device, two entities on one parameter, a section past the last
+    // clip — and the golden is the plan those produce. Every other script's `plan.json` is
+    // pinned by its own golden test.
+    let first = run("render", AT);
+    let second = run("render", AT);
+    assert_same("the plan was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
+    assert_matches_golden("render", &first);
 }
 
 // ---------------------------------------------------------------------------
@@ -900,7 +956,7 @@ fn the_two_transports_answer_the_same_way() {
     // transport reshapes, reclassifies or quietly drops something on the way out. That is not
     // hypothetical: MCP's `get_history` once lost `provenance`, and its hand-decoded
     // `apply_patch` once read `"dry_run": "true"` as false and applied.
-    for name in ["every_tool", "refusals", "branches"] {
+    for name in ["every_tool", "refusals", "branches", "render"] {
         let over_mcp = run(name, AT);
         let over_grpc = run_over_grpc(name, AT);
         assert_same(
@@ -930,7 +986,7 @@ fn every_implemented_tool_is_scripted() {
     // The `call!` macro panics on a tool it does not know, but only if a script calls one — so
     // an RPC could be implemented, advertised, and never exercised here. This is what makes
     // `tests/AGENTS.md`'s "add it to a script" a rule rather than a suggestion.
-    let scripted: std::collections::BTreeSet<String> = ["every_tool", "refusals", "branches"]
+    let scripted: std::collections::BTreeSet<String> = ["every_tool", "refusals", "branches", "render"]
         .iter()
         .flat_map(|name| script(name))
         .map(|step| step.tool)

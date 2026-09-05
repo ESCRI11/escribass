@@ -140,7 +140,11 @@ impl Compiler<'_> {
         let master = master.map(|m| {
             let at = format!("/tracks/{}", m.id);
             self.check_routing(&at, m, Some(m));
-            let own = if master_muted { Vec::new() } else { clips.remove(m.id.as_str()).unwrap_or_default() };
+            let own = if master_muted {
+                Vec::new()
+            } else {
+                clips.remove(m.id.as_str()).unwrap_or_default()
+            };
             self.track(&at, m, own, &mut lanes)
         });
 
@@ -217,7 +221,11 @@ impl Compiler<'_> {
             }
         }
         if !routing.sends.is_empty() {
-            self.refuse(format!("{at}/routing/sends"), UNSUPPORTED, "sends are the mixer's, which is M2's");
+            self.refuse(
+                format!("{at}/routing/sends"),
+                UNSUPPORTED,
+                "sends are the mixer's, which is M2's",
+            );
         }
         if !routing.sidechains.is_empty() {
             self.refuse(
@@ -240,7 +248,10 @@ impl Compiler<'_> {
         self.refuse(
             format!("{at}/ref/{arm}"),
             UNSUPPORTED,
-            format!("`{arm}` devices are compiled and hosted from M4; M1 hosts the bundled plugins and the sampler"),
+            format!(
+                "`{arm}` devices are compiled and hosted from M4; M1 hosts the bundled plugins \
+                 and the sampler"
+            ),
         );
     }
 
@@ -337,7 +348,8 @@ impl Compiler<'_> {
                             length_ticks: n.length_ticks.min(length.saturating_sub(n.start_tick)),
                             ..(*n).clone()
                         });
-                        placed(offset, length, plan_clip::Content::Notes(PlanNotes { notes: inside.collect() }))
+                        let notes = PlanNotes { notes: inside.collect() };
+                        placed(offset, length, plan_clip::Content::Notes(notes))
                     })
                     .collect()
             }
@@ -347,7 +359,10 @@ impl Compiler<'_> {
                     self.refuse(
                         format!("{at}/audio_clip/asset_hash"),
                         "asset_missing",
-                        format!("`{}` is not in assets/; add_asset is what puts it there", audio.asset_hash),
+                        format!(
+                            "`{}` is not in assets/; add_asset is what puts it there",
+                            audio.asset_hash
+                        ),
                     );
                     return Vec::new();
                 };
@@ -356,7 +371,8 @@ impl Compiler<'_> {
                 // stretches to the clip it is handed — so a short last iteration would stretch
                 // to the wrong length. Refused rather than rendered wrong; the additive field
                 // that would express it is the `ponytail:` on `PlanAudio` in render.proto.
-                if audio.time_stretch && held.loop_length_ticks.is_some() && held.length_ticks % unit != 0 {
+                let stretched_loop = audio.time_stretch && held.loop_length_ticks.is_some();
+                if stretched_loop && held.length_ticks % unit != 0 {
                     self.refuse(
                         format!("{at}/loop_length_ticks"),
                         UNSUPPORTED,
@@ -400,7 +416,9 @@ fn lanes(song: &Song) -> Lanes<'_> {
             .entry(target.param.as_str())
             .or_default();
         // Keyed for patch paths only (ADR 0002 §2); the key crosses empty (ADR 0007 §2).
-        lane.extend(automation.points.values().map(|p| AutomationPoint { id: String::new(), ..p.clone() }));
+        for point in automation.points.values() {
+            lane.push(AutomationPoint { id: String::new(), ..point.clone() });
+        }
     }
     for lane in lanes.values_mut().flat_map(|by_param| by_param.values_mut()) {
         lane.sort_by_key(|p| p.tick);

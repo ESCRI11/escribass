@@ -10,7 +10,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
 | `determinism.rs` | The suite: it drives `escribass-mcp` and `escribass-grpc` as subprocesses and compares what they produce. | hand |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
-| `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json` and `origin.json`. | `UPDATE_FIXTURES=1 cargo test` |
+| `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`, `origin.json` and `plan.json` — what `compile` says about the project, the `RenderPlan` or every reason there is none (ADR 0007 §4). | `UPDATE_FIXTURES=1 cargo test` |
 
 ## Rules
 
@@ -30,7 +30,8 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 ## Adding things
 
 - **A fixture:** a `build_*()` and a `*_FIXTURE` path constant in `schema/tests/roundtrip.rs`; write it with `UPDATE_FIXTURES=1`; read it from the TS and Python tests too.
-- **The three scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing).
+- **The four scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing), `render` (what `compile` resolves — order, loops, solo and mute, lanes, the render length — is a pure function of the document, and the plan golden is where M0's claim and M1's meet).
+- **`plan.json`** is written for every script, so a project M1 cannot render goldens its refusal, naming the field. Its asset index is built from the `assets/` listing under the fixed root `/escri/assets`: `compile` reads no file, so the path is opaque to it, and a run's temporary directory in a golden would be the one kind of input the suite exists to keep out.
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
 - **A cross-language check:** `schema/tests/replay.test.ts` and `schema/tests/test_replay.py` read the golden and replay it. They compare *documents*, not bytes — neither side's serialiser is the canonical writer, and that the bytes are canonical is Rust's claim.
 - **A tool:** add it to a script — `every_implemented_tool_is_scripted` enforces this — add an arm to the gRPC driver's `call!`, and run the suite — the ids of every later step shift if the new tool mints any.
