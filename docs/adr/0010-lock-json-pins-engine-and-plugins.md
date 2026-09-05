@@ -139,11 +139,28 @@ new value. A `repin` tool waits for M2, where a UI can show what changes and ask
 now would be designing against no consumer, which is ADR 0002 §7's reason for deferring
 `FormRule` and the plan's for deferring `Instrument.state`.
 
-The engine block is checked on the same terms, which means an engine upgrade refuses every
-existing project until it is re-pinned. That is deliberate and it is uncomfortable: an engine
-upgrade *does* invalidate bit-exactness, and §17 already requires "a full golden-render pass"
-for one. The discomfort is real and it is M2's to soften with a UI, not M1's to avoid by
-downgrading the check to a warning.
+**The engine block is the exception: it re-pins on open.** Everything above is about a
+plugin, and a plugin pin fails in a way the engine pin cannot. A referenced plugin this build
+lacks makes the song *unrenderable* — there is nothing to put in the chain — and which plugins
+exist is a property of the installation that the project legitimately constrains. A newer
+engine hosting the same plugins renders the same song fine; what an upgrade puts at risk is
+bit-exactness against a golden, not whether the project opens.
+
+Refusing on the engine block would also aim the error at the wrong thing. There is exactly one
+engine and a project cannot choose it, so an upgrade would refuse *every* project on the
+machine at once — which is not an operator error about any of them, and leaves the operator
+hand-editing `lock.json` in every project directory to say what the installer already knows.
+So `open` writes the running build's engine commits into the block and continues.
+
+That does not lose the record the lenient table objects to losing, because the engine block was
+never where it lived. ADR 0008 §5 has the engine embed its submodule commits and report them in
+`RenderResult`: what a given render was made with travels with that render, which is where the
+question is actually asked. §17's "a full golden-render pass" obligation stays on the pull
+request that moves the pin — CI, where the goldens are — rather than being collected from users
+one project at a time.
+
+A plugin entry is still never rewritten (decision 2), so this is one block behaving differently
+for a stated reason, not a general softening.
 
 ### 4. M1 produces a build manifest; `plugin_unknown` and `param_unknown` become validator rules
 
@@ -210,7 +227,8 @@ effects exercise it.
 | The plugins block is a pure function of the current song | Loses a pin on an ordinary delete, and undo (ADR 0005 §4) silently re-pins from the running build. Monotone has no such hole. |
 | Store the plugin's path in `lock.json` | Machine-specific, in a file that is committed to the user's repository and byte-compared by the determinism suite. |
 | Warn on mismatch and open anyway | §11's "checked at load" becomes "mentioned at load"; over MCP the warning has no reader. |
-| Auto-repin on open | Destroys the record §2.2's claim is checked against; the symptom is a moved golden and a lock file that says nothing moved. |
+| Auto-repin a *plugin* on open | Destroys the record §2.2's claim is checked against; the symptom is a moved golden and a lock file that says nothing moved. The engine block is re-pinned (decision 3) because its record lives in `RenderResult`, not here. |
+| Refuse on the engine block too, for symmetry | One engine, not chosen per project: an upgrade would refuse every project at once and be repaired by hand-editing each. Symmetry between a pin the project constrains and a pin the installation owns is not a property worth having. |
 | `lock_mismatch` as a `Violation` (caller-fixable) | Every fix is an operator action — install, rebuild, or edit the pin. Inside §6's retry loop it would only spend retries. |
 | Commit the manifest | Two pins for one fact — the manifest and the plugin binary — with the stale one silent. ADR 0008 §4's argument, one artefact over. |
 | The validator takes an optional manifest | Gives both rules a silent skip arm, which is the defect M0.4 exists to prevent. |

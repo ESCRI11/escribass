@@ -67,7 +67,7 @@
       "commit": "6ef7b89b6e5aa914593c7f3ca19b859915c30337",
       "date": "2024-01-14",
       "repo": "sfztools/sfizz-ui",
-      "note": "the sfizz VST3. Added at M1 (ADR 0010); needs sign-off under CLAUDE.md #4."
+      "note": "the sfizz VST3. Added at M1 (ADR 0010); the `sfizz` pin alone builds none."
     },
     "dexed": {
       "version": "1.0.1",
@@ -206,6 +206,10 @@
       "rmcp": {
         "version": "3.2.0",
         "note": "official MCP Rust SDK (ADR 0006 §6)"
+      },
+      "sha2": {
+        "version": "0.10",
+        "note": "content hashing for `add_asset` (M1 PR 3, ADR 0011). The engine does not hash: juce::SHA256 lives in juce_cryptography, which Tracktion does not pull in, so one hasher in the system rather than two (M1 spike, 2026-09-04)"
       },
       "protoc_gen_tonic": {
         "version": "0.5.0",

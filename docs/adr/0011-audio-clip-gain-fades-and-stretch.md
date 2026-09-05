@@ -208,8 +208,9 @@ project, and so the first change that *would* strand a real document is the one 
 - **PR 3** adds `AddAsset` to `SongTools`, which is what puts a file in `assets/` and makes an
   `asset_hash` resolvable. It needs a hasher; `docs/plan.md` records the decision that `core`
   hashes with `sha2` rather than the engine, which would put the engine in the project-writing
-  path against CLAUDE.md #6. That dependency is not added by this PR and needs sign-off under
-  CLAUDE.md #4.
+  path against CLAUDE.md #6. `sha2` 0.10 is pinned in `lock.baseline.json` by this PR; the
+  spike found the engine could not hash cheaply anyway, since `juce::SHA256` lives in
+  `juce_cryptography` and Tracktion does not pull it in.
 - **Trap 16 lands here.** An audio asset makes `assets/` **non-empty for the first time**.
   `Project::write` creates the directory, and M0.4's comparison ignores it precisely because
   git cannot store an empty one — so the first golden containing an asset changes what the

@@ -164,7 +164,9 @@ Before merging any change, confirm:
 - All external tool versions recorded in `lock.json` and checked at load. From M1 that is the
   engine's submodule commits and one entry per plugin the song references, added on first
   reference and never removed; a referenced plugin this build cannot match refuses to open with
-  `lock_mismatch`, and re-pinning is always explicit (ADR 0010 §1–§3).
+  `lock_mismatch`, and re-pinning a plugin is always explicit. The engine block re-pins on open
+  instead: a newer engine still renders the song, and what a render was made with travels with
+  the render (ADR 0010 §1–§3, ADR 0008 §5).
 - A golden-render test exists for every bundled instrument (render fixture → hash compare).
   **The comparison is over the WAV's `data` chunk, never the whole file**, and the committed
   `.sha256` hashes the PCM payload: JUCE writes a `bext` chunk carrying `OriginationDate` and
@@ -249,6 +251,7 @@ not in its scope and needs no ADR.
 | Render determinism, scope | Linux x86-64 on a pinned image and compiler; cross-CPU unproven until CI measures it | A pin fixes the source; the bits also depend on what the compiler emitted and what the CPU chose at run time, and sfizz and JUCE dispatch SIMD at run time (ADR 0009 §1, §6) | 2026-09-05 |
 | `lock.json` v2 | The engine's submodule commits plus one entry per referenced plugin, added on first reference and never removed | A block derived purely from the current song loses a pin on an ordinary delete, and undo (ADR 0005 §4) then re-pins from the running build — a silent re-pin caused by pressing undo (ADR 0010 §1, §2) | 2026-09-05 |
 | A referenced plugin this build cannot match | Refuse to open, `lock_mismatch`; re-pinning is always explicit | The strict reading of §11, in the shape `schema_version_mismatch` already has. Rendering silence or substituting produces a wrong render that hashes differently with no error anywhere (ADR 0010 §3) | 2026-09-05 |
+| A newer engine than the project pins | Re-pin on open, do not refuse | A missing plugin makes a song unrenderable; a newer engine renders it fine and only risks bit-exactness. There is one engine and a project cannot choose it, so refusing would refuse every project at once, and §17's golden-render pass belongs on the PR that moves the pin (ADR 0010 §3) | 2026-09-05 |
 | `plugin_unknown`, `param_unknown` | Validator rules, resolved against a build manifest the engine generates and `core` requires | §4.4 has wanted both since M0.2 and neither could resolve without knowing what this build hosts; an optional manifest would give both rules a silent skip arm (ADR 0010 §4) | 2026-09-05 |
 | `AudioClip` | Gains `gain_db`, `fade_in_ticks`, `fade_out_ticks`, `time_stretch`; the fade formula is ours and stretch is a flag | An audio track has no device, so no `ParamRef` can reach a clip's level; and a stretch *ratio* would have to be computed by a caller that cannot read the asset (ADR 0011 §1, §3) | 2026-09-05 |
 | Airwindows | Deferred to M4, with clap-wrapper | Its pinned repository may not build a Linux VST3, and §11's golden per bundled *instrument* is met by the three synths; M4 already has the CLAP→VST3 path (ADR 0003 §4, amended; ADR 0010 §5) | 2026-09-05 |
@@ -272,7 +275,7 @@ is `docs/roadmap.md`. Both defer to this section.
 
 ## 17. Pinned toolchain baseline [MUST]
 
-Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json`. A project's `lock.json` recorded only `schema_version` until M1. From M1 it also records the engine's submodule commits and one entry per plugin the song references, added on first reference and compared at load (ADR 0010 §1–§3); M4 adds the compiled artefacts and model hashes (ADR 0003 §3). Only what a project uses is copied into it, never the whole table.
+Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags or branches; tags are listed for readability only. Upgrades require an ADR and a full golden-render pass. This table is mirrored in `/lock.baseline.json`. A project's `lock.json` recorded only `schema_version` until M1. From M1 it also records the engine's submodule commits and one entry per plugin the song references, added on first reference and compared at load, with the engine block re-pinned rather than refused (ADR 0010 §1–§3); M4 adds the compiled artefacts and model hashes (ADR 0003 §3). Only what a project uses is copied into it, never the whole table.
 
 | Component | Version / tag | Commit | Date | Notes |
 |---|---|---|---|---|
