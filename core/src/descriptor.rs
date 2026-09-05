@@ -328,3 +328,56 @@ fn snake_case(name: &str) -> String {
 pub fn tool_names(descriptor: &[u8]) -> Result<Vec<String>, String> {
     Ok(tool_schemas(descriptor)?.into_iter().map(|t| t.name).collect())
 }
+
+/// One field of a message, as the field-coverage guard sees it (ADR 0007 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Field {
+    pub name: String,
+    /// The fully qualified name of the message this field holds — for a map, of its value —
+    /// when it holds one.
+    pub message: Option<String>,
+}
+
+/// Every message in the set by fully qualified name (`.escribass.song.v1.Note`), with its
+/// fields.
+///
+/// The synthetic entry message a `map<K, V>` compiles to is folded into the field that
+/// declares the map: it exists on the wire and nowhere in the model, so a guard that walked
+/// it would be covering `key` and `value` fields nobody wrote. This is the same index the
+/// tool schemas are built from, so there is one reading of the descriptor, not two.
+pub fn message_fields(descriptor: &[u8]) -> Result<BTreeMap<String, Vec<Field>>, String> {
+    let set = FileDescriptorSet::decode(descriptor)
+        .map_err(|e| format!("the descriptor set does not decode: {e}"))?;
+    let index = Index::build(&set);
+
+    let is_entry = |message: &DescriptorProto| {
+        message.options.as_ref().and_then(|o| o.map_entry).unwrap_or(false)
+    };
+    let mut messages = BTreeMap::new();
+    for (name, entry) in &index.messages {
+        if is_entry(entry.2) {
+            continue;
+        }
+        let fields = entry
+            .2
+            .field
+            .iter()
+            .map(|field| {
+                let message = match map_entry(&index, field) {
+                    Some(map) => map
+                        .2
+                        .field
+                        .iter()
+                        .find(|f| f.name() == "value")
+                        .filter(|f| f.r#type() == Type::Message)
+                        .map(|f| f.type_name().to_string()),
+                    None if field.r#type() == Type::Message => Some(field.type_name().to_string()),
+                    None => None,
+                };
+                Field { name: field.name().to_string(), message }
+            })
+            .collect();
+        messages.insert(name.clone(), fields);
+    }
+    Ok(messages)
+}
