@@ -26,7 +26,7 @@ pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops
     refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
-pub use project::{Prepared, Project, ProjectError};
+pub use project::{asset_hash, Prepared, Project, ProjectError};
 pub use mcp::SongTools;
 pub use session::{new_song, Session};
 pub use validate::{validate, Violation};

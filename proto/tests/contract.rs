@@ -1,11 +1,14 @@
-//! The wire contract of ADR 0006, asserted where it can silently stop holding.
+//! The wire contracts of ADR 0006 and ADR 0007, asserted where they can silently stop holding.
 //!
 //! There is no round-trip fixture here: `schema/tests/roundtrip.rs` covers the model, and
-//! this module adds no model types. What it covers is the three things about *this* file that
-//! a future change could break without any other test noticing.
+//! this crate adds no model types. What it covers is the handful of things about *these*
+//! files that a future change could break without any other test noticing.
 
+use escribass_proto::prost_types::{DescriptorProto, FileDescriptorSet};
+use escribass_proto::render::{PlanClip, PlanNotes, PlanTrack, RenderPlan};
 use escribass_proto::tools::{AddClipRequest, SongResponse, ToolResult, Violation};
-use escribass_schema::song::{NoteClip, Song};
+use escribass_proto::DESCRIPTOR;
+use escribass_schema::song::{Mix, Note, NoteClip, Song};
 use prost::Message;
 
 /// The canonical RFC 6902 text of one operation, as `ops_text` in `core` produces it.
@@ -66,14 +69,20 @@ fn the_generated_serde_impl_base64_encodes_patch() {
     assert_ne!(encoded, OPS);
 }
 
-/// ADR 0006 §1: every mutating RPC returns the one result contract, and only the reads differ.
+/// ADR 0006 §1: every mutating RPC returns the one result contract, and only an RPC that
+/// produces no ops — a read, or `AddAsset`, whose answer is an address — returns its own.
 ///
 /// Read from the `.proto` rather than the generated code because the rule is about the service
 /// definition, and because a new RPC added with its own response message would otherwise be
 /// caught by nothing until a reviewer noticed.
 #[test]
 fn every_mutating_rpc_returns_the_shared_result() {
-    const READS: [&str; 3] = ["GetSong", "GetSongAt", "GetHistory"];
+    const OWN_SHAPE: [(&str, &str); 4] = [
+        ("GetSong", "SongResponse"),
+        ("GetSongAt", "SongResponse"),
+        ("GetHistory", "HistoryResponse"),
+        ("AddAsset", "AssetResponse"),
+    ];
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/song_tools.proto"))
         .expect("song_tools.proto");
 
@@ -83,14 +92,108 @@ fn every_mutating_rpc_returns_the_shared_result() {
         let returns = line.rsplit("returns").next().unwrap().trim_matches(|c: char| {
             c.is_whitespace() || c == '(' || c == ')' || c == ';'
         });
-        if READS.contains(&name) {
-            assert_eq!(returns, if name == "GetHistory" { "HistoryResponse" } else { "SongResponse" });
-        } else {
-            assert_eq!(returns, "ToolResult", "{name} must return the shared contract");
+        match OWN_SHAPE.iter().find(|(rpc, _)| *rpc == name) {
+            Some((_, own)) => assert_eq!(returns, *own, "{name}"),
+            None => assert_eq!(returns, "ToolResult", "{name} must return the shared contract"),
         }
         seen += 1;
     }
-    assert_eq!(seen, 20, "every rpc in the service is checked");
+    assert_eq!(seen, 22, "every rpc in the service is checked");
+}
+
+// ---- render.proto (ADR 0007 §2) ----
+
+/// ADR 0007 §2: a leaf message crosses into the plan *by value* — it is the model's type, not
+/// a plan-local copy of it.
+///
+/// A compile-time assertion, like the one above for requests. Drop `extern_path` for
+/// `render.proto` in `proto/buf.gen.yaml` and prost generates its own `Note` and `Mix` into
+/// this crate: the mirrored shape ADR 0006 §4 forbids, which compiles fine on its own and
+/// stops compiling here, because these are the model's types by name.
+#[test]
+fn the_plan_carries_the_model_types_themselves() {
+    let plan = RenderPlan {
+        tracks: vec![PlanTrack {
+            mix: Some(Mix { gain_db: -3.0, pan: 0.0, mute: false, solo: false }),
+            clips: vec![PlanClip {
+                start_tick: 0,
+                length_ticks: 960,
+                content: Some(escribass_proto::render::plan_clip::Content::Notes(PlanNotes {
+                    notes: vec![Note { pitch: 60, ..Default::default() }],
+                })),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let decoded = RenderPlan::decode(&*plan.encode_to_vec()).expect("a plan decodes");
+    assert_eq!(decoded, plan);
+}
+
+/// ADR 0007 §2: everything structural in the plan is `repeated`, never a map. The model keys
+/// its collections by id so patch paths survive concurrent inserts; a plan is never patched,
+/// and `repeated` carries the one thing the model deliberately does not store — order. A map
+/// reaching the engine would hand it a collection to derive order from, which is what ADR
+/// 0007 §1 keeps on core's side.
+///
+/// Walked from the descriptor rather than the generated code, because a `map<...>` is a
+/// synthetic nested message with `map_entry` set, and that is the one place it cannot hide.
+#[test]
+fn nothing_reachable_from_the_plan_is_a_map() {
+    let set = FileDescriptorSet::decode(DESCRIPTOR).expect("the descriptor decodes");
+    let mut messages = std::collections::BTreeMap::new();
+    for file in &set.file {
+        for message in &file.message_type {
+            index(&format!(".{}.{}", file.package(), message.name()), message, &mut messages);
+        }
+    }
+
+    let mut pending = vec![".escribass.render.v1.RenderPlan".to_string()];
+    let mut visited = std::collections::BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        let message = messages.get(&name).unwrap_or_else(|| panic!("{name} is not in the descriptor"));
+        for field in &message.field {
+            if field.r#type() == escribass_proto::prost_types::field_descriptor_proto::Type::Message {
+                let target = messages.get(field.type_name()).expect("every message type resolves");
+                assert!(
+                    !target.options.as_ref().is_some_and(|o| o.map_entry()),
+                    "{name}.{} is a map; a plan-local message is repeated, never keyed \
+                     (ADR 0007 §2)",
+                    field.name()
+                );
+                // The walk stops at the model's own messages. Rule 1 crosses them **whole**,
+                // so what is inside one is the model's business, not the plan's: Note carries
+                // a map<string, double> of per-note expression, which is a keyed set of
+                // scalars rather than the entity collection ADR 0001 §3's rule is about.
+                // Descending would assert the opposite of rule 1 — that a leaf is reshaped on
+                // the way in — which is the mirrored shape ADR 0006 §4 forbids.
+                if field.type_name().starts_with(".escribass.render.v1.") {
+                    pending.push(field.type_name().to_string());
+                }
+            }
+        }
+    }
+    // Every plan-local message, so a new one cannot be added outside the walk.
+    for name in messages.keys().filter(|n| n.starts_with(".escribass.render.v1.")) {
+        let plan_local = name.strip_prefix(".escribass.render.v1.").expect("the prefix matched");
+        if plan_local.starts_with("Plan") {
+            assert!(visited.contains(name), "{name} is plan-local and the walk never reached it");
+        }
+    }
+}
+
+fn index<'a>(
+    name: &str,
+    message: &'a DescriptorProto,
+    into: &mut std::collections::BTreeMap<String, &'a DescriptorProto>,
+) {
+    for nested in &message.nested_type {
+        index(&format!("{name}.{}", nested.name()), nested, into);
+    }
+    into.insert(name.to_string(), message);
 }
 
 /// The error shape core already returns, transported rather than redefined (ADR 0006 §2).

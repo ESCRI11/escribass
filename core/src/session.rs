@@ -21,9 +21,9 @@ use crate::project::{Prepared, Project, ProjectError};
 use crate::validate::Violation;
 use crate::tools;
 use escribass_proto::tools::{
-    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest, AddTrackRequest,
-    ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest, GetSongAtRequest,
-    HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
+    AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
+    AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
+    GetSongAtRequest, HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
     SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
     SwitchBranchRequest, ToolResult, TransposeRequest,
 };
@@ -203,6 +203,27 @@ impl Session {
     ) -> Result<ToolResult, ProjectError> {
         let built = tools::move_section(self.project.song(), request);
         self.from_tool("move_section", built, request.dry_run, self.ids.fork())
+    }
+
+    // ---- assets (§10) ----
+
+    /// `add_asset`: the hash that names `content` in `assets/`, written unless this is a dry
+    /// run.
+    ///
+    /// Not through `run`, and not a `ToolResult`: there are no ops, no entry and no
+    /// caller-fixable refusal — core inspects no content, so the only way this fails is an
+    /// unwritable directory, an operator's problem (ADR 0006 §2). What the caller needs is
+    /// the address, so that is what comes back, the way a read returns what it read.
+    ///
+    /// A dry run is the same hash without the write, which is the first half of the real
+    /// path (ADR 0006 §3): the name an asset gets is decided before anything touches disk.
+    pub fn add_asset(&self, request: &AddAssetRequest) -> Result<AssetResponse, ProjectError> {
+        let asset_hash = if request.dry_run {
+            crate::project::asset_hash(&request.content)
+        } else {
+            self.project.add_asset(&request.content)?
+        };
+        Ok(AssetResponse { asset_hash })
     }
 
     // ---- branches (ADR 0001 §2) ----

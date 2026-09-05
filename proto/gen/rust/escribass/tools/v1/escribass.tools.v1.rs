@@ -229,6 +229,43 @@ pub struct AddAutomationRequest {
     pub dry_run: bool,
 }
 // ---------------------------------------------------------------------------
+// Assets (§10)
+// ---------------------------------------------------------------------------
+
+/// Puts a file in assets/, named by its SHA-256, and returns that name — the value an
+/// AudioClip.asset_hash then references. Content-addressed, so adding the same bytes twice
+/// writes one file and the call is safe to repeat.
+///
+/// The bytes are opaque: §10's assets/ holds samples, compiled plugins and models alike, and
+/// core inspects none of them. Over MCP they cross as proto3 JSON's base64 — the same rule as
+/// Instrument.state, and unlike ToolResult.patch, which is JSON text wearing a bytes field
+/// (ADR 0006 §6). Whether an asset is something the engine can play is the engine's question,
+/// asked when it opens the file.
+///
+/// dry_run returns the hash and writes nothing: the first half of the real path, as for every
+/// tool (ADR 0006 §3).
+///
+/// ponytail: an asset is bounded by each transport's default message limit (4 MB over gRPC).
+/// Raise them, or take a path, when a real asset exceeds it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AddAssetRequest {
+    #[prost(bytes="vec", tag="1")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bool, tag="2")]
+    pub dry_run: bool,
+}
+/// What add_asset returns. Not ToolResult: that message is for tools that produce ops, which
+/// the pipeline records or refuses, and an asset is neither in the song nor in the log —
+/// there is no patch and no entry, and the one thing the caller needs is the address. The
+/// reads set the precedent for a tool returning what it produced (ADR 0006 §1). Nor is there
+/// a caller-fixable half to carry: core refuses no content, so the only failure is an
+/// unwritable directory, which is an operator's (ADR 0006 §2).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AssetResponse {
+    #[prost(string, tag="1")]
+    pub asset_hash: ::prost::alloc::string::String,
+}
+// ---------------------------------------------------------------------------
 // Time base and arrangement (§5)
 // ---------------------------------------------------------------------------
 
@@ -265,6 +302,33 @@ pub struct MoveSectionRequest {
     #[prost(int32, tag="3")]
     pub end_tick: i32,
     #[prost(bool, tag="4")]
+    pub dry_run: bool,
+}
+// ---------------------------------------------------------------------------
+// Rendering (§8)
+// ---------------------------------------------------------------------------
+
+/// Renders the song as it stands to a WAV at `output_path`. Core compiles the document into a
+/// RenderPlan (ADR 0007 §4) and hands it to a fresh engine process, which writes the file and
+/// exits (ADR 0008 §2).
+///
+/// Returns ToolResult with `patch` and `entry_id` empty, as the branch tools do: nothing in
+/// the song changed. `valid` and `errors` are the half that matters — what this engine cannot
+/// render comes back as render_unsupported, naming the field (ADR 0007 §6) — and an engine
+/// that fails is an operator error, since no retry fixes a crash (ADR 0008 §1). The audio's
+/// own answer, its PCM hash and the commits it was built from, is the engine's RenderResult
+/// (render.proto); the file at `output_path` is what this call produces.
+///
+/// dry_run compiles and reports, and spawns no engine: compile is the first half of a render,
+/// exactly as prepare is the first half of a commit (ADR 0006 §3).
+///
+/// Defined here so buf breaking guards it; implemented when the engine exists (M1 PR 10).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RenderExportRequest {
+    /// Absolute path of the WAV to write. The engine is handed this and the plan, nothing else.
+    #[prost(string, tag="1")]
+    pub output_path: ::prost::alloc::string::String,
+    #[prost(bool, tag="2")]
     pub dry_run: bool,
 }
 // ---------------------------------------------------------------------------

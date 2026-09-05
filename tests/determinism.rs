@@ -223,11 +223,16 @@ fn check(step: &Step, id: usize, frame: &Value) -> Value {
         .map(|errors| errors.iter().filter_map(|e| e["rule"].as_str()).collect())
         .unwrap_or_default();
 
-    const READS: [&str; 3] = ["get_song", "get_song_at", "get_history"];
+    // The tools that answer with something other than a `ToolResult`: three reads, which
+    // return what they read, and `add_asset`, which returns where it put something. None of
+    // them produces ops for the pipeline to record or refuse, so none has a `valid` to carry
+    // (ADR 0006 §1).
+    const NOT_TOOL_RESULTS: [&str; 4] =
+        ["get_song", "get_song_at", "get_history", "add_asset"];
     match (&step.refused, content.get("valid").and_then(Value::as_bool)) {
-        // A read has no `valid`. Matched by name rather than by the field's absence, so a
-        // mutating tool whose result lost its shape fails here instead of passing quietly.
-        (None, None) if READS.contains(&step.tool.as_str()) => {}
+        // Matched by name rather than by the field's absence, so a mutating tool whose result
+        // lost its shape fails here instead of passing quietly.
+        (None, None) if NOT_TOOL_RESULTS.contains(&step.tool.as_str()) => {}
         (None, None) => panic!("step {id} (`{}`) answered without `valid`: {content}", step.tool),
         (None, Some(true)) => {}
         (None, Some(false)) => {
@@ -318,8 +323,10 @@ fn speak(flags: &[&str], project: &Path, requests: &[Value]) -> Vec<Value> {
 /// things.
 struct Snapshot(BTreeMap<String, Vec<u8>>);
 
-/// Files only: `assets/` is created empty and git cannot store an empty directory, so its
-/// absence would read as a difference between a fresh run and a checkout.
+/// Files only, which is what makes `assets/` compare correctly in both states: empty, it
+/// contributes nothing on either side, so git's inability to store an empty directory never
+/// reads as a difference; non-empty, every asset is compared by name and by bytes like any
+/// other file. `add_asset` is what first puts one there (ADR 0011, Consequences).
 fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut found = BTreeMap::new();
     let mut pending = vec![root.to_path_buf()];
@@ -778,6 +785,16 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
                         }
                         "get_history" => {
                             history_shaped(answered(client.get_history(GetHistoryRequest {})).await)
+                        }
+                        // Its own arm, like the reads: an address is not a `ToolResult`.
+                        // `content` is `bytes` and arrives base64, which the generated
+                        // deserializer decodes — the symmetry `apply_patch` does not have,
+                        // because an asset really is opaque binary (`core/src/mcp.rs`).
+                        "add_asset" => {
+                            let request: AddAssetRequest = serde_json::from_value(args)
+                                .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
+                            let answer = answered(client.add_asset(request)).await;
+                            json!({"asset_hash": answer.asset_hash})
                         }
                         unknown => panic!("step {id}: the suite does not know `{unknown}`"),
                     }

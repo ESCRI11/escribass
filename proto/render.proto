@@ -1,0 +1,174 @@
+// What crosses into the engine, and what comes back (docs/specs.md §8). The choices this
+// file makes that §8 leaves open: docs/adr/0007-engine-renders-a-render-plan.md (what a plan
+// is), 0008 (how it travels, and what the engine reports), 0009 §2 (what the hash is of).
+//
+// The engine never receives a Song. It receives a RenderPlan: flat, ordered, already
+// resolved. Nothing that needs the model's structure crosses — no id-keyed map, no
+// Clip.track_id, no Mix.solo to resolve against other tracks, no loop_length_ticks to expand,
+// no Effect.index to sort by, no history field. Core does all of that once, in compile, and
+// the engine renders exactly length_ticks ticks with no opinion of its own (ADR 0007 §1).
+//
+// Two rules decide every message here (ADR 0007 §2):
+//
+//   1. A song.v1 message is reused **by value** when it holds no entity collection and no id
+//      naming another entity. Its id, provenance and version cross empty. A plan-local copy
+//      would be the mirrored shape ADR 0006 §4 forbids: a field added to Note would never
+//      reach it, and nothing would break loudly enough to notice.
+//   2. Everything structural — the track list, a clip list, an effect chain, a lane's points,
+//      the tempo map — is plan-local and `repeated`, never a map. ADR 0001 §3 keys the model
+//      by id so patch paths survive concurrent inserts; a plan is never patched, and
+//      `repeated` carries the one thing the model deliberately does not store: order.
+//
+// A Plan* message holds no field the model already has, apart from the two ints a clip
+// cannot cross without (Clip carries a track_id, so it cannot be reused whole). The
+// descriptor-driven test of ADR 0007 §5 is what keeps that true.
+//
+// The plan is derived, never persisted, never edited, never read back. It has the standing
+// of a WAV, not of song.json, so it is not a second representation of song state
+// (CLAUDE.md #1, ADR 0007 §5).
+
+syntax = "proto3";
+
+package escribass.render.v1;
+
+import "song.proto";
+
+// ---------------------------------------------------------------------------
+// The plan (ADR 0007)
+// ---------------------------------------------------------------------------
+
+// One offline render. Exactly one of these arrives on the engine's stdin, read to
+// end-of-stream, and exactly one RenderResult leaves on stdout; the process then exits
+// (ADR 0008 §1). At M2 the same message is the argument of Render.Render.
+message RenderPlan {
+  // Every track that sounds, in mixer order. Tracks that solo and mute silence are already
+  // gone, and every one of these outputs to `master`: sends, sidechains and buses are M2's,
+  // and compile refuses them with render_unsupported (ADR 0007 §6).
+  repeated PlanTrack tracks = 1;
+
+  // The master track: its effect chain and its mix. Structural rather than a kind on
+  // PlanTrack, because Track.kind is consumed by compile, not carried (ADR 0007 §5).
+  PlanTrack master = 2;
+
+  // The tempo map, in tick order. Every tick in this plan is a model tick at 960 PPQ, and
+  // the engine places it on its own tempo sequence: one owner of tick→sample is one fewer
+  // rounding site (ADR 0007 §3). If that proves unstable across tempo changes, the recorded
+  // fallback is core-computed sample positions beside the ticks, in a later field.
+  repeated escribass.song.v1.TempoEvent tempo = 3;
+
+  escribass.song.v1.RenderTarget target = 4;
+
+  // How long the render is: the last clip's end (docs/plan.md, decisions of 2026-09-04).
+  // The engine renders this many ticks and stops; it does not look for the last clip itself.
+  int32 length_ticks = 5;
+
+  // Where the WAV goes, absolute. A path the engine is handed is output, not a project file;
+  // §8's "never reads project files" is about the .escri, not the filesystem (ADR 0008 §1).
+  string output_path = 6;
+}
+
+// A track as the engine builds it: devices in order, then what plays through them.
+message PlanTrack {
+  // Absent on an audio track and on master (§4.4).
+  PlanInstrument instrument = 1;
+
+  // The effect chain in chain order — Effect.index sorted by compile, not by the engine
+  // (ADR 0007 §1).
+  repeated PlanEffect effects = 2;
+
+  escribass.song.v1.Mix mix = 3;
+
+  // In timeline order. Loops are already expanded: a looping clip arrives as its unrolled
+  // content, and no clip here carries a loop length.
+  repeated PlanClip clips = 4;
+}
+
+// An instrument with the automation that targets it. Lanes nest under their device rather
+// than naming it: ParamRef.device_id is an id naming another entity, which is exactly what
+// rule 1 keeps out of the plan, and a positional index would be an Effect.index by another
+// name.
+message PlanInstrument {
+  escribass.song.v1.Instrument instrument = 1;
+  repeated PlanLane lanes = 2;
+}
+
+message PlanEffect {
+  escribass.song.v1.Effect effect = 1;
+  repeated PlanLane lanes = 2;
+}
+
+// One automated parameter of the enclosing device.
+message PlanLane {
+  // ParamRef.param, the identifier the plugin itself declares (ADR 0010 §4).
+  string param = 1;
+
+  // In tick order. The curve on each point is one of the two shapes ADR 0002 §8 defines a
+  // formula for; the engine implements those formulas, not Tracktion's own.
+  repeated escribass.song.v1.AutomationPoint points = 2;
+}
+
+// A clip placed on the timeline. start_tick and length_ticks are Clip's own, copied because
+// Clip carries a track_id and cannot cross whole; nothing else of Clip is here.
+message PlanClip {
+  int32 start_tick = 1;
+  int32 length_ticks = 2;
+
+  oneof content {
+    PlanNotes notes = 3;
+    PlanAudio audio = 4;
+  }
+}
+
+// The notes of a clip, by value, in start order. Note.start_tick stays clip-relative, as the
+// model holds it (ADR 0007 §3).
+message PlanNotes {
+  repeated escribass.song.v1.Note notes = 1;
+}
+
+// An audio clip beside the file it plays. The bytes are not embedded: every sample of every
+// asset through stdin and into the plan golden is the alternative ADR 0007 §2 rejects. The
+// engine learns nothing about the .escri from a path it opens.
+//
+// ponytail: a looped, stretched clip whose length is not a multiple of its loop is not yet
+// expressible — compile expands the loop, and the truncated last iteration would stretch to
+// the wrong length (ADR 0011 §3). One additive field naming the stretched unit fixes it the
+// day compile meets one; no ADR names it yet.
+message PlanAudio {
+  escribass.song.v1.AudioClip clip = 1;
+
+  // Absolute path of the asset, resolved by core from AudioClip.asset_hash (§10).
+  string path = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The result (ADR 0008 §5, ADR 0009 §2)
+// ---------------------------------------------------------------------------
+
+// What a successful render reports. Failure is an exit code, never a result carrying errors:
+// by the time a plan reaches the engine every caller-fixable failure has already been
+// refused upstream, and no retry fixes a crash (ADR 0008 §1).
+message RenderResult {
+  // SHA-256, lowercase hex, of the WAV's `data` chunk — the PCM payload and only that.
+  // Never of the file: JUCE writes a `bext` chunk carrying the clock, so the file differs
+  // between two runs that produced identical audio (ADR 0009 §2). This is the number the
+  // committed .sha256 beside a golden holds and the one §18.2 publishes.
+  string pcm_sha256 = 1;
+
+  // The commit each vendored component was compiled from, keyed by its name in
+  // lock.baseline.json — tracktion_engine, juce, rubberband, and each bundled plugin —
+  // embedded at configure time from the submodule checkout, never read from a file at run
+  // time. The render suite compares these before it compares a sample (ADR 0008 §5).
+  map<string, string> commits = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The service (ADR 0008 §1)
+// ---------------------------------------------------------------------------
+
+// Defined in M1 so buf breaking guards the shape M2 implements; implemented by nobody in
+// M1, where the engine is a fresh subprocess per render speaking the same two messages over
+// stdio. At M2 the stdio path is deleted, not kept beside this (ADR 0008 §1).
+service Render {
+  // One offline render of one plan to the file the plan names.
+  rpc Render(RenderPlan) returns (RenderResult);
+}

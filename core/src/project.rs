@@ -7,7 +7,7 @@
 //!   song.json    the canonical model — a derived cache of patches/ (ADR 0004)
 //!   patches/     one <entry-id>.json per patch entry, append-only
 //!   refs.json    branch pointers and HEAD
-//!   assets/      content-addressed; nothing produces one before M1
+//!   assets/      content-addressed: one file per asset, named by its SHA-256 (`add_asset`)
 //!   lock.json    versions checked at load (§11)
 //! ```
 //!
@@ -335,6 +335,35 @@ impl Project {
         self.swap(self.song.clone(), history)
     }
 
+    // ---- assets (§10) ----
+
+    /// Puts `content` in `assets/` under its hash, and returns that hash.
+    ///
+    /// Content-addressed, so the name is a pure function of the bytes and a second call with
+    /// the same content writes nothing: the file that is there *is* the file that would be
+    /// written. That is what makes the call safe to repeat, and what keeps an asset out of
+    /// the patch log — the log records changes to the song, and an asset is not in the song
+    /// until a clip names it (CLAUDE.md #2 is about the document).
+    ///
+    /// `&self` rather than `&mut self`: nothing in memory changes. The index from hash to
+    /// path that `compile` takes (ADR 0007 §4) is read from the directory when it is needed.
+    ///
+    /// `ponytail:` a file already present is trusted by name; nothing re-hashes it to prove
+    /// the bytes match. Add a check here if a corrupted asset ever needs to be caught before
+    /// the engine fails to open it.
+    pub fn add_asset(&self, content: &[u8]) -> Result<String, ProjectError> {
+        let hash = asset_hash(content);
+        // Created here as well as in `write`: git stores no empty directory, so a project
+        // cloned before its first asset arrives without one.
+        let assets = self.root.join(ASSETS);
+        std::fs::create_dir_all(&assets).map_err(|e| err(&assets, "unwritable", e.to_string()))?;
+        let path = assets.join(&hash);
+        if !path.exists() {
+            write_atomically(&path, content)?;
+        }
+        Ok(hash)
+    }
+
     /// Writes a proposed state and adopts it only once the write succeeded.
     fn swap(&mut self, song: Song, history: History) -> Result<(), ProjectError> {
         let next = Project { root: self.root.clone(), song, history };
@@ -502,6 +531,17 @@ fn refusal(root: &Path, violations: &[Violation]) -> ProjectError {
     )
 }
 
+/// The name an asset has in `assets/`: its SHA-256, lowercase hex (§10).
+///
+/// One hasher in the system. The engine does not compute this — `juce::SHA256` lives in a
+/// module Tracktion does not link, and an engine that wrote into the project would be on the
+/// wrong side of CLAUDE.md #6 — so what `AudioClip.asset_hash` means is decided here and
+/// nowhere else (ADR 0011, Consequences).
+pub fn asset_hash(content: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(content).iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 fn read(path: &Path) -> Result<String, ProjectError> {
     std::fs::read_to_string(path).map_err(|e| err(path, "unreadable", e.to_string()))
 }
@@ -513,7 +553,7 @@ fn read(path: &Path) -> Result<String, ProjectError> {
 ///
 /// `ponytail:` no `fsync`, so a power cut can still lose the tail of a write the OS had not
 /// flushed. Add one here if that ever matters more than write latency.
-fn write_atomically(path: &Path, contents: &str) -> Result<(), ProjectError> {
+fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
     let temporary = path.with_file_name(format!(".{name}.tmp"));
     std::fs::write(&temporary, contents).map_err(|e| err(&temporary, "unwritable", e.to_string()))?;

@@ -388,6 +388,28 @@ pub mod song_tools_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn add_asset(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AddAssetRequest>,
+        ) -> std::result::Result<tonic::Response<super::AssetResponse>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/AddAsset",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("escribass.tools.v1.SongTools", "AddAsset"));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn set_tempo(
             &mut self,
             request: impl tonic::IntoRequest<super::SetTempoRequest>,
@@ -451,6 +473,28 @@ pub mod song_tools_client {
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("escribass.tools.v1.SongTools", "MoveSection"));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn render_export(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RenderExportRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/RenderExport",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("escribass.tools.v1.SongTools", "RenderExport"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -622,6 +666,11 @@ pub mod song_tools_server {
             request: tonic::Request<super::AddAutomationRequest>,
         ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
         ///
+        async fn add_asset(
+            &self,
+            request: tonic::Request<super::AddAssetRequest>,
+        ) -> std::result::Result<tonic::Response<super::AssetResponse>, tonic::Status>;
+        ///
         async fn set_tempo(
             &self,
             request: tonic::Request<super::SetTempoRequest>,
@@ -635,6 +684,11 @@ pub mod song_tools_server {
         async fn move_section(
             &self,
             request: tonic::Request<super::MoveSectionRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn render_export(
+            &self,
+            request: tonic::Request<super::RenderExportRequest>,
         ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
         ///
         async fn create_branch(
@@ -1319,6 +1373,51 @@ pub mod song_tools_server {
                     };
                     Box::pin(fut)
                 }
+                "/escribass.tools.v1.SongTools/AddAsset" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddAssetSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::AddAssetRequest>
+                    for AddAssetSvc<T> {
+                        type Response = super::AssetResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AddAssetRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::add_asset(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddAssetSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/escribass.tools.v1.SongTools/SetTempo" => {
                     #[allow(non_camel_case_types)]
                     struct SetTempoSvc<T: SongTools>(pub Arc<T>);
@@ -1439,6 +1538,51 @@ pub mod song_tools_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = MoveSectionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/RenderExport" => {
+                    #[allow(non_camel_case_types)]
+                    struct RenderExportSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::RenderExportRequest>
+                    for RenderExportSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RenderExportRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::render_export(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RenderExportSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
