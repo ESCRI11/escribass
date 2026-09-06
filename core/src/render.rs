@@ -255,6 +255,34 @@ impl Compiler<'_> {
         );
     }
 
+    /// A note this engine cannot voice as it is written (ADR 0007 §6).
+    ///
+    /// Both fields cross into the plan — the coverage guard requires every field of an embedded
+    /// message to — and the engine would render both as though they were zero: a microtonal
+    /// offset needs per-note pitch bend or a channel per note, and an expression value needs a
+    /// controller nothing in the model names. Refused rather than dropped, because a note that
+    /// sounds at the wrong pitch and reports success is §10's "never silently substituted" one
+    /// layer over.
+    fn check_note(&mut self, at: &str, note: &Note) {
+        if note.microtonal_cents != 0.0 {
+            self.refuse(
+                format!("{at}/microtonal_cents"),
+                UNSUPPORTED,
+                format!(
+                    "{} cents needs per-note pitch bend; M1 sends a note on one channel",
+                    note.microtonal_cents
+                ),
+            );
+        }
+        for name in note.expression.keys() {
+            self.refuse(
+                format!("{at}/expression/{name}"),
+                UNSUPPORTED,
+                format!("`{name}` is per-note expression; M1 sends no controller for one"),
+            );
+        }
+    }
+
     fn track(&mut self, at: &str, track: &Track, clips: Vec<&Clip>, lanes: &mut Lanes) -> PlanTrack {
         let instrument = track.instrument.as_ref().map(|held| {
             self.check_device(&format!("{at}/instrument"), held.r#ref.as_ref());
@@ -331,6 +359,11 @@ impl Compiler<'_> {
             None => Vec::new(),
 
             Some(clip::Content::NoteClip(notes)) => {
+                // Once per note, not once per loop iteration: a refusal names the note the
+                // author wrote, and every iteration of a loop is the same note.
+                for (id, note) in &notes.notes {
+                    self.check_note(&format!("{at}/note_clip/notes/{id}"), note);
+                }
                 // Start order; ties by id.
                 let mut ordered: Vec<&Note> = notes.notes.values().collect();
                 ordered.sort_by_key(|n| n.start_tick);

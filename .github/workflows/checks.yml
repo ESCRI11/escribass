@@ -291,7 +291,7 @@ jobs:
             check "$component" "$(jq -r ".bundled_plugins.${component}.commit" lock.baseline.json)"
           done
           # Failure is an exit code (ADR 0008 §1): nothing on stdin is not a plan.
-          if "$engine" < /dev/null > /dev/null; then
+          if "$engine" engine/build/manifest.json < /dev/null > /dev/null; then
             echo "::error::the engine accepted an empty stdin as a plan"
             exit 1
           fi
@@ -313,3 +313,59 @@ jobs:
             jq -e --arg c "$commit" 'any(.plugins[]; .commit == $c)' "$manifest" > /dev/null \
               || { echo "::error::the manifest names no plugin built from ${component} ${commit}"; exit 1; }
           done
+
+      # A note through a real plugin, twice, in two fresh processes. This is not the golden
+      # render suite — that is PR 11, with committed WAVs and a first-differing-sample report —
+      # it is the standing answer to "does hosting still work at all", which nothing else in
+      # this workflow asks. Dexed because it is pure FM with no RNG and no resampling
+      # (docs/specs.md §8), so a difference here is the engine's, not a plugin's.
+      #
+      # The plan is written as protobuf text and encoded by the protoc this build already
+      # produced, so the check adds no tool and no dependency. The comparison is the engine's
+      # own pcm_sha256, which is a hash of the `data` chunk: the files differ every run,
+      # because JUCE writes the clock into a `bext` chunk (ADR 0009 §2).
+      - name: A note sounds, and it sounds the same twice
+        if: env.SKIP != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          protoc=engine/build/vendor/protobuf/protoc
+          cat > plan.txtpb <<EOF
+          tracks {
+            instrument { instrument { ref { plugin { plugin_id: "Digital Suburban/Dexed" } } } }
+            mix { gain_db: 0.0 pan: 0.0 }
+            clips { start_tick: 0 length_ticks: 1920
+                    notes { notes { pitch: 60 start_tick: 0 length_ticks: 960 velocity: 100 } } }
+          }
+          master { mix { gain_db: 0.0 pan: 0.0 } }
+          tempo { tick: 0 bpm: 120.0 }
+          target { kind: RENDER_KIND_MASTER sample_rate: 48000 bit_depth: 24 }
+          length_ticks: 1920
+          output_path: "$PWD/note.wav"
+          EOF
+          "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+            --encode=escribass.render.v1.RenderPlan proto/render.proto < plan.txtpb > plan.binpb
+          hash_of() {
+            "$engine" engine/build/manifest.json < plan.binpb > "$1"
+            "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+              --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
+              | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
+          }
+          one=$(hash_of one.binpb)
+          # 1920 ticks at 120 bpm is one second: 48000 frames of 24-bit stereo in `data`.
+          python3 - <<'PY'
+          import struct, sys, wave
+          w = wave.open("note.wav")
+          assert (w.getnchannels(), w.getframerate(), w.getsampwidth(), w.getnframes()) \
+                 == (2, 48000, 3, 48000), (w.getnchannels(), w.getframerate(), w.getsampwidth(), w.getnframes())
+          d = w.readframes(w.getnframes())
+          peak = max(abs(int.from_bytes(d[i:i+3], "little", signed=True)) for i in range(0, len(d), 3))
+          # A plugin that loaded and was never given the note renders silence and says nothing,
+          # which is the failure this whole step exists to catch.
+          assert peak > 8388608 // 100, f"the render peaks at {peak}; a hosted note is not silent"
+          print(f"peak {peak} of {2**23}")
+          PY
+          two=$(hash_of two.binpb)
+          echo "run 1 $one"
+          echo "run 2 $two"
+          [ -n "$one" ] && [ "$one" = "$two" ] \
+            || { echo "::error::two renders of one plan disagree: $one vs $two"; exit 1; }
