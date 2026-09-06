@@ -256,6 +256,9 @@ not in its scope and needs no ADR.
 | `AudioClip` | Gains `gain_db`, `fade_in_ticks`, `fade_out_ticks`, `time_stretch`; the fade formula is ours and stretch is a flag | An audio track has no device, so no `ParamRef` can reach a clip's level; and a stretch *ratio* would have to be computed by a caller that cannot read the asset (ADR 0011 §1, §3) | 2026-09-05 |
 | Airwindows | Deferred to M4, with clap-wrapper | Its pinned repository may not build a Linux VST3, and §11's golden per bundled *instrument* is met by the three synths; M4 already has the CLAP→VST3 path (ADR 0003 §4, amended; ADR 0010 §5) | 2026-09-05 |
 | A stretched loop whose clip is not a whole number of loops | Refused with `render_unsupported`, naming `loop_length_ticks` | Each loop iteration crosses as its own plan clip and the engine stretches to the clip it is handed, so a short last iteration would stretch to the wrong length; the plan cannot yet say otherwise, and a plan wrong by construction is not handed to the engine quietly (ADR 0007 §6, amended) | 2026-09-05 |
+| Who computes `pcm_sha256` | The engine, with `juce::SHA256` from the pinned JUCE, reading back the `data` chunk it already checks for length | `RenderResult` is what a render reports about itself and M2's `Render` returns it whole; the module is in the JUCE already pinned, so the count of dependencies did not move; and a RIFF walker in `core`'s production path is audio knowledge on the wrong side of CLAUDE.md #6 (ADR 0009 §2, amended) | 2026-09-06 |
+| Compile-time ISA for the engine | `-march=x86-64 -mtune=generic`, applied to every vendored source | The SSE2 baseline is all Tracktion, JUCE and choc require; a wider one buys speed M1 does not need and lets the compiler choose instructions that round differently, and it has no FMA to contract. Any other `-march` on a compile line fails the build (ADR 0009 §3) | 2026-09-06 |
+| The engine's C++ protobuf | protobuf v21.12 as a submodule; `protoc` built from it | The last line before the runtime depends on abseil, and what Ubuntu 24.04 packages; building `protoc` from the same checkout makes runtime and compiler one pin. **A new dependency pending sign-off** (ADR 0008 §4, pinned; CLAUDE.md #4) | 2026-09-06 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process — must be resolved before M4, ADR 0003 §7); minimum supported OS versions; symbolic model choice for v1 melody/drum generation; whether §6's analysis features and symbolic generation are v1 scope at all (ADR 0003, Still unplaced).
 
@@ -282,6 +285,7 @@ Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags
 |---|---|---|---|---|
 | Tracktion Engine | `develop` (post-v3.2.0) | `0e02f709c4088b2aec427ba6bbbfee3639139bb9` | 2026-09-02 | v3.2.0 (2025-05-15) is 16 months old; active development is on `develop`. Re-pin monthly until a v3.3 tag lands. |
 | JUCE | 8.0.13 (Tracktion submodule) | `37c894f83d379179b2070d437ccd0f1cd9af9576` | 2026-05-21 | **Use the commit Tracktion pins, not JUCE latest.** JUCE 9.0.1 (2026-08-10) exists but Tracktion has not adopted it; do not mix. |
+| Protobuf (C++ runtime and `protoc`, engine) | v21.12 | `f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c` | 2022-12-12 | Submodule; the engine's CMake builds `protoc` from it and generates the C++ for `schema/song.proto` and `proto/render.proto` at build time (ADR 0008 §4). The last line before abseil, and what Ubuntu 24.04 packages. **Added 2026-09-06 (M1 PR 5), pending sign-off.** |
 | Cmajor | 1.0.3177 | `024a208515f15e43271d9b2ea85ee22a2233384b` | 2026-07-28 | Provides `cmaj` CLI and `libCmajPerformer`. |
 | clap-wrapper | v0.16.0 | `1cca996e96f29ab2be7ae9f8cfe532bbc92e1dd6` | 2026-08-08 | CLAP → VST3 projection. |
 | CLAP SDK | 1.2.10 | tag `1.2.10` | — | Header-only; pinned via tag hash at vendoring time. |
@@ -297,7 +301,7 @@ Resolved from upstream git on 2026-09-02. Agents pin **commit hashes**, not tags
 | Python (`ai`) | 3.12.x | — | — | Pin exact patch in `ai/.python-version`; lock deps with `uv`. |
 | LLM provider | OpenRouter | — | — | Model ids pinned per project in `lock.json` under `ai.model`. |
 | CI image (golden renders) | `ubuntu-24.04` | — | — | The image every M1 golden render is valid for. `ubuntu-latest` moves, and every golden would drift with no PR to blame (ADR 0009 §5). |
-| C++ compiler (golden renders) | g++ 13.3 | — | — | What the spike ran and what the goldens are blessed under. `engine/`'s CMake pins the compile-time `-march`, sets `-ffp-contract=off`, and fails on `-ffast-math` (ADR 0009 §3). |
+| C++ compiler (golden renders) | g++ 13.3 | — | — | What the spike ran and what the goldens are blessed under. `engine/`'s CMake pins the compile-time baseline at `-march=x86-64 -mtune=generic` (SSE2: all Tracktion, JUCE and choc require, and no FMA to contract; chosen in PR 5), sets `-ffp-contract=off` on every vendored source, and fails the build on `-ffast-math` or a second `-march` (ADR 0009 §3). |
 
 Rules:
 - `lock.baseline.json` is the only place these values live in code; CI fails if a submodule or vendored dependency drifts from it.

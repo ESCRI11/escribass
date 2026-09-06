@@ -1,0 +1,6 @@
+[submodule "engine/vendor/tracktion_engine"]
+	path = engine/vendor/tracktion_engine
+	url = https://github.com/Tracktion/tracktion_engine.git
+[submodule "engine/vendor/protobuf"]
+	path = engine/vendor/protobuf
+	url = https://github.com/protocolbuffers/protobuf.git
