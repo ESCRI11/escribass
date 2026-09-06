@@ -88,6 +88,22 @@ There is **no tolerance by default**. A plugin that proves non-deterministic get
 tolerance *and* a per-plugin note in §8, in the PR that discovers it — never a tolerance
 applied globally, which would hide every other plugin's drift behind the worst one's.
 
+**Settled 2026-09-06, in PR 5: the engine computes `pcm_sha256`.** This section fixed what
+the hash is of and left who computes it unsaid, and the spike's note that the engine need not
+hash — `juce::SHA256` lives in `juce_cryptography`, which Tracktion does not link — had been
+copied into `lock.baseline.json` and `core/Cargo.toml` as though it were a decision. It was a
+statement about dependency count, and the count does not move: `juce_cryptography` is a module
+of the JUCE already pinned. Three things put the hash in the engine. `RenderResult` is what a
+render reports about itself, and `Render.Render` (ADR 0008 §1) returns that message whole at
+M2, so a field the engine never fills is a service that lies about its own answer. ADR 0008 §3
+already has the engine read its output back rather than trust a return value, and the check
+that landed is that the `data` chunk holds exactly the frames the plan's length comes to at
+its sample rate — the walk to that chunk is the hash's input, so hashing it is one more line.
+And CLAUDE.md #6 puts audio on the engine's side of the line: a RIFF walker in `core`'s
+production path would be audio knowledge on the wrong side of it. `tests/renders.rs` (PR 11)
+keeps a walker of its own in Rust for the first-differing-sample report, which is a test, and
+it computes the hash a second way for free.
+
 ### 3. Each hazard is a build requirement, with the reason attached
 
 None of these are style. Each is a specific way the same source produces different bits, and

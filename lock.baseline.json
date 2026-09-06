@@ -14,6 +14,13 @@
       "note": "must equal tracktion_engine submodule",
       "verified": "2026-09-04: tracktion_engine 0e02f70 pins modules/juce at exactly this commit"
     },
+    "protobuf": {
+      "version": "21.12",
+      "tag": "v21.12",
+      "commit": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+      "date": "2022-12-12",
+      "note": "C++ runtime and protoc for the engine, built from the submodule; the engine's CMake generates song.proto and render.proto at build time (ADR 0008 §4, pinned 2026-09-06). The last line before abseil, and what Ubuntu 24.04 packages. Added in M1 PR 5 as a new dependency, pending sign-off (CLAUDE.md #4)."
+    },
     "rubberband": {
       "version": "4.0.0",
       "commit": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
@@ -209,7 +216,7 @@
       },
       "sha2": {
         "version": "0.10",
-        "note": "content hashing for `add_asset` (M1 PR 3, ADR 0011). The engine does not hash: juce::SHA256 lives in juce_cryptography, which Tracktion does not pull in, so one hasher in the system rather than two (M1 spike, 2026-09-04)"
+        "note": "content hashing for `add_asset` (M1 PR 3, ADR 0011): core hashes what enters the project. The engine hashes its own output, the PCM, with juce::SHA256 from the JUCE already pinned — the spike's note that it need not was about dependency count, and juce_cryptography adds none (ADR 0009 §2, settled 2026-09-06)"
       },
       "protoc_gen_tonic": {
         "version": "0.5.0",
@@ -236,7 +243,7 @@
       "_note": "What every M1 golden render is valid for (ADR 0009 §1, §5). ubuntu-latest moves, and every golden would drift with no PR to blame, so the engine and render jobs name the image explicitly.",
       "runner": "ubuntu-24.04",
       "cxx": "g++ 13.3",
-      "flags": "-ffp-contract=off, no -ffast-math; compile-time -march pinned in engine/'s CMake"
+      "flags": "-march=x86-64 -mtune=generic -ffp-contract=off on every vendored source; no -ffast-math and no second -march, checked against compile_commands.json by engine/cmake/check_flags.cmake before the engine compiles (ADR 0009 §3; baseline chosen in M1 PR 5)"
     }
   }
 }

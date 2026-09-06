@@ -144,6 +144,15 @@ unaffected: it compares the three languages it generates, and C++ is not one of 
 `schema/AGENTS.md`'s line — "A language target (C++ at M1): one plugin entry in `buf.gen.yaml`"
 — was written before this coupling was seen and is corrected in this commit.
 
+**Pinned 2026-09-06, in PR 5: protobuf v21.12, `f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c`.**
+This decision named "the vendored protobuf" without a version, and no C++ protobuf was in
+`lock.baseline.json` to name. v21.12 is the smallest option that builds: the last line before
+the runtime depends on abseil — a second submodule and minutes more in a job that already
+builds JUCE and Tracktion — and the version Ubuntu 24.04 itself packages. The engine builds
+`protoc` from the same checkout, which is what makes the runtime and the compiler one pin. It
+is a new dependency under CLAUDE.md #4, added to `lock.baseline.json` under `engine.protobuf`
+and to §17, pending sign-off.
+
 ### 5. The engine reports the commits it was built from, and the render suite compares them
 
 Trap 8 is M0.4's own defect one language over, and worse. `cargo test -p escribass-tests` does

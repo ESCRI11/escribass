@@ -11,9 +11,10 @@ escribass-schema = { path = "../schema" }
 escribass-proto = { path = "../proto" }
 # Decoding the descriptor set into tool schemas (ADR 0006 §6).
 prost = "0.14"
-# Content hashing for `add_asset` (§10, ADR 0011). One hasher in the system: the engine does
-# not hash, since juce::SHA256 lives in a module Tracktion does not pull in, and putting the
-# engine in the project-writing path would contradict CLAUDE.md #6 anyway.
+# Content hashing for `add_asset` (§10, ADR 0011): core hashes what enters the project. The
+# engine hashes its own output, the PCM, with juce::SHA256 from the JUCE already pinned
+# (ADR 0009 §2, settled) — and putting the engine in the project-writing path would
+# contradict CLAUDE.md #6 anyway.
 sha2 = "0.10"
 # The MCP server (§18.2, ADR 0006 §6). `server` brings the handler traits, `transport-io`
 # the stdio transport. `macros` is off: the `#[tool]` macro derives schemas from Rust types
