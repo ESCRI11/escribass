@@ -31,8 +31,13 @@ function(escribass_plugin name)
     # JUCE resolves its plugin copy directories from $ENV{HOME} at configure time and Dexed
     # asks for the copy, so an unredirected build installs a VST3 into the developer's ~/.vst3
     # — and then a scan could open the one in the home directory rather than the one just
-    # built. HOME points inside the build tree, which also keeps anything else these trees do
-    # with a home directory inside it.
+    # built. HOME points inside the build tree instead.
+    #
+    # Configure only, and that is the whole point: the copy destination is baked into a JUCE
+    # property here and read again at build time, so redirecting the *build* would buy nothing
+    # and cost the cache. ccache resolves its own directory from $HOME, so a build under a
+    # redirected HOME fills a throwaway cache inside the build tree — which is what the first
+    # CI run did, 219 cacheable calls for the whole job and none of them a plugin's.
     set(env ${CMAKE_COMMAND} -E env HOME=${build}/home)
 
     ExternalProject_Add(${name}
@@ -52,7 +57,7 @@ function(escribass_plugin name)
         # looks again: an edited plugin source, or a submodule moved to another commit, would
         # leave the old bundle in place and the manifest would describe it. That is trap 8 one
         # layer out. The nested ninja is a no-op when nothing changed.
-        BUILD_COMMAND ${env} ${CMAKE_COMMAND} --build <BINARY_DIR> --target ${P_TARGET}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target ${P_TARGET}
         BUILD_ALWAYS TRUE
         BUILD_BYPRODUCTS ${build}/${P_VST3}
         INSTALL_COMMAND ""
