@@ -4,3 +4,12 @@
 [submodule "engine/vendor/protobuf"]
 	path = engine/vendor/protobuf
 	url = https://github.com/protocolbuffers/protobuf.git
+[submodule "engine/vendor/surge"]
+	path = engine/vendor/surge
+	url = https://github.com/surge-synthesizer/surge.git
+[submodule "engine/vendor/sfizz-ui"]
+	path = engine/vendor/sfizz-ui
+	url = https://github.com/sfztools/sfizz-ui.git
+[submodule "engine/vendor/dexed"]
+	path = engine/vendor/dexed
+	url = https://github.com/asb2m10/dexed.git

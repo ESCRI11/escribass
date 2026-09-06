@@ -66,7 +66,7 @@
       "commit": "4e70dc0bef53b41f2853ed46e26f5911114c92d0",
       "date": "2024-01-14",
       "repo": "sfztools/sfizz",
-      "note": "library and JACK client only; this repo builds no VST3 (spike, 2026-09-04). The bundled plugin is sfizz_ui."
+      "note": "library and JACK client only; this repo builds no VST3 (spike, 2026-09-04). The bundled plugin is sfizz_ui, and this entry documents what sfizz_ui vendors rather than a submodule of ours. Verified 2026-09-06 (M1 PR 6): sfizz-ui 6ef7b89 pins its `library` submodule at exactly this commit, so the two agree and sfizz_ui governs."
     },
     "sfizz_ui": {
       "version": "1.2.3",
@@ -74,7 +74,7 @@
       "commit": "6ef7b89b6e5aa914593c7f3ca19b859915c30337",
       "date": "2024-01-14",
       "repo": "sfztools/sfizz-ui",
-      "note": "the sfizz VST3. Added at M1 (ADR 0010); the `sfizz` pin alone builds none."
+      "note": "the sfizz VST3, and the submodule the engine builds. Added at M1 (ADR 0010); the `sfizz` pin alone builds none. Vendored 2026-09-06 in M1 PR 6, with surge_xt and dexed."
     },
     "dexed": {
       "version": "1.0.1",
@@ -243,7 +243,7 @@
       "_note": "What every M1 golden render is valid for (ADR 0009 §1, §5). ubuntu-latest moves, and every golden would drift with no PR to blame, so the engine and render jobs name the image explicitly.",
       "runner": "ubuntu-24.04",
       "cxx": "g++ 13.3",
-      "flags": "-march=x86-64 -mtune=generic -ffp-contract=off on every vendored source; no -ffast-math and no second -march, checked against compile_commands.json by engine/cmake/check_flags.cmake before the engine compiles (ADR 0009 §3; baseline chosen in M1 PR 5)"
+      "flags": "-march=x86-64 -mtune=generic -ffp-contract=off on every vendored source, the three bundled plugins included; no -ffast-math and no second -march, checked against compile_commands.json by engine/cmake/check_flags.cmake before the engine and each plugin compiles (ADR 0009 §3; baseline chosen in M1 PR 5, extended to the plugins in PR 6, where the guard fired on sfizz's own -ffast-math and the flag was removed rather than the guard weakened)"
     }
   }
 }

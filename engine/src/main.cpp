@@ -7,9 +7,17 @@
 // is std::cerr), which is why nothing here installs a logger (ADR 0008 §1).
 //
 // ponytail: this PR renders the plan's length and nothing on it — no track, clip, device or
-// lane is read, and every plan is silence of the right length. PR 6 and 7 host the instruments
-// and place notes and automation, PR 8 plays audio clips; the plan's shape is already the one
-// they fill in.
+// lane is read, and every plan is silence of the right length. PR 7 hosts the instruments and
+// places notes and automation, PR 8 plays audio clips; the plan's shape is already the one they
+// fill in.
+//
+// `--scan` is the build's second use of this binary (ADR 0010 §4). It opens each bundled VST3
+// once, asks it what it is, and writes the manifest. Scanning is not hosting: it instantiates a
+// plugin and reads its description and parameter list, and it never puts one in a render graph,
+// feeds it a sample or sets a parameter. That half is PR 7's. It lives here rather than in a
+// second binary because the provenance below and the VST3 loading above it are the same two
+// things a render needs, and a second JUCE console app would compile every JUCE module again
+// for the sake of one file.
 
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_cryptography/juce_cryptography.h>
@@ -24,6 +32,7 @@
 #include <cstdio>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -49,6 +58,7 @@ enum Exit : int {
     kBadPlan = 2,       // stdin was not a plan, or names something no valid song produces
     kRenderFailed = 3,  // Tracktion reported an error, or produced no file
     kBadOutput = 4,     // the file is not the WAV the plan asked for
+    kScanFailed = 5,    // --scan: a bundled plugin did not open, or said nothing about itself
 };
 
 int fail (Exit code, const std::string& why)
@@ -149,6 +159,125 @@ tl::expected<juce::int64, std::string> seekToData (juce::FileInputStream& in)
         in.setPosition (in.getPosition() + size + (size & 1));
     }
     return tl::unexpected (std::string ("the file has no data chunk"));
+}
+
+// -----------------------------------------------------------------------------------------
+// --scan: the build manifest (ADR 0010 §4)
+// -----------------------------------------------------------------------------------------
+
+// A plugin id ends up as a key in a project's lock.json, which ADR 0010 §1 keeps free of
+// anything machine-specific because that file is committed to the user's repository and
+// byte-compared by the determinism suite. That rules out JUCE's own
+// PluginDescription::createIdentifierString(), which hashes the plugin's path into the string.
+// What is left, and what the VST3 factory actually reports for the class, is the vendor and
+// the class name.
+//
+// ponytail: the ceiling is two plugins with one vendor and one name, which the three bundled
+// ones are not. The upgrade path is the VST3 class UID — unique by construction, and reachable
+// only past JUCE, which keeps it as the 32-bit hash in PluginDescription::uniqueId.
+juce::String pluginIdOf (const juce::PluginDescription& desc)
+{
+    return desc.manufacturerName + "/" + desc.name;
+}
+
+// Opens each bundled VST3 once and writes what it says about itself. Argument order is
+// `<manifest> <component> <path>...`, where the component is its key in lock.baseline.json;
+// the commit comes from the provenance compiled in at configure time rather than from the
+// caller, so the manifest cannot claim a commit the binary was not built against.
+int scan (const juce::StringArray& args)
+{
+    if (args.size() < 3 || args.size() % 2 != 1)
+        return fail (kScanFailed, "usage: --scan <manifest.json> <component> <plugin.vst3> ...");
+
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+    juce::AudioPluginFormatManager manager;
+    manager.addFormat (new juce::VST3PluginFormat());
+    auto& format = *manager.getFormat (0);
+
+    // Sorted, because ADR 0010 §1 wants the pins it feeds sorted and a manifest that reorders
+    // itself between builds would make every diff of a derived file unreadable.
+    std::map<juce::String, juce::var> plugins;
+
+    for (int i = 1; i + 1 < args.size(); i += 2)
+    {
+        const auto& component = args[i];
+        const auto& path = args[i + 1];
+
+        const char* commit = nullptr;
+        for (const auto& c : escribass::provenance::pluginCommits)
+            if (component == c.component)
+                commit = c.sha;
+        if (commit == nullptr)
+            return fail (kScanFailed, "no submodule commit is compiled in for '" + component.toStdString() + "'");
+
+        juce::OwnedArray<juce::PluginDescription> types;
+        format.findAllTypesForFile (types, path);
+        if (types.isEmpty())
+            // A module that fails to dlopen looks exactly like one that declares nothing:
+            // JUCE reports neither. The hint is here because the difference costs an hour.
+            return fail (kScanFailed, path.toStdString() + ": no VST3 audio effect class. Either the bundle"
+                                          " declares none, or it did not load — check `ldd` on the .so inside it");
+
+        for (const auto* desc : types)
+        {
+            // Instantiating is the only way to ask for the parameters, and it is where a
+            // headless VST3 either works or does not (trap 10). 48 kHz and 512 frames are
+            // the render's own rate and block size; a scan reads no audio, so they only have
+            // to be something the plugin accepts.
+            juce::String error;
+            auto instance = manager.createPluginInstance (*desc, 48000.0, kBlockSize, error);
+            if (instance == nullptr)
+                return fail (kScanFailed, path.toStdString() + ": " + error.toStdString());
+
+            // Both halves, because a VST3 host is shown exactly two things about a parameter
+            // and neither does the whole job. The id is the plugin's own ParamID and is unique
+            // by the format's rules; the name is what a person reads and is not — Surge XT
+            // repeats 176 of its 2855 names, one per unassigned effect slot, so a name cannot
+            // be what a ParamRef resolves through. The key is therefore the identifier and the
+            // value is the label. PR 9 is where a ParamRef is checked against these keys.
+            auto* params = new juce::DynamicObject();
+            for (int n = 0; n < instance->getParameters().size(); ++n)
+            {
+                const auto* param = instance->getHostedParameter (n);
+                params->setProperty (param->getParameterID(), param->getName (1024));
+            }
+
+            // Two entries under one id would leave the second one addressing the first one's
+            // binary, which is ADR 0010 §3's lock_mismatch arriving as the wrong plugin
+            // instead of as an error.
+            const auto id = pluginIdOf (*desc);
+            if (plugins.count (id) != 0)
+                return fail (kScanFailed, "two plugins report the id '" + id.toStdString() + "'");
+
+            auto* entry = new juce::DynamicObject();
+            entry->setProperty ("commit", juce::String (commit));
+            entry->setProperty ("params", juce::var (params));
+            entry->setProperty ("path", path);
+            entry->setProperty ("version", desc->version);
+            plugins[id] = juce::var (entry);
+        }
+    }
+
+    std::map<juce::String, juce::String> sortedEngine;
+    for (const auto& c : escribass::provenance::engineCommits)
+        sortedEngine[c.component] = c.sha;
+
+    auto* engine = new juce::DynamicObject();
+    for (const auto& [component, sha] : sortedEngine)
+        engine->setProperty (component, sha);
+
+    auto* pluginsVar = new juce::DynamicObject();
+    for (const auto& [id, entry] : plugins)
+        pluginsVar->setProperty (id, entry);
+
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("engine", juce::var (engine));
+    root->setProperty ("plugins", juce::var (pluginsVar));
+
+    const juce::File out (args[0]);
+    if (! out.replaceWithText (juce::JSON::toString (juce::var (root), false) + "\n"))
+        return fail (kScanFailed, "could not write the manifest to " + args[0].toStdString());
+    return kOk;
 }
 
 int run()
@@ -255,7 +384,9 @@ int run()
 
     RenderResult result;
     result.set_pcm_sha256 (juce::SHA256 (in, *dataSize).toHexString().toStdString());
-    for (const auto& commit : escribass::provenance::commits)
+    for (const auto& commit : escribass::provenance::engineCommits)
+        (*result.mutable_commits())[commit.component] = commit.sha;
+    for (const auto& commit : escribass::provenance::pluginCommits)
         (*result.mutable_commits())[commit.component] = commit.sha;
     if (! result.SerializeToOstream (&std::cout))
         return fail (kBadOutput, "could not write the RenderResult to stdout");
@@ -269,11 +400,22 @@ int main (int argc, char** argv)
 {
     if (argc == 2 && std::string_view (argv[1]) == "--version")
     {
-        for (const auto& commit : escribass::provenance::commits)
+        for (const auto& commit : escribass::provenance::engineCommits)
+            std::printf ("%s %s\n", commit.component, commit.sha);
+        for (const auto& commit : escribass::provenance::pluginCommits)
             std::printf ("%s %s\n", commit.component, commit.sha);
         return kOk;
     }
+    // The build calls this, not a render (ADR 0010 §4). It is a mode of the engine rather than
+    // its own binary for the reason at the top of this file.
+    if (argc >= 2 && std::string_view (argv[1]) == "--scan")
+    {
+        juce::StringArray args;
+        for (int i = 2; i < argc; ++i)
+            args.add (juce::String::fromUTF8 (argv[i]));
+        return scan (args);
+    }
     if (argc != 1)
-        return fail (kBadPlan, "usage: escribass_engine [--version] < plan.binpb > result.binpb");
+        return fail (kBadPlan, "usage: escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...] < plan.binpb > result.binpb");
     return run();
 }
