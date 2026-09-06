@@ -80,3 +80,64 @@ jobs:
           git fetch --no-tags origin \
             "+refs/heads/${GITHUB_BASE_REF}:refs/heads/${GITHUB_BASE_REF}"
           schema/node_modules/.bin/buf breaking --against ".git#branch=${GITHUB_BASE_REF}"
+
+  # The engine, built from its submodules on the image and compiler every M1 golden render is
+  # valid for (ADR 0009 §1, §5). ubuntu-latest moves, and every golden would drift with no PR
+  # to blame; this job names the image and the compiler.
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # The image carries three GCCs; g++ 13.3 is the pin (docs/specs.md §17).
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tracktion declares JUCE with an SSH URL no keyless runner can clone, and `insteadOf`
+      # did not take (spike, 2026-09-04): the submodule's own config is overridden before JUCE
+      # is fetched. Depth 1 at the pinned commit, which GitHub serves for any reachable SHA.
+      - name: Check out the submodules
+        run: |
+          git submodule update --init --depth 1 engine/vendor/tracktion_engine engine/vendor/protobuf
+          git -C engine/vendor/tracktion_engine config submodule.modules/juce.url https://github.com/juce-framework/JUCE.git
+          git -C engine/vendor/tracktion_engine submodule update --init --depth 1 modules/juce
+
+      # X11 headers are needed to build even headless: JUCE compiles juceaide against
+      # juce_gui_basics during configure, before any define of ours applies. webkit2gtk and
+      # gtk+ are not needed (spike, 2026-09-04). JUCE links X11 by dlopen, so the -dev
+      # packages are for their headers.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build \
+            libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev
+
+      - name: Configure
+        run: cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      # Generates the C++ from schema/song.proto and proto/render.proto (ADR 0008 §4), checks
+      # the compile commands for -ffast-math and a second -march (ADR 0009 §3), then compiles.
+      - name: Build
+        run: cmake --build engine/build --target escribass_engine
+
+      # ADR 0008 §5 and §17: the binary reports the commits it was compiled from, and they are
+      # the ones lock.baseline.json pins. A drifted submodule fails here, naming the component.
+      - name: Built from the pinned commits
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          "$engine" --version
+          for component in tracktion_engine juce protobuf; do
+            pinned=$(jq -r ".engine.${component}.commit" lock.baseline.json)
+            built=$("$engine" --version | awk -v c="$component" '$1 == c { print $2 }')
+            if [ "$pinned" != "$built" ]; then
+              echo "::error::${component}: built from ${built}, lock.baseline.json pins ${pinned}"
+              exit 1
+            fi
+          done
+          # Failure is an exit code (ADR 0008 §1): nothing on stdin is not a plan.
+          if "$engine" < /dev/null > /dev/null; then
+            echo "::error::the engine accepted an empty stdin as a plan"
+            exit 1
+          fi
