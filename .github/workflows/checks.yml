@@ -7,6 +7,41 @@ on:
     branches: [main]
   pull_request:
 
+# Two jobs with two very different appetites: `checks` is a few minutes, `engine` compiles
+# Tracktion Engine, JUCE and three VST3s and is up to an hour cold. Paying that for a typo in
+# docs/specs.md is the wall-clock cost of the whole workflow spent on nothing, so each job
+# below first asks whether the pull request touched anything it actually reads.
+#
+# Three decisions, because a gate that gets any of them wrong is a silent hole — it does not
+# fail, it just stops testing something and nobody notices until the thing it stopped testing
+# breaks:
+#
+# 1. The gate is a shell step, not `paths:` on the trigger above and not a filter action.
+#    `paths:` is workflow-wide, and this workflow is two jobs with two different sets of
+#    inputs, so it cannot express the distinction at all. A third-party action (dorny/
+#    paths-filter and friends) would be a dependency lock.baseline.json does not track, for
+#    what two lines of `git diff` do; CLAUDE.md #4 wants every dependency pinned there, and
+#    nothing here is worth opening that ledger or that supply chain.
+#
+# 2. The gate skips *steps*, never a job. A job skipped by `jobs.<id>.if` reports no status
+#    at all, and a required status check that never reports leaves a pull request unmergeable
+#    for good. This repository is private on a plan where the branch-protection API answers
+#    403, so whether required checks are configured is not knowable from in here — and this
+#    shape is correct either way: both jobs always run, always report, and simply do nothing
+#    when there is nothing for them to do. No `changes` job and no trailing "all green" job
+#    to keep in sync with the job list either.
+#
+# 3. The gate applies to pull requests only. A push to main is the last line of defence, and
+#    it may be a squash, a merge commit or a direct push — no one base-ref convention covers
+#    all three, and an engine build skipped on main because the diff looked small is a broken
+#    main that no pull request is left to blame. main always builds everything.
+#
+# The lists below are exclusions, not inclusions: a path that is not named runs the job. A
+# new top-level directory (§13 has /app, /ai and /compilers still to come) therefore triggers
+# both jobs until someone deliberately decides otherwise, which is the direction that costs
+# runner minutes instead of coverage. `.github/` is in neither list on purpose: a change to
+# this gate is tested by this gate.
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -18,29 +53,63 @@ jobs:
         with:
           fetch-depth: 0 # buf breaking compares against a git ref
 
+      # What this job reads is the cargo workspace in the root Cargo.toml — schema, proto,
+      # core, tests — plus the protos, buf.yaml and the toolchain pins. What it does not read
+      # is docs/, .githooks/, the root prose files, and engine/: the engine is C++ that no
+      # workspace member depends on, and it consumes song.proto rather than being consumed
+      # (CLAUDE.md #6). Everything else — lock.baseline.json, Cargo.lock, .github/ — is
+      # deliberately absent from the list and so runs the job, because the failure mode here
+      # is a Rust or codegen change merging untested, and that is worth far more than the
+      # three minutes this job costs.
+      #
+      # The four sub-checks and `Wire compatibility` have different inputs, but they share the
+      # setup above and below — three `cargo install`s, `npm ci`, `uv sync` — which is most of
+      # the job's cost. Gating them apart would still pay all of it, so the whole job is one
+      # gate.
+      - name: Does this pull request touch anything these checks read?
+        if: github.event_name == 'pull_request'
+        run: |
+          # HEAD is the merge commit GitHub builds for a pull request and HEAD^1 is the base
+          # branch tip it was merged onto, so this is exactly the diff the pull request
+          # introduces. If either is unavailable — a shallow clone, a pull request with no
+          # merge ref — the job runs in full rather than guessing at what changed.
+          base=$(git rev-parse --verify HEAD^1) || exit 0
+          changed=$(git diff --name-only "$base" HEAD) || exit 0
+          echo "$changed"
+          [ -n "$changed" ] || exit 0
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|engine/|\.githooks/|[^/]+\.md$)'; then
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "::notice::nothing these checks read has changed"
+          fi
+
       # rustup reads rust-toolchain.toml, so the pinned 1.98.0 installs itself.
       - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
         with:
           node-version: "25"
 
       - name: Install uv
+        if: env.SKIP != '1'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Cache codegen plugins
+        if: env.SKIP != '1'
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin
           key: codegen-plugins-prost-0.5.0-serde-0.4.0-tonic-0.5.0
 
       - name: Install codegen plugins
+        if: env.SKIP != '1'
         run: |
           command -v protoc-gen-prost       >/dev/null || cargo install protoc-gen-prost@0.5.0 --locked
           command -v protoc-gen-prost-serde >/dev/null || cargo install protoc-gen-prost-serde@0.4.0 --locked
           command -v protoc-gen-tonic       >/dev/null || cargo install protoc-gen-tonic@0.5.0 --locked
 
       - name: Install JavaScript and Python dependencies
+        if: env.SKIP != '1'
         working-directory: schema
         run: |
           npm ci
@@ -49,16 +118,19 @@ jobs:
       # 1/4 — generated code matches the protos. Two modules, two scripts: the model
       # generates Rust, TypeScript and Python; the service generates Rust only (ADR 0006 §7).
       - name: Generated code is in sync
+        if: env.SKIP != '1'
         run: |
           ./schema/codegen.sh --check
           ./proto/codegen.sh --check
 
       # 2/4
       - name: Rust
+        if: env.SKIP != '1'
         run: cargo test
 
       # 3/4
       - name: TypeScript
+        if: env.SKIP != '1'
         working-directory: schema
         run: |
           npx tsc --noEmit
@@ -66,13 +138,14 @@ jobs:
 
       # 4/4
       - name: Python
+        if: env.SKIP != '1'
         working-directory: schema
         run: uv run python -m unittest discover -s tests
 
       # song.proto has consumers from M0.2; a field renumbered by accident is a silent
       # wire break. Only meaningful against a different ref, so pull requests only.
       - name: Wire compatibility
-        if: github.event_name == 'pull_request'
+        if: env.SKIP != '1' && github.event_name == 'pull_request'
         run: |
           # actions/checkout leaves no local ref for the base branch on a pull_request event,
           # even at fetch-depth 0, so buf's `.git#branch=...` cannot resolve it. Fetch it into
@@ -99,11 +172,41 @@ jobs:
       CXX: g++-13
     steps:
       - uses: actions/checkout@v4
+        with:
+          # HEAD^1, for the path gate below. The default depth of 1 grafts the merge commit's
+          # parents away, and the gate would then fail to resolve a base and rebuild the world
+          # on every pull request.
+          fetch-depth: 2
+
+      # What this job reads is engine/ and its vendored trees, the pins in lock.baseline.json
+      # and .gitmodules that decide which commits those trees sit at, schema/song.proto and
+      # proto/render.proto (the C++ is generated from them at configure time), and tests/,
+      # where the M1 golden renders this build has to reproduce live. What it does not read is
+      # docs/, .githooks/, the root prose files, and core/: core is Rust and the engine is
+      # schema-agnostic (CLAUDE.md #6), so no source path connects them. Everything else runs
+      # the build, because the failure mode is a plugin or a pin silently no longer compiling
+      # — the thing this job exists to catch — and an hour of runner time is the cheaper half
+      # of that trade. `schema/` is not narrowed to song.proto: a rebuild triggered by a
+      # Python test file is a few warm-ccache minutes, a missed one is a broken engine.
+      - name: Does this pull request touch anything the engine is built from?
+        if: github.event_name == 'pull_request'
+        run: |
+          # As in the `checks` job above: HEAD is the pull request's merge commit, HEAD^1 the
+          # base it was merged onto, and anything unresolvable means build everything.
+          base=$(git rev-parse --verify HEAD^1) || exit 0
+          changed=$(git diff --name-only "$base" HEAD) || exit 0
+          echo "$changed"
+          [ -n "$changed" ] || exit 0
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|\.githooks/|[^/]+\.md$)'; then
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "::notice::nothing the engine is built from has changed"
+          fi
 
       # Tracktion declares JUCE with an SSH URL no keyless runner can clone, and `insteadOf`
       # did not take (spike, 2026-09-04): the submodule's own config is overridden before JUCE
       # is fetched. Depth 1 at the pinned commit, which GitHub serves for any reachable SHA.
       - name: Check out the submodules
+        if: env.SKIP != '1'
         run: |
           git submodule update --init --depth 1 \
             engine/vendor/tracktion_engine engine/vendor/protobuf \
@@ -127,6 +230,7 @@ jobs:
       # JUCE with JUCE_JACK=1 in its own CMakeLists; and xcb, xkbcommon, cairo and pango,
       # because sfizz-ui's VST3 links VSTGUI and VSTGUI's Linux backend is drawn on those.
       - name: Install build dependencies
+        if: env.SKIP != '1'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build ccache \
@@ -143,6 +247,7 @@ jobs:
       # change also starts from a cache with nothing of the old pin to offer, and carries the
       # run id so each run saves what it learned (actions/cache keys are write-once).
       - name: Cache compiled objects
+        if: env.SKIP != '1'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
@@ -150,6 +255,7 @@ jobs:
           restore-keys: engine-ccache-gcc13-${{ hashFiles('lock.baseline.json') }}-
 
       - name: Configure
+        if: env.SKIP != '1'
         run: |
           ccache --max-size=4G
           cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -159,6 +265,7 @@ jobs:
       # the compile commands of the engine and of each plugin for -ffast-math and a second
       # -march (ADR 0009 §3), compiles all four, and scans the three VST3s into the manifest.
       - name: Build
+        if: env.SKIP != '1'
         run: |
           cmake --build engine/build --target manifest
           ccache --show-stats
@@ -166,6 +273,7 @@ jobs:
       # ADR 0008 §5 and §17: the binary reports the commits it was compiled from, and they are
       # the ones lock.baseline.json pins. A drifted submodule fails here, naming the component.
       - name: Built from the pinned commits
+        if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
           "$engine" --version
@@ -191,7 +299,8 @@ jobs:
       # What this build can host, as the plugins themselves reported it (ADR 0010 §4). PR 9
       # wires core's validator to this; here it is only asserted to exist and to be complete,
       # so that a plugin that builds but declares nothing fails in the PR that broke it.
-      - name: The manifest describes three plugins with parameters
+      - name: The manifest describes what this build can host
+        if: env.SKIP != '1'
         run: |
           manifest=engine/build/manifest.json
           jq '.plugins | to_entries | map({key, version: .value.version, params: (.value.params | length)})' "$manifest"
