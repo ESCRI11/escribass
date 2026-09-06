@@ -3,8 +3,9 @@
 // this binary was built against, and only the binary knows.
 //
 // Keys are the component's name in lock.baseline.json; the render suite compares them there
-// before it compares a sample. Rubber Band and the bundled plugins join this list in the PRs
-// that vendor them.
+// before it compares a sample. The split is not cosmetic: ADR 0010 §4's manifest reports the
+// engine block on its own, because ADR 0010 §3 re-pins that block on open and refuses on a
+// plugin. `--version` and RenderResult report both lists.
 #pragma once
 
 namespace escribass::provenance {
@@ -14,10 +15,19 @@ struct Commit {
     const char* sha;
 };
 
-inline constexpr Commit commits[] = {
+inline constexpr Commit engineCommits[] = {
     { "tracktion_engine", "@COMMIT_TRACKTION_ENGINE@" },
     { "juce",             "@COMMIT_JUCE@" },
     { "protobuf",         "@COMMIT_PROTOBUF@" },
+};
+
+// The bundled instruments of docs/specs.md §8. sfizz itself is not here: it is not a submodule
+// of ours but of sfizz-ui, which is the repository that builds the VST3 (trap 11), so the
+// commit that describes what was compiled is sfizz-ui's.
+inline constexpr Commit pluginCommits[] = {
+    { "surge_xt", "@COMMIT_SURGE_XT@" },
+    { "sfizz_ui", "@COMMIT_SFIZZ_UI@" },
+    { "dexed",    "@COMMIT_DEXED@" },
 };
 
 }  // namespace escribass::provenance

@@ -38,7 +38,7 @@ add_compile_options(-march=x86-64 -mtune=generic -ffp-contract=off)
 # ------------------------------------------------------------------------------------------
 
 set(VENDOR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
-foreach(sub tracktion_engine tracktion_engine/modules/juce protobuf)
+foreach(sub tracktion_engine tracktion_engine/modules/juce protobuf surge sfizz-ui dexed)
     if(NOT EXISTS ${VENDOR}/${sub}/CMakeLists.txt)
         message(FATAL_ERROR "vendor/${sub} is not checked out; see the engine job in .github/workflows/checks.yml for the submodule steps (JUCE needs its URL overridden first)")
     endif()
@@ -63,6 +63,9 @@ endfunction()
 engine_commit_of(${VENDOR}/tracktion_engine              COMMIT_TRACKTION_ENGINE)
 engine_commit_of(${VENDOR}/tracktion_engine/modules/juce COMMIT_JUCE)
 engine_commit_of(${VENDOR}/protobuf                      COMMIT_PROTOBUF)
+engine_commit_of(${VENDOR}/surge                         COMMIT_SURGE_XT)
+engine_commit_of(${VENDOR}/sfizz-ui                      COMMIT_SFIZZ_UI)
+engine_commit_of(${VENDOR}/dexed                         COMMIT_DEXED)
 configure_file(src/provenance.h.in ${CMAKE_BINARY_DIR}/gen/provenance.h @ONLY)
 
 # ------------------------------------------------------------------------------------------
@@ -114,6 +117,9 @@ target_compile_definitions(escribass_engine PRIVATE
     JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0
+    # --scan opens the bundled VST3s (ADR 0010 §4), and PR 7 puts them in the render graph.
+    # JUCE compiles its VST3 host out unless asked for it, and Tracktion does not ask.
+    JUCE_PLUGINHOST_VST3=1
     # Headless: the device list would otherwise be logged at engine start.
     TRACKTION_LOG_DEVICES=0)
 
@@ -137,3 +143,9 @@ add_custom_target(engine_flags_check
                              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_flags.cmake
     COMMENT "compile_commands.json: no -ffast-math, one -march")
 add_dependencies(escribass_engine engine_flags_check)
+
+# ------------------------------------------------------------------------------------------
+# The bundled plugins and the manifest that says what this build can host
+# ------------------------------------------------------------------------------------------
+
+include(cmake/plugins.cmake)

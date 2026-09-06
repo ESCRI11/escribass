@@ -81,12 +81,18 @@ jobs:
             "+refs/heads/${GITHUB_BASE_REF}:refs/heads/${GITHUB_BASE_REF}"
           schema/node_modules/.bin/buf breaking --against ".git#branch=${GITHUB_BASE_REF}"
 
-  # The engine, built from its submodules on the image and compiler every M1 golden render is
-  # valid for (ADR 0009 §1, §5). ubuntu-latest moves, and every golden would drift with no PR
-  # to blame; this job names the image and the compiler.
+  # The engine, its three bundled plugins and the manifest that says what this build can host
+  # (ADR 0010 §4), on the image and compiler every M1 golden render is valid for (ADR 0009 §1,
+  # §5). ubuntu-latest moves, and every golden would drift with no PR to blame; this job names
+  # the image and the compiler.
+  #
+  # A runner has no display of any kind, so this job is also the standing answer to trap 10:
+  # the scan step below instantiates all three VST3s and would fail here first.
   engine:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Three plugins roughly triple what this job compiles; the cache below is what keeps it
+    # from being the wall-clock cost of the whole workflow on every run.
+    timeout-minutes: 60
     env:
       # The image carries three GCCs; g++ 13.3 is the pin (docs/specs.md §17).
       CC: gcc-13
@@ -99,28 +105,63 @@ jobs:
       # is fetched. Depth 1 at the pinned commit, which GitHub serves for any reachable SHA.
       - name: Check out the submodules
         run: |
-          git submodule update --init --depth 1 engine/vendor/tracktion_engine engine/vendor/protobuf
+          git submodule update --init --depth 1 \
+            engine/vendor/tracktion_engine engine/vendor/protobuf \
+            engine/vendor/surge engine/vendor/sfizz-ui engine/vendor/dexed
           git -C engine/vendor/tracktion_engine config submodule.modules/juce.url https://github.com/juce-framework/JUCE.git
           git -C engine/vendor/tracktion_engine submodule update --init --depth 1 modules/juce
+          # Each plugin vendors a dependency tree of its own — Surge and Dexed a JUCE each,
+          # sfizz-ui the sfizz that lock.baseline.json pins, as its `library` submodule. Depth
+          # 1 for the same reason as above: Surge's tree alone is about a gigabyte in full.
+          for p in surge sfizz-ui dexed; do
+            git -C "engine/vendor/$p" submodule update --init --recursive --depth 1 --jobs 4
+          done
 
       # X11 headers are needed to build even headless: JUCE compiles juceaide against
       # juce_gui_basics during configure, before any define of ours applies. webkit2gtk and
       # gtk+ are not needed (spike, 2026-09-04). JUCE links X11 by dlopen, so the -dev
       # packages are for their headers.
+      #
+      # The plugins add two groups, both headers for libraries their code dlopens or their
+      # editors draw with, neither of which a render touches: JACK, because Dexed compiles its
+      # JUCE with JUCE_JACK=1 in its own CMakeLists; and xcb, xkbcommon, cairo and pango,
+      # because sfizz-ui's VST3 links VSTGUI and VSTGUI's Linux backend is drawn on those.
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build \
+          sudo apt-get install -y --no-install-recommends ninja-build ccache \
             libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev \
-            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libjack-jackd2-dev \
+            libxcb1-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev libxcb-xkb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libcairo2-dev libpango1.0-dev libglib2.0-dev
+
+      # ccache rather than a cache of built plugin bundles, because ccache decides a hit from
+      # the preprocessed source and the compile line: a moved pin misses it by construction
+      # rather than by our bookkeeping being right, and a cache that served a stale plugin
+      # binary would be trap 8 one layer out. The key names lock.baseline.json so that a pin
+      # change also starts from a cache with nothing of the old pin to offer, and carries the
+      # run id so each run saves what it learned (actions/cache keys are write-once).
+      - name: Cache compiled objects
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: engine-ccache-gcc13-${{ hashFiles('lock.baseline.json') }}-${{ github.run_id }}
+          restore-keys: engine-ccache-gcc13-${{ hashFiles('lock.baseline.json') }}-
 
       - name: Configure
-        run: cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: |
+          ccache --max-size=4G
+          cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       # Generates the C++ from schema/song.proto and proto/render.proto (ADR 0008 §4), checks
-      # the compile commands for -ffast-math and a second -march (ADR 0009 §3), then compiles.
+      # the compile commands of the engine and of each plugin for -ffast-math and a second
+      # -march (ADR 0009 §3), compiles all four, and scans the three VST3s into the manifest.
       - name: Build
-        run: cmake --build engine/build --target escribass_engine
+        run: |
+          cmake --build engine/build --target manifest
+          ccache --show-stats
 
       # ADR 0008 §5 and §17: the binary reports the commits it was compiled from, and they are
       # the ones lock.baseline.json pins. A drifted submodule fails here, naming the component.
@@ -128,16 +169,38 @@ jobs:
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
           "$engine" --version
-          for component in tracktion_engine juce protobuf; do
-            pinned=$(jq -r ".engine.${component}.commit" lock.baseline.json)
-            built=$("$engine" --version | awk -v c="$component" '$1 == c { print $2 }')
-            if [ "$pinned" != "$built" ]; then
-              echo "::error::${component}: built from ${built}, lock.baseline.json pins ${pinned}"
+          check() {
+            built=$("$engine" --version | awk -v c="$1" '$1 == c { print $2 }')
+            if [ "$2" != "$built" ]; then
+              echo "::error::$1: built from ${built}, lock.baseline.json pins $2"
               exit 1
             fi
+          }
+          for component in tracktion_engine juce protobuf; do
+            check "$component" "$(jq -r ".engine.${component}.commit" lock.baseline.json)"
+          done
+          for component in surge_xt sfizz_ui dexed; do
+            check "$component" "$(jq -r ".bundled_plugins.${component}.commit" lock.baseline.json)"
           done
           # Failure is an exit code (ADR 0008 §1): nothing on stdin is not a plan.
           if "$engine" < /dev/null > /dev/null; then
             echo "::error::the engine accepted an empty stdin as a plan"
             exit 1
           fi
+
+      # What this build can host, as the plugins themselves reported it (ADR 0010 §4). PR 9
+      # wires core's validator to this; here it is only asserted to exist and to be complete,
+      # so that a plugin that builds but declares nothing fails in the PR that broke it.
+      - name: The manifest describes three plugins with parameters
+        run: |
+          manifest=engine/build/manifest.json
+          jq '.plugins | to_entries | map({key, version: .value.version, params: (.value.params | length)})' "$manifest"
+          # Four entries from three files: sfizz-ui's VST3 declares both `sfizz` and
+          # `sfizz-multi`, and a manifest describes classes this build can host, not files.
+          jq -e '(.plugins | length) == 4' "$manifest" > /dev/null
+          jq -e 'all(.plugins[]; (.params | length) > 0 and (.commit | length) == 40)' "$manifest" > /dev/null
+          for component in surge_xt sfizz_ui dexed; do
+            commit=$(jq -r ".bundled_plugins.${component}.commit" lock.baseline.json)
+            jq -e --arg c "$commit" 'any(.plugins[]; .commit == $c)' "$manifest" > /dev/null \
+              || { echo "::error::the manifest names no plugin built from ${component} ${commit}"; exit 1; }
+          done

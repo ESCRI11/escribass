@@ -172,6 +172,25 @@ engine binary:
   vendored commit, the path to its binary, and its **parameter list** — the identifiers a
   `ParamRef.param` and an `Instrument.params` key must match.
 
+**Refined 2026-09-06, in PR 6, which built the first manifest.** This section assumed a VST3
+reports one id and one name per parameter. It reports neither in a form that does both jobs, and
+the manifest's shape follows what is there rather than what was assumed:
+
+- `plugin_id` is `"<vendor>/<class name>"` as the VST3 factory reports both — `Surge Synth
+  Team/Surge XT`, `SFZTools/sfizz`, `SFZTools/sfizz-multi`, `Digital Suburban/Dexed`. JUCE's own
+  `PluginDescription::createIdentifierString()` is not usable: it hashes the plugin's **path**
+  into the string, and decision 1 keeps `lock.json` free of anything machine-specific. Three
+  files give four entries, because sfizz-ui's bundle declares two audio classes; the manifest
+  describes what can be hosted, not what was built.
+- the **parameter list is a map from the plugin's own parameter id to its display name**, and
+  the id is the identifier a `ParamRef.param` must match. Names alone cannot be: Surge XT
+  repeats 176 of its 2855, one per unassigned effect slot. Ids alone would put opaque integers
+  in a file §2.6 wants readable, so the name travels beside its id as the label an editor and a
+  model read.
+- there is no third option. A VST3 host is shown a numeric `ParamID` and a display string; the
+  readable identifier a JUCE plugin uses internally is hashed away by JUCE's own VST3 wrapper
+  before a host can see it.
+
 It is **generated at build time and never committed**, for ADR 0008 §4's reason applied to a
 different artefact: a committed manifest is a description of a plugin binary that must agree
 with the plugin binary, which is two pins for one fact, and the stale one is silent. It is also

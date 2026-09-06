@@ -492,16 +492,36 @@ prevent; a feature is absent where it cannot run and loud where it must.
 7. **Randomness inside the fixture** — Surge start phase and unison detune, sfizz `*_random`.
 8. **The suite validates a stale engine** — M0.4's exact defect, one language over. The engine
    embeds the submodule commits it was built from and the suite compares them.
-9. **JUCE `add_subdirectory` twice** — target collision between Surge's JUCE and Tracktion's.
-   Plugins are separate CMake projects. Hit on day one.
-10. **Headless JUCE may need a display to instantiate a VST3.** The spike rendered with no
-    display, but it hosted no VST3 — that half is still untested.
+9. ~~**JUCE `add_subdirectory` twice**~~ — **confirmed and handled in PR 6**: Surge vendors
+   `surge-synthesizer/JUCE`, Dexed vendors `juce-framework/JUCE` at another commit, Tracktion a
+   third. Each plugin is an `ExternalProject` with its own configure and its own target
+   namespace (`engine/cmake/plugins.cmake`), so the collision cannot occur rather than being
+   managed. The determinism flags cross as `CMAKE_{C,CXX}_FLAGS`, since `add_compile_options`
+   does not.
+10. ~~**Headless JUCE may need a display to instantiate a VST3.**~~ — **answered in PR 6: it
+    does not.** `escribass_engine --scan` opens all three bundled VST3s through
+    `juce::VST3PluginFormat`, instantiates each with `AudioPluginFormatManager` and reads its
+    parameters, with `DISPLAY` and `WAYLAND_DISPLAY` unset — including sfizz's, whose plugin
+    links VSTGUI. A CI runner has no display at all, so the engine job is the standing check.
+    Two things the trap did not name and PR 7 will meet: X11, xcb, cairo and pango **headers**
+    are needed to *build* (the plugin links them even where nothing draws), and sfizz writes
+    `[sfizz] new synth` when it is constructed — to **stderr**, so ADR 0008 §1's "stdout
+    carries protobuf bytes and nothing else" survives a hosted plugin, but only just.
 11. ~~**sfizz's VST3 lives in `sfizz-ui`**~~ — **confirmed by the spike**: `sfizz` 1.2.3's CMake
     builds a library and a JACK client, no VST3.
 12. **`ubuntu-latest` moves** — an image update changes the compiler and every golden drifts
     with no PR to blame.
 13. **`every_tool`'s plugin id is invented.** Once the validator resolves plugin ids,
-    `com.surge-synth.surge-xt` must be a real manifest id or `checks` goes red.
+    `com.surge-synth.surge-xt` must be a real manifest id or `checks` goes red. **PR 6 learned
+    the real ones**, and they are what PR 9 must write into `tests/determinism/*/script.json`
+    and `tests/fixtures/song/minimal.json`: `Surge Synth Team/Surge XT`, `SFZTools/sfizz`,
+    `SFZTools/sfizz-multi` and `Digital Suburban/Dexed` — the vendor and the class name as the
+    VST3 factory reports them, which is all a VST3 offers that is not a path hash or a 32-bit
+    number. Three files, four classes: sfizz-ui's bundle declares two. A parameter is worse
+    off: the manifest's `params` maps the plugin's own parameter id to its display name,
+    because the names are not unique (Surge XT repeats 176 of 2855, one per unassigned effect
+    slot) and the ids are opaque integers. `ParamRef.param` matching the **key** is what PR 9
+    has to settle.
 14. **`Instrument.state` must not join `JSON_TEXT_FIELDS`** — it is opaque binary, and the
     comment there already names it as the counter-example.
 15. **Rubber Band is a second DSP surface.** A phase vocoder has modes, a threading option and
