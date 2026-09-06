@@ -191,6 +191,16 @@ the manifest's shape follows what is there rather than what was assumed:
   readable identifier a JUCE plugin uses internally is hashed away by JUCE's own VST3 wrapper
   before a host can see it.
 
+**Extended 2026-09-06, in PR 7, which first set a parameter.** The same fact settles the other
+half of what a `ParamRef` means, which this section had left open by talking only about the
+key: a parameter's **value** — in `Instrument.params`, in `Effect.params` and on every
+`AutomationPoint` — is the plugin's *normalised* value, `0.0` to `1.0`. That is not a choice
+either. VST3 exposes exactly one numeric domain to a host, `Vst::ParamValue`, and it is
+normalised; JUCE passes it through unchanged and a plugin's own units exist only as the display
+string beside it. So `param_unknown` (below) has a companion the validator can also check — a
+value outside `0..1` — and the engine clamps rather than refuses, because Tracktion's parameter
+range clamps it either way and a caller error is not the engine's to discover (ADR 0008 §1).
+
 It is **generated at build time and never committed**, for ADR 0008 §4's reason applied to a
 different artefact: a committed manifest is a description of a plugin binary that must agree
 with the plugin binary, which is two pins for one fact, and the stale one is silent. It is also

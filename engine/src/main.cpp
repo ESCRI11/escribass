@@ -6,18 +6,21 @@
 // and JUCE's own logger does the same on Linux (juce_SystemStats_linux.cpp: outputDebugString
 // is std::cerr), which is why nothing here installs a logger (ADR 0008 §1).
 //
-// ponytail: this PR renders the plan's length and nothing on it — no track, clip, device or
-// lane is read, and every plan is silence of the right length. PR 7 hosts the instruments and
-// places notes and automation, PR 8 plays audio clips; the plan's shape is already the one they
-// fill in.
+// The plan names its plugins by the id the build manifest declares (ADR 0010 §4), and the
+// manifest's path is the engine's one argument: a render opens the exact binaries it names and
+// walks no directory, which is what makes a fresh process per render cost one dlopen rather
+// than a scan (ADR 0008 §2). Where a shipped engine finds that file is still PR 9's question —
+// core is the one that will pass it — so it is an argument here and not a search.
+//
+// ponytail: this PR hosts devices, places notes and drives automation. An audio clip is PR 8's
+// and is refused rather than dropped, because a render that completes with a clip missing is
+// the failure ADR 0010 §3 spends a table refusing: it sounds wrong and says nothing.
 //
 // `--scan` is the build's second use of this binary (ADR 0010 §4). It opens each bundled VST3
-// once, asks it what it is, and writes the manifest. Scanning is not hosting: it instantiates a
-// plugin and reads its description and parameter list, and it never puts one in a render graph,
-// feeds it a sample or sets a parameter. That half is PR 7's. It lives here rather than in a
-// second binary because the provenance below and the VST3 loading above it are the same two
-// things a render needs, and a second JUCE console app would compile every JUCE module again
-// for the sake of one file.
+// once, asks it what it is, and writes the manifest. It lives here rather than in a second
+// binary because the provenance below and the VST3 loading above it are the same two things a
+// render needs, and a second JUCE console app would compile every JUCE module again for the
+// sake of one file.
 
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_cryptography/juce_cryptography.h>
@@ -36,8 +39,11 @@
 #include <string>
 #include <string_view>
 #include <unistd.h>
+#include <vector>
 
 namespace te = tracktion;
+using escribass::render::v1::PlanLane;
+using escribass::render::v1::PlanTrack;
 using escribass::render::v1::RenderPlan;
 using escribass::render::v1::RenderResult;
 
@@ -280,7 +286,363 @@ int scan (const juce::StringArray& args)
     return kOk;
 }
 
-int run()
+// -----------------------------------------------------------------------------------------
+// Hosting the plan (PR 7)
+// -----------------------------------------------------------------------------------------
+
+// Every parameter value in a plan — `Instrument.params`, `Effect.params` and every
+// `AutomationPoint.value` — is the plugin's own **normalised** value. That is the only domain
+// a VST3 offers a host: the format's `ParamValue` is 0..1 and JUCE hands it through unchanged,
+// which is the same fact that leaves ADR 0010 §4's manifest keying a parameter by its opaque
+// `ParamID`. Out of range is clamped rather than refused, because Tracktion's own parameter
+// range clamps it either way and a value that means nothing is PR 9's `param_unknown` — a
+// caller error, which by ADR 0008 §1 is not one the engine is left to discover.
+float normalised (double value)
+{
+    return (float) juce::jlimit (0.0, 1.0, value);
+}
+
+// The build manifest (ADR 0010 §4) and the plugin descriptions it resolves to.
+//
+// A file is opened once per render, at the exact path the manifest names, and no directory is
+// walked. That is the scan ADR 0008 §2 removes so a fresh process per render costs one dlopen
+// per referenced plugin; a manifest that has drifted from the binaries is caught here as a
+// class the file does not declare, rather than by loading whatever is at the path.
+//
+// Each class the file declares is registered with Tracktion's own list, because that is where
+// ExternalPlugin looks a description up when it is created — findMatchingPlugin() searches
+// knownPluginList and nothing else (tracktion_ExternalPlugin.cpp).
+class Plugins {
+public:
+    Plugins (te::Engine& e, juce::var manifest_) : engine (e), manifest (std::move (manifest_)) {}
+
+    tl::expected<juce::PluginDescription, std::string> describe (const std::string& id)
+    {
+        if (const auto known = byId.find (id); known != byId.end())
+            return known->second;
+
+        const auto path = pathOf (id);
+        if (path.isEmpty())
+            // ADR 0010 §3 refuses a referenced plugin this build lacks when the project is
+            // opened, so a plan carrying one is an operator error like the rest of them.
+            return tl::unexpected ("the manifest names no plugin '" + id + "'");
+
+        juce::OwnedArray<juce::PluginDescription> types;
+        vst3.findAllTypesForFile (types, path);
+        if (types.isEmpty())
+            return tl::unexpected (path.toStdString() + ": no VST3 audio class. Either the bundle"
+                                       " declares none, or it did not load — check `ldd` on the .so inside it");
+        for (const auto* found : types)
+        {
+            engine.getPluginManager().knownPluginList.addType (*found);
+            byId.emplace (pluginIdOf (*found).toStdString(), *found);
+        }
+
+        if (const auto known = byId.find (id); known != byId.end())
+            return known->second;
+        return tl::unexpected (path.toStdString() + " declares no class called '" + id
+                               + "'; the manifest describes another build");
+    }
+
+private:
+    juce::String pathOf (const std::string& id) const
+    {
+        if (auto* plugins = manifest["plugins"].getDynamicObject())
+            for (const auto& entry : plugins->getProperties())
+                // Compared as text. A plugin id is a vendor and a class name (ADR 0010 §4), so
+                // it holds spaces and a slash and is not a juce::Identifier by that class's own
+                // rules, even though the manifest's object stores it as one.
+                if (entry.name.toString() == juce::String (id))
+                    return entry.value["path"].toString();
+        return {};
+    }
+
+    te::Engine& engine;
+    juce::var manifest;
+    juce::VST3PluginFormat vst3;
+    std::map<std::string, juce::PluginDescription> byId;
+};
+
+// Builds the edit the plan describes.
+//
+// Everything it reads is already resolved (ADR 0007 §1): mixer order, chain order, loop
+// expansion, solo and mute, and which device each automation lane targets. Nothing here sorts,
+// searches for a track, or decides what sounds — `core/src/render.rs` did all of it once, and
+// a second opinion in C++ is the second implementation ADR 0007 exists to prevent.
+class Builder {
+public:
+    Builder (te::Edit& e, Plugins& p, const RenderPlan& plan_, te::TimePosition end_)
+        : edit (e), plugins (p), plan (plan_), end (end_)
+    {
+        for (const auto& event : plan.tempo())
+            tempoTicks.push_back (event.tick());
+    }
+
+    // Every track in the plan, onto the audio tracks the edit was created with, in order.
+    std::string build()
+    {
+        const auto audio = te::getAudioTracks (edit);
+        if (audio.size() < plan.tracks_size())
+            // The edit was created with one audio track per plan track; a shortfall would index
+            // past the end of the array, which juce::Array answers with a null rather than an
+            // exception.
+            return "the edit has " + std::to_string (audio.size()) + " audio tracks for the plan's "
+                   + std::to_string (plan.tracks_size());
+        for (int i = 0; i < plan.tracks_size(); ++i)
+            if (const auto why = track (*audio[i], plan.tracks (i)); ! why.empty())
+                return why;
+
+        if (! plan.has_master())
+            return {};
+        const auto& master = plan.master();
+        if (master.clips_size() > 0)
+            // §4.4 gives the master no instrument, and Tracktion's master track holds no clips
+            // either. The model permits a clip whose track_id names the master; the validator
+            // does not yet refuse one, so this is where it stops, loudly.
+            return "the plan puts a clip on the master track, which has no instrument to voice it";
+        int slot = 0;
+        for (const auto& effect : master.effects())
+        {
+            auto plugin = device (effect.effect().ref(), effect.effect().state(),
+                                  effect.effect().params(), effect.lanes());
+            if (! plugin)
+                return plugin.error();
+            edit.getMasterPluginList().insertPlugin (*plugin, slot++, nullptr);
+        }
+        if (auto fader = edit.getMasterVolumePlugin(); fader != nullptr && master.has_mix())
+            mix (*fader, master.mix());
+        return {};
+    }
+
+private:
+    std::string track (te::AudioTrack& target, const PlanTrack& source)
+    {
+        // Chain order as the plan holds it: the instrument, then the effects, then the track's
+        // own volume and pan, which Tracktion already put at the end of this list. A fader
+        // after the chain is what a mixer strip is.
+        int slot = 0;
+        if (source.has_instrument())
+        {
+            const auto& held = source.instrument().instrument();
+            auto plugin = device (held.ref(), held.state(), held.params(), source.instrument().lanes());
+            if (! plugin)
+                return plugin.error();
+            target.pluginList.insertPlugin (*plugin, slot++, nullptr);
+        }
+        for (const auto& effect : source.effects())
+        {
+            auto plugin = device (effect.effect().ref(), effect.effect().state(),
+                                  effect.effect().params(), effect.lanes());
+            if (! plugin)
+                return plugin.error();
+            target.pluginList.insertPlugin (*plugin, slot++, nullptr);
+        }
+        if (auto* fader = target.getVolumePlugin(); fader != nullptr && source.has_mix())
+            mix (*fader, source.mix());
+        return notes (target, source);
+    }
+
+    // `mute` and `solo` were applied by compile and cross false (ADR 0007 §1), so a mix is a
+    // level and a position and nothing else.
+    void mix (te::VolumeAndPanPlugin& fader, const escribass::song::v1::Mix& source)
+    {
+        fader.setVolumeDb ((float) source.gain_db());
+        fader.setPan ((float) source.pan());
+    }
+
+    // One device on a chain: the plugin the manifest names, then its state, then its
+    // parameters, then the automation that targets it.
+    //
+    // **State first, parameters second, and that order is the whole of it** (trap 6). A VST3
+    // state is the entire plugin, every parameter included, so a parameter set before it is
+    // silently overwritten by it — and only sometimes, because it shows up exactly where the
+    // state and the parameter disagree, which is the case the parameter was written for. The
+    // trap's other half, a value that ramps from a reused instance's previous one through the
+    // plugin's own smoothing, is what ADR 0008 §2's fresh process removes; nothing here has to.
+    //
+    // ponytail: nothing in M1 writes an `Instrument.state` — fixtures are factory defaults plus
+    // `params` (docs/plan.md, "Deferred again") — so no fixture exercises this path yet. It is
+    // written now because the order is not discoverable afterwards: the first state to arrive
+    // would simply render wrong.
+    tl::expected<te::Plugin::Ptr, std::string> device (const escribass::song::v1::DeviceRef& ref,
+                                                       const std::string& state,
+                                                       const google::protobuf::Map<std::string, double>& params,
+                                                       const google::protobuf::RepeatedPtrField<PlanLane>& lanes)
+    {
+        if (! ref.has_plugin())
+            // compile refuses the compiled kinds (ADR 0007 §6) and lets a SamplerRef through,
+            // because §16 puts the sampler in M1 — but a sampler is an SFZ from assets/ and
+            // assets are PR 8's, so nothing hosts one yet. Refused rather than rendered silent.
+            return tl::unexpected (std::string ("a device in the plan is not a plugin; a sampler is"
+                                                " an SFZ from assets/, which no PR has hosted yet"));
+        const auto& id = ref.plugin().plugin_id();
+        const auto desc = plugins.describe (id);
+        if (! desc)
+            return tl::unexpected (desc.error());
+
+        auto plugin = edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, *desc);
+        auto* external = dynamic_cast<te::ExternalPlugin*> (plugin.get());
+        if (external == nullptr)
+            return tl::unexpected ("'" + id + "' did not become a hosted plugin");
+        if (external->getAudioPluginInstance() == nullptr)
+            external->initialiseFully();
+        auto* instance = external->getAudioPluginInstance();
+        if (instance == nullptr)
+            return tl::unexpected ("'" + id + "': " + external->getLoadError().toStdString());
+
+        // Trap 14: `state` is opaque binary and is never text. It reaches the plugin as the
+        // bytes the model holds, unparsed and unexamined.
+        if (! state.empty())
+            instance->setStateInformation (state.data(), (int) state.size());
+
+        // The plugin's own parameter ids, which are what --scan wrote as the manifest's keys
+        // and therefore what a `ParamRef.param` and a `params` key match (ADR 0010 §4).
+        std::map<std::string, int> byParamId;
+        for (int i = 0; i < instance->getParameters().size(); ++i)
+            byParamId[instance->getHostedParameter (i)->getParameterID().toStdString()] = i;
+
+        for (const auto& [param, value] : params)
+        {
+            const auto found = byParamId.find (param);
+            if (found == byParamId.end())
+                return tl::unexpected ("'" + id + "' declares no parameter '" + param + "'");
+            // Written to the plugin's own parameter rather than through Tracktion's
+            // AutomatableParameter, and that is the second half of trap 6. Tracktion caches the
+            // value it read when the plugin was created and refreshes that cache from an
+            // asynchronous callback, so a state applied since leaves the cache stale — and
+            // AutomatableParameter::setParameterValue returns without writing when the cached
+            // value already equals the one being set. A parameter would then be dropped exactly
+            // when the stale value happened to match, which is a silence with no error in it.
+            instance->getHostedParameter (found->second)->setValue (normalised (value));
+        }
+
+        for (const auto& lane : lanes)
+        {
+            const auto found = byParamId.find (lane.param());
+            // Tracktion keys a hosted VST3's automation by the plugin's parameter *index*, not
+            // by its ParamID: buildParameterList() reads an id only from an
+            // AudioProcessorParameterWithID, and a hosted VST3's parameters are
+            // HostedAudioProcessorParameters, so it falls back to juce::String(i)
+            // (tracktion_ExternalPlugin.cpp). The manifest's key is translated through the
+            // index above rather than assumed to be the same string.
+            auto automatable = found == byParamId.end()
+                                 ? te::AutomatableParameter::Ptr()
+                                 : external->getAutomatableParameterByID (juce::String (found->second));
+            if (automatable == nullptr)
+                // A parameter the plugin does not declare, or declares and does not automate.
+                // Both are PR 9's `param_unknown`; here neither can move a sample.
+                return tl::unexpected ("'" + id + "' has no automatable parameter '" + lane.param() + "'");
+            place (*automatable, lane);
+        }
+
+        return plugin;
+    }
+
+    // ADR 0002 §8's two curves, and they are **ours** rather than Tracktion's. `curve` on a
+    // point is the shape of the segment from that point to the next; before the first point the
+    // value is the first point's, and after the last it is the last's.
+    //
+    //   LINEAR  the value moves in a straight line to the next point, **in ticks** — §4.2's one
+    //           musical time, and the axis a point is stored on.
+    //   HOLD    the value stays at this point's until the next point, where it steps.
+    //
+    // Tracktion's parameter curve is in seconds (tracktion_AutomatableParameter.cpp, where
+    // AutomationCurveSource builds it with TimeBase::time), and a straight segment there is a
+    // straight line in seconds. Within one tempo the two are the same line; across a tempo
+    // change they are not, so a LINEAR segment is split at every tempo event inside it, at the
+    // value our formula gives for that tick. Each piece then lies in one constant tempo, where
+    // the two definitions agree, and the result is our formula rather than an approximation to
+    // it. HOLD is a second point at the segment's end carrying the segment's own value:
+    // Tracktion draws a straight line between two equal values, which is the hold, and the next
+    // point at that same instant is the step.
+    void place (te::AutomatableParameter& param, const PlanLane& lane)
+    {
+        auto& curve = param.getCurve();
+        const auto at = [this] (int tick)
+        {
+            return edit.tempoSequence.toTime (te::BeatPosition::fromBeats (tick / (double) kPpq));
+        };
+
+        for (int i = 0; i < lane.points_size(); ++i)
+        {
+            const auto& point = lane.points (i);
+            curve.addPoint (at (point.tick()), normalised (point.value()), 0.0f, nullptr);
+            if (i + 1 == lane.points_size())
+                break;
+
+            const auto& next = lane.points (i + 1);
+            if (point.curve() == escribass::song::v1::CURVE_HOLD)
+            {
+                curve.addPoint (at (next.tick()), normalised (point.value()), 0.0f, nullptr);
+                continue;
+            }
+            for (const auto tick : tempoTicks)
+                if (tick > point.tick() && tick < next.tick())
+                {
+                    const auto through = (tick - point.tick()) / (double) (next.tick() - point.tick());
+                    curve.addPoint (at (tick),
+                                    normalised (point.value() + through * (next.value() - point.value())),
+                                    0.0f, nullptr);
+                }
+        }
+
+        // Tracktion builds a curve's read iterator on a 10 ms timer (the deferredUpdateTimer in
+        // AutomationCurveSource). A render that started before it fired would read no automation
+        // at all and one that started after would read all of it, which is a render that depends
+        // on a clock — CLAUDE.md #3, arriving as an intermittently silent lane.
+        param.updateStream();
+    }
+
+    // One MIDI clip per track, spanning the render, with every note at its absolute beat.
+    //
+    // `compile` already unrolled every loop and cut every note to the clip holding it
+    // (core/src/render.rs), so a plan clip's boundary carries nothing left for the engine to
+    // reproduce — and one clip is one fewer Tracktion behaviour (loop flags, content offset,
+    // clip length, per-clip mute) standing between a note and its MIDI.
+    //
+    // ponytail: PR 8's audio clips are Tracktion clips, because an asset has a length, a gain
+    // and fades of its own that belong to the clip. A note has none of that.
+    std::string notes (te::AudioTrack& target, const PlanTrack& source)
+    {
+        te::MidiClip::Ptr midi;
+        for (const auto& clip : source.clips())
+        {
+            if (clip.has_audio())
+                return "the plan has an audio clip; playing one is PR 8's, and a render that "
+                       "left it out would sound wrong and say nothing (ADR 0010 §3)";
+            if (! clip.has_notes())
+                // compile's `oneof_unset` arm produces no plan clip at all, so this is unreachable
+                // from a valid song and is here because the alternative is a silent skip.
+                return "a clip in the plan carries neither notes nor audio";
+            for (const auto& note : clip.notes().notes())
+            {
+                if (midi == nullptr)
+                {
+                    midi = target.insertMIDIClip (te::TimeRange (te::TimePosition(), end), nullptr);
+                    if (midi == nullptr)
+                        return "Tracktion would not put a MIDI clip on a track";
+                }
+                // §4.4 puts the note inside its clip and compile bounded the clip's end, so this
+                // sum fits an int32; widened because ADR 0002 §1 says absolute tick arithmetic is
+                // done in 64 bits.
+                const auto start = (juce::int64) clip.start_tick() + note.start_tick();
+                midi->getSequence().addNote (note.pitch(),
+                                             te::BeatPosition::fromBeats (start / (double) kPpq),
+                                             te::BeatDuration::fromBeats (note.length_ticks() / (double) kPpq),
+                                             note.velocity(), 0, nullptr);
+            }
+        }
+        return {};
+    }
+
+    te::Edit& edit;
+    Plugins& plugins;
+    const RenderPlan& plan;
+    const te::TimePosition end;
+    std::vector<int> tempoTicks;
+};
+
+int run (const juce::File& manifestFile)
 {
     // ADR 0009 §3: FTZ and DAZ, set before any thread exists so the render thread inherits
     // them (Linux copies the FP environment on clone). Tracktion sets them again on that
@@ -288,6 +650,11 @@ int run()
     // own statement of the same thing, and it covers any thread JUCE starts first.
     _MM_SET_FLUSH_ZERO_MODE (_MM_FLUSH_ZERO_ON);
     _MM_SET_DENORMALS_ZERO_MODE (_MM_DENORMALS_ZERO_ON);
+
+    const auto manifest = juce::JSON::parse (manifestFile);
+    if (! manifest.isObject())
+        return fail (kBadPlan, "no build manifest at " + manifestFile.getFullPathName().toStdString()
+                                   + "; it is written by `cmake --build engine/build --target manifest` (ADR 0010 §4)");
 
     // One plan, read to end-of-stream (ADR 0008 §1).
     const std::string bytes ((std::istreambuf_iterator<char> (std::cin)), std::istreambuf_iterator<char>());
@@ -300,12 +667,21 @@ int run()
     te::Engine engine (std::make_unique<Storage> (scratch.dir), std::make_unique<te::UIBehaviour>(), std::make_unique<Behaviour>());
     auto* wav = engine.getAudioFileFormatManager().getWavFormat();
 
+    // A pin, not a default: the pan law is a process-wide static in Tracktion
+    // (tracktion_AudioUtilities.cpp) that any module could set, and it decides the two gains a
+    // `Mix.pan` becomes. Linear is what Tracktion itself starts at, and it is the only one of
+    // the five that leaves a centred track at exactly its `gain_db`; the cost is that a hard
+    // pan is +6 dB on the surviving side. Nothing in the model names a law, so this is the
+    // engine stating which one it renders, not a choice the document makes.
+    te::setDefaultPanLaw (te::PanLawLinear);
+
     if (const auto why = check (plan, *wav); ! why.empty())
         return fail (kBadPlan, why);
     const auto& target = plan.target();
 
-    // An empty edit: one audio track and the master, both silent. Master volume at 0 dB so the
-    // level is the plan's when PR 7 applies Mix, not Tracktion's -3 dB default.
+    // One audio track per plan track, and the master. Master volume at 0 dB so the level is the
+    // plan's Mix, not Tracktion's -3 dB default. At least one track even for a plan with none,
+    // because an edit's own default is one and a silent extra track sums exactly zero.
     auto edit = te::Edit::createEdit ({ engine,
                                         te::createEmptyEdit (engine),
                                         te::ProjectItemID (1, {}),
@@ -314,8 +690,13 @@ int run()
                                         te::Edit::getDefaultNumUndoLevels(),
                                         [&engine] { return engine.getPropertyStorage().getAppCacheFolder().getChildFile ("plan.tracktionedit"); },
                                         {},
-                                        1,
+                                        (juce::uint32) std::max (1, plan.tracks_size()),
                                         0.0f });
+
+    // Automation is read when the transport reads it, and AutomationCurveSource::setPosition
+    // returns without moving a parameter when it does not. Stated rather than inherited: the
+    // flag is a property of the edit, and a plan's lanes are not optional.
+    edit->getAutomationRecordManager().setReadingAutomation (true);
 
     // The tempo map goes on Tracktion's sequence and Tracktion converts (ADR 0007 §3). A model
     // tempo event holds until the next; on a TempoSetting that is a curve of 1.0, which
@@ -329,6 +710,12 @@ int run()
         tempo.insertTempo (te::BeatPosition::fromBeats (event.tick() / (double) kPpq), event.bpm(), 1.0f);
     }
     const auto end = tempo.toTime (te::BeatPosition::fromBeats (plan.length_ticks() / (double) kPpq));
+
+    // The tempo map is on the sequence before this, because every tick the builder converts —
+    // a note's beat, an automation point's time — is converted through it.
+    Plugins plugins (engine, manifest);
+    if (const auto why = Builder (*edit, plugins, plan, end).build(); ! why.empty())
+        return fail (kBadPlan, why);
 
     te::Renderer::Parameters params (*edit);
     params.destFile = juce::File (plan.output_path());
@@ -415,7 +802,8 @@ int main (int argc, char** argv)
             args.add (juce::String::fromUTF8 (argv[i]));
         return scan (args);
     }
-    if (argc != 1)
-        return fail (kBadPlan, "usage: escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...] < plan.binpb > result.binpb");
-    return run();
+    if (argc != 2)
+        return fail (kBadPlan, "usage: escribass_engine <manifest.json> < plan.binpb > result.binpb"
+                               "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
+    return run (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
 }

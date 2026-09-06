@@ -92,9 +92,14 @@ instantiation. Two of those three are irreducible and small; the third — *find
 everything it finds. That is what ADR 0010's manifest removes: the engine loads the exact
 binaries the manifest names, at the paths it names, and never scans. The manifest is produced
 once at build time, so the per-render cost is one `dlopen` per referenced plugin and nothing
-else. What that actually measures is PR 7's to report; the spike measured build cost (two
-minutes wall from cold, 23 minutes CPU) and never measured start-up, so no number is claimed
-here.
+else. **Measured 2026-09-06, in PR 7, which first hosted one.** One second of audio at 48 kHz on the
+pinned compiler, five processes each, warm: a plan with no device at all is **520 ms**, which is
+process start plus JUCE and Tracktion initialisation and is what every render pays; one Dexed
+adds **65 ms**; all three bundled plugins on three tracks come to **914 ms**, so the whole
+plugin half of a three-instrument render is under 400 ms. The fixed half dominates, and it is
+the half a resident engine would save — which is the trade decision 2 declines, at a price now
+known rather than assumed. The spike had measured build cost (two minutes wall from cold, 23
+minutes CPU) and never start-up.
 
 The reuse this forgoes buys nothing M1 wants. An offline render is not interactive, and §11's
 golden tests each render once. M2's preview does need a live process, for a reason M1 does not

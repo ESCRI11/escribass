@@ -503,6 +503,33 @@ fn everything_m1_cannot_render_is_refused_at_once() {
 }
 
 #[test]
+fn a_note_m1_cannot_voice_is_refused_rather_than_flattened() {
+    // Both fields cross into the plan and both would render as though they were zero, which
+    // is a note at the wrong pitch and a render that reports success (ADR 0007 §6). Refused
+    // once per note, not once per loop iteration.
+    let (_dir, mut session) = opened();
+    let t = track(&mut session, TrackKind::Instrument, plugin());
+    let bent = Note { microtonal_cents: -13.5, ..note(60, 0, 240) };
+    let c = clip(&mut session, &t, 0, 960, &[bent, note(62, 480, 240)]);
+    let ids: Vec<String> = match &session.project().song().clips[&c].content {
+        Some(escribass_schema::song::clip::Content::NoteClip(n)) => n.notes.keys().cloned().collect(),
+        _ => panic!("the clip is a note clip"),
+    };
+    // Looping, so every note is in the plan twice and the refusal is still one per note.
+    set(&mut session, format!("/clips/{c}/loop_length_ticks"), json!(480));
+    set(&mut session, format!("/clips/{c}/note_clip/notes/{}/expression/pressure", ids[1]), json!(0.5));
+
+    let refused = refused(&session, &BTreeMap::new());
+    assert_eq!(
+        refused,
+        vec![
+            (format!("/clips/{c}/note_clip/notes/{}/microtonal_cents", ids[0]), UNSUPPORTED),
+            (format!("/clips/{c}/note_clip/notes/{}/expression/pressure", ids[1]), UNSUPPORTED),
+        ]
+    );
+}
+
+#[test]
 fn what_does_not_sound_is_not_examined() {
     // Muting the Cmajor track is how a project exports the rest of itself before M4. Naming
     // master explicitly is the same as not naming it.

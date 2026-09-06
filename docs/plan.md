@@ -487,8 +487,17 @@ prevent; a feature is absent where it cannot run and loud where it must.
 4. **Summation order under a thread pool** — float addition is not associative. Single-threaded.
 5. **`-ffp-contract`** — both compilers fuse `a*b+c` on a capable `-march`; a vendored
    `CMakeLists` adding `-ffast-math` changes bits.
-6. **`setState` then `setParam`, in a fresh process** — params applied before state are
-   overwritten, and smoothing ramps from the previous value in a reused instance.
+6. ~~**`setState` then `setParam`, in a fresh process**~~ — **settled in PR 7, and it had a
+   second half the trap did not name.** The order is state first, parameters second, and it is
+   proved rather than asserted: a Dexed state captured with `Cutoff` at 0.05 renders one hash
+   with no parameters, and the same state plus `params { Cutoff: 1.0 }` renders *exactly* the
+   hash of a plan with no state at all. The half that would have been missed is that 1.0 is
+   also the value Tracktion cached when the plugin was created, and
+   `AutomatableParameter::setParameterValue` returns without writing when the cached value
+   already equals the one being set — so a parameter routed through Tracktion would have been
+   dropped precisely when the state disagreed with it. The engine writes the plugin's own
+   parameter instead. The trap's other half, smoothing from a reused instance, is ADR 0008 §2's
+   fresh process and needs nothing here.
 7. **Randomness inside the fixture** — Surge start phase and unison detune, sfizz `*_random`.
 8. **The suite validates a stale engine** — M0.4's exact defect, one language over. The engine
    embeds the submodule commits it was built from and the suite compares them.
