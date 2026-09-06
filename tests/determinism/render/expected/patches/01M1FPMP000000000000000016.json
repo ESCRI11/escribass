@@ -1,0 +1,43 @@
+{
+  "id": "01M1FPMP000000000000000016",
+  "parents": [
+    "01M1FPMP000000000000000013"
+  ],
+  "tool": "add_automation",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/automation/01M1FPMP000000000000000014",
+      "value": {
+        "id": "01M1FPMP000000000000000014",
+        "points": {
+          "01M1FPMP000000000000000015": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP000000000000000015",
+            "tick": 480,
+            "value": 0.7
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP00000000000000000G",
+          "param": "drive"
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 14
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

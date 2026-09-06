@@ -29,8 +29,11 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
 | `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
 | `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
-| `src/descriptor.rs` | `tool_schemas`: the protobuf descriptor turned into one JSON Schema per tool (ADR 0006 §6). Proto3 JSON's own mapping, with proto field names. | done |
+| `src/descriptor.rs` | `tool_schemas`: the protobuf descriptor turned into one JSON Schema per tool (ADR 0006 §6). Proto3 JSON's own mapping, with proto field names. `message_fields`: the same index read out as messages and fields, for the coverage guard. | done |
 | `tests/descriptor.rs` | Correspondence with the proto, one mapping rule per test. Every failure here is otherwise silent. | done |
+| `src/render.rs` | `compile`: a valid `Song` and an index from asset hash to path → the `RenderPlan` the engine renders, or every `Violation` (ADR 0007 §4). Pure; every order from a stated rule. | done |
+| `tests/render.rs` | What the plan resolves and what M1 refuses, one claim each, every song built through `Session`. | done |
+| `tests/render_coverage.rs` | The field-coverage guard (ADR 0007 §5): every `song.v1` field is carried, consumed, or ignored with a reason, and a field on no list fails. | done |
 | `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Both transports dispatch here and decide nothing. | done |
 | `tests/session.rs` | Dry run equals the recorded patch; refusals keep their rule; the `Ok(valid=false)` / `Err` line. | done |
 | `src/version.rs` | `bump_versions` (ADR 0005 §2) and `version_writes`, the guard behind `version_not_writable`. Operates on `Value`, like `patch.rs`. | done |
@@ -99,6 +102,11 @@ cargo test -p escribass-core
 | `serde_json` carries the `float_roundtrip` feature | ADR 0002 §4 |
 | The writer rejects non-finite doubles; it does not rewrite values. `-0.0` is the tool API's to normalise, presence the validator's, timestamp precision the clock's | ADR 0002 §4, as amended 2026-09-02 |
 | A new dependency needs asking first, then a `lock.baseline.json` entry | CLAUDE.md #4; specs §17 |
+| Every order in the plan comes from a stated rule — mixer index, `Effect.index`, start tick, tick, parameter name — with ties by id, which is what a `BTreeMap` iterates in under a stable sort. Never from a hash table: a single-run test cannot catch that | ADR 0007 §1; CLAUDE.md #3 |
+| `compile` examines only what sounds. A track `mute` or `solo` silences is dropped before its devices, routing and lanes are looked at, so muting the Cmajor track is how a project exports the rest of itself before M4. The render length is the song's regardless: the last clip or section, sounding or not | ADR 0007 §1, §6 |
+| `id`, `provenance` and `version` cross the plan empty, and so do `Mix.mute` and `Mix.solo`, because compile has applied them: a `solo` the engine could see is one it could act on. `PluginRef.version` is a pin, not a §4.3 field, and stays | ADR 0007 §2, §5 |
+| A field added to `song.proto` must be carried, consumed or ignored *with a reason* in `tests/render_coverage.rs`, or the guard fails. The lists are data; an ignored entry without a reason is where a field that should have rendered hides | ADR 0007 §5 |
+| `compile` leaves `output_path` empty: where the WAV goes is `render_export`'s argument, not the document's | ADR 0007 §4 |
 
 ## Adding things
 

@@ -14,6 +14,7 @@ pub mod mcp;
 pub mod merge;
 pub mod patch;
 pub mod project;
+pub mod render;
 pub mod session;
 pub mod tools;
 pub mod validate;
@@ -21,12 +22,13 @@ pub mod version;
 
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
-pub use descriptor::{tool_names, tool_schemas, ToolSchema};
+pub use descriptor::{message_fields, tool_names, tool_schemas, Field, ToolSchema};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
     refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use project::{asset_hash, Prepared, Project, ProjectError};
+pub use render::compile;
 pub use mcp::SongTools;
 pub use session::{new_song, Session};
 pub use validate::{validate, Violation};

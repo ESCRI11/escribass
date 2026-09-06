@@ -1,0 +1,43 @@
+{
+  "id": "01M1FPMP00000000000000001C",
+  "parents": [
+    "01M1FPMP000000000000000019"
+  ],
+  "tool": "add_automation",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/automation/01M1FPMP00000000000000001A",
+      "value": {
+        "id": "01M1FPMP00000000000000001A",
+        "points": {
+          "01M1FPMP00000000000000001B": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP00000000000000001B",
+            "tick": 0,
+            "value": 1.0
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP00000000000000000A",
+          "param": "cutoff"
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 16
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

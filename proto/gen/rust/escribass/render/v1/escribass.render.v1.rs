@@ -26,8 +26,10 @@ pub struct RenderPlan {
     pub tempo: ::prost::alloc::vec::Vec<::escribass_schema::song::TempoEvent>,
     #[prost(message, optional, tag="4")]
     pub target: ::core::option::Option<::escribass_schema::song::RenderTarget>,
-    /// How long the render is: the last clip's end (docs/plan.md, decisions of 2026-09-04).
-    /// The engine renders this many ticks and stops; it does not look for the last clip itself.
+    /// How long the render is: the end of the last clip or of the last section, whichever is
+    /// later (docs/plan.md, decisions of 2026-09-04). A section that outlasts every clip is an
+    /// outro someone named, and it renders as the silence they wrote. The engine renders this
+    /// many ticks and stops; it looks for neither itself.
     #[prost(int32, tag="5")]
     pub length_ticks: i32,
     /// Where the WAV goes, absolute. A path the engine is handed is output, not a project file;
@@ -115,8 +117,9 @@ pub struct PlanNotes {
 ///
 /// ponytail: a looped, stretched clip whose length is not a multiple of its loop is not yet
 /// expressible — compile expands the loop, and the truncated last iteration would stretch to
-/// the wrong length (ADR 0011 §3). One additive field naming the stretched unit fixes it the
-/// day compile meets one; no ADR names it yet.
+/// the wrong length (ADR 0011 §3). compile refuses one with render_unsupported rather than
+/// hand the engine a plan that is wrong by construction (ADR 0007 §6, amended). One additive
+/// field naming the stretched unit lifts the refusal; no ADR names it yet.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PlanAudio {
     #[prost(message, optional, tag="1")]

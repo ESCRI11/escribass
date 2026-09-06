@@ -1,0 +1,29 @@
+{
+  "id": "01M1FPMP00000000000000000Z",
+  "parents": [
+    "01M1FPMP00000000000000000Y"
+  ],
+  "tool": "apply_patch",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP00000000000000000X/version",
+      "value": 2
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP00000000000000000X/loop_length_ticks",
+      "value": 960
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 12
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

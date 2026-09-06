@@ -1,0 +1,61 @@
+{
+  "id": "01M1FPMP00000000000000001M",
+  "parents": [
+    "01M1FPMP00000000000000001H"
+  ],
+  "tool": "add_track",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP00000000000000001J",
+      "value": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP00000000000000001J",
+        "index": 4,
+        "instrument": {
+          "id": "01M1FPMP00000000000000001K",
+          "params": {},
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "ref": {
+            "sampler": {
+              "sfz_hash": "5d41402abc4b2a76b9719d911017c592"
+            }
+          },
+          "state": "",
+          "version": 1
+        },
+        "kind": "TRACK_KIND_INSTRUMENT",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Keys",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 20
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

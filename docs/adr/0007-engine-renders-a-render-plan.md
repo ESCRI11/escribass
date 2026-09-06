@@ -145,6 +145,16 @@ capabilities, which is CLAUDE.md #6 in reverse. The validator checks reference i
 (§4.4: the reference resolves to something pinned); compile checks capability; each fails in
 one place with one rule.
 
+**Amended 2026-09-05, when compile met it.** One refusal more than the list above, under the
+same rule: a looping audio clip with `time_stretch` set whose `length_ticks` is not a whole
+number of `loop_length_ticks`. The plan carries each loop iteration as a clip of its own and
+the engine stretches the asset to the clip it is handed (ADR 0011 §3), so the short last
+iteration would stretch to the wrong length — which `render.proto`'s `ponytail:` on `PlanAudio`
+had already recorded the plan cannot yet say otherwise about. "Nothing else" was written
+before compile existed, and a plan wrong by construction is not something to hand the engine
+quietly. The refusal names `Clip.loop_length_ticks` and lifts the day an additive field names
+the stretched unit.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |

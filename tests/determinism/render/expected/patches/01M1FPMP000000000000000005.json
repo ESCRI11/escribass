@@ -1,0 +1,99 @@
+{
+  "id": "01M1FPMP000000000000000005",
+  "parents": [],
+  "tool": "create",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/id",
+      "value": "01M1FPMP000000000000000001"
+    },
+    {
+      "op": "replace",
+      "path": "/schema_version",
+      "value": 1
+    },
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP000000000000000002",
+      "value": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP000000000000000002",
+        "index": 0,
+        "kind": "TRACK_KIND_MASTER",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Master",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 1
+    },
+    {
+      "op": "add",
+      "path": "/provenance",
+      "value": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      }
+    },
+    {
+      "op": "add",
+      "path": "/render_target",
+      "value": {
+        "bit_depth": 24,
+        "dither": false,
+        "kind": "RENDER_KIND_MASTER",
+        "sample_rate": 48000
+      }
+    },
+    {
+      "op": "add",
+      "path": "/tempo_map",
+      "value": {
+        "events": {
+          "01M1FPMP000000000000000003": {
+            "bpm": 120.0,
+            "id": "01M1FPMP000000000000000003",
+            "tick": 0
+          }
+        }
+      }
+    },
+    {
+      "op": "add",
+      "path": "/time_signature_map",
+      "value": {
+        "events": {
+          "01M1FPMP000000000000000004": {
+            "denominator": 4,
+            "id": "01M1FPMP000000000000000004",
+            "numerator": 4,
+            "tick": 0
+          }
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

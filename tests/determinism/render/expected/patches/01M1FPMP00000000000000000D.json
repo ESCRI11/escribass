@@ -1,0 +1,46 @@
+{
+  "id": "01M1FPMP00000000000000000D",
+  "parents": [
+    "01M1FPMP00000000000000000B"
+  ],
+  "tool": "add_track",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/tracks/01M1FPMP00000000000000000C",
+      "value": {
+        "allow_overlap": false,
+        "fx_chain": {},
+        "id": "01M1FPMP00000000000000000C",
+        "index": 3,
+        "kind": "TRACK_KIND_AUDIO",
+        "mix": {
+          "gain_db": 0.0,
+          "mute": false,
+          "pan": 0.0,
+          "solo": false
+        },
+        "name": "Loop",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "routing": {
+          "sends": {},
+          "sidechains": {}
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 4
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

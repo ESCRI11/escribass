@@ -1,0 +1,41 @@
+{
+  "id": "01M1FPMP00000000000000000Y",
+  "parents": [
+    "01M1FPMP00000000000000000W"
+  ],
+  "tool": "add_clip",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP00000000000000000X",
+      "value": {
+        "audio_clip": {
+          "asset_hash": "2286d76f7fa133642170637e5c7635d116dbd96cb8b9892281b945b350870636",
+          "fade_in_ticks": 100,
+          "fade_out_ticks": 200,
+          "gain_db": -3.0,
+          "time_stretch": true
+        },
+        "id": "01M1FPMP00000000000000000X",
+        "length_ticks": 1920,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 0,
+        "track_id": "01M1FPMP00000000000000000C",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 11
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}
