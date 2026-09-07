@@ -19,7 +19,7 @@
       "tag": "v21.12",
       "commit": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
       "date": "2022-12-12",
-      "note": "C++ runtime and protoc for the engine, built from the submodule; the engine's CMake generates song.proto and render.proto at build time (ADR 0008 §4, pinned 2026-09-06). The last line before abseil, and what Ubuntu 24.04 packages. Added in M1 PR 5 as a new dependency, pending sign-off (CLAUDE.md #4)."
+      "note": "C++ runtime and protoc for the engine, built from the submodule; the engine's CMake generates song.proto and render.proto at build time (ADR 0008 §4, pinned 2026-09-06). The last line before abseil, and what Ubuntu 24.04 packages. Added in M1 PR 5 as a new dependency, signed off 2026-09-07 (CLAUDE.md #4)."
     },
     "grpc": {
       "version": "1.54.3",
