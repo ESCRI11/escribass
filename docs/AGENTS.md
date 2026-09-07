@@ -10,7 +10,7 @@ Prose only: the architecture spec, its decision records, one research report, on
 | `adr/` | One record per decision; each lands with its `specs.md` §15 row. See `adr/AGENTS.md`. | Through §15 |
 | `landscape-2026-09.md` | Competitive and academic research of 2026-09-02, companion to §18. Its line 3: "Point-in-time; re-check quarterly"; §18.3's heading sets the same cadence. Its "Strategic implications" defers to §18 as "the binding version". | No |
 | `wireframes.html` | Six plates of the §9 desktop shell (M2), `draft 0.1`, footer "keyed to docs/specs.md v0.4". Its header: "Nothing here is built". Its "What the spec dictates / What I invented here" section separates §9's requirements from its own layout choices. Plates are cited by number from ADR 0002 (§2: Plate 2; Consequences: Plate 3). | No |
-| `plan.md` | Status per M0 step, deferred items with revisit points, known gaps, the [OPEN] list. Its header: milestones are §16's and rules are `CLAUDE.md`'s — "when they disagree, they win and this file is stale". Linked from `CLAUDE.md`, M0 section. | No |
+| `plan.md` | Status per milestone step, deferred items with revisit points, known gaps, the [OPEN] list, and a closing retrospective per milestone. Its header: milestones are §16's and rules are `CLAUDE.md`'s — "when they disagree, they win and this file is stale". Linked from `CLAUDE.md`, current-milestone section. | No |
 | `roadmap.md` | Milestones in user terms, the dependency spine, what v1 is not, what would change course. Its own header: the least authoritative of the three planning documents — §16 wins, then `plan.md`; "No dates". | No |
 
 ## Reading `specs.md`
