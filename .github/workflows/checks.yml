@@ -884,6 +884,12 @@ jobs:
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
           chmod +x "$engine"
           find engine/build/plugins -name '*.so' -exec chmod +x {} +
+          # An artefact download carries no useful file metadata — the `chmod` above is the
+          # same problem — and `renders.rs` refuses an engine older than `engine/src`, which
+          # this job checked out *after* the engine job built the binary. That guard is about a
+          # developer who edited `main.cpp` and did not rebuild; here the binary is built from
+          # this very commit by construction, so the timestamps are noise and are restated.
+          find engine/build -exec touch {} +
           "$engine" --version
           # The manifest names absolute paths. If a runner ever unpacks the workspace somewhere
           # else, that is the failure to report — not `plugin_unknown` three layers up.
