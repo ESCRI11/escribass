@@ -1438,6 +1438,11 @@ int run (const juce::File& manifestFile)
             error = outcome.error().empty() ? "Tracktion reported a failure without a message" : outcome.error();
         done = true;
     });
+    if (handle == nullptr)
+        // Never seen: `EditRenderer::render` always returns a handle. Checked because the loop
+        // below asks it for progress and cancels it, and a null one there would be a hang.
+        return fail (kRenderFailed, "Tracktion started no render and reported no failure");
+
     // **The loop is bounded, and the bound counts iterations rather than reading a clock**
     // (CLAUDE.md #3; M1 PR 13). `done` is set only by the callback above, nothing sets
     // `hasBeenCancelled` during a render, and `NodeRenderContext`'s "wait for any nodes to
@@ -1457,7 +1462,7 @@ int run (const juce::File& manifestFile)
     while (! done)
     {
         juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
-        if (const auto progress = handle ? handle->getProgress() : 1.0f; progress > furthest)
+        if (const auto progress = handle->getProgress(); progress > furthest)
         {
             furthest = progress;
             stalled = 0;
