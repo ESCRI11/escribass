@@ -42,6 +42,9 @@ use std::path::{Path, PathBuf};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/renders");
 
+/// Where `.github/workflows/checks.yml` builds the engine, and where CMake puts it.
+const ENGINE: &str = "engine/build/escribass_engine_artefacts/Release/escribass_engine";
+
 /// Every fixture, named rather than discovered, and checked against the directory below.
 ///
 /// §11 requires a golden render for **every bundled instrument**; these are the three of §8,
@@ -76,7 +79,8 @@ fn workspace() -> &'static Path {
 /// from and [`stale`] refuses a build that is not the pinned one. A search that could find the
 /// wrong engine is only dangerous when nothing checks which engine it found.
 fn told(variable: &str, default: &str) -> PathBuf {
-    let path = std::env::var_os(variable).map(PathBuf::from).unwrap_or_else(|| workspace().join(default));
+    let path =
+        std::env::var_os(variable).map(PathBuf::from).unwrap_or_else(|| workspace().join(default));
     assert!(
         path.exists(),
         "{} is not there.\n\
@@ -120,7 +124,7 @@ struct Rendered {
 fn render(name: &str) -> Rendered {
     let directory = Scratch::new("renders", name);
     let wav = directory.0.with_extension("wav");
-    let engine = told("ESCRIBASS_ENGINE", "engine/build/escribass_engine_artefacts/Release/escribass_engine");
+    let engine = told("ESCRIBASS_ENGINE", ENGINE);
     // The manifest a real build wrote, not `tests/fixtures/manifest.json`: that one is a
     // committed subset with the machine's plugin paths dropped, and an engine handed it would
     // have nothing to load (ADR 0010 §4).
@@ -215,8 +219,15 @@ fn render(name: &str) -> Rendered {
         drifted.join("\n")
     );
 
-    let file = std::fs::read(&wav).unwrap_or_else(|e| panic!("`{name}` reported a render and {} is not readable: {e}", wav.display()));
+    let file = std::fs::read(&wav).unwrap_or_else(|e| {
+        panic!("`{name}` reported a render and {} is not readable: {e}", wav.display())
+    });
     let (format, pcm) = data(&file, &format!("`{name}`'s render"));
+    // The engine's number, checked against a second one computed here: another language,
+    // another SHA-256, and another walk of the same file. `asset_hash` is `core`'s hasher for
+    // §10's content addressing — borrowed for its bytes-in, hex-out, not for its meaning — so
+    // an engine that hashed the wrong span, or a walker here that found the wrong chunk, is a
+    // disagreement rather than two mistakes agreeing.
     assert_eq!(
         escribass_core::asset_hash(&pcm),
         reported,
@@ -255,7 +266,9 @@ fn stale(reported: &BTreeMap<String, String>) -> Vec<String> {
             .as_str()
             .or_else(|| lock["bundled_plugins"][component]["commit"].as_str());
         match pinned {
-            None => wrong.push(format!("  {component}: built from {built}, and lock.baseline.json pins nothing by that name")),
+            None => wrong.push(format!(
+                "  {component}: built from {built}, and lock.baseline.json pins nothing by that name"
+            )),
             Some(pinned) if pinned != built => {
                 wrong.push(format!("  {component}: built from {built}, lock.baseline.json pins {pinned}"))
             }
@@ -294,7 +307,11 @@ fn data(bytes: &[u8], what: &str) -> (Format, Vec<u8>) {
         let id = &bytes[at..at + 4];
         let size = u32::from_le_bytes(bytes[at + 4..at + 8].try_into().expect("four bytes")) as usize;
         let body = bytes.get(at + 8..at + 8 + size).unwrap_or_else(|| {
-            panic!("{what}: chunk {} at {at} claims {size} bytes and the file has {}", String::from_utf8_lossy(id), bytes.len())
+            panic!(
+                "{what}: chunk {} at {at} claims {size} bytes and the file has {}",
+                String::from_utf8_lossy(id),
+                bytes.len()
+            )
         });
         match id {
             b"fmt " => {
@@ -315,7 +332,11 @@ fn data(bytes: &[u8], what: &str) -> (Format, Vec<u8>) {
     }
     let format = format.unwrap_or_else(|| panic!("{what} has no `fmt ` chunk"));
     let found = found.unwrap_or_else(|| panic!("{what} has no `data` chunk"));
-    assert!(format.bits % 8 == 0 && format.bits > 0 && format.bits <= 32, "{what}: {} bits per sample", format.bits);
+    assert!(
+        format.bits % 8 == 0 && format.bits > 0 && format.bits <= 32,
+        "{what}: {} bits per sample",
+        format.bits
+    );
     (format, found)
 }
 
@@ -438,7 +459,10 @@ fn every_fixture_renders_the_same_twice_in_two_fresh_processes() {
         let (a, b) = (render(name), render(name));
         assert_eq!(a.format, b.format, "`{name}`: two runs disagree about the format");
         if let Some(report) = differences(a.format, &a.pcm, &b.pcm) {
-            panic!("`{name}` rendered twice and the two disagree.\nLeft is the first run, right the second.\n{report}");
+            panic!(
+                "`{name}` rendered twice and the two disagree.\n\
+                 Left is the first run, right is the second.\n{report}"
+            );
         }
         assert_eq!(a.reported, b.reported, "`{name}`: identical PCM hashed differently");
     }
@@ -542,7 +566,10 @@ fn a_stale_engine_is_named_rather_than_arriving_as_a_golden_diff() {
     drifted.insert("sfizz_ui".to_string(), "0".repeat(40));
     let report = stale(&drifted);
     assert_eq!(report.len(), 1, "{report:?}");
-    assert!(report[0].contains("sfizz_ui") && report[0].contains("lock.baseline.json pins"), "{report:?}");
+    assert!(
+        report[0].contains("sfizz_ui") && report[0].contains("lock.baseline.json pins"),
+        "{report:?}"
+    );
 
     // And an engine that reports less than it used to is not silently agreed with.
     let mut missing = honest.clone();
