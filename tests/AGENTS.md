@@ -30,6 +30,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | A fixture or a golden changes only in the PR that changes the `.proto`, the canonical form, or a tool's semantics — and its diff is reviewed there. `UPDATE_FIXTURES=1` blesses whatever ran, including a deterministically wrong output; this rule is the only guard against that | specs §17 (same rule for golden renders) |
 | Two runs agreeing catches nondeterminism; only the golden catches **drift**. A dependency that changes how a float is written, or feature unification flipping `serde_json::Map` to insertion order, produces the same wrong bytes twice | specs §11 |
 | Fixture inputs are byte-stable: fixed timestamps, fixed ids, no wall clock, no unseeded randomness | specs §11; ADR 0001 §5 |
+| Every scripted `render_export` is a **dry run**. This suite runs in the `checks` job, which builds no engine, so what it can honestly check is compile-through-the-tool-API and the wire shape of the answer. The engine half — the spawn, the WAV, the hash, the commits — is `renders.rs` (M1 PR 11), behind the cargo feature that makes it absent where it cannot run. What keeps that from being a silent gap is `a_real_render_needs_an_engine_and_says_so_rather_than_pretending`: asked for a real render with no engine, a server answers as an operator error and writes nothing | ADR 0006 §3; ADR 0008 §2 |
 
 ## Adding things
 

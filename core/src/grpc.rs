@@ -16,12 +16,9 @@
 //! because §6's retry loop has to be able to see it. Only an operator's problem becomes a
 //! `Status`.
 //!
-//! Every RPC in `song_tools.proto` is implemented here but one. The tools §5 lists that are
-//! missing are missing from the *contract* too, named in a comment there with the milestone
-//! each waits for. The exception is `render_export`: its RPC is defined in M1 PR 3 so that
-//! `buf breaking` guards the shape from the first PR that could break it, and it answers
-//! `UNIMPLEMENTED` until the engine that would serve it exists (PR 10). Over MCP it is not
-//! advertised at all.
+//! Every RPC in `song_tools.proto` is implemented here. The tools §5 lists that are missing
+//! are missing from the *contract* too, named in a comment there with the milestone each
+//! waits for.
 
 use crate::session::Session;
 use crate::ProjectError;
@@ -121,14 +118,17 @@ macro_rules! service {
                 Ok(Response::new(response))
             }
 
-            // Defined so `buf breaking` guards it; served when the engine exists (M1 PR 10).
-            // `UNIMPLEMENTED` rather than a refusal: there is nothing a caller could say
-            // differently, so it does not belong inside §6's retry loop (ADR 0006 §2).
+            // Its own method, like `add_asset`: a render answers with what it produced, not
+            // with a `ToolResult` (song_tools.proto, `RenderResponse`). A compile refusal is
+            // still `OK` carrying `valid = false`; only an engine that would not run becomes
+            // a `Status` (ADR 0006 §2).
             async fn render_export(
                 &self,
-                _request: Request<RenderExportRequest>,
-            ) -> Result<Response<ToolResult>, Status> {
-                Err(Status::unimplemented("render_export waits for the engine (M1 PR 10)"))
+                request: Request<RenderExportRequest>,
+            ) -> Result<Response<RenderResponse>, Status> {
+                let response =
+                    self.locked().render_export(&request.into_inner()).map_err(status)?;
+                Ok(Response::new(response))
             }
 
             $(

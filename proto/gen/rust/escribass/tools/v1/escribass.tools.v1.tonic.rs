@@ -479,7 +479,7 @@ pub mod song_tools_client {
         pub async fn render_export(
             &mut self,
             request: impl tonic::IntoRequest<super::RenderExportRequest>,
-        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+        ) -> std::result::Result<tonic::Response<super::RenderResponse>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -689,7 +689,7 @@ pub mod song_tools_server {
         async fn render_export(
             &self,
             request: tonic::Request<super::RenderExportRequest>,
-        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<super::RenderResponse>, tonic::Status>;
         ///
         async fn create_branch(
             &self,
@@ -1560,7 +1560,7 @@ pub mod song_tools_server {
                         T: SongTools,
                     > tonic::server::UnaryService<super::RenderExportRequest>
                     for RenderExportSvc<T> {
-                        type Response = super::ToolResult;
+                        type Response = super::RenderResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,

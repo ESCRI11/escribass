@@ -10,6 +10,7 @@ project file directly (§5), so what is not here cannot be done to a song.
 | Path | Role | Written by |
 |---|---|---|
 | `song_tools.proto` | The `SongTools` service, its request messages, `ToolResult` and `Violation`. | hand |
+| `render.proto` | The engine's boundary: `RenderPlan`, `RenderResult`, and a `Render` service nobody implements before M2 (ADR 0007, ADR 0008). | hand |
 | `buf.gen.yaml` | Three plugins: `protoc-gen-prost`, `protoc-gen-prost-serde`, `protoc-gen-tonic`. Rust only. | hand |
 | `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
@@ -32,6 +33,7 @@ cargo test -p escribass-proto
 |---|---|---|
 | One `ToolResult` for every mutating RPC | Every tool does the same thing: produce ops, which the pipeline records or refuses. Sixteen response messages would be sixteen copies of one contract, each free to drift. | ADR 0006 §1 |
 | Reads return their own messages | `valid`, `patch`, `summary` and `entry_id` mean nothing for a read, and a result whose fields are mostly inapplicable teaches callers to ignore fields. | ADR 0006 §1 |
+| `AddAsset` and `RenderExport` too | Neither produces ops, so `patch` and `entry_id` would be permanently empty — and each has one thing the caller actually needs: an address, and the hash of what was rendered beside the commits it was rendered by. `RenderExport` was declared as a `ToolResult` in PR 3 and changed in PR 10, before any client had called it; the root `buf.yaml` carries the one-release breaking-check exemption that let it. | ADR 0006 §1, amended |
 | `ToolResult.patch` is `bytes` | RFC 6902 values cross unmodelled. Modelling them in protobuf made the patch log nondeterministic and produced documents `core` could not re-read. | ADR 0002 §11 |
 | Requests embed `escribass.song.v1` types | A hand-written `NoteSpec` mirroring `Note` is a second representation of song state under another name, and it stops matching the first time a field is added. | ADR 0006 §4, CLAUDE.md #1 |
 | `Violation` rather than a per-transport error | `Violation`, `PatchError`, `HistoryError` and `ProjectError` in `core` already carry `path`/`rule`/`message`. This transports that shape; it does not add a fifth. | ADR 0006 §2 |

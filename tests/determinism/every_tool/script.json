@@ -75,6 +75,9 @@
   {"tool": "add_asset", "args": {"content": "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAOAAAA==", "dry_run": true}},
   {"tool": "add_asset", "args": {"content": "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAOAAAA=="}},
 
+  {"tool": "render_export", "args": {"output_path": "/escri/out.wav", "dry_run": true},
+    "refused": "render_unsupported"},
+
   {"tool": "get_song", "args": {}},
   {"tool": "get_history", "args": {}}
 ]

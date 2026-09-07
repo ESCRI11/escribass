@@ -36,6 +36,8 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/render.rs` | `compile`: a valid `Song` and an index from asset hash to path → the `RenderPlan` the engine renders, or every `Violation` (ADR 0007 §4). Pure; every order from a stated rule. | done |
 | `tests/render.rs` | What the plan resolves and what M1 refuses, one claim each, every song built through `Session`. | done |
 | `tests/render_coverage.rs` | The field-coverage guard (ADR 0007 §5): every `song.v1` field is carried, consumed, or ignored with a reason, and a field on no list fails. | done |
+| `src/engine.rs` | `Engine`: where the engine binary is, and the stdio protocol of ADR 0008 §1 — one plan in, one `RenderResult` out, failure is an exit code. Every failure it returns is an operator's. | done |
+| `tests/engine.rs` | `render_export` from both sides of ADR 0006 §2's line, driven against a fake engine that is a shell script. What a *real* engine does is PR 11's. | done |
 | `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Both transports dispatch here and decide nothing. | done |
 | `tests/session.rs` | Dry run equals the recorded patch; refusals keep their rule; the `Ok(valid=false)` / `Err` line. | done |
 | `src/version.rs` | `bump_versions` (ADR 0005 §2) and `version_writes`, the guard behind `version_not_writable`. Operates on `Value`, like `patch.rs`. | done |
@@ -91,6 +93,9 @@ cargo test -p escribass-core
 | A tool schema omits `id`, `provenance` and `version` for an embedded entity: core sets them, and an advertised argument that is discarded teaches a model a contract that is not real | ADR 0006 §4 |
 | `apply_patch` over MCP is decoded by hand, so it validates by hand. `as_bool().unwrap_or(false)` read `"true"` as false and applied a request meant as a preview | ADR 0006 §3 |
 | A call that changes nothing records nothing: an entry with no operations claims something happened | specs §5 |
+| The engine binary is **told, never searched** (`--engine`), like the manifest — but optional, because only `render_export` needs one. A session told nothing refuses that call as an operator error rather than skipping it, and a dry run still works | ADR 0008 §2; ADR 0010 §4 |
+| `render_export` splits at ADR 0006 §2's line and nowhere else: `compile`'s refusals are `valid = false`, and an engine that is missing, crashes or answers with something else is `ProjectError`. A crash reported as a refusal is three retries a model cannot spend | ADR 0006 §2; ADR 0008 §1 |
+| The engine is spawned fresh per render and handed the plan on stdin, framed by end of stream. Nothing is pooled or reused: a resident plugin instance makes a render depend on the render before it | ADR 0008 §1, §2 |
 | A transport translates and decides nothing. Anything a caller could get two different answers to from gRPC and MCP belongs in `session.rs` | ADR 0006 |
 | Never serialise a song through `serde_json::Value`: its `Map` is a `BTreeMap` and sorts struct field names as well as map keys, silently changing the canonical form | `src/canonical.rs` module note; ADR 0002 §4 |
 | The document has no arrays — every collection is a map keyed by entity id — so `patch` rejects one rather than implementing index handling that cannot be reached | ADR 0001 §3 |

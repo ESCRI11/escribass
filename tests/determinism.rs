@@ -876,6 +876,15 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
                             let answer = answered(client.add_asset(request)).await;
                             json!({"asset_hash": answer.asset_hash})
                         }
+                        // Its own arm, like `add_asset`: a render answers with what it
+                        // produced (song_tools.proto, `RenderResponse`). Every scripted step
+                        // is a dry run, so no engine is started on either transport — what a
+                        // suite with no engine build cannot cover, `tests/AGENTS.md` names.
+                        "render_export" => {
+                            let request: RenderExportRequest = serde_json::from_value(args)
+                                .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
+                            render_shaped(&answered(client.render_export(request)).await)
+                        }
                         unknown => panic!("step {id}: the suite does not know `{unknown}`"),
                     }
                 };
@@ -952,6 +961,23 @@ fn shaped(result: &escribass_proto::tools::ToolResult) -> Value {
     })
 }
 
+/// A `RenderResponse` in the shape MCP puts on the wire (`core/src/mcp.rs`).
+///
+/// `result` is null unless an engine ran, which no scripted step does: every one is a dry run.
+fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
+    json!({
+        "valid": response.valid,
+        "errors": response.errors.iter().map(|e| json!({
+            "path": e.path, "rule": e.rule, "message": e.message,
+        })).collect::<Vec<_>>(),
+        "summary": response.summary,
+        "result": response.result.as_ref().map(|result| json!({
+            "pcm_sha256": result.pcm_sha256,
+            "commits": result.commits,
+        })),
+    })
+}
+
 /// A song, rendered by the canonical writer and parsed — the same document MCP sends as text.
 fn song_shaped(response: escribass_proto::tools::SongResponse) -> Value {
     let song = response.song.expect("a read returns a song");
@@ -1003,6 +1029,64 @@ fn the_origin_is_the_document_a_replay_starts_from() {
     // the first operation. A message field that is absent stays absent — `tempo_map` and
     // `render_target` arrive as `add` operations in the root entry, not as `replace`.
     assert!(document.get("tempo_map").is_none(), "an unset message is omitted, not defaulted");
+}
+
+/// What this suite covers of `render_export`, and what it deliberately does not.
+///
+/// Every scripted step is a **dry run**: it compiles the song and starts no process, which is
+/// the whole of what a machine with no engine build can honestly check (ADR 0006 §3). The
+/// `checks` job is one of those — it does not build the engine, and a real render needs the
+/// binary, three plugins and forty minutes. What is left over is the engine half: the spawn,
+/// the WAV, the hash and the commits. **`tests/renders.rs` (M1 PR 11) owns that**, behind the
+/// cargo feature that makes it absent where it cannot run rather than silently passing.
+///
+/// So the seam itself is what this asserts. Asked for a real render, a server told no engine
+/// answers as an operator error and writes nothing — the one outcome that must never be a
+/// quiet success, because a dry run and a render that did nothing look identical from here.
+#[test]
+fn a_real_render_needs_an_engine_and_says_so_rather_than_pretending() {
+    let directory = Scratch::new("no_engine");
+    let wav = directory.0.with_extension("wav");
+    let call = |id: usize| {
+        json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": {"name": "render_export", "arguments": {
+                "output_path": wav.display().to_string(), "dry_run": false,
+            }}
+        })
+    };
+    let requests = vec![
+        json!({
+            "jsonrpc": "2.0", "id": 0, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": {"name": "escribass-tests", "version": "1"}
+            }
+        }),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        call(1),
+    ];
+
+    // Told nothing: `engine_unset`. The flag is optional so a process that only edits needs no
+    // engine build, and this is what keeps "optional" from meaning "skipped".
+    let frames = speak(&["--create", "--manifest", MANIFEST], &directory.0, &requests);
+    let refused = frames.iter().find(|f| f["id"] == json!(1)).expect("an answer");
+    let message = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("engine_unset"), "expected an operator error, got {refused}");
+    assert_eq!(refused["error"]["code"], json!(-32603), "an operator error, not a refusal");
+    assert!(!wav.exists(), "nothing was rendered and nothing should have been written");
+
+    // Told wrongly: `engine_missing`. A path that is not there is never searched around.
+    let absent = directory.0.join("no-such-engine");
+    let frames = speak(
+        &["--manifest", MANIFEST, "--engine", &absent.display().to_string()],
+        &directory.0,
+        &requests[..2].iter().cloned().chain([call(1)]).collect::<Vec<_>>(),
+    );
+    let refused = frames.iter().find(|f| f["id"] == json!(1)).expect("an answer");
+    let message = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("engine_missing"), "expected an operator error, got {refused}");
+    assert!(!wav.exists());
 }
 
 #[test]

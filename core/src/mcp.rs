@@ -20,9 +20,9 @@ use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest,
-    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SwitchBranchRequest,
-    ToolResult, TransposeRequest,
+    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
+    RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
+    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
@@ -58,6 +58,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "quantize",
     "add_automation",
     "add_asset",
+    "render_export",
     "set_tempo",
     "add_section",
     "move_section",
@@ -156,6 +157,26 @@ fn tool_result(result: &ToolResult) -> CallToolResult {
         "entry_id": result.entry_id,
     });
     complete(structured, !result.valid)
+}
+
+/// A [`RenderResponse`] as MCP carries it.
+///
+/// Built field by field for the same reason a `ToolResult` is: the shape a model reads is
+/// decided here rather than by a generated serializer. `result` is the engine's own message,
+/// nested as the proto nests it, and null when no engine ran — a dry run or a refusal.
+fn render_response(response: &RenderResponse) -> CallToolResult {
+    let structured = json!({
+        "valid": response.valid,
+        "errors": response.errors.iter().map(|e| json!({
+            "path": e.path, "rule": e.rule, "message": e.message,
+        })).collect::<Vec<_>>(),
+        "summary": response.summary,
+        "result": response.result.as_ref().map(|result| json!({
+            "pcm_sha256": result.pcm_sha256,
+            "commits": result.commits,
+        })),
+    });
+    complete(structured, !response.valid)
 }
 
 fn complete(structured: Value, is_error: bool) -> CallToolResult {
@@ -344,6 +365,15 @@ impl ServerHandler for SongTools {
                 let arguments: AddAssetRequest = decode("add_asset", &request)?;
                 let response = session.add_asset(&arguments).map_err(broken)?;
                 complete(json!({"asset_hash": response.asset_hash}), false)
+            }
+            "render_export" => {
+                // Its own arm, like `add_asset`: what comes back is what the render produced,
+                // not a `ToolResult` (song_tools.proto, `RenderResponse`). An engine that
+                // would not run leaves through `broken`, outside §6's retry loop, because
+                // nothing a model says differently would start it (ADR 0006 §2).
+                let arguments: RenderExportRequest = decode("render_export", &request)?;
+                let response = session.render_export(&arguments).map_err(broken)?;
+                render_response(&response)
             }
             "set_tempo" => {
                 let arguments: SetTempoRequest = decode("set_tempo", &request)?;

@@ -312,24 +312,51 @@ pub struct MoveSectionRequest {
 /// RenderPlan (ADR 0007 §4) and hands it to a fresh engine process, which writes the file and
 /// exits (ADR 0008 §2).
 ///
-/// Returns ToolResult with `patch` and `entry_id` empty, as the branch tools do: nothing in
-/// the song changed. `valid` and `errors` are the half that matters — what this engine cannot
-/// render comes back as render_unsupported, naming the field (ADR 0007 §6) — and an engine
-/// that fails is an operator error, since no retry fixes a crash (ADR 0008 §1). The audio's
-/// own answer, its PCM hash and the commits it was built from, is the engine's RenderResult
-/// (render.proto); the file at `output_path` is what this call produces.
+/// `valid` and `errors` are the caller's half: what this engine cannot render comes back as
+/// render_unsupported, naming the field (ADR 0007 §6). An engine that will not start, crashes
+/// or writes nothing is an operator error and never a refusal, since no retry fixes a crash
+/// (ADR 0008 §1).
 ///
 /// dry_run compiles and reports, and spawns no engine: compile is the first half of a render,
 /// exactly as prepare is the first half of a commit (ADR 0006 §3).
-///
-/// Defined here so buf breaking guards it; implemented when the engine exists (M1 PR 10).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RenderExportRequest {
     /// Absolute path of the WAV to write. The engine is handed this and the plan, nothing else.
+    /// A relative one is refused rather than resolved against whatever directory this process
+    /// happens to be in.
     #[prost(string, tag="1")]
     pub output_path: ::prost::alloc::string::String,
     #[prost(bool, tag="2")]
     pub dry_run: bool,
+}
+/// What render_export returns. **Not ToolResult, revised 2026-09-07 in M1 PR 10** — it was
+/// declared as one when this RPC was defined in PR 3, before the engine existed to answer.
+///
+/// Two halves of the same reason. Nothing here is a mutation: `patch` and `entry_id` would be
+/// permanently empty, and ADR 0006 §1 gives the shared result to the tools that produce ops
+/// for the pipeline to record or refuse, not to a tool whose fields are mostly inapplicable.
+/// And a render's own answer — the hash of what it produced, and the commits of the build that
+/// produced it — has nowhere to go in ToolResult, so a caller driving this over MCP could not
+/// see either, while §18.2 publishes the first and ADR 0008 §5 has the render suite compare
+/// the second before it compares a sample. AddAsset set the precedent one section up: a tool
+/// that produces an artefact answers with the artefact's address, and a render's address is
+/// its hash.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RenderResponse {
+    /// False means nothing was rendered and `errors` says why (ADR 0006 §2).
+    #[prost(bool, tag="1")]
+    pub valid: bool,
+    #[prost(message, repeated, tag="2")]
+    pub errors: ::prost::alloc::vec::Vec<Violation>,
+    /// One deterministic line describing the render: its length and what plays. Derived from the
+    /// plan, never from the caller's arguments, so it carries no path (§11).
+    #[prost(string, tag="3")]
+    pub summary: ::prost::alloc::string::String,
+    /// The engine's own answer, by value rather than copied field by field — a field added to
+    /// RenderResult reaches a caller without touching this file (ADR 0006 §4, one boundary
+    /// over). Absent on a dry run and on a refusal: no engine ran.
+    #[prost(message, optional, tag="4")]
+    pub result: ::core::option::Option<super::super::render::v1::RenderResult>,
 }
 // ---------------------------------------------------------------------------
 // Branches (ADR 0001 §2, §4)
