@@ -12,9 +12,9 @@
 // than a scan (ADR 0008 §2). Where a shipped engine finds that file is still PR 9's question —
 // core is the one that will pass it — so it is an argument here and not a search.
 //
-// ponytail: this PR hosts devices, places notes and drives automation. An audio clip is PR 8's
-// and is refused rather than dropped, because a render that completes with a clip missing is
-// the failure ADR 0010 §3 spends a table refusing: it sounds wrong and says nothing.
+// ponytail: a sampler instrument is still refused rather than voiced — an SFZ from assets/
+// loaded into sfizz is PR 8b's — because a render that completes with a device missing is the
+// failure ADR 0010 §3 spends a table refusing: it sounds wrong and says nothing.
 //
 // `--scan` is the build's second use of this binary (ADR 0010 §4). It opens each bundled VST3
 // once, asks it what it is, and writes the manifest. It lives here rather than in a second
@@ -24,6 +24,7 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 #include <juce_cryptography/juce_cryptography.h>
+#include <rubberband/RubberBandStretcher.h>
 
 #include "provenance.h"
 #include "render.pb.h"
@@ -31,17 +32,22 @@
 #include <pmmintrin.h>
 #include <xmmintrin.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unistd.h>
 #include <vector>
 
 namespace te = tracktion;
+using escribass::render::v1::PlanClip;
 using escribass::render::v1::PlanLane;
 using escribass::render::v1::PlanTrack;
 using escribass::render::v1::RenderPlan;
@@ -363,6 +369,159 @@ private:
     std::map<std::string, juce::PluginDescription> byId;
 };
 
+// -----------------------------------------------------------------------------------------
+// Audio clips (PR 8)
+// -----------------------------------------------------------------------------------------
+
+// ADR 0011 §3's option word, written out in full. Every group Rubber Band 4.0.0 declares is
+// named, the eight whose value is numerically zero included, because the point is not what the
+// number comes to — it comes to `OptionEngineFiner | OptionThreadingNever` — but that a moved
+// upstream default shows up as a diff in this file rather than as a golden nobody can account
+// for (trap 15: a pinned version of a phase vocoder is not a pinned output).
+//
+// Two are worth reading rather than skimming. `OptionProcessOffline` is what runs the study
+// pass, and it is also what makes Rubber Band pad and compensate its own delay so a stretched
+// result has an exact start and duration — the property `audio` below relies on when it asks
+// for a buffer the length of the clip. `OptionThreadingNever` is ADR 0009 §3's single thread,
+// and it is inert twice over: the flag is read only by the R2 engine (R2Stretcher.cpp is the
+// only file in the library that mentions it), and the single-file build compiles threading out
+// with `NO_THREADING`. It is passed anyway, because a configuration that would change meaning
+// if the engine choice moved is not a configuration.
+constexpr auto kStretchOptions = RubberBand::RubberBandStretcher::OptionProcessOffline
+                               | RubberBand::RubberBandStretcher::OptionEngineFiner
+                               | RubberBand::RubberBandStretcher::OptionThreadingNever
+                               | RubberBand::RubberBandStretcher::OptionStretchElastic
+                               | RubberBand::RubberBandStretcher::OptionTransientsCrisp
+                               | RubberBand::RubberBandStretcher::OptionDetectorCompound
+                               | RubberBand::RubberBandStretcher::OptionPhaseLaminar
+                               | RubberBand::RubberBandStretcher::OptionWindowStandard
+                               | RubberBand::RubberBandStretcher::OptionSmoothingOff
+                               | RubberBand::RubberBandStretcher::OptionFormantShifted
+                               | RubberBand::RubberBandStretcher::OptionPitchHighSpeed
+                               | RubberBand::RubberBandStretcher::OptionChannelsApart;
+
+// ADR 0009 §4's sample-rate conversion, and the only place in the engine a rate is converted.
+//
+// `juce::LagrangeInterpolator` is a fixed 5-point Lagrange polynomial: no options to pin, no
+// runtime CPU dispatch, and `reset()` zeroes the four samples of history it carries, so its
+// output is a pure function of the input, the ratio and the JUCE commit §17 pins. `ratio` is
+// the asset's rate over the render's — input samples consumed per output sample.
+//
+// ponytail: no anti-aliasing filter, so downsampling folds everything above the new Nyquist.
+// M1's fixture is at the render rate and this path exists so a mismatched asset plays rather
+// than being refused (ADR 0009 §4); a band-limited resampler is the upgrade the first time a
+// project downsamples something bright.
+juce::AudioBuffer<float> resampled (const juce::AudioBuffer<float>& in, double ratio, int frames)
+{
+    juce::AudioBuffer<float> out (in.getNumChannels(), frames);
+    out.clear();
+    juce::LagrangeInterpolator interpolator;
+    for (int channel = 0; channel < in.getNumChannels(); ++channel)
+    {
+        interpolator.reset();
+        // The overload that is told how much input exists: the five-point kernel reads past
+        // the sample it is producing, and the last output frame is at the end of the asset.
+        interpolator.process (ratio, in.getReadPointer (channel), out.getWritePointer (channel),
+                              frames, in.getNumSamples(), 0);
+    }
+    return out;
+}
+
+// The asset stretched to fill the clip, pitch unchanged (ADR 0011 §3). `frames` is the clip's
+// length in samples, and the ratio is derived from it here rather than carried in the plan
+// because `compile` reads no file and so cannot know the asset's duration (ADR 0007 §4).
+//
+// The block size is Rubber Band's own: `getSamplesRequired()` is the documented mode for a
+// caller with no external constraint, and taking it means there is no block-size constant of
+// ours for a golden to depend on. Draining while `available()` is positive and stopping at
+// zero is what the library's own command line does when threading is off, which here it always
+// is (main/main.cpp, the "completing" loop).
+juce::AudioBuffer<float> stretched (const juce::AudioBuffer<float>& in, double rate, int frames)
+{
+    const auto channels = (size_t) in.getNumChannels();
+    const auto total = in.getNumSamples();
+
+    RubberBand::RubberBandStretcher stretcher ((size_t) rate, channels, kStretchOptions,
+                                               frames / (double) total, 1.0);
+    stretcher.setExpectedInputDuration ((size_t) total);
+
+    std::vector<const float*> input (channels);
+    for (size_t channel = 0; channel < channels; ++channel)
+        input[channel] = in.getReadPointer ((int) channel);
+    // Any number of samples at a time is allowed in the study pass, and there is one clip's
+    // worth of them, so it is one call.
+    stretcher.study (input.data(), (size_t) total, true);
+
+    juce::AudioBuffer<float> out (in.getNumChannels(), frames);
+    out.clear();
+    juce::AudioBuffer<float> block (in.getNumChannels(), 1);
+    std::vector<float*> output (channels);
+    int written = 0;
+
+    const auto drain = [&]
+    {
+        for (int available = stretcher.available(); available > 0; available = stretcher.available())
+        {
+            block.setSize (in.getNumChannels(), available, false, false, true);
+            for (size_t channel = 0; channel < channels; ++channel)
+                output[channel] = block.getWritePointer ((int) channel);
+            const auto got = (int) stretcher.retrieve (output.data(), (size_t) available);
+            // Anything past the clip's end is dropped rather than kept: offline mode
+            // compensates its own delay, so an overrun is the ratio's rounding and not a tail
+            // that belongs anywhere. It must still be retrieved, or the stretcher stalls.
+            const auto room = std::min (got, frames - written);
+            for (int channel = 0; channel < in.getNumChannels() && room > 0; ++channel)
+                out.copyFrom (channel, written, block, channel, 0, room);
+            written = std::min (frames, written + got);
+        }
+    };
+
+    for (int read = 0; read < total;)
+    {
+        const auto want = std::clamp ((int) stretcher.getSamplesRequired(), 1, total - read);
+        for (size_t channel = 0; channel < channels; ++channel)
+            input[channel] = in.getReadPointer ((int) channel, read);
+        read += want;
+        stretcher.process (input.data(), (size_t) want, read >= total);
+        drain();
+    }
+    drain();
+    return out;
+}
+
+// ADR 0011 §2's formula, and it is **ours** rather than Tracktion's fade shapes for the reason
+// ADR 0002 §8 gives for the automation curves: a shape the renderer chose is one §11's
+// bit-exactness is at the mercy of, and one a second renderer cannot reimplement.
+//
+//   g_in(n)  = 1 if f_in == 0, else min(1, n / f_in)
+//   g_out(n) = 1 if f_out == 0, else min(1, (N - n) / f_out)
+//   out(n)   = in(n) * 10^(gain_db / 20) * g_in(n) * g_out(n)
+//
+// Three properties are the formula's, not this code's, and they are what remove the special
+// cases: `g_in(0)` is zero, which is the click a fade exists to remove; the two ramps multiply,
+// so fades that overlap need no clamping rule; and both are linear in amplitude, because a
+// dB-linear ramp never reaches silence.
+//
+// The three factors are combined in double and applied to the sample once. Float multiplication
+// is not associative, so the order is a decision and not a formatting choice — this is the one
+// the formula's own left-to-right reading gives once the constants are folded.
+void shape (juce::AudioBuffer<float>& buffer, double gainDb, int fadeIn, int fadeOut)
+{
+    const auto frames = buffer.getNumSamples();
+    const auto gain = std::pow (10.0, gainDb / 20.0);
+
+    for (int n = 0; n < frames; ++n)
+    {
+        auto g = gain;
+        if (fadeIn > 0)
+            g *= std::min (1.0, n / (double) fadeIn);
+        if (fadeOut > 0)
+            g *= std::min (1.0, (frames - n) / (double) fadeOut);
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            buffer.getWritePointer (channel)[n] *= (float) g;
+    }
+}
+
 // Builds the edit the plan describes.
 //
 // Everything it reads is already resolved (ADR 0007 §1): mixer order, chain order, loop
@@ -372,7 +531,9 @@ private:
 class Builder {
 public:
     Builder (te::Edit& e, Plugins& p, const RenderPlan& plan_, te::TimePosition end_)
-        : edit (e), plugins (p), plan (plan_), end (end_)
+        : edit (e), plugins (p), plan (plan_), end (end_),
+          rate (plan_.target().sample_rate()),
+          scratch (e.engine.getPropertyStorage().getAppCacheFolder())
     {
         for (const auto& event : plan.tempo())
             tempoTicks.push_back (event.tick());
@@ -439,7 +600,7 @@ private:
         }
         if (auto* fader = target.getVolumePlugin(); fader != nullptr && source.has_mix())
             mix (*fader, source.mix());
-        return notes (target, source);
+        return clips (target, source);
     }
 
     // `mute` and `solo` were applied by compile and cross false (ADR 0007 §1), so a mix is a
@@ -471,8 +632,9 @@ private:
     {
         if (! ref.has_plugin())
             // compile refuses the compiled kinds (ADR 0007 §6) and lets a SamplerRef through,
-            // because §16 puts the sampler in M1 — but a sampler is an SFZ from assets/ and
-            // assets are PR 8's, so nothing hosts one yet. Refused rather than rendered silent.
+            // because §16 puts the sampler in M1 — but a sampler is an SFZ from assets/ loaded
+            // into sfizz, which is PR 8b's. Refused rather than rendered silent: sfizz with no
+            // SFZ loaded is a plugin that opens, reports nothing wrong and silences its track.
             return tl::unexpected (std::string ("a device in the plan is not a plugin; a sampler is"
                                                 " an SFZ from assets/, which no PR has hosted yet"));
         const auto& id = ref.plugin().plugin_id();
@@ -538,6 +700,15 @@ private:
         return plugin;
     }
 
+    // Where a model tick falls on the timeline. The tempo map was put on the edit's own
+    // sequence before this builder ran, so one owner converts tick to time and there is one
+    // rounding site rather than two (ADR 0007 §3). Widened to 64 bits because an absolute tick
+    // is summed before it is converted (ADR 0002 §1).
+    te::TimePosition at (juce::int64 tick)
+    {
+        return edit.tempoSequence.toTime (te::BeatPosition::fromBeats (tick / (double) kPpq));
+    }
+
     // ADR 0002 §8's two curves, and they are **ours** rather than Tracktion's. `curve` on a
     // point is the shape of the segment from that point to the next; before the first point the
     // value is the first point's, and after the last it is the last's.
@@ -558,10 +729,6 @@ private:
     void place (te::AutomatableParameter& param, const PlanLane& lane)
     {
         auto& curve = param.getCurve();
-        const auto at = [this] (int tick)
-        {
-            return edit.tempoSequence.toTime (te::BeatPosition::fromBeats (tick / (double) kPpq));
-        };
 
         for (int i = 0; i < lane.points_size(); ++i)
         {
@@ -593,23 +760,26 @@ private:
         param.updateStream();
     }
 
-    // One MIDI clip per track, spanning the render, with every note at its absolute beat.
+    // What a track plays: one MIDI clip per track spanning the render with every note at its
+    // absolute beat, and one Tracktion audio clip per audio clip.
     //
-    // `compile` already unrolled every loop and cut every note to the clip holding it
-    // (core/src/render.rs), so a plan clip's boundary carries nothing left for the engine to
-    // reproduce — and one clip is one fewer Tracktion behaviour (loop flags, content offset,
-    // clip length, per-clip mute) standing between a note and its MIDI.
-    //
-    // ponytail: PR 8's audio clips are Tracktion clips, because an asset has a length, a gain
-    // and fades of its own that belong to the clip. A note has none of that.
-    std::string notes (te::AudioTrack& target, const PlanTrack& source)
+    // Notes need no clip boundary of their own. `compile` already unrolled every loop and cut
+    // every note to the clip holding it (core/src/render.rs), so a plan clip's edges carry
+    // nothing left for the engine to reproduce — and one clip is one fewer Tracktion behaviour
+    // (loop flags, content offset, clip length, per-clip mute) standing between a note and its
+    // MIDI. An asset is the other case: it has a length, a gain and fades of its own, and
+    // `audio` below is where those become samples.
+    std::string clips (te::AudioTrack& target, const PlanTrack& source)
     {
         te::MidiClip::Ptr midi;
         for (const auto& clip : source.clips())
         {
             if (clip.has_audio())
-                return "the plan has an audio clip; playing one is PR 8's, and a render that "
-                       "left it out would sound wrong and say nothing (ADR 0010 §3)";
+            {
+                if (const auto why = audio (target, clip); ! why.empty())
+                    return why;
+                continue;
+            }
             if (! clip.has_notes())
                 // compile's `oneof_unset` arm produces no plan clip at all, so this is unreachable
                 // from a valid song and is here because the alternative is a silent skip.
@@ -635,11 +805,151 @@ private:
         return {};
     }
 
+    // One audio clip: the asset, at the clip's position, at its gain, with its fades, and
+    // stretched to fill the clip when it asks (ADR 0011 §2 and §3).
+    //
+    // Everything the model says about the clip is applied here, into a buffer, and what
+    // Tracktion is handed is a file of exactly the clip's length with no gain, no fade and no
+    // stretch of its own. That follows from one decision, ADR 0011 §2's: the fade shape is ours,
+    // so it cannot be a property set on a Tracktion clip. Once the samples have to be touched
+    // for that, the stretch and the rate conversion come along — and every surface that
+    // computes audio is then in one place with one determinism note each (ADR 0009 §4), rather
+    // than split across a question about what Tracktion did in between.
+    //
+    // ponytail: the whole asset is read into memory and one WAV per clip is written to the
+    // process's scratch directory, which `TempDir` deletes on the way out. The ceiling is an
+    // asset that does not fit in RAM, or a plan with hundreds of clips; the upgrade is a
+    // streaming pass, and neither is a shape M1 renders.
+    std::string audio (te::AudioTrack& target, const PlanClip& clip)
+    {
+        const auto& source = clip.audio();
+        const auto& held = source.clip();
+        const auto first = (juce::int64) clip.start_tick();
+        const auto last = first + clip.length_ticks();
+
+        if (held.fade_in_ticks() < 0 || held.fade_out_ticks() < 0)
+            // A fade is a length. The formula would read a negative one as a ramp through zero
+            // into an inverted signal, which is not something anyone asked for.
+            return "an audio clip has a negative fade length";
+
+        const auto start = te::toSamples (at (first), rate);
+        const auto frames = (int) (te::toSamples (at (last), rate) - start);
+        if (frames <= 0)
+            return "an audio clip of " + std::to_string (clip.length_ticks())
+                   + " ticks is under one sample long at this tempo and rate";
+
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        const juce::File file (source.path());
+        const std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+        if (reader == nullptr)
+            // core resolved this path from the clip's `asset_hash` and refused a hash `assets/`
+            // does not hold (core/src/render.rs), so what is left here is a file that is not
+            // audio this build reads, or one that has gone since the plan was compiled.
+            return "'" + source.path() + "' is not an audio file this engine reads";
+        if (reader->numChannels < 1 || reader->numChannels > 2)
+            return "'" + source.path() + "' has " + std::to_string (reader->numChannels)
+                   + " channels; M1 renders a stereo master from mono and stereo assets";
+        if (reader->lengthInSamples <= 0
+            || reader->lengthInSamples > (juce::int64) std::numeric_limits<int>::max())
+            return "'" + source.path() + "' holds " + std::to_string (reader->lengthInSamples)
+                   + " sample frames, which is not something to play";
+        if (! (reader->sampleRate > 0.0))
+            return "'" + source.path() + "' declares a sample rate of "
+                   + std::to_string (reader->sampleRate);
+
+        juce::AudioBuffer<float> buffer ((int) reader->numChannels, (int) reader->lengthInSamples);
+        if (! reader->read (&buffer, 0, buffer.getNumSamples(), 0, true, true))
+            return "could not read '" + source.path() + "'";
+
+        // ADR 0009 §4: an asset that does not match the render's rate is **converted, not
+        // stretched**, and that happens whether or not the clip asks for a stretch.
+        if (reader->sampleRate != rate)
+            // At least one frame: an asset shorter than one frame at the render's rate would
+            // otherwise become an empty buffer and a clip of silence with nothing to say so.
+            buffer = resampled (buffer, reader->sampleRate / rate,
+                                std::max (1, (int) std::llround (buffer.getNumSamples() * rate
+                                                                 / reader->sampleRate)));
+
+        // ADR 0011 §3: a stretched clip fills its own musical length. `compile` unrolled a loop
+        // into one plan clip per iteration and refused one whose last iteration is short, so
+        // the length here is the unit that repeats and never a truncated one (render.proto,
+        // PlanAudio; ADR 0007 §6 as amended).
+        if (held.time_stretch() && buffer.getNumSamples() != frames)
+            buffer = stretched (buffer, rate, frames);
+
+        // Exactly the clip, which is what makes the fades below run over the clip's length and
+        // not the asset's: a shorter asset ends in silence, a longer one stops, and both are
+        // what ADR 0011 §3 says an unstretched clip does.
+        buffer.setSize (buffer.getNumChannels(), frames, true, true, false);
+        shape (buffer, held.gain_db(),
+               (int) (te::toSamples (at (first + held.fade_in_ticks()), rate) - start),
+               (int) (te::toSamples (at (last), rate)
+                      - te::toSamples (at (last - held.fade_out_ticks()), rate)));
+
+        const auto processed = scratch.getChildFile ("clip" + juce::String (++placed) + ".wav");
+        {
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> out (processed.createOutputStream());
+            if (out == nullptr)
+                return "could not open " + processed.getFullPathName().toStdString() + " to write";
+            // 32-bit float, said rather than inherited: `gain_db` has no upper bound in §4.4, so
+            // an integer intermediate would clip a hot clip here — before the mix, the chain and
+            // the master, which are where a render's level is actually decided.
+            const std::unique_ptr<juce::AudioFormatWriter> writer (
+                wav.createWriterFor (out, juce::AudioFormatWriter::Options {}
+                                              .withSampleRate (rate)
+                                              .withNumChannels (buffer.getNumChannels())
+                                              .withBitsPerSample (32)
+                                              .withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint)));
+            if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (buffer, 0, frames))
+                return "could not write " + processed.getFullPathName().toStdString();
+        }
+        // The scope above closes the writer, and closing it is what finishes the file: a WAV's
+        // `data` size is written by the writer's destructor, so a file handed to Tracktion
+        // before that reads back as zero frames long — a clip of silence with nothing to say
+        // it went wrong.
+
+        // The file is at the render's rate and holds exactly the clip's frames, so nothing the
+        // clip could carry is set: no stretch, no gain, no fade, no loop, no offset. The clip
+        // is a placement.
+        //
+        // Tracktion still reads it through a `juce::LagrangeInterpolator` — `WaveNode::
+        // processSection` does that for every wave clip whatever the ratio. At the 1:1 the line
+        // above guarantees, the kernel is a delta and the samples come back bit-identical
+        // (measured: zero difference over a rendered clip), but the interpolator's two-sample
+        // base latency is not compensated, so the clip sounds two samples after its position.
+        // Upstream's, deterministic, and written down in ADR 0009 §4 and §8 rather than worked
+        // around here, because the workaround would be a compensation coupled to a JUCE
+        // internal for 42 microseconds.
+        const te::ClipPosition position { te::TimeRange (at (first), at (last)), te::TimeDuration() };
+        auto inserted = target.insertWaveClip (processed.getFileNameWithoutExtension(), processed, position, false);
+        if (inserted == nullptr)
+            return "Tracktion would not put an audio clip on a track";
+
+        // The path is forced absolute, because `insertWaveClip` stores a relative one and this
+        // edit cannot resolve it: `SourceFileReference::findFileFromString` resolves a relative
+        // source against the project manager's edit file, and a render edit has no project, so
+        // the clip ends up pointing at a file that does not exist. That does not fail — a
+        // WaveNode whose file is missing never reports itself ready, and NodeRenderContext's
+        // `leafNodesReady` loop sleeps on it forever. A hang, not an error, and the engine's own
+        // dispatch loop would wait behind it. Absolute is what the plan hands us in the first
+        // place (ADR 0008 §1).
+        inserted->getSourceFileReference().setToFile (processed, te::SourceFileReference::PathStyle::alwaysAbsolute, false);
+        return {};
+    }
+
     te::Edit& edit;
     Plugins& plugins;
     const RenderPlan& plan;
     const te::TimePosition end;
     std::vector<int> tempoTicks;
+
+    // What an audio clip is resolved into samples with: the render's own rate, and the
+    // directory `TempDir` deletes on the way out, which is where the processed clips go.
+    const double rate;
+    const juce::File scratch;
+    int placed = 0;
 };
 
 int run (const juce::File& manifestFile)

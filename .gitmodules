@@ -13,3 +13,6 @@
 [submodule "engine/vendor/dexed"]
 	path = engine/vendor/dexed
 	url = https://github.com/asb2m10/dexed.git
+[submodule "engine/vendor/rubberband"]
+	path = engine/vendor/rubberband
+	url = https://github.com/breakfastquay/rubberband.git

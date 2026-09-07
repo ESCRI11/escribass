@@ -19,6 +19,7 @@ inline constexpr Commit engineCommits[] = {
     { "tracktion_engine", "@COMMIT_TRACKTION_ENGINE@" },
     { "juce",             "@COMMIT_JUCE@" },
     { "protobuf",         "@COMMIT_PROTOBUF@" },
+    { "rubberband",       "@COMMIT_RUBBERBAND@" },
 };
 
 // The bundled instruments of docs/specs.md §8. sfizz itself is not here: it is not a submodule
