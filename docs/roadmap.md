@@ -37,8 +37,10 @@ terminal — edit bar 17 through the tool API, re-render, and a sample diff show
 confined to bar 17. Render hashes land in golden tests (§11). *Real:* differentiator 1.
 
 **M2 — UI.** Open the project in a desktop app, see the arrangement and the piano roll, press
-play and hear it; open the mixer and the patch-log history (§9). Every view is a read of the
-model; every control is a tool call (§2.1).
+play and hear it; open the mixer, the instrument and effect editors, and the patch-log history
+(§9). Every view is a read of the model; every control is a tool call (§2.1). The editors were
+added 2026-09-07 — §9's seventh view sat in no milestone at all until ADR 0014 §1 placed it.
+Linux x86-64, as M1: macOS and Windows are unclaimed rather than contradicted (ADR 0014 §2).
 *Proof:* the bar-17 demo with the edit visible on the timeline and in the roll. *Real:*
 nothing new; differentiator 3 becomes something a person can see.
 
@@ -161,10 +163,13 @@ the canonical demo has no sound.
 protected by habit. The determinism suite is M0.4, after `core` and the tool API, so the two
 largest pieces of M0 are built before the byte-for-byte check exists.
 
-**4. Merge is designed blind.** ADR 0001 §4 auto-merges disjoint paths and defers interactive
-resolution to M2. One hole is already known: dense `index` on tracks and effects lets two
-valid branches auto-merge into an invalid document (`plan.md`, deferred to M0.3). Closing it
-is a schema change — another ADR against the foundation.
+**4. Merge is designed blind.** ADR 0001 §4 auto-merges disjoint paths and deferred interactive
+resolution to M2; ADR 0015 §3 takes it there as one optional per-path field on `merge_branch`,
+which is the smallest thing that finishes a merge. One hole stays open: dense `index` on tracks
+and effects lets two valid branches auto-merge into an invalid document (`plan.md`, deferred to
+M0.3). Closing it is a schema change — another ADR against the foundation — and its trigger is
+now an event rather than a milestone: the first gesture that reorders a chain or inserts a track
+mid-list, which M2 is on record as not offering (ADR 0015 §4).
 
 **5. M0 carries everything; M4 now carries the rest.** M0 holds the model, the tool API,
 branching, merge and an MCP surface, and its scope has already grown once (`b402dc0`). ADR

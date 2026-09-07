@@ -55,6 +55,19 @@ instrument. One synth proves the render path; the set is what M1 delivers.
 are projections of the model and need nothing beyond M0 and M1, so they belong with the other
 projections.
 
+- **Amended 2026-09-07:** and the **instrument and effect editors**, which is §9's seventh view
+  and which this decision missed. It read §9's list as six views placed and one — the code
+  views — deferred to decision 8; the editors were named in the same breath as the code views
+  and placed nowhere, so the milestone that gets a plugin editor was never written down. That
+  is the failure this ADR exists to prevent, in the ADR itself. They are M2's, on this
+  decision's own test: a projection of the model needing nothing beyond M0 and M1. What M2
+  builds is the *generic* editor — a form over the build manifest, which already maps a
+  `ParamID` to a display name (ADR 0010 §4) — and not the plugin's own VST3 window, which needs
+  a window handle inside the engine process and is a different feature. Three rows of
+  `plan.md`'s deferred ledger waited on "the first milestone that lets a user choose a patch";
+  with the milestone named, all three are restated against what this editor actually does, and
+  two of them turn out not to be M2's (ADR 0014 §1, §3).
+
 ### 6. The Libretto-grammar ADR precedes M3
 
 §18.2 Stage 1 requires it "before M3" and it was in no milestone. It sets the LLM-facing view

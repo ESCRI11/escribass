@@ -21,6 +21,19 @@
       "date": "2022-12-12",
       "note": "C++ runtime and protoc for the engine, built from the submodule; the engine's CMake generates song.proto and render.proto at build time (ADR 0008 §4, pinned 2026-09-06). The last line before abseil, and what Ubuntu 24.04 packages. Added in M1 PR 5 as a new dependency, pending sign-off (CLAUDE.md #4)."
     },
+    "grpc": {
+      "version": "1.54.3",
+      "tag": "v1.54.3",
+      "commit": "868412b573a0663c8db41558498caf44098f4390",
+      "date": "2023-07-25",
+      "repo": "grpc/grpc",
+      "abseil": {
+        "commit": "b971ac5250ea8de900eae9f95e06548d14cd95fe",
+        "lts": "20230125",
+        "note": "grpc's own third_party/abseil-cpp, pinned by the grpc commit above as juce is pinned by tracktion_engine's. Not a separate submodule of ours. sfizz-ui vendors abseil of the same LTS release inside its own ExternalProject, which is a separate CMake tree, so the two never meet."
+      },
+      "note": "grpc++ for the engine's Render and Preview services at M2 (ADR 0013 §1). Chosen as the NEWEST release whose own third_party/protobuf submodule is f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c — byte for byte the `protobuf` entry above — so gRPC's protobuf and ours are one pin rather than two that must agree. v1.52.2 and earlier pin v21.9; v1.55.0 pins protobuf 22.x, where abseil becomes protobuf's own dependency and ADR 0008 §4's reason for the v21.12 pin stops holding. Verified 2026-09-07: configured and built libgrpc++.a and grpc_cpp_plugin against engine/vendor/protobuf itself under -march=x86-64 -mtune=generic -ffp-contract=off (1345 targets, 2m53s on 20 jobs), emitting no -ffast-math, no second -march, and only the -maes/-msse4.1 on abseil's randen that engine/cmake/check_flags.cmake already allows. NOT yet verified, and PR 0 settles both before PR 9: that it coexists with the engine's existing add_subdirectory(vendor/protobuf) in one tree, and what it costs on a two-core runner. Approved as a dependency under CLAUDE.md #4. Inert until PR 9 adds it to tests/renders.rs's COMPONENTS and the engine job's component list."
+    },
     "rubberband": {
       "version": "4.0.0",
       "commit": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
@@ -90,15 +103,38 @@
     }
   },
   "app": {
+    "_note": "app/'s direct dependencies, enumerated by exact version the way `schema` is, with the tree's integrity hashes in app/package-lock.json (docs/specs.md §17, registry packages). Signed off as ONE set under CLAUDE.md #4 (ADR 0016 §2); anything beyond this list goes back to a person before it is installed. Deliberately absent, each with its cost written out in ADR 0016 §3: any state library, any test framework, any CSS or component framework, and @vitejs/plugin-react. No app.* package can reach a render, so §17's golden-render pass is vacuous here and says so rather than being skipped (ADR 0016 §4). Written 2026-09-07 in M2 PR 1; nothing installs from it until PR 2 writes app/package.json.",
     "tauri": {
       "version": "2.11.5",
-      "cli": "2.11.4"
+      "cli": "2.11.4",
+      "api": "2.11.1",
+      "note": "one Rust crate and two npm packages on separate version lines. The webview Tauri renders in — WebKitGTK, WKWebView, WebView2 — ships with the operating system and cannot be pinned by anyone (ADR 0016 §5)."
     },
     "react": {
-      "version": null
+      "version": "19.2.8"
+    },
+    "react_dom": {
+      "version": "19.2.8"
+    },
+    "types_react": {
+      "version": "19.2.18"
+    },
+    "types_react_dom": {
+      "version": "19.2.7"
+    },
+    "vite": {
+      "version": "8.2.2",
+      "note": "the one build dependency. React ships CommonJS and bare specifiers do not resolve in a browser, so tsc plus an import map is more configuration than a bundler, not less."
     },
     "codemirror": {
-      "version": "6.x"
+      "version": "6.0.2",
+      "note": "no consumer until M4's code views (ADR 0003 §8). Pinned now anyway: it replaces `\"6.x\"`, which was not a pin and would have re-resolved silently on the first install."
+    },
+    "_reused": {
+      "typescript": "5.9.3",
+      "bufbuild_protobuf": "2.14.1",
+      "tsx": "4.23.13",
+      "note": "already pinned under `schema.typescript`; app/ is a new consumer, not a new dependency. @bufbuild/protobuf is the runtime the generated TypeScript imports; tsx runs the projection golden under node:test (ADR 0012 §5)."
     }
   },
   "ai": {
@@ -111,8 +147,9 @@
   "notes": [
     "commit: null means the tag hash must be resolved and filled in when the dependency is first vendored.",
     "JUCE is never upgraded independently of tracktion_engine.",
-    "Any change here requires an ADR and a full golden-render pass.",
-    "bundled_plugins resolved from upstream git on 2026-09-05 (ADR 0010); date is the commit's own date. sfizz_ui is a new entry, not a re-pin."
+    "Any change here requires an ADR, and a full golden-render pass if the pin can reach a render; a pin that cannot says why in its ADR rather than skipping in silence (docs/specs.md §17, last rule; ADR 0016 §4).",
+    "bundled_plugins resolved from upstream git on 2026-09-05 (ADR 0010); date is the commit's own date. sfizz_ui is a new entry, not a re-pin.",
+    "app and engine.grpc added 2026-09-07 in M2 PR 1 (ADR 0013 §1, ADR 0016). The frontend set is one sign-off; the golden-render pass is required of any pin that can reach a render, and app.* cannot."
   ],
   "schema": {
     "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md §17, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",

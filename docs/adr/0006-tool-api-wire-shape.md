@@ -155,6 +155,22 @@ parameters, so M0.2's tests are untouched; the session passes its own through. B
 accept flags selecting `SeededIds` and `FixedClock`, which is what lets M0.4 compare two
 scripted sessions byte for byte *through a real server* rather than only through the library.
 
+**Amended 2026-09-07, when `app` arrived with File · Open.** The rule is **one session per
+project**, not one project per process, and the part this decision was protecting is unchanged:
+there is still no `open_project` *tool*, and the wire surface does not grow. What changes is who
+may construct a session. A desktop application opens a second document in a second window, and
+this decision's own words leave the room for it — `--create` was never a tool either — so
+`app`'s host constructs a `Session` as a library call and keeps one per project directory, which
+makes two windows on one project share a session rather than race inside one address space. An
+`open_project` tool is still refused, for the reason given above that M2 does not remove: an MCP
+stdio process is still not a session.
+
+The sentence "a lock file is M2's problem" is also now due. `core` takes one: `.escri/lock`,
+created with `create_new`, holding the pid, released on a clean close, reported and never broken
+automatically if it is already there. The single-writer assumption stops being structural the
+moment a host can open two projects, and ADR 0004's three renames interleaved is not a failure
+worth leaving to convention (ADR 0012 §3).
+
 ### 6. MCP is served by `rmcp`; `patch` crosses as a JSON array, never base64
 
 The MCP server uses the official Rust SDK (`rmcp`, pinned in `lock.baseline.json`) rather than
