@@ -718,6 +718,9 @@
     "valid": true
   },
   {
+    "asset_hash": "3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"
+  },
+  {
     "entry_id": "01M1FPMP00000000000000001M",
     "errors": [],
     "patch": [
@@ -738,7 +741,7 @@
             },
             "ref": {
               "sampler": {
-                "sfz_hash": "5d41402abc4b2a76b9719d911017c592"
+                "sfz_hash": "3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"
               }
             },
             "state": "",
@@ -1285,7 +1288,7 @@
           },
           "ref": {
             "sampler": {
-              "sfz_hash": "5d41402abc4b2a76b9719d911017c592"
+              "sfz_hash": "3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"
             }
           },
           "state": "",

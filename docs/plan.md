@@ -460,7 +460,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 6 | `m1.6-plugins` | Three plugin submodules, manifests, the bundle cache |
 | 7 | `m1.7-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
 | 8 | `m1.8-audio` | Asset playback, gain and fades, Rubber Band vendored and pinned for stretch |
-| 8b | `m1.8b-sampler` | `Instrument.kind: sampler` — an SFZ from `assets/` loaded into sfizz. §16 puts the sampler in M1 and no PR owned it; §11 wants a golden per bundled instrument, and sfizz with no SFZ loaded silences its whole track, so PR 11's sfizz fixture depends on this |
+| 8b | `m1.8b-sampler` | `Instrument.kind: sampler` — an SFZ from `assets/` loaded into sfizz. §16 puts the sampler in M1 and no PR owned it; §11 wants a golden per bundled instrument, so PR 11's sfizz fixture depends on this. **Done.** The row's premise was half wrong: sfizz with no SFZ is *not* silent — its default patch is `<region>sample=*sine`, so what a fixture would have goldened is a sine and not a sampler. The real hazard is one layer in, and measured: an SFZ whose sample cannot be resolved renders silence and exits zero |
 | 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
 | 10 | `m1.10-render-export` | `Session::render_export` and `add_asset` over both transports |
 | 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip |

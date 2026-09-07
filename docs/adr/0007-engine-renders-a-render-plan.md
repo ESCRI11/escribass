@@ -76,6 +76,28 @@ its layout, its hashing, its history. A file the engine is handed a path to is i
 engine learns nothing about where it came from. Embedding the bytes instead would put every
 sample of every asset through stdin and into the plan golden.
 
+**Extended 2026-09-07, when the sampler met it.** A sampler's SFZ crosses the same way:
+`PlanInstrument` carries `Instrument` by value — `SamplerRef.sfz_hash` included — beside
+`sfz_path`, the absolute path core resolved from that hash. That is this decision applied
+rather than a new one; what makes it worth recording is *why* a path is the only thing that
+could have crossed. An SFZ is not self-contained. It names its samples with relative paths,
+and `assets/` is content-addressed — one file per asset under its SHA-256, no directory and
+no extension (§10, `core/src/project.rs`) — so the bytes of an SFZ would arrive without the
+samples they name, and no message this ADR could add would carry them either.
+
+What resolves it is the store's own flat shape. sfizz looks a `sample=` up against the
+directory the SFZ was loaded from (`FilePool::checkSample`), so an SFZ stored in `assets/`
+reaches its siblings and nothing else — and a sibling there is another asset, addressed by
+its own hash. **M1 renders exactly that case: an SFZ whose `sample=` values are the hashes of
+the assets beside it.** It needs no staging directory, no rewriting, no name on an asset and
+no change to `add_asset`, which takes bytes and returns a hash.
+
+The general case — an SFZ downloaded with its samples under the names it was written against
+— is refused rather than half-supported, because supporting it needs an asset that knows its
+own name, and that is a `song.proto` question with an ADR of its own. Refused *loudly*: sfizz
+drops a region whose sample it cannot find and reports nothing (ADR 0009 §4), so the
+alternative is a track of silence that exits zero.
+
 ### 3. Time crosses as ticks plus tempo events; the engine converts
 
 `Note.start_tick`, clip positions, fade lengths and automation ticks cross as the integers the
@@ -155,6 +177,20 @@ before compile existed, and a plan wrong by construction is not something to han
 quietly. The refusal names `Clip.loop_length_ticks` and lifts the day an additive field names
 the stretched unit.
 
+**Extended 2026-09-07, in PR 8b.** One more, and one that deliberately stays outside compile.
+The refusal is a `sampler` on an **effect**: `Effect.ref` and `Instrument.ref` are one
+`DeviceRef` type, so the model can hold it, and sfizz voices notes while an effect chain is
+handed audio. It joins the list under the same rule, naming `Effect.ref.sampler`. A sampler
+*instrument* is not refused — it is what PR 8b renders, which is why this decision never
+listed the arm.
+
+The one that stays outside is the SFZ itself. An SFZ this engine cannot resolve is
+caller-fixable, and by the reasoning above it belongs here — but deciding it means reading the
+file, and compile is pure (decision 4). So the engine refuses it instead, naming the `sample=`
+it could not find, and it is the one caller-fixable refusal in M1 that arrives as an exit
+code. Moving it here means giving compile the file reading its signature was defined not to
+do; that is a question for M2, not a reason to make compile impure now.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |
@@ -179,6 +215,8 @@ the stretched unit.
   decision is amended in place and the plan gains sample positions beside ticks.
 - **ADR 0008** fixes how the plan reaches the engine; **ADR 0011** adds the audio clip fields
   that cross by value here.
+- **PR 8b** adds `PlanInstrument.sfz_path` under decision 2 as extended, and the restricted
+  case it renders is recorded in `render.proto` beside the field.
 - `proto/` still generates Rust only (ADR 0006 §7); the engine's C++ is generated at build
   time (ADR 0008 §4).
 - The `docs/plan.md` deferred row for user VST3 plugins is unchanged: a plugin outside the
