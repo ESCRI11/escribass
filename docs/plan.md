@@ -485,7 +485,11 @@ prevent; a feature is absent where it cannot run and loud where it must.
    three `ubuntu-24.04` runners with the binary the `engine` job built and uploaded, comparing
    against the same committed bytes with no tolerance, and `cross-cpu` reports which CPU models
    actually turned up. One model across the matrix is reported as **inconclusive** rather than
-   as a pass, because the runner pool is not ours to choose.
+   as a pass, because the runner pool is not ours to choose. **First run, 2026-09-07:** three
+   runners, one CPU model (`AMD EPYC 7763`), all four goldens reproduced — inconclusive, and
+   reported in those words. Separately, the goldens were blessed on an `AMD Ryzen AI 9 HX PRO
+   370` and reproduce on the EPYC byte for byte, which is two CPU models and two builds; ADR
+   0009 §6 records why that is evidence and not the answer, and the trap stays open.
 2. ~~**The WAV header carries a date or a software tag**~~ — **confirmed by the spike**: JUCE
    emits a `bext` chunk with `OriginationDate` and `OriginationTime`. Compare the `data` chunk.
 3. **Denormals** — without FTZ/DAZ a filter tail is 100× slower and its bits depend on a

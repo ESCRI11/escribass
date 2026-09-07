@@ -41,7 +41,11 @@ nothing. §15's minimum-supported-OS item stays `[OPEN]`; this ADR states what M
 choosing the platforms the *product* supports is not an agent's decision (CLAUDE.md, `[OPEN]`).
 
 **Unproven, and only CI can settle it.** Whether the same binary produces the same bytes on two
-different runner CPUs of the same architecture — decision 6.
+different runner CPUs of the same architecture — decision 6. **Measured 2026-09-07, in PR 11,
+and it moved but did not close:** all four goldens reproduce bit-exactly across two different
+x86-64 CPU models, sfizz included. The claim above is unchanged, because what the measurement
+covers is narrower than what it looks like it covers; decision 6 says exactly what was and was
+not held constant.
 
 The claim is deliberately narrower than §2.2's sentence, which reads as though pinned versions
 alone were sufficient. They are not: a pin fixes the source, and the bits also depend on what
@@ -215,6 +219,35 @@ The spike could not answer it: it ran on one machine.
 
 A golden is not blessed on a claim this ADR has not yet tested. Until PR 11 reports, the M1
 goldens are valid for the pinned image and CPU, and they say so.
+
+**Run 2026-09-07, in PR 11. Nothing failed, nothing retreated, and the experiment as written
+is still open.** Read the three results separately, because they are not the same result:
+
+1. **Same binary, three runners, one CPU model.** The `renders` matrix rendered all four
+   goldens on three `ubuntu-24.04` runners with the binary the `engine` job built and uploaded.
+   All three reproduced the committed bytes exactly. GitHub gave all three the **same** CPU —
+   `AMD EPYC 7763 64-Core Processor` — so this says the binary is reproducible and says
+   *nothing at all* about cross-CPU. The `cross-cpu` job reports that as **inconclusive**, in
+   those words, rather than as a pass; it will say something different the run a second model
+   turns up, and that is now standing rather than a thing someone has to remember to try.
+2. **Two builds, two CPU models, identical PCM.** The goldens were blessed on the development
+   machine — `AMD Ryzen AI 9 HX PRO 370`, Zen 5, `avx512f` present — on Ubuntu 24.04 with
+   g++ 13.3.0, and reproduced byte for byte on the EPYC 7763, Zen 3, with **no `avx512f`** and
+   a separately compiled engine. All four fixtures, sfizz included. That is a stronger
+   statement than decision 1 makes in one respect (two builds, not one binary) and it is
+   genuinely two CPU models.
+3. **What result 2 does not show, and this is the part worth writing down.** Trap 1's hazard is
+   a *dispatcher choosing differently* — AVX2 here, SSE4 there. It almost certainly did not
+   happen here. sfizz's `SIMDHelpers.cpp` selects between scalar, SSE and **AVX** (§8), and
+   both of these CPUs have AVX and AVX2, so both runs will have taken the same path. What
+   result 2 measures is that the *same* SIMD path rounds identically on two microarchitectures,
+   which is worth knowing and is not the question. A CPU without AVX would be the interesting
+   one, and GitHub's pool did not offer one.
+
+So decision 1's claim is left exactly where it was. The evidence points one way, the mechanism
+that would settle it runs on every pull request, and widening the claim on one pair of AMD
+parts that took the same code path would be the "a claim is not a goal" this ADR already
+refuses in its alternatives table.
 
 ## Alternatives considered
 
