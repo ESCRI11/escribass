@@ -9,7 +9,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `fixtures/history/patch_entry.json`, `fixtures/history/refs.json` | The on-disk forms of ADR 0001 §1 and §2, written by `core/tests/history.rs`. | `UPDATE_FIXTURES=1 cargo test -p escribass-core` |
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
 | `fixtures/manifest.json` | The build manifest every suite validates against (ADR 0010 §4): a **subset** of a real `escribass_engine --scan`, with the machine's plugin paths dropped. Read by `core/tests/common/mod.rs` and by the determinism suite, which passes it to both binaries as `--manifest`. | hand, from a real scan; see below |
-| `determinism.rs` | The suite: it drives `escribass-mcp` and `escribass-grpc` as subprocesses and compares what they produce. | hand |
+| `determinism.rs` | The suite: it drives `escribass-mcp` and `escribass-grpc` as subprocesses — each given `--manifest fixtures/manifest.json` — and compares what they produce. | hand |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`, `origin.json` and `plan.json` — what `compile` says about the project, the `RenderPlan` or every reason there is none (ADR 0007 §4). | `UPDATE_FIXTURES=1 cargo test` |
 
