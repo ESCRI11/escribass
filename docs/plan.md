@@ -36,9 +36,9 @@ stale.
 | M1.10 | `render_export` over both transports | done | PR #49 |
 | M1.11 | Four golden renders, and the two defects blessing them found | done | PR #50 |
 | M1.12 | The bar-17 demo as a test, and §18.2's claim narrowed to what it can carry | done | PR #51 |
-| M1.13 | A four-lane review of M1: seven blockers, eleven majors | done | this PR |
-
-C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
+| M1.13 | A four-lane review of M1: seven blockers, eleven majors | done | PR #52 |
+| M1.14 | §11 walked line by line against the code; docs closed; `CLAUDE.md` to M2 | done | this PR |
+| — | **M1 complete.** Render engine, four goldens, `lock.json` v2 | done | — |
 
 ## M0.2 — `core/`
 
@@ -473,7 +473,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip. Also **deletes the `RPC_SAME_RESPONSE_TYPE` exemption in the root `buf.yaml`**: it exists only while `main` still carries `RenderExport`'s old response type, which is what `buf breaking --against` compares to. **Done**, and it found two defects that nothing before it could have. **A render did not replace its output**: Tracktion opens the destination at end-of-file, so a second render to one path appended a whole second RIFF file and every reader — the engine's own read-back included — took the first `data` chunk. Every "renders the same twice" check that reused one path was therefore comparing a render against itself, which is why **Surge XT was believed deterministic at its factory patch and is not**: it needs `A Osc 1 Retrigger` set, which is trap 7 arriving exactly where trap 7 said it would. And **an asset in `assets/` could not be played at all**: JUCE picks a reader by file extension and a content-addressed asset has none, so every audio clip in a real project failed — invisible until a fixture built through the tool API rendered one |
 | 12 | `m1.12-locality` | The bar-17 demo as a test. **Done.** It also corrected §18.2's wording: "bytes changed only in bar 17" is false in general — a note's release tail outlives its note-off, so how far an edit reaches is a property of the note's length, not of the platform. What the test asserts exactly is that nothing *before* the edit moves; what comes after is measured and printed |
 | 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone. **Done**, and the number was eighteen: seven blockers and eleven majors from four independent lanes (determinism, the tool-API boundary, the C++ engine, ADR-versus-code correspondence). The lesson is one sentence: **every one of them was behind a passing check**, and six of them exit 0 — an engine that renders nothing, a leftover scratch file that changes the audio, a NaN that renders silence, a killed render that destroys the last good one, a stdout that could not be written, and a golden suite that never checked the engine binary against `engine/src`. One reported finding did not survive measurement and is recorded as a correction in the other direction (ADR 0009 §4, the two-sample offset) |
-| 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
+| 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2. **Done.** §11's five bullets were walked against the code rather than from memory and all five hold; what enforces each is named in the pull request, and §11 already names most of them in its own text because PR 13 rewrote it to describe what the code does. Nothing was added, because nothing was missing |
 
 PR 0 is a spike that is thrown away: the ADRs cannot be written honestly without knowing
 Tracktion's API for device-less construction, whether JUCE needs X11 to instantiate a VST3
@@ -598,6 +598,29 @@ reason. Revisit at M2 with the first plugin editor.
 Render tail: `length_ticks` ends at the last clip or section. A `RenderTarget.tail` field is a
 `song.proto` change with its own ADR when someone wants release tails.
 
+## M1, closed
+
+Fourteen pull requests, five ADRs, one four-lane review. What M1 delivers: a `RenderPlan`
+compiled by `core` from the song and rendered by a C++ engine that never sees a `Song` — a
+fresh process per render, hosting Surge XT, sfizz and Dexed as VST3 and playing audio clips at
+their gain, fades and Rubber Band stretch — four golden WAVs that reproduce byte for byte, and
+a `lock.json` recording the build each of them was made with. §11's checklist was walked bullet
+by bullet against the code at the close, and all five hold.
+
+M0's lesson held and sharpened. The review returned eighteen defects and what they had in
+common was that none of them was a red test: six exited 0. An engine that rendered nothing and
+reported success. A leftover scratch file that changed the audio. A render that appended a
+second RIFF file instead of replacing the first, which made three "renders the same twice"
+checks compare one render against itself — and hid the fact that Surge XT at its factory patch
+seeds itself from the wall clock. A golden suite that had never once compared the engine binary
+against `engine/src`.
+
+What M1 does not claim is as much of the point as what it does. macOS, Windows and any CPU
+other than the x86-64 the goldens were blessed on are unclaimed rather than contradicted (ADR
+0009 §1). The cross-CPU experiment ran on three runners and drew one CPU model, and PR 13 read
+sfizz's dispatcher again and found the AVX switch empty at this pin — so trap 1 stays open on
+the mechanism and not merely on the sample (ADR 0009 §6).
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -606,6 +629,11 @@ One line each; §16 has the definitions, and ADR 0003 placed what §16 had left 
 ## Deferred, on purpose
 
 Each of these was raised, judged, and put off. None is forgotten; none is blocking.
+
+Walked again at M1's close, 2026-09-07. No row was left waiting on an M1 event: PR 9 closed the
+M1 half of `lock.json` and PR 13 moved `Instrument.state` off the trigger that had already
+passed, and both rows say so below. Every other row's revisit point is M2 or later and M1
+neither reached nor moved it.
 
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
@@ -620,7 +648,7 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | `schema/pyproject.toml` `[build-system]` | Consumers use `sys.path`; no wheel needed yet | when `ai/` depends on it | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
 | User VST3 plugins | §8 says "VST3 host" and §16 never says user plugins, so nothing places them. M1 refuses a plugin outside the bundled manifest, which makes the gap loud rather than silent | M2, when `app` could show a plugin browser | M1 planning, 2026-09-04 |
-| `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated | when someone exports something with a long release | M1 planning, 2026-09-04 |
+| `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated. **Measured in PR 12**, so the trigger is no longer abstract: a half-bar note's release runs about 5,800 frames (0.12 s) past its note-off on this build, and that is what a render ending at the last clip cuts off | when someone exports something with a long release | M1 planning, 2026-09-04 |
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result — the same shape as the interactive resolution already deferred there | M2 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
@@ -628,11 +656,17 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 ## Known gaps
 
 - **`Project::write` rewrites every entry file on every commit** — O(history) I/O per call.
-  Invisible while histories are short; the tool API is what will make it visible.
+  ~~Invisible while histories are short; the tool API is what will make it visible.~~ That
+  trigger has now passed and the gap did not: M1's render fixtures drive the longest scripts in
+  the repository through the tool API and the suites still finish in seconds, because a script
+  is tens of entries and a process is one project. What would make it visible is a session that
+  stays open and keeps appending, which is `app`. Revisit at M2.
 - **No lock file on an `.escri` directory.** ADR 0001 §2 assumes a single writer and ADR 0004's
   commit is three renames; two processes on one project would race them. M0.3 makes it
-  structural (one project per process, ADR 0006 §5) rather than enforced. Revisit at M2, when
-  `app` supervises the processes.
+  structural (one project per process, ADR 0006 §5) rather than enforced. M1's second process
+  does not change that: the engine is handed an asset to read and a WAV to write and never
+  opens a project directory at all (CLAUDE.md #6, ADR 0007 §2). Revisit at M2, when `app`
+  supervises the processes.
 
 ## Open — not ours to decide
 
