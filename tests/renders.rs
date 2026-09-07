@@ -762,7 +762,8 @@ fn a_note_edited_in_bar_17_changes_nothing_before_bar_17() {
     let directory = Scratch::new("renders", "bar17");
     // Two paths, never one. PR 11 found that a render over an existing file appended a second
     // RIFF and every reader took the first, so two renders to one path compared a run against
-    // itself. The engine deletes its destination now; the habit is what made that visible.
+    // itself. The engine replaces its destination properly now; the habit is what made that
+    // visible.
     let before_wav = directory.0.with_extension("before.wav");
     let after_wav = directory.0.with_extension("after.wav");
 

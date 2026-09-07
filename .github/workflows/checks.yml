@@ -391,9 +391,9 @@ jobs:
       # The two runs share one output path, and until M1 PR 11 that made this comparison and the
       # three below it **vacuous**: Tracktion opened the destination at end-of-file, so the
       # second render appended a whole second RIFF file and every reader — this one included —
-      # took the first `data` chunk, which was the first run's. The engine now removes the
-      # destination first (`engine/src/main.cpp`), which is what makes rendering twice to one
-      # path a real question again. `tests/renders.rs` gives every render a path of its own as
+      # took the first `data` chunk, which was the first run's. The engine now renders to a
+      # sibling `.part` and renames it onto the destination (`engine/src/main.cpp`), which is
+      # what makes rendering twice to one path a real question again. `tests/renders.rs` gives every render a path of its own as
       # well, so it would catch a regression here rather than inherit it.
       #
       # The plan is written as protobuf text and encoded by the protoc this build already

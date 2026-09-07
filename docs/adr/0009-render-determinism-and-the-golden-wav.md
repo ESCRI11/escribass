@@ -105,6 +105,16 @@ engine now deletes the destination before rendering, which is both what an expor
 makes a second render to one path a real question. The cost of not having found this is in
 decision 4's Surge row.
 
+**Extended 2026-09-07, in PR 13: the render goes to a sibling `.part` and is renamed onto the
+destination only after every check has passed.** Deleting the destination up front answers the
+appending, and it opens a second hole in the same place: a render killed halfway left a
+truncated WAV — measured at 43 MB, its `data` chunk declaring more than the file held — exactly
+where the last good render had been, with the engine never reaching its own length check to say
+so. A POSIX `rename` is the fix and it subsumes the first one: what a reader sees is the old
+file or the new one and never half of either, and the `.part` a render writes is a path nobody
+else writes. (`std::rename`, not `juce::File::moveFileTo`, which unlinks the destination before
+renaming and so has a window where neither file is there.)
+
 **Settled 2026-09-06, in PR 5: the engine computes `pcm_sha256`.** This section fixed what
 the hash is of and left who computes it unsaid, and the spike's note that the engine need not
 hash — `juce::SHA256` lives in `juce_cryptography`, which Tracktion does not link — had been
