@@ -117,8 +117,10 @@ escribass_plugin(dexed
 # engine/build/ already keeps out of git.
 #
 # ponytail: the build root, not $<TARGET_FILE_DIR:escribass_engine>, which CMake will not
-# evaluate in a custom command's OUTPUT. Where a shipped engine looks for its manifest is a
-# question PR 9 answers, when core is the one opening it.
+# evaluate in a custom command's OUTPUT. PR 9 answered where a consumer looks for it: nowhere.
+# Both `core` binaries take `--manifest <path>`, required, with no default and no search — a
+# default is a place a stale manifest sits unnoticed and a search is a way to find the wrong
+# one, which are the two shapes of the silent arm ADR 0010 §4 refuses.
 set(MANIFEST ${CMAKE_BINARY_DIR}/manifest.json)
 add_custom_command(
     OUTPUT ${MANIFEST}

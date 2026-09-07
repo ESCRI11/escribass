@@ -16,6 +16,11 @@ const MASTER: &str = "01M1FPMP00TRACKMASTER00003";
 const CLIP: &str = "01M1FPMP00CPCHRS0000000006";
 const AUDIO_CLIP: &str = "01M1FPMP00CPGTR0000000000H";
 const NOTE_G1: &str = "01M1FPMP00NTEG100000000007";
+/// The fixture's Surge XT effect, and one of the parameter ids the manifest fixture declares
+/// for it — `A Filter 1 Cutoff`, which is an opaque integer because that is all a VST3 host
+/// is shown (ADR 0010 §4).
+const SURGE_FX: &str = "01M1FPMP00FXSRGE0000000005";
+const CUTOFF: &str = "1945359057";
 
 fn valid_song() -> Song {
     from_canonical_json(&std::fs::read_to_string(FIXTURE).expect("fixture")).expect("parses")
@@ -26,6 +31,23 @@ fn rules(mutate: impl FnOnce(&mut Song)) -> Vec<&'static str> {
     let mut song = valid_song();
     mutate(&mut song);
     validate(&song, &manifest()).into_iter().map(|v| v.rule).collect()
+}
+
+/// The fixture's Surge XT reference, its parameters, and the Cmajor instrument's parameters.
+fn plugin(song: &mut Song) -> &mut PluginRef {
+    let effect = song.tracks.get_mut(BASS).unwrap().fx_chain.get_mut(SURGE_FX).unwrap();
+    let Some(DeviceRef { kind: Some(device_ref::Kind::Plugin(p)) }) = &mut effect.r#ref else {
+        unreachable!("the fixture's effect is a plugin")
+    };
+    p
+}
+
+fn surge_params(song: &mut Song) -> &mut std::collections::BTreeMap<String, f64> {
+    &mut song.tracks.get_mut(BASS).unwrap().fx_chain.get_mut(SURGE_FX).unwrap().params
+}
+
+fn cmajor_params(song: &mut Song) -> &mut std::collections::BTreeMap<String, f64> {
+    &mut song.tracks.get_mut(BASS).unwrap().instrument.as_mut().unwrap().params
 }
 
 fn assert_fires(rule: &str, mutate: impl FnOnce(&mut Song)) {
@@ -178,6 +200,74 @@ fn a_plugin_reference_is_pinned_to_a_version() {
             }
         }
     });
+}
+
+// ---- resolved against the build manifest (ADR 0010 §4) ----
+//
+// The fixture's *effect* is Surge XT and its *instrument* is a Cmajor source, which is what
+// makes these tests worth having in pairs: one device the manifest can answer for and one it
+// cannot, in the same song.
+
+#[test]
+fn a_plugin_this_build_cannot_host_is_refused() {
+    // §4.4's "resolves to a known plugin". `the_fixture_is_valid` is the other half: the id
+    // the fixture does carry, `Surge Synth Team/Surge XT`, is one the manifest declares — so
+    // this rule is shown both firing and not firing on the same field.
+    assert_fires("plugin_unknown", |s| plugin(s).plugin_id = "org.nope.nothing".to_string());
+}
+
+#[test]
+fn a_parameter_the_plugin_does_not_declare_is_refused() {
+    // `cutoff` is the name a person would reach for and is not an identifier: the manifest
+    // keys a parameter by the plugin's own `ParamID`, because display names are not unique.
+    assert_fires("param_unknown", |s| {
+        surge_params(s).insert("cutoff".to_string(), 0.5);
+    });
+    assert_fires("param_unknown", |s| {
+        s.automation.values_mut().for_each(|a| {
+            let target = a.target.as_mut().unwrap();
+            target.device_id = SURGE_FX.to_string();
+            target.param = "cutoff".to_string();
+        });
+    });
+}
+
+#[test]
+fn a_real_parameter_id_resolves() {
+    // The rule has to stop firing, or it is a rule that refuses everything.
+    let mut song = valid_song();
+    surge_params(&mut song).insert(CUTOFF.to_string(), 0.5);
+    let target = song.automation.values_mut().next().unwrap().target.as_mut().unwrap();
+    target.device_id = SURGE_FX.to_string();
+    target.param = CUTOFF.to_string();
+    assert_eq!(validate(&song, &manifest()), vec![]);
+}
+
+#[test]
+fn a_plugin_parameter_value_is_normalised() {
+    // ADR 0010 §4, extended in PR 7: VST3 shows a host exactly one numeric domain and it is
+    // `0..1`. The engine clamps rather than refusing, so nothing downstream would report it.
+    assert_fires("param_out_of_range", |s| {
+        surge_params(s).insert(CUTOFF.to_string(), 1.5);
+    });
+    assert_fires("param_out_of_range", |s| {
+        let automation = s.automation.values_mut().next().unwrap();
+        let target = automation.target.as_mut().unwrap();
+        target.device_id = SURGE_FX.to_string();
+        target.param = CUTOFF.to_string();
+        automation.points.values_mut().for_each(|p| p.value = -0.5);
+    });
+}
+
+#[test]
+fn a_device_that_is_not_a_plugin_is_not_judged_by_the_manifest() {
+    // The fixture's Cmajor instrument carries `drive: 0.62` and its lane targets `cutoff`,
+    // and neither is a plugin parameter: a Cmajor device declares its parameters in a source
+    // M4 compiles, which this build cannot read. Unchecked for a stated reason, rather than
+    // silently — and this is what says so, so that the day M4 arrives the test fails.
+    let mut song = valid_song();
+    cmajor_params(&mut song).insert("anything at all".to_string(), 7.5);
+    assert_eq!(validate(&song, &manifest()), vec![]);
 }
 
 // ---- rules the schema shape implies (ADR 0002 Consequences) ----

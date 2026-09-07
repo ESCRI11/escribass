@@ -21,6 +21,8 @@ use std::sync::Arc;
 /// Reading it rather than building one in Rust is deliberate: the parse path is what the
 /// binaries use, so a manifest this crate cannot read fails here rather than at startup.
 pub fn manifest() -> Arc<Manifest> {
-    const AT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/manifest.json");
-    Arc::new(Manifest::read(AT).expect("the manifest fixture is readable"))
+    Arc::new(Manifest::read(MANIFEST).expect("the manifest fixture is readable"))
 }
+
+/// Where it lives, for the tests that need the file rather than the parsed value.
+pub const MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/manifest.json");

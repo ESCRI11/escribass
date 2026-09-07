@@ -5,9 +5,9 @@
 //! the only exception is where a test deliberately corrupts a file to prove `open` notices.
 
 mod common;
-use common::manifest;
+use common::{manifest, MANIFEST};
 
-use escribass_core::{diff, entry, timestamp_from_ms, History, IdSource, Project, SeededIds};
+use escribass_core::{diff, entry, timestamp_from_ms, FixedClock, History, IdSource, Op, Project, SeededIds};
 use escribass_schema::history::Refs;
 use escribass_schema::song::{Author, Provenance, Song};
 use serde_json::{json, Value};
@@ -206,6 +206,142 @@ fn a_lock_from_another_schema_version_is_refused_at_load() {
     let e = Project::open(&dir.0, manifest()).unwrap_err();
     assert_eq!(e.rule, "schema_version_mismatch");
     assert!(e.message.contains("99"), "{}", e.message);
+}
+
+// ---- lock.json v2 (ADR 0010) ----
+
+const SURGE: &str = "Surge Synth Team/Surge XT";
+const SURGE_FX: &str = "/tracks/01M1FPMP00TRACKBASS0000002/fx_chain/01M1FPMP00FXSRGE0000000005";
+
+fn lock(root: &PathBuf) -> Value {
+    serde_json::from_str(&std::fs::read_to_string(root.join("lock.json")).unwrap()).unwrap()
+}
+
+fn write_lock(root: &PathBuf, lock: &Value) {
+    std::fs::write(root.join("lock.json"), serde_json::to_string_pretty(lock).unwrap()).unwrap();
+}
+
+fn manifest_value() -> Value {
+    serde_json::from_str(&std::fs::read_to_string(MANIFEST).unwrap()).unwrap()
+}
+
+/// A manifest that hosts nothing, with this one's engine — the build that lost a plugin.
+fn without_plugins() -> std::sync::Arc<escribass_core::Manifest> {
+    let mut described = manifest_value();
+    described["plugins"] = json!({});
+    let at = std::env::temp_dir().join(format!("escribass-empty-manifest-{}.json", std::process::id()));
+    std::fs::write(&at, described.to_string()).unwrap();
+    std::sync::Arc::new(escribass_core::Manifest::read(&at).unwrap())
+}
+
+#[test]
+fn a_referenced_plugin_is_pinned_from_the_build_manifest() {
+    // ADR 0010 §1 and §2. The engine block is recorded too, so a person reading the file can
+    // see what the last write was made against — §11's "all external tool versions recorded".
+    let dir = Scratch::new();
+    sample(&dir.0).write().unwrap();
+
+    let lock = lock(&dir.0);
+    assert_eq!(lock["plugins"][SURGE]["version"], json!("1.3.4"));
+    assert_eq!(lock["plugins"][SURGE]["commit"], json!("f7b97c682ade0b87da85ca5968b63d5c7c98e68d"));
+    assert!(lock["engine"]["tracktion_engine"].is_string(), "{lock}");
+    // Nothing machine-specific: the file is committed to the user's repository and
+    // byte-compared by the determinism suite (ADR 0010 §1).
+    assert!(lock["plugins"][SURGE].get("path").is_none(), "{lock}");
+    assert!(lock["plugins"][SURGE].get("params").is_none(), "{lock}");
+}
+
+#[test]
+fn a_pin_outlives_the_reference_that_made_it() {
+    // ADR 0010 §2's monotone rule. A block derived purely from the current song would lose
+    // this pin, and ADR 0005 §4's undo would then re-pin from whatever build is running.
+    let dir = Scratch::new();
+    let mut project = sample(&dir.0);
+    project.write().unwrap();
+
+    // A counter past the ones `sample` already minted: the log is append-only and an id is a
+    // pure function of the counter under a seed.
+    let mut ids = SeededIds::new(1_788_307_200_000, 99);
+    let remove: Vec<Op> =
+        serde_json::from_value(json!([{"op": "remove", "path": SURGE_FX}])).unwrap();
+    project
+        .commit("apply_patch", &remove, Author::Human, &mut ids, &FixedClock(1_788_307_200_000))
+        .expect("removing the effect is a legal edit");
+
+    assert!(project.song().tracks[BASS].fx_chain.is_empty(), "the reference is gone");
+    assert_eq!(lock(&dir.0)["plugins"][SURGE]["version"], json!("1.3.4"), "and the pin is not");
+}
+
+#[test]
+fn a_referenced_plugin_this_build_cannot_match_refuses_to_open() {
+    // §11's load check, ADR 0010 §3: the same shape `schema_version_mismatch` has, and the
+    // strict reading — nothing opens, nothing is substituted, nothing is silently re-pinned.
+    let dir = Scratch::new();
+    sample(&dir.0).write().unwrap();
+
+    let mut edited = lock(&dir.0);
+    edited["plugins"][SURGE]["commit"] = json!("0000000000000000000000000000000000000000");
+    write_lock(&dir.0, &edited);
+
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
+    assert_eq!(e.rule, "lock_mismatch");
+    assert!(e.message.contains(SURGE) && e.message.contains("0000000"), "{}", e.message);
+
+    // The other arm: the pin agrees with itself and this build has no such plugin at all.
+    write_lock(&dir.0, &lock(&dir.0));
+    let e = Project::open(&dir.0, without_plugins()).unwrap_err();
+    assert_eq!(e.rule, "lock_mismatch");
+    assert!(e.message.contains("cannot host it"), "{}", e.message);
+}
+
+#[test]
+fn a_pin_the_song_no_longer_references_is_inert() {
+    // The cost of monotone, and what makes it affordable: `open` compares only the pins the
+    // song currently references, so a stale entry is a record of history, not a hostage.
+    let dir = Scratch::new();
+    sample(&dir.0).write().unwrap();
+
+    let mut edited = lock(&dir.0);
+    edited["plugins"]["Some Vendor/A Plugin We Dropped"] =
+        json!({"commit": "0000000000000000000000000000000000000000", "version": "0.1"});
+    write_lock(&dir.0, &edited);
+
+    Project::open(&dir.0, manifest()).expect("a pin nothing references cannot refuse anything");
+}
+
+#[test]
+fn the_engine_block_re_pins_on_open_rather_than_refusing() {
+    // ADR 0010 §3's one exception, and the reason it is one: there is a single engine and a
+    // project cannot choose it, so refusing would refuse every project on the machine at once.
+    // What a render was made with travels with the render (ADR 0008 §5), not with this file.
+    let dir = Scratch::new();
+    sample(&dir.0).write().unwrap();
+
+    let mut edited = lock(&dir.0);
+    edited["engine"]["tracktion_engine"] = json!("0000000000000000000000000000000000000000");
+    write_lock(&dir.0, &edited);
+
+    let mut reopened = Project::open(&dir.0, manifest()).expect("a newer engine still opens");
+    reopened.write().unwrap();
+    assert_eq!(
+        lock(&dir.0)["engine"],
+        manifest_value()["engine"],
+        "the running build's commits, written back on the next write"
+    );
+}
+
+#[test]
+fn a_lock_written_before_m1_still_opens() {
+    // `engine` and `plugins` default to empty, and an absent pin is one that has not been
+    // added yet rather than a disagreement (ADR 0010 §2). The next write adds it.
+    let dir = Scratch::new();
+    let mut project = sample(&dir.0);
+    project.write().unwrap();
+    std::fs::write(dir.0.join("lock.json"), "{\n  \"schema_version\": 1\n}\n").unwrap();
+
+    let mut reopened = Project::open(&dir.0, manifest()).expect("a v1 lock is not a mismatch");
+    reopened.write().unwrap();
+    assert_eq!(lock(&dir.0)["plugins"][SURGE]["version"], json!("1.3.4"));
 }
 
 #[test]

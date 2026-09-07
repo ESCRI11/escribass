@@ -461,7 +461,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 7 | `m1.7-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
 | 8 | `m1.8-audio` | Asset playback, gain and fades, Rubber Band vendored and pinned for stretch |
 | 8b | `m1.8b-sampler` | `Instrument.kind: sampler` — an SFZ from `assets/` loaded into sfizz. §16 puts the sampler in M1 and no PR owned it; §11 wants a golden per bundled instrument, so PR 11's sfizz fixture depends on this. **Done.** The row's premise was half wrong: sfizz with no SFZ is *not* silent — its default patch is `<region>sample=*sine`, so what a fixture would have goldened is a sine and not a sampler. The real hazard is one layer in, and measured: an SFZ whose sample cannot be resolved renders silence and exits zero |
-| 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
+| 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else. **Done.** Every byte that moved has one of three causes — the plugin id, two parameter ids, and `lock.json`'s two new blocks — and the goldens were re-derived from the old ones by that substitution alone to prove it. `param_out_of_range` came along with them, since PR 7 had already established the domain |
 | 10 | `m1.10-render-export` | `Session::render_export` and `add_asset` over both transports |
 | 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip |
 | 12 | `m1.12-locality` | The bar-17 demo as a test |
@@ -521,7 +521,14 @@ prevent; a feature is absent where it cannot run and loud where it must.
     builds a library and a JACK client, no VST3.
 12. **`ubuntu-latest` moves** — an image update changes the compiler and every golden drifts
     with no PR to blame.
-13. **`every_tool`'s plugin id is invented.** Once the validator resolves plugin ids,
+13. ~~**`every_tool`'s plugin id is invented.**~~ — **settled in PR 9**, and the trap was
+    right about all of it. `com.surge-synth.surge-xt` and `org.surge-synth.surge-xt` are now
+    `Surge Synth Team/Surge XT` across 23 files, and `cutoff` and `drive` are `1945359057` and
+    `1243907205`, which the manifest fixture carries with their display names beside them so a
+    reader can tell what they are. The half the trap did not name is where the *tests* get a
+    manifest, since the real one is never committed: they read a committed subset of a real
+    `--scan`, and the engine CI job asserts it is still a subset of what the build declares.
+    The original text follows. Once the validator resolves plugin ids,
     `com.surge-synth.surge-xt` must be a real manifest id or `checks` goes red. **PR 6 learned
     the real ones**, and they are what PR 9 must write into `tests/determinism/*/script.json`
     and `tests/fixtures/song/minimal.json`: `Surge Synth Team/Surge XT`, `SFZTools/sfizz`,
@@ -583,7 +590,7 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated | when someone exports something with a long release | M1 planning, 2026-09-04 |
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result — the same shape as the interactive resolution already deferred there | M2 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
-| `lock.json` beyond `schema_version` | Nothing to pin until compiled artefacts and models exist | M1, M4 | ADR 0003 §3; §17 |
+| `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
 
 ## Known gaps
 

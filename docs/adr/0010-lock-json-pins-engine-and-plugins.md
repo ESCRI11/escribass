@@ -207,6 +207,15 @@ with the plugin binary, which is two pins for one fact, and the stale one is sil
 what ADR 0008 §2 needs so a fresh process can skip the VST3 scan: the engine opens the exact
 paths the manifest names.
 
+**Settled 2026-09-07, in PR 9, which first read one.** How `core` *finds* the manifest was left
+open here and asked again in `engine/cmake/plugins.cmake`. It is told: `--manifest <path>` on
+both binaries, required, with no default and no search. A default path is a place a stale
+manifest can sit unnoticed, and a search is a way to find the wrong one — both re-introduce the
+silent arm this section refuses on the argument type. The same PR gives the normalised-value
+companion above the rule id `param_out_of_range`, and applies it only where a plugin is what
+the value reaches: a Cmajor, Faust or neural device declares its parameters in a source M4
+compiles, so its keys and values are unresolvable here and are left so, in one marked place.
+
 `core` reads it. The validator takes the manifest as a **constructor argument**, not an
 `Option`, and the binaries refuse to start without one (`manifest_missing`, operator error).
 An `Option` would give the two rules a "skip if absent" arm, and a rule that skips silently is
@@ -276,10 +285,12 @@ effects exercise it.
   `org.surge-synth.surge-xt`. Both are invented; both must become the id the manifest declares,
   or `plugin_unknown` turns `checks` red. They are fixed in PR 9 with the goldens, and the
   spelling difference between them is itself the evidence that neither was ever checked.
-- **`core`'s own tests** read a small manifest fixture. A test in the render suite (PR 11,
-  behind the render feature, where a built engine exists) asserts the fixture's plugin ids and
-  parameter names are a subset of the built manifest's — so the fixture cannot drift back into
-  being invented.
+- **`core`'s own tests** read a small manifest fixture. **Amended 2026-09-07, in PR 9:** the
+  subset assertion this bullet gave to PR 11's render suite is in the engine's CI job instead,
+  beside the step that already checks the built manifest is complete. That is where both files
+  exist at once, so it needs no cargo feature and no built engine on a contributor's machine,
+  and it runs one milestone step earlier than promised — from the pull request that creates the
+  fixture rather than two after it.
 - **ADR 0003 §4 is amended in place**; §15 gains a row for the amendment.
 - **`docs/plan.md`'s deferred row** "`lock.json` beyond `schema_version`" is closed for its M1
   half. Its M4 half — compiled artefacts and model hashes — is unchanged.

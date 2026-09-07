@@ -315,6 +315,26 @@ jobs:
               || { echo "::error::the manifest names no plugin built from ${component} ${commit}"; exit 1; }
           done
 
+      # The other half of ADR 0010 §4, and the reason the fixture is allowed to be committed
+      # at all. `core`'s tests and the determinism suite validate against
+      # tests/fixtures/manifest.json — a hand-trimmed subset of a real `--scan`, because the
+      # real one is generated at build time and never committed. A subset that stops being a
+      # subset is a fixture drifting back into invented ids, which is exactly the defect PR 9
+      # replaced, and this is the only place both files exist at once.
+      - name: The manifest fixture is a subset of what this build declares
+        if: env.SKIP != '1'
+        run: |
+          jq -e --slurpfile built engine/build/manifest.json '
+            .engine == ($built[0].engine)
+            and (.plugins | to_entries | all(
+              ($built[0].plugins[.key]) as $b
+              | $b != null
+                and $b.commit == .value.commit
+                and $b.version == .value.version
+                and (.value.params | to_entries | all($b.params[.key] == .value))))
+          ' tests/fixtures/manifest.json > /dev/null \
+            || { echo "::error::tests/fixtures/manifest.json is no longer a subset of what this build declares"; exit 1; }
+
       # A note through a real plugin, twice, in two fresh processes. This is not the golden
       # render suite — that is PR 11, with committed WAVs and a first-differing-sample report —
       # it is the standing answer to "does hosting still work at all", which nothing else in
