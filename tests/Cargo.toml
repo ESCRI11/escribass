@@ -14,6 +14,19 @@ autotests = false
 name = "determinism"
 path = "determinism.rs"
 
+# The golden renders, absent unless asked for. They need a built engine and three VST3s, which
+# cargo cannot produce, and a `#[test]` that noticed that and returned early would be the quiet
+# skip M0.4 exists to prevent (docs/plan.md, M1 PRs). `required-features` makes the target not
+# exist without the feature, so `cargo test` from the root compiles it away and
+# `cargo test -p escribass-tests --features renders` compiles it and then insists.
+[[test]]
+name = "renders"
+path = "renders.rs"
+required-features = ["renders"]
+
+[features]
+renders = []
+
 [dev-dependencies]
 # `diff` builds the failure report, so a mismatch names paths rather than printing two
 # documents. Nothing here reaches into `core` to mutate a song — that goes through the

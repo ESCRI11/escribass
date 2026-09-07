@@ -1022,7 +1022,16 @@ private:
         juce::AudioFormatManager formats;
         formats.registerBasicFormats();
         const juce::File file (source.path());
-        const std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+        // The **stream** overload, not the `File` one: `createReaderFor (const File&)` asks each
+        // format `canHandleFile`, which compares the file's *extension*, and an asset in
+        // `assets/` is named by its own SHA-256 and has none (ADR 0007 §2, §10). Every audio
+        // clip in a real project would otherwise fail here, which is what M1 PR 11's audio
+        // golden found: PR 8's check handed the engine a path of its own ending in `.wav`, so
+        // nothing had ever opened a content-addressed asset. The stream overload asks each
+        // format to read the header instead, which is the only honest question about a file
+        // whose name is a hash.
+        const std::unique_ptr<juce::AudioFormatReader> reader (
+            formats.createReaderFor (file.createInputStream()));
         if (reader == nullptr)
             // core resolved this path from the clip's `asset_hash` and refused a hash `assets/`
             // does not hold (core/src/render.rs), so what is left here is a file that is not
@@ -1210,6 +1219,17 @@ int run (const juce::File& manifestFile)
 
     te::Renderer::Parameters params (*edit);
     params.destFile = juce::File (plan.output_path());
+    // **The destination is removed first, and this is not tidiness.** Tracktion opens it with
+    // `juce::File::createOutputStream()`, which positions at the *end* of an existing file, so a
+    // render over one that is already there appends a second, complete RIFF file after the
+    // first. The WAV then holds two `data` chunks; every reader takes the first, which is the
+    // *previous* render. Measured in M1 PR 11: rendering one plan twice to one path leaves a
+    // file of exactly twice the size whose `bext` origination time is still the first run's, and
+    // the read-back below hashed that first chunk and reported the old audio as this render's
+    // answer. That made every "renders the same twice" check that reused one path vacuous, and
+    // it is why `tests/renders.rs` gives each render a path of its own as well.
+    if (params.destFile.existsAsFile() && ! params.destFile.deleteFile())
+        return fail (kRenderFailed, "cannot replace " + plan.output_path());
     params.audioFormat = wav;
     params.sampleRateForAudio = target.sample_rate();
     params.bitDepth = (int) target.bit_depth();

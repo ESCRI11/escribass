@@ -41,7 +41,11 @@ nothing. §15's minimum-supported-OS item stays `[OPEN]`; this ADR states what M
 choosing the platforms the *product* supports is not an agent's decision (CLAUDE.md, `[OPEN]`).
 
 **Unproven, and only CI can settle it.** Whether the same binary produces the same bytes on two
-different runner CPUs of the same architecture — decision 6.
+different runner CPUs of the same architecture — decision 6. **Measured 2026-09-07, in PR 11,
+and it moved but did not close:** all four goldens reproduce bit-exactly across two different
+x86-64 CPU models, sfizz included. The claim above is unchanged, because what the measurement
+covers is narrower than what it looks like it covers; decision 6 says exactly what was and was
+not held constant.
 
 The claim is deliberately narrower than §2.2's sentence, which reads as though pinned versions
 alone were sufficient. They are not: a pin fixes the source, and the bits also depend on what
@@ -87,6 +91,19 @@ render moved by a block", which is M0.4's "paths, not two 40 KB blobs" applied t
 There is **no tolerance by default**. A plugin that proves non-deterministic gets a documented
 tolerance *and* a per-plugin note in §8, in the PR that discovers it — never a tolerance
 applied globally, which would hide every other plugin's drift behind the worst one's.
+
+**Amended 2026-09-07, in PR 11: a render removes its destination first, and until it did, the
+comparison read the wrong `data` chunk.** This section says the comparison is over the `data`
+chunk, singular, which assumed a WAV has one. Tracktion opens the destination with
+`juce::File::createOutputStream()`, and that positions at the *end* of an existing file — so a
+render over a file that is already there **appends a second, complete RIFF file after the
+first**. Measured: rendering one plan twice to one path leaves a file of exactly twice the size
+whose `bext` origination time is still the first run's. Every reader takes the first `data`
+chunk, so the engine's own read-back (ADR 0008 §3) hashed the *previous* render and reported it
+as this one's, and the length check passed because the first chunk is the right length. The
+engine now deletes the destination before rendering, which is both what an export means and what
+makes a second render to one path a real question. The cost of not having found this is in
+decision 4's Surge row.
 
 **Settled 2026-09-06, in PR 5: the engine computes `pcm_sha256`.** This section fixed what
 the hash is of and left who computes it unsaid, and the spike's note that the engine need not
@@ -134,7 +151,11 @@ looks arbitrary.
   stored in the project, and a plugin's internal RNG is a source the project cannot reach. So
   the golden fixtures disable them rather than seed them: Surge XT's random start phase and
   unison detune randomisation, sfizz's `*_random` opcodes (trap 7). A fixture that needs
-  randomness to sound right is not a fixture M1 can golden.
+  randomness to sound right is not a fixture M1 can golden. **Measured 2026-09-07, in PR 11:
+  this bullet is load-bearing for Surge and the disabling is one parameter.** Surge XT at its
+  factory patch renders a different hash every time; setting `A Osc 1 Retrigger`
+  (`1217754326`) to 1.0 makes four fresh processes agree exactly. So `tests/renders/surge_xt`
+  carries that `set_param`, and it is the fixture's whole reason for having one.
 
 ### 4. Every DSP surface carries a determinism note; there are five, not three
 
@@ -145,10 +166,10 @@ is, what makes it deterministic, and what it is known to be sensitive to:
 | Surface | Note |
 |---|---|
 | Dexed | Pure FM synthesis, no resampling, no runtime dispatch found. Expected exact, and the cheapest of the three to bless first. |
-| Surge XT | Random start phase, unison detune randomisation and noise sources, all disabled in the fixture (decision 3). **Answered 2026-09-06, in PR 6: it is not seeded from a constant — it is seeded from the wall clock.** `SurgeStorage.h` defines `STORAGE_USES_INDEPENDENT_RNG 1` and constructs its `std::minstd_rand` from `std::chrono::system_clock::now().time_since_epoch().count()`; the one call that would reseed it, `seed_rand`, is commented out. So decision 3's "disable rather than seed" is the only option here, not a preference: a fixture must avoid every path that reads it — oscillator start phase, unison detune, the sample-and-hold LFO shape and the effects that call `rand_pm1` — because nothing reachable from a plan can make them repeat. **Measured 2026-09-06, in PR 7:** the factory init patch does not reach it. One note through Surge XT at its defaults, rendered in three fresh processes, produced identical PCM (`42069eed…`), and so did a fourth run with a parameter set and a `Global Volume` lane on it. So the fixture obligation is real but narrow — it constrains which patch a fixture selects, not whether Surge can be goldened at all. |
+| Surge XT | Random start phase, unison detune randomisation and noise sources, all disabled in the fixture (decision 3). **Answered 2026-09-06, in PR 6: it is not seeded from a constant — it is seeded from the wall clock.** `SurgeStorage.h` defines `STORAGE_USES_INDEPENDENT_RNG 1` and constructs its `std::minstd_rand` from `std::chrono::system_clock::now().time_since_epoch().count()`; the one call that would reseed it, `seed_rand`, is commented out. So decision 3's "disable rather than seed" is the only option here, not a preference: a fixture must avoid every path that reads it — oscillator start phase, unison detune, the sample-and-hold LFO shape and the effects that call `rand_pm1` — because nothing reachable from a plan can make them repeat. ~~**Measured 2026-09-06, in PR 7:** the factory init patch does not reach it.~~ **Corrected 2026-09-07, in PR 11: it does, and PR 7 was reading a file it had not rewritten.** Those three "fresh processes" rendered to one output path, and decision 2's amendment says what that produced: runs two and three appended a second RIFF file, and every reader — the engine's own read-back included — took run one's `data` chunk. Three identical hashes were one render counted three times. With the engine deleting its destination first, Surge XT at its factory patch renders **a different hash every run**: five fresh processes, five hashes. So the obligation is the wide one this row states above, and the path the factory patch reaches is the first one named — the oscillator's random start phase. Setting `A Osc 1 Retrigger` (`1217754326`) to 1.0 makes four fresh processes agree exactly, and that is the one `set_param` in `tests/renders/surge_xt`. |
 | sfizz | Resamples, and dispatches SIMD at run time. The most likely of the three to differ across CPUs, which makes it the one decision 6's experiment must include. **Written 2026-09-07, in PR 8b**, where an SFZ was first loaded into it, and it has three parts this row did not name. **How a sample is found:** `FilePool::checkSample` joins the sample's name to the directory the SFZ was loaded from and, only if that misses, walks the path segment by segment through a case-insensitive `directory_iterator` — whose order is the filesystem's. M1's SFZ names its samples by their own asset hash, so the exact match hits and the scan is never reached; the engine refuses an SFZ it cannot resolve before sfizz sees it (ADR 0007 §2, extended), which is what keeps that fallback out of a render. **What an unresolvable sample does:** nothing audible and nothing visible — the region is dropped and the removal is a `DBG`, which a release build compiles out. Measured: an SFZ whose sample cannot be read renders a track of silence and exits zero, which is why the refusal above is a check and not a comment. **Offline is not playback:** sfizz keeps a second pair of quality settings for freewheeling (`freewheelingSampleQuality`, `freewheelingOscillatorQuality`) and switches to them when the host declares an offline render, so what a golden holds is deliberately not what a preview will play at M2. Also measured: the same note through the same SFZ hashed identically in five fresh processes (`8eb5e18d…` at 48 kHz/24-bit), and sfizz with no SFZ at all is not silent — its default patch is `<region>sample=*sine`, so a sampler that loaded nothing sounds like a sine rather than like nothing. |
 | Rubber Band | A phase vocoder: modes, internal buffering and its own threading. Its configuration is pinned by ADR 0011 (offline, R3 engine, threading disabled), and it is a summation-order hazard of its own if that threading option is ever relaxed. **Written 2026-09-07, in PR 8**, and it moved in two directions. Worse than this row assumed: the *build* chooses the FFT, and the option word says nothing about that — the full build system takes FFTW, IPP, KissFFT or vDSP from whatever is installed, and a phase vocoder over two FFTs is two different signals. The engine builds upstream's `single/RubberBandSingle.cpp`, which hard-defines `USE_BUILTIN_FFT` and `USE_BQRESAMPLER`, so the choice belongs to this repository. Better than this row assumed: there is no runtime CPU dispatch anywhere in the library — every SIMD path is a compile-time `#ifdef` on `HAVE_IPP`/`HAVE_VDSP`, neither defined — so unlike sfizz it is not a candidate for decision 6's cross-CPU disagreement; and its threading is compiled out by `NO_THREADING` as well as refused by the option, with the option itself read only by the R2 engine. Measured: a stretched clip hashed identically in three fresh processes. |
-| Sample-rate conversion | An asset whose sample rate differs from the render target is converted, and the converter is a DSP surface like any other. It is deterministic because JUCE is pinned by commit; M1's audio fixture uses an asset at the render rate so the golden does not depend on it, and a rate-mismatched asset is a documented note rather than a silent resample. **Written 2026-09-07, in PR 8: it is `juce::LagrangeInterpolator`, and there are two of them.** The engine converts the asset to the render's rate itself, once, before the stretch and the fades — a fixed 5-point Lagrange polynomial with no options, no runtime dispatch and a four-sample history that `reset()` zeroes, so its output is a pure function of the input and the ratio. It has no anti-alias filter, so downsampling folds; that is the note, not a defect to hide. The second one is Tracktion's: `WaveNode::processSection` reads every wave clip through a `juce::LagrangeInterpolator` even at a 1:1 ratio. At exactly 1:1 the kernel is a delta and the samples come back bit-identical — measured over a rendered clip, zero difference — but the interpolator's 2-sample base latency is not compensated, so **an audio clip sounds two samples after its position**. Deterministic, upstream's, and recorded here so that the offset in a golden is not a mystery. |
+| Sample-rate conversion | An asset whose sample rate differs from the render target is converted, and the converter is a DSP surface like any other. It is deterministic because JUCE is pinned by commit; M1's audio fixture uses an asset at the render rate so the golden does not depend on it, and a rate-mismatched asset is a documented note rather than a silent resample. **Written 2026-09-07, in PR 8: it is `juce::LagrangeInterpolator`, and there are two of them.** The engine converts the asset to the render's rate itself, once, before the stretch and the fades — a fixed 5-point Lagrange polynomial with no options, no runtime dispatch and a four-sample history that `reset()` zeroes, so its output is a pure function of the input and the ratio. It has no anti-alias filter, so downsampling folds; that is the note, not a defect to hide. **Written 2026-09-07, in PR 11: an asset in `assets/` has no file extension, and JUCE picks a reader by extension.** `AudioFormatManager::createReaderFor (const File&)` asks each format `canHandleFile`, which compares the extension; an asset is named by its own SHA-256 (§10), so *every* audio clip in a real project failed with "not an audio file this engine reads". PR 8's check never saw it, because it handed the engine a path of its own ending in `.wav`. The engine takes the stream overload instead, which asks each format to read the header — the only honest question about a file whose name is a hash. The second interpolator is Tracktion's: `WaveNode::processSection` reads every wave clip through a `juce::LagrangeInterpolator` even at a 1:1 ratio. At exactly 1:1 the kernel is a delta and the samples come back bit-identical — measured over a rendered clip, zero difference — but the interpolator's 2-sample base latency is not compensated, so **an audio clip sounds two samples after its position**. Deterministic, upstream's, and recorded here so that the offset in a golden is not a mystery. |
 
 Rubber Band is the one that would have been missed. It arrives as "time-stretch, already
 pinned at 4.0.0" (§17) and looks like a settled dependency, but a pinned *version* of a phase
@@ -198,6 +219,35 @@ The spike could not answer it: it ran on one machine.
 
 A golden is not blessed on a claim this ADR has not yet tested. Until PR 11 reports, the M1
 goldens are valid for the pinned image and CPU, and they say so.
+
+**Run 2026-09-07, in PR 11. Nothing failed, nothing retreated, and the experiment as written
+is still open.** Read the three results separately, because they are not the same result:
+
+1. **Same binary, three runners, one CPU model.** The `renders` matrix rendered all four
+   goldens on three `ubuntu-24.04` runners with the binary the `engine` job built and uploaded.
+   All three reproduced the committed bytes exactly. GitHub gave all three the **same** CPU —
+   `AMD EPYC 7763 64-Core Processor` — so this says the binary is reproducible and says
+   *nothing at all* about cross-CPU. The `cross-cpu` job reports that as **inconclusive**, in
+   those words, rather than as a pass; it will say something different the run a second model
+   turns up, and that is now standing rather than a thing someone has to remember to try.
+2. **Two builds, two CPU models, identical PCM.** The goldens were blessed on the development
+   machine — `AMD Ryzen AI 9 HX PRO 370`, Zen 5, `avx512f` present — on Ubuntu 24.04 with
+   g++ 13.3.0, and reproduced byte for byte on the EPYC 7763, Zen 3, with **no `avx512f`** and
+   a separately compiled engine. All four fixtures, sfizz included. That is a stronger
+   statement than decision 1 makes in one respect (two builds, not one binary) and it is
+   genuinely two CPU models.
+3. **What result 2 does not show, and this is the part worth writing down.** Trap 1's hazard is
+   a *dispatcher choosing differently* — AVX2 here, SSE4 there. It almost certainly did not
+   happen here. sfizz's `SIMDHelpers.cpp` selects between scalar, SSE and **AVX** (§8), and
+   both of these CPUs have AVX and AVX2, so both runs will have taken the same path. What
+   result 2 measures is that the *same* SIMD path rounds identically on two microarchitectures,
+   which is worth knowing and is not the question. A CPU without AVX would be the interesting
+   one, and GitHub's pool did not offer one.
+
+So decision 1's claim is left exactly where it was. The evidence points one way, the mechanism
+that would settle it runs on every pull request, and widening the claim on one pair of AMD
+parts that took the same code path would be the "a claim is not a goal" this ADR already
+refuses in its alternatives table.
 
 ## Alternatives considered
 

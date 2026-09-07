@@ -1,6 +1,6 @@
 # AGENTS.md — tests/
 
-Shared, cross-language test inputs, and the determinism suite (CLAUDE.md, M0 step 4; specs §11, §13). Per-language unit tests live with their package (`schema/tests/`), not here.
+Shared, cross-language test inputs, the determinism suite (CLAUDE.md, M0 step 4; specs §11, §13) and the golden renders (M1 PR 11; ADR 0009). Per-language unit tests live with their package (`schema/tests/`), not here.
 
 This is a Cargo package, `escribass-tests`, with no library: suites and their inputs only.
 
@@ -9,7 +9,11 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `fixtures/history/patch_entry.json`, `fixtures/history/refs.json` | The on-disk forms of ADR 0001 §1 and §2, written by `core/tests/history.rs`. | `UPDATE_FIXTURES=1 cargo test -p escribass-core` |
 | `fixtures/song/minimal.json` | Canonical JSON (ADR 0002 §4) of the song built by `build()` in `schema/tests/roundtrip.rs`. Read by the Rust, TypeScript and Python round-trip tests. | `UPDATE_FIXTURES=1 cargo test -p escribass-schema` |
 | `fixtures/manifest.json` | The build manifest every suite validates against (ADR 0010 §4): a **subset** of a real `escribass_engine --scan`, with the machine's plugin paths dropped. Read by `core/tests/common/mod.rs` and by the determinism suite, which passes it to both binaries as `--manifest`. | hand, from a real scan; see below |
+| `common/mod.rs` | What both suites need to drive a real server process: `AT`, `binary`, `refuse_if_stale`, `speak`, `Scratch`. Extracted in M1 PR 11 — two copies of a stale-binary guard is one copy that stops being maintained. | hand |
 | `determinism.rs` | The suite: it drives `escribass-mcp` and `escribass-grpc` as subprocesses — each given `--manifest fixtures/manifest.json` — and compares what they produce. | hand |
+| `renders.rs` | The golden-render suite (ADR 0009; §11), **behind the `renders` cargo feature**: it drives `escribass-mcp` with `--engine` and a *real* build manifest, renders each fixture for real, and compares the WAV's `data` chunk twice over — against a second run and against committed bytes. | hand |
+| `renders/<name>/script.json` | A fixture, as tool calls. No `render_export` step: the harness appends it, because `output_path` is a scratch path that only exists at run time and `render.proto` requires an absolute one. Assets travel as base64 inside `add_asset`, since what a render golden commits is the WAV. | hand |
+| `renders/<name>/golden.wav`, `golden.wav.sha256` | The blessed render, whole, and the SHA-256 of its `data` chunk — the number §18.2 publishes. | `UPDATE_FIXTURES=1 cargo test -p escribass-tests --features renders` |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`, `origin.json` and `plan.json` — what `compile` says about the project, the `RenderPlan` or every reason there is none (ADR 0007 §4). | `UPDATE_FIXTURES=1 cargo test` |
 
@@ -30,6 +34,10 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | A fixture or a golden changes only in the PR that changes the `.proto`, the canonical form, or a tool's semantics — and its diff is reviewed there. `UPDATE_FIXTURES=1` blesses whatever ran, including a deterministically wrong output; this rule is the only guard against that | specs §17 (same rule for golden renders) |
 | Two runs agreeing catches nondeterminism; only the golden catches **drift**. A dependency that changes how a float is written, or feature unification flipping `serde_json::Map` to insertion order, produces the same wrong bytes twice | specs §11 |
 | Fixture inputs are byte-stable: fixed timestamps, fixed ids, no wall clock, no unseeded randomness | specs §11; ADR 0001 §5 |
+| A render golden is compared over the WAV's **`data` chunk and nothing else**. JUCE writes a `bext` chunk carrying the clock, so the file differs between two runs that produced identical audio; the whole file is committed anyway, because a reviewer needs something to diff and a listener something to play | ADR 0009 §2 |
+| **No tolerance, ever.** A plugin that proves non-deterministic gets a documented note in §8 in the PR that finds it — never a global slackening, which would make "two CPUs round differently" and "a plugin changed a filter" the same observation | ADR 0009 §2, §6 |
+| A render fixture avoids every RNG a plan cannot seed: Surge XT needs `A Osc 1 Retrigger` set, because its factory patch randomises the oscillator start phase from a wall-clock seed; sfizz's `*_random` opcodes stay out, and its SFZ names its sample by that asset's own hash so nothing walks a directory | ADR 0009 §3, §4; specs §8 |
+| `renders.rs` compares the engine's embedded commits against `lock.baseline.json` **before it reads a sample**, and gives every render an output path of its own. Both are guards against believing a stale answer: the first against an engine built from drifted submodules, the second against a render that did not replace its output | ADR 0008 §5; ADR 0009 §2 |
 | Every scripted `render_export` is a **dry run**. This suite runs in the `checks` job, which builds no engine, so what it can honestly check is compile-through-the-tool-API and the wire shape of the answer. The engine half — the spawn, the WAV, the hash, the commits — is `renders.rs` (M1 PR 11), behind the cargo feature that makes it absent where it cannot run. What keeps that from being a silent gap is `a_real_render_needs_an_engine_and_says_so_rather_than_pretending`: asked for a real render with no engine, a server answers as an operator error and writes nothing | ADR 0006 §3; ADR 0008 §2 |
 
 ## Adding things
@@ -38,6 +46,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 - **A plugin or a parameter to `fixtures/manifest.json`:** build the engine, run `cmake --build engine/build --target manifest`, and copy the entry — id, `commit`, `version`, and only the `params` the fixtures name — out of `engine/build/manifest.json`. Never the `path`: it is machine-specific and this file is committed. Never a value typed from memory: the CI subset check is what would catch it, and catching it in CI is slower than reading it off the scan.
 - **The four scripts:** `every_tool` (the whole surface is reproducible, and a preview burns nothing), `refusals` (a refused call changes nothing — not the document, not the log, not the ids the next call mints), `branches` (navigation records nothing, a merge records one entry with two parents, a conflict writes nothing), `render` (what `compile` resolves — order, loops, solo and mute, lanes, the render length — is a pure function of the document, and the plan golden is where M0's claim and M1's meet).
 - **`plan.json`** is written for every script, so a project M1 cannot render goldens its refusal, naming the field. Its asset index is built from the `assets/` listing under the fixed root `/escri/assets`: `compile` reads no file, so the path is opaque to it, and a run's temporary directory in a golden would be the one kind of input the suite exists to keep out.
+- **A render fixture:** a directory under `renders/` with a `script.json`, its name added to `NAMES` in `renders.rs` — a fixture the list does not name fails rather than being quietly unrun — and a golden written with `UPDATE_FIXTURES=1`. Say in the pull request what it is: instrument, duration, rate, depth, channels, peak and PCM hash. A fixture that needs randomness to sound right is not one M1 can golden.
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
 - **A cross-language check:** `schema/tests/replay.test.ts` and `schema/tests/test_replay.py` read the golden and replay it. They compare *documents*, not bytes — neither side's serialiser is the canonical writer, and that the bytes are canonical is Rust's claim.
 - **A tool:** add it to a script — `every_implemented_tool_is_scripted` enforces this — add an arm to the gRPC driver's `call!`, and run the suite — the ids of every later step shift if the new tool mints any.
@@ -47,6 +56,13 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 ```
 cargo test                      # from the workspace root: builds the binaries, then runs
 cargo test -p escribass-tests   # only works if the binaries are already built
+cargo test -p escribass-tests --features renders   # and only with a built engine
 ```
+
+`renders` is a cargo feature rather than a test that notices there is no engine and returns:
+that would be the quiet skip M0.4 exists to prevent. Without the feature the target does not
+exist; with it, the suite insists on an engine and says how to build one. It finds
+`engine/build` where CMake puts it — or `ESCRIBASS_ENGINE` and `ESCRIBASS_MANIFEST` — and what
+makes looking safe is that it then refuses a build whose commits are not the pinned ones.
 
 `CARGO_BIN_EXE_<name>` is not set for a package that does not own the binary, so the suite finds the binaries from the test executable's own path. It cannot build them — cargo holds the build lock while tests run — and it **refuses to run against one older than `core/src`**, because `cargo test -p escribass-tests` rebuilds the libraries and not the binaries, and a suite that validates a stale build and passes is worse than one that fails.

@@ -1,1 +1,6 @@
 tests/determinism/** -text
+# The golden renders (ADR 0009 §2). `-text` keeps the fixtures byte-stable, and `binary` on the
+# WAVs stops `git diff` from emitting a megabyte of mojibake for a file whose comparison lives
+# in `tests/renders.rs` anyway.
+tests/renders/** -text
+*.wav binary

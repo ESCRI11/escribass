@@ -463,7 +463,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 8b | `m1.8b-sampler` | `Instrument.kind: sampler` — an SFZ from `assets/` loaded into sfizz. §16 puts the sampler in M1 and no PR owned it; §11 wants a golden per bundled instrument, so PR 11's sfizz fixture depends on this. **Done.** The row's premise was half wrong: sfizz with no SFZ is *not* silent — its default patch is `<region>sample=*sine`, so what a fixture would have goldened is a sine and not a sampler. The real hazard is one layer in, and measured: an SFZ whose sample cannot be resolved renders silence and exits zero |
 | 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else. **Done.** Every byte that moved has one of three causes — the plugin id, two parameter ids, and `lock.json`'s two new blocks — and the goldens were re-derived from the old ones by that substitution alone to prove it. `param_out_of_range` came along with them, since PR 7 had already established the domain |
 | 10 | `m1.10-render-export` | `Session::render_export` over both transports. **Done.** The row said "and `add_asset`", which PR 3 had already delivered on both transports and the determinism suite already scripts — so this PR is `render_export` alone. Two things it settled that the row did not name: the engine binary is **told** (`--engine`), never searched, for the reason the manifest is (ADR 0010 §4); and `RenderExport` answers with `RenderResponse` rather than the shared `ToolResult`, because a render produces no ops and the hash it reports has nowhere else to go (ADR 0006 §1, extended). The determinism suite scripts it as a **dry run**, since the `checks` job builds no engine; the engine half is PR 11's, and `tests/AGENTS.md` says so where a reader will hit it |
-| 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip. Also **deletes the `RPC_SAME_RESPONSE_TYPE` exemption in the root `buf.yaml`**: it exists only while `main` still carries `RenderExport`'s old response type, which is what `buf breaking --against` compares to |
+| 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip. Also **deletes the `RPC_SAME_RESPONSE_TYPE` exemption in the root `buf.yaml`**: it exists only while `main` still carries `RenderExport`'s old response type, which is what `buf breaking --against` compares to. **Done**, and it found two defects that nothing before it could have. **A render did not replace its output**: Tracktion opens the destination at end-of-file, so a second render to one path appended a whole second RIFF file and every reader — the engine's own read-back included — took the first `data` chunk. Every "renders the same twice" check that reused one path was therefore comparing a render against itself, which is why **Surge XT was believed deterministic at its factory patch and is not**: it needs `A Osc 1 Retrigger` set, which is trap 7 arriving exactly where trap 7 said it would. And **an asset in `assets/` could not be played at all**: JUCE picks a reader by file extension and a content-addressed asset has none, so every audio clip in a real project failed — invisible until a fixture built through the tool API rendered one |
 | 12 | `m1.12-locality` | The bar-17 demo as a test |
 | 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone |
 | 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
@@ -481,6 +481,15 @@ prevent; a feature is absent where it cannot run and loud where it must.
 1. **Two runs agree, the golden differs, and the cause is the CPU.** sfizz and JUCE dispatch
    SIMD at runtime; AVX2 on one runner and SSE4 on another round differently. Reads as
    flakiness. Pin the ISA; bless a golden only after the spike hashes identically on two CPUs.
+   **PR 11 runs the experiment** (ADR 0009 §6): the `renders` job renders the four goldens on
+   three `ubuntu-24.04` runners with the binary the `engine` job built and uploaded, comparing
+   against the same committed bytes with no tolerance, and `cross-cpu` reports which CPU models
+   actually turned up. One model across the matrix is reported as **inconclusive** rather than
+   as a pass, because the runner pool is not ours to choose. **First run, 2026-09-07:** three
+   runners, one CPU model (`AMD EPYC 7763`), all four goldens reproduced — inconclusive, and
+   reported in those words. Separately, the goldens were blessed on an `AMD Ryzen AI 9 HX PRO
+   370` and reproduce on the EPYC byte for byte, which is two CPU models and two builds; ADR
+   0009 §6 records why that is evidence and not the answer, and the trap stays open.
 2. ~~**The WAV header carries a date or a software tag**~~ — **confirmed by the spike**: JUCE
    emits a `bext` chunk with `OriginationDate` and `OriginationTime`. Compare the `data` chunk.
 3. **Denormals** — without FTZ/DAZ a filter tail is 100× slower and its bits depend on a
@@ -500,8 +509,18 @@ prevent; a feature is absent where it cannot run and loud where it must.
    parameter instead. The trap's other half, smoothing from a reused instance, is ADR 0008 §2's
    fresh process and needs nothing here.
 7. **Randomness inside the fixture** — Surge start phase and unison detune, sfizz `*_random`.
+   **Settled in PR 11, and the trap was right where PR 7 thought it was not.** Surge XT's
+   factory patch does reach the wall-clock RNG — five fresh renders, five hashes — and PR 7's
+   three agreeing hashes were one render read three times, through the output file it had not
+   replaced. `A Osc 1 Retrigger` (`1217754326`) at 1.0 is the whole fix, and four fresh
+   processes then agree exactly. sfizz's `*_random` opcodes stay out of the fixture, and the
+   SFZ names its sample by the asset hash (PR 8b) so nothing walks a directory.
 8. **The suite validates a stale engine** — M0.4's exact defect, one language over. The engine
-   embeds the submodule commits it was built from and the suite compares them.
+   embeds the submodule commits it was built from and the suite compares them. **Closed in PR
+   11**: `tests/renders.rs` compares `RenderResult.commits` against `lock.baseline.json` before
+   it reads a sample, and a mismatch fails naming the component and saying not to bless a golden
+   against that build. Proved by a doctored map in a test that needs no engine, and by moving a
+   pin in `lock.baseline.json` and watching a real render refuse.
 9. ~~**JUCE `add_subdirectory` twice**~~ — **confirmed and handled in PR 6**: Surge vendors
    `surge-synthesizer/JUCE`, Dexed vendors `juce-framework/JUCE` at another commit, Tracktion a
    third. Each plugin is an `ExternalProject` with its own configure and its own target
@@ -520,7 +539,9 @@ prevent; a feature is absent where it cannot run and loud where it must.
 11. ~~**sfizz's VST3 lives in `sfizz-ui`**~~ — **confirmed by the spike**: `sfizz` 1.2.3's CMake
     builds a library and a JACK client, no VST3.
 12. **`ubuntu-latest` moves** — an image update changes the compiler and every golden drifts
-    with no PR to blame.
+    with no PR to blame. **Held in PR 11**: the `renders` job names `ubuntu-24.04` like the
+    `engine` job it takes its binary from, so the goldens are only ever compared on the image
+    §17 pins. `cross-cpu` does nothing but read text files and may sit on `ubuntu-latest`.
 13. ~~**`every_tool`'s plugin id is invented.**~~ — **settled in PR 9**, and the trap was
     right about all of it. `com.surge-synth.surge-xt` and `org.surge-synth.surge-xt` are now
     `Surge Synth Team/Surge XT` across 23 files, and `cutoff` and `drive` are `1945359057` and
@@ -554,7 +575,12 @@ prevent; a feature is absent where it cannot run and loud where it must.
     identically in three fresh processes.
 16. **An audio asset makes `assets/` non-empty for the first time.** `Project::write` creates
     the directory and M0's comparison ignores it because git cannot store an empty one; a
-    golden that now contains an asset changes what the determinism suite compares.
+    golden that now contains an asset changes what the determinism suite compares. **Settled
+    where it landed**: the determinism suite's `every_tool` golden already carries assets, and
+    PR 11's render fixtures carry theirs as base64 inside `script.json` rather than as files,
+    because what a render golden commits is the WAV. The trap's real sting turned out to be one
+    layer down and is trap 7's neighbour: an asset is named by its own hash and so has **no
+    extension**, which is what stopped the engine reading one at all until PR 11.
 
 ### Deferred again, with reasons
 
