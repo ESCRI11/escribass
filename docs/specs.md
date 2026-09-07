@@ -170,7 +170,9 @@ Before merging any change, confirm:
 - All external tool versions recorded in `lock.json` and checked at load. From M1 that is the
   engine's submodule commits and one entry per plugin the song references, added on first
   reference and never removed; a referenced plugin this build cannot match refuses to open with
-  `lock_mismatch`, and re-pinning a plugin is always explicit. The engine block re-pins on open
+  `lock_mismatch`, and re-pinning a plugin is always explicit. A `SamplerRef` counts as a
+  reference: its `sfz_hash` pins the patch and not the build that plays it, and until M1 PR 13 a
+  sampler-only project pinned nothing at all (ADR 0010 §1, corrected). The engine block re-pins on open
   instead: a newer engine still renders the song, and what a render was made with travels with
   the render (ADR 0010 §1–§3, ADR 0008 §5).
 - A golden-render test exists for every bundled instrument (render fixture → hash compare).
@@ -181,7 +183,9 @@ Before merging any change, confirm:
   no engine to run rather than a test that skips itself; it renders each fixture twice for
   nondeterminism and against committed bytes for drift, and a mismatch names the first differing
   sample. It compares the commits the engine was built from against `lock.baseline.json` first,
-  because a stale engine is a wrong answer and not a golden failure (ADR 0008 §5).
+  because a stale engine is a wrong answer and not a golden failure (ADR 0008 §5) — and, since
+  M1 PR 13, refuses an engine binary older than `engine/src`, which those commits say nothing
+  about, being the submodules'.
 - **The determinism suite in `tests/` passes.** It drives `core` through the tool API over a
   real server process and checks the claim three ways: two runs against each other, each
   against a committed golden, and one transport against the other. Two runs agreeing catches
