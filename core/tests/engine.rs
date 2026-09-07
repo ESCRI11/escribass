@@ -300,6 +300,27 @@ fn stdout_that_is_not_a_render_result_is_an_operator_error() {
     assert_eq!(failed.rule, "engine_unreadable");
 }
 
+#[cfg(unix)]
+#[test]
+fn an_engine_that_exits_zero_saying_nothing_is_an_operator_error() {
+    // The case the test above cannot reach: `echo` writes bytes that fail to decode, but an
+    // engine that writes *nothing* hands `RenderResult::decode` an empty slice, which is a
+    // valid proto3 message. Without a check on the hash this is a "successful" render with an
+    // empty `pcm_sha256` and no file on disk — precisely what song_tools.proto §8 says is an
+    // operator error and never a refusal.
+    let dir = Scratch::new();
+    let mut session = opened(&dir);
+    let engine = fake_engine(&dir, "true");
+    session.set_engine(Engine::new(&engine, MANIFEST));
+
+    let failed = session
+        .render_export(&export(&dir.at("out.wav"), false))
+        .expect_err("an engine that renders nothing is an operator error");
+    assert_eq!(failed.rule, "engine_unreadable");
+    assert!(failed.message.contains("pcm_sha256"), "{}", failed.message);
+    assert!(!dir.at("out.wav").exists(), "nothing was rendered");
+}
+
 /// The id of the entity a tool's patch added, read from the patch it returned.
 ///
 /// Through the tool API, like every other read of what a tool did (CLAUDE.md #2).

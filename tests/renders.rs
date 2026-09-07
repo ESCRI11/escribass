@@ -49,7 +49,7 @@
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{speak, Scratch, AT};
+use common::{refuse_if_older_than_source, speak, workspace, Scratch, AT};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -83,10 +83,6 @@ const COMPONENTS: [&str; 7] = [
     "dexed",
 ];
 
-fn workspace() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("a workspace root")
-}
-
 /// Where the engine build is, told by an environment variable or found where CMake puts it.
 ///
 /// `core` is told and never searches (ADR 0008 §2, ADR 0010 §4), and this is a test harness
@@ -94,6 +90,12 @@ fn workspace() -> &'static Path {
 /// builds to, and what makes that safe is that the engine reports the commits it was compiled
 /// from and [`stale`] refuses a build that is not the pinned one. A search that could find the
 /// wrong engine is only dangerous when nothing checks which engine it found.
+///
+/// **Which engine, and how old.** `stale` compares *submodule* commits, so it says the vendored
+/// trees are the pinned ones and nothing at all about `engine/src`: editing `main.cpp` and not
+/// rebuilding left this suite green, and `bless` behind the same non-check would commit a
+/// golden from a binary predating its own source. So the engine is checked against its sources
+/// here too, by the same walk `common` uses for the cargo binaries (M1 PR 13).
 fn told(variable: &str, default: &str) -> PathBuf {
     let path =
         std::env::var_os(variable).map(PathBuf::from).unwrap_or_else(|| workspace().join(default));
@@ -105,6 +107,15 @@ fn told(variable: &str, default: &str) -> PathBuf {
          `cmake --build engine/build --target manifest`, or set {variable}.",
         path.display()
     );
+    if variable == "ESCRIBASS_ENGINE" {
+        refuse_if_older_than_source(
+            "the engine",
+            &path,
+            &common::engine_sources(),
+            "CMake is outside the cargo graph, so nothing rebuilt it for you. Run\n\
+             `cmake --build engine/build --target manifest`.",
+        );
+    }
     path
 }
 

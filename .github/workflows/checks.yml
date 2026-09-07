@@ -506,6 +506,126 @@ jobs:
           [ -n "$one" ] && [ "$one" = "$two" ] \
             || { echo "::error::two renders of one audio clip disagree: $one vs $two"; exit 1; }
 
+      # M1 PR 13. Five defects a four-lane review of M1 found, every one of them behind a green
+      # check and every one of them exiting 0 — which is why none of them was a golden failure
+      # and why they are asserted here rather than left to the render suite. Each block names
+      # the measurement that reproduced it.
+      - name: A crowded, killed, oversized or nonsense render fails instead of lying
+        if: env.SKIP != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          protoc=engine/build/vendor/protobuf/protoc
+          encode() {
+            "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+              --encode=escribass.render.v1.RenderPlan proto/render.proto
+          }
+          hash_of() {
+            "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+              --decode=escribass.render.v1.RenderResult proto/render.proto \
+              | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
+          }
+          python3 - <<'PY'
+          import struct, wave
+          # The clip's own asset: a quarter-second of constant 0.5 at the render's rate, so
+          # nothing resamples. And a decoy of a different length and level, to stand in the
+          # scratch directory as a previous run's leftover.
+          for name, frames, level in (("guard.wav", 12000, 0.5), ("decoy.wav", 24000, -0.25)):
+              w = wave.open(name, "wb")
+              w.setnchannels(1); w.setsampwidth(3); w.setframerate(48000); w.setnframes(frames)
+              w.writeframes(struct.pack("<i", round(level * 8388607))[:3] * frames)
+              w.close()
+          PY
+          plan() {
+            cat <<EOF
+          tracks {
+            mix { gain_db: 0.0 pan: 0.0 }
+            clips { start_tick: 480 length_ticks: ${2:-480}
+                    audio { clip { gain_db: ${3:-0.0} } path: "$PWD/guard.wav" } }
+          }
+          master { mix { gain_db: 0.0 pan: 0.0 } }
+          tempo { tick: 0 bpm: 120.0 }
+          target { kind: RENDER_KIND_MASTER sample_rate: 48000 bit_depth: 24 }
+          length_ticks: ${4:-1920}
+          output_path: "$PWD/$1"
+          EOF
+          }
+          refuses() {
+            what="$1"; shift
+            plan refused.wav "$@" | encode > refused.binpb
+            if "$engine" engine/build/manifest.json < refused.binpb > /dev/null 2> refused.err; then
+              echo "::error::the engine accepted $what"
+              exit 1
+            fi
+            sed -n 's/^escribass_engine: /  refused: /p' refused.err
+          }
+
+          # A plan carrying a value that is not a number. `normalised()` gated every parameter
+          # through `juce::jlimit`, which returns its argument when both comparisons are false,
+          # so NaN went through it untouched; `gain_db` is read elsewhere entirely and had no
+          # gate at all. Measured: NaN, inf and 1e9 dB each rendered the clip as pure silence,
+          # exit 0, with a hash identical to an empty plan's.
+          refuses "a NaN gain_db" 480 nan
+          refuses "an infinite gain_db" 480 inf
+          # Finite, and still not a finite gain: 10^(1e9/20) is inf.
+          refuses "a gain_db of 1e9" 480 1e9
+          # An int32 tick count that no longer fits an int number of sample frames. The clip's
+          # frame count used to be a bare `(int)` cast of an int64: 1073741824 ticks at 120 bpm
+          # and 48 kHz is 26,843,545,600 samples, which wraps to a positive 1,073,741,824, past
+          # the `<= 0` guard and into an 8.6 GB AudioBuffer.
+          refuses "a clip of 2^30 ticks" 1073741824 0.0
+          refuses "a plan of 2^31-1 ticks" 480 0.0 2147483647
+
+          # A scratch directory a previous run left behind. It was `escribass_engine.<pid>` in
+          # the system temp directory, deleted only from a destructor — so it leaked every time
+          # a render was killed, and pid reuse then walked into it. `createOutputStream` opens
+          # an existing file at its end rather than truncating, so the clip was appended after
+          # the leftover and `createReaderFor` took the stale payload in front: one plan, three
+          # hashes, exit 0 and stderr empty each time. `$$` in the shell below is the pid the
+          # `exec`d engine inherits, which is what makes this the real collision and not a
+          # simulation of one.
+          plan rendered.wav | encode > guard.binpb
+          clean=$("$engine" engine/build/manifest.json < guard.binpb 2>/dev/null | hash_of)
+          mkdir -p crowded
+          dirty=$(TMPDIR=$PWD/crowded sh -c '
+            mkdir -p "$TMPDIR/escribass_engine.$$" \
+              && cp decoy.wav "$TMPDIR/escribass_engine.$$/clip1.wav" \
+              && exec "$0" engine/build/manifest.json < guard.binpb' "$engine" 2>/dev/null | hash_of)
+          echo "clean scratch $clean"
+          echo "crowded       $dirty"
+          [ -n "$clean" ] && [ "$clean" = "$dirty" ] \
+            || { echo "::error::a leftover scratch file changed the render: $clean vs $dirty"; exit 1; }
+
+          # A render killed halfway must not have destroyed the last good one. The destination
+          # used to be deleted up front and written in place, so a SIGKILL left a truncated WAV
+          # — measured at 43 MB, its `data` chunk declaring more than the file held — exactly
+          # where the previous render had been, with the engine never reaching its own length
+          # check to say so. It now renders to a sibling `.part` and renames only after every
+          # check passes.
+          plan keep.wav | encode > keep.binpb
+          plan keep.wav 480 0.0 2880000 | encode > keeplong.binpb
+          "$engine" engine/build/manifest.json < keep.binpb > /dev/null 2>/dev/null
+          before=$(sha256sum keep.wav | cut -d' ' -f1)
+          "$engine" engine/build/manifest.json < keeplong.binpb > /dev/null 2>/dev/null &
+          victim=$!
+          sleep 2
+          kill -9 $victim || true
+          wait $victim 2>/dev/null || true
+          after=$(sha256sum keep.wav | cut -d' ' -f1)
+          echo "before the kill $before"
+          echo "after  the kill $after"
+          [ "$before" = "$after" ] \
+            || { echo "::error::a killed render replaced the previous one with a fragment"; exit 1; }
+          rm -f keep.wav.part
+
+          # A stdout it could not write. The RenderResult fits std::cout's buffer, so
+          # SerializeToOstream returned true having written nothing to the descriptor and the
+          # real write(2) happened inside the unchecked flush(): `> /dev/full` was exit 0 with
+          # an empty stdout and nothing on stderr.
+          if "$engine" engine/build/manifest.json < guard.binpb > /dev/full 2>/dev/null; then
+            echo "::error::the engine exited 0 after a stdout it could not write"
+            exit 1
+          fi
+
       # The other half of PR 8: Rubber Band. A one-second asset in a two-second clip has to
       # come out two seconds long with its pitch unchanged, and it has to do it the same way
       # twice — a phase vocoder is the surface ADR 0009 §4 says is most at the mercy of its own
