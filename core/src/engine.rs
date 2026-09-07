@@ -86,7 +86,7 @@ impl Engine {
             ));
         }
 
-        RenderResult::decode(&finished.stdout[..]).map_err(|e| {
+        let result = RenderResult::decode(&finished.stdout[..]).map_err(|e| {
             self.broke(
                 "engine_unreadable",
                 format!(
@@ -95,7 +95,27 @@ impl Engine {
                     said(&finished.stderr),
                 ),
             )
-        })
+        })?;
+
+        // Decoding is not enough to have been answered. proto3 has no required fields, so an
+        // empty stdout — and all-zero stdout with it — decodes to a `RenderResult` with every
+        // field at its default, and an engine that exited 0 having written nothing would come
+        // back as a successful render with an empty hash and no file. `song_tools.proto` §8
+        // says the opposite in as many words: an engine that "writes nothing is an operator
+        // error and never a refusal". The hash is the answer, so its absence is the absence of
+        // an answer — checked on `pcm_sha256` rather than on the byte count because the bytes
+        // do not distinguish "said nothing" from "said all zeroes".
+        if result.pcm_sha256.is_empty() {
+            return Err(self.broke(
+                "engine_unreadable",
+                format!(
+                    "the engine exited 0 and reported no pcm_sha256; a RenderResult without a \
+                     hash is not an answer, and nothing was written (ADR 0008 §1){}",
+                    said(&finished.stderr),
+                ),
+            ));
+        }
+        Ok(result)
     }
 
     fn broke(&self, rule: &'static str, message: String) -> ProjectError {

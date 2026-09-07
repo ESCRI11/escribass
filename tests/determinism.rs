@@ -17,7 +17,7 @@
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{binary, speak, Scratch, AT};
+use common::{binary, engine_sources, refuse_if_older_than_source, speak, Scratch, AT};
 
 use escribass_core::diff;
 use serde::Deserialize;
@@ -795,7 +795,11 @@ fn shaped(result: &escribass_proto::tools::ToolResult) -> Value {
 
 /// A `RenderResponse` in the shape MCP puts on the wire (`core/src/mcp.rs`).
 ///
-/// `result` is null unless an engine ran, which no scripted step does: every one is a dry run.
+/// `result` goes through the generated serializer here for the same reason it does there, and
+/// this line is half the point: a second hand copy would drop a new field identically on both
+/// sides of the comparison, so the parity check would keep passing while both transports lost
+/// it (M1 PR 13). `result` is null unless an engine ran, which no scripted step does: every one
+/// is a dry run.
 fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
     json!({
         "valid": response.valid,
@@ -803,10 +807,7 @@ fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
             "path": e.path, "rule": e.rule, "message": e.message,
         })).collect::<Vec<_>>(),
         "summary": response.summary,
-        "result": response.result.as_ref().map(|result| json!({
-            "pcm_sha256": result.pcm_sha256,
-            "commits": result.commits,
-        })),
+        "result": response.result,
     })
 }
 
@@ -935,4 +936,39 @@ fn every_implemented_tool_is_scripted() {
     for tool in escribass_core::mcp::IMPLEMENTED {
         assert!(scripted.contains(*tool), "`{tool}` is implemented and no script calls it");
     }
+}
+
+#[test]
+fn the_staleness_guard_walks_the_engine_sources_too() {
+    // M1 PR 13, B2. `renders.rs` compared the seven commits the engine embeds and called that
+    // its provenance check; those are *submodule* HEADs, so editing `engine/src/main.cpp`
+    // moved none of them and the golden suite — `bless` included — stayed green against a
+    // binary predating its own source. Demonstrated by editing `main.cpp`, not rebuilding, and
+    // watching the goldens pass.
+    //
+    // Checked here rather than in `renders.rs` because it needs no engine, and the suite that
+    // does need one is behind a feature whose CI job skips a `core/`-only change.
+    let dir = Scratch::new("determinism", "staleness");
+    std::fs::create_dir_all(&dir.0).expect("a scratch directory");
+    let pretend = dir.0.join("escribass_engine");
+    std::fs::write(&pretend, b"an engine built before the last edit").expect("a stub binary");
+    std::fs::File::options()
+        .write(true)
+        .open(&pretend)
+        .expect("the stub opens")
+        .set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::UNIX_EPOCH))
+        .expect("a modification time can be set");
+
+    let refused = std::panic::catch_unwind(|| {
+        refuse_if_older_than_source("the engine", &pretend, &engine_sources(), "rebuild it")
+    })
+    .expect_err("a binary dated 1970 is older than every engine source");
+    let message = refused
+        .downcast_ref::<String>()
+        .cloned()
+        .unwrap_or_else(|| refused.downcast_ref::<&str>().map(|s| s.to_string()).unwrap_or_default());
+    assert!(
+        message.contains("engine/"),
+        "the guard must name the engine source it is older than, and said: {message}"
+    );
 }

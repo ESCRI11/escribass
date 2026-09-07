@@ -54,34 +54,33 @@ pub fn binary(name: &str) -> PathBuf {
     path
 }
 
-/// Refuses to run against a binary older than the source it was built from.
-///
-/// `cargo test -p escribass-tests` builds this package and the *libraries* it depends on — not
-/// `escribass-core`'s binary targets, which is what the suite actually drives. Without this
-/// check the suite happily validates a build from before your change and passes, which is worse
-/// than failing: a determinism suite that green-lights stale bytes is the one kind of test that
-/// must never be quietly wrong.
-///
-/// Found the hard way. Two deliberate mutations to `core` both "passed" here until the binary
-/// was rebuilt by hand. The engine cannot be defended this way at all — it is built by CMake,
-/// outside the cargo graph — which is why it reports the commits it was compiled from instead
-/// and `renders.rs` compares them (ADR 0008 §5, trap 8).
-fn refuse_if_stale(name: &str, path: &Path) {
-    let built = std::fs::metadata(path).and_then(|m| m.modified()).expect("the binary has a time");
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("a workspace root");
+/// The workspace root, from this package's manifest directory.
+pub fn workspace() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("a workspace root")
+}
 
+/// The newest file under `roots`, where a root may be a file or a directory to walk.
+///
+/// Split out of [`refuse_if_stale`] in M1 PR 13, because the engine needs the same walk over a
+/// different set of roots and a second copy of it would be the copy that stops being
+/// maintained. Unreadable roots are skipped rather than refused: a root that is not there
+/// cannot be newer than anything.
+fn newest(roots: &[PathBuf]) -> Option<(std::time::SystemTime, PathBuf)> {
     let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    // Every crate the binaries embed, not just `core`: the canonical writer lives in
-    // `schema/`, and it is the thing the goldens exist to pin. `Cargo.lock` is watched too,
-    // because §11's own drift example — a dependency changing how a float is written — moves
-    // the lock and nothing else, and would otherwise be validated against the old binary.
-    let mut pending = vec![
-        workspace.join("core").join("src"),
-        workspace.join("schema").join("src"),
-        workspace.join("proto").join("src"),
-    ];
-    if let Ok(when) = std::fs::metadata(workspace.join("Cargo.lock")).and_then(|m| m.modified()) {
-        newest = Some((when, workspace.join("Cargo.lock")));
+    let mut consider = |at: PathBuf| {
+        if let Ok(when) = std::fs::metadata(&at).and_then(|m| m.modified()) {
+            if newest.as_ref().is_none_or(|(latest, _)| when > *latest) {
+                newest = Some((when, at));
+            }
+        }
+    };
+    let mut pending: Vec<PathBuf> = Vec::new();
+    for root in roots {
+        if root.is_dir() {
+            pending.push(root.clone());
+        } else {
+            consider(root.clone());
+        }
     }
     while let Some(directory) = pending.pop() {
         let Ok(listing) = std::fs::read_dir(&directory) else { continue };
@@ -89,26 +88,70 @@ fn refuse_if_stale(name: &str, path: &Path) {
             let at = entry.path();
             if at.is_dir() {
                 pending.push(at);
-            } else if at.extension().and_then(|e| e.to_str()) == Some("rs") {
-                if let Ok(when) = entry.metadata().and_then(|m| m.modified()) {
-                    if newest.as_ref().is_none_or(|(latest, _)| when > *latest) {
-                        newest = Some((when, at));
-                    }
-                }
+            } else {
+                consider(at);
             }
         }
     }
+    newest
+}
 
-    if let Some((when, source)) = newest {
-        assert!(
-            built >= when,
-            "`{name}` is older than {}.\n\
-             The suite drives the binary, and `cargo test -p escribass-tests` does not rebuild \
-             it — only the libraries it links. Run `cargo test` from the workspace root, or \
-             `cargo build` first. Passing against a stale build is worse than failing.",
-            source.strip_prefix(workspace).unwrap_or(&source).display()
-        );
-    }
+/// Refuses to run against a build older than the source it was built from.
+///
+/// Without this a suite happily validates a build from before your change and passes, which is
+/// worse than failing: a determinism suite that green-lights stale bytes is the one kind of
+/// test that must never be quietly wrong.
+///
+/// Found the hard way, twice. `cargo test -p escribass-tests` builds this package and the
+/// *libraries* it depends on, not `escribass-core`'s binary targets — two deliberate mutations
+/// to `core` both "passed" here until the binary was rebuilt by hand. And in M1 PR 13 the same
+/// hole was found under the engine: `renders.rs` compares the *submodule* commits the engine
+/// embeds (ADR 0008 §5, trap 8), which is a check on the vendored trees and says nothing about
+/// `engine/src`, so editing `main.cpp` and not rebuilding left the golden suite green. The
+/// commit comparison and this are two different questions; both are asked.
+pub fn refuse_if_older_than_source(what: &str, built: &Path, roots: &[PathBuf], remedy: &str) {
+    let when_built =
+        std::fs::metadata(built).and_then(|m| m.modified()).expect("the binary has a time");
+    let Some((when, source)) = newest(roots) else { return };
+    assert!(
+        when_built >= when,
+        "`{what}` is older than {}.\n{remedy}\nPassing against a stale build is worse than \
+         failing.",
+        source.strip_prefix(workspace()).unwrap_or(&source).display()
+    );
+}
+
+/// What the engine binary must be newer than.
+///
+/// Named here, beside the walker, so a test can assert these roots actually reach
+/// `engine/src/main.cpp` — the claim that was false before M1 PR 13 and that nothing checked.
+pub fn engine_sources() -> Vec<PathBuf> {
+    vec![
+        workspace().join("engine").join("src"),
+        workspace().join("engine").join("cmake"),
+        workspace().join("engine").join("CMakeLists.txt"),
+    ]
+}
+
+/// The cargo half of the check above: a workspace binary against every crate it embeds.
+fn refuse_if_stale(name: &str, path: &Path) {
+    // Every crate the binaries embed, not just `core`: the canonical writer lives in
+    // `schema/`, and it is the thing the goldens exist to pin. `Cargo.lock` is watched too,
+    // because §11's own drift example — a dependency changing how a float is written — moves
+    // the lock and nothing else, and would otherwise be validated against the old binary.
+    refuse_if_older_than_source(
+        name,
+        path,
+        &[
+            workspace().join("core").join("src"),
+            workspace().join("schema").join("src"),
+            workspace().join("proto").join("src"),
+            workspace().join("Cargo.lock"),
+        ],
+        "The suite drives the binary, and `cargo test -p escribass-tests` does not rebuild it \
+         — only the libraries it links. Run `cargo test` from the workspace root, or \
+         `cargo build` first.",
+    );
 }
 
 // ---------------------------------------------------------------------------

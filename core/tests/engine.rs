@@ -61,20 +61,10 @@ fn opened(dir: &Scratch) -> Session {
     Session::new(project, Box::new(ids), Box::new(clock), Author::Model)
 }
 
-/// An engine that is a script: it records that it ran, keeps the plan it was given, and then
-/// does whatever `body` says.
+/// An engine that is a script, in this suite's scratch directory (`common::fake_engine`).
 #[cfg(unix)]
 fn fake_engine(dir: &Scratch, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = dir.at("fake-engine");
-    let script = format!(
-        "#!/bin/sh\ncat > '{plan}'\necho \"$1\" > '{argument}'\n{body}\n",
-        plan = dir.at("plan.binpb").display(),
-        argument = dir.at("argument").display(),
-    );
-    std::fs::write(&path, script).expect("the fake engine is writable");
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-    path
+    common::fake_engine(&dir.0, body)
 }
 
 #[cfg(unix)]
@@ -298,6 +288,27 @@ fn stdout_that_is_not_a_render_result_is_an_operator_error() {
         .render_export(&export(&dir.at("out.wav"), false))
         .expect_err("an undecodable answer is an operator error");
     assert_eq!(failed.rule, "engine_unreadable");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_engine_that_exits_zero_saying_nothing_is_an_operator_error() {
+    // The case the test above cannot reach: `echo` writes bytes that fail to decode, but an
+    // engine that writes *nothing* hands `RenderResult::decode` an empty slice, which is a
+    // valid proto3 message. Without a check on the hash this is a "successful" render with an
+    // empty `pcm_sha256` and no file on disk — precisely what song_tools.proto §8 says is an
+    // operator error and never a refusal.
+    let dir = Scratch::new();
+    let mut session = opened(&dir);
+    let engine = fake_engine(&dir, "true");
+    session.set_engine(Engine::new(&engine, MANIFEST));
+
+    let failed = session
+        .render_export(&export(&dir.at("out.wav"), false))
+        .expect_err("an engine that renders nothing is an operator error");
+    assert_eq!(failed.rule, "engine_unreadable");
+    assert!(failed.message.contains("pcm_sha256"), "{}", failed.message);
+    assert!(!dir.at("out.wav").exists(), "nothing was rendered");
 }
 
 /// The id of the entity a tool's patch added, read from the patch it returned.

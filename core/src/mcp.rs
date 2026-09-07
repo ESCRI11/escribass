@@ -161,9 +161,21 @@ fn tool_result(result: &ToolResult) -> CallToolResult {
 
 /// A [`RenderResponse`] as MCP carries it.
 ///
-/// Built field by field for the same reason a `ToolResult` is: the shape a model reads is
-/// decided here rather than by a generated serializer. `result` is the engine's own message,
-/// nested as the proto nests it, and null when no engine ran — a dry run or a refusal.
+/// The response's own three fields are built here for the same reason a `ToolResult`'s are:
+/// the shape a model reads is decided here rather than by a generated serializer. `result` is
+/// **not** — it goes through the generated serializer, because `song_tools.proto` says it
+/// crosses "by value rather than copied field by field — a field added to `RenderResult`
+/// reaches a caller without touching this file", and copying its two fields by hand made that
+/// true over gRPC and false here (M1 PR 13). That is M0.3's dropped `provenance` in a second
+/// place, and three layers hid it: every scripted `render_export` is a dry run, so `result` was
+/// always null; the parity harness had a hand copy of its own, so a dropped field was dropped
+/// identically on both sides; and the one test reading a real render answer is behind a
+/// feature whose CI job skips a `core/`-only change.
+///
+/// The generated serializer is the right one to reach for: it emits the same snake_case names
+/// unconditionally (`preserve_proto_field_names`, `emit_fields`), and `RenderResult` has no
+/// `bytes` field, so ADR 0006 §6's base64 rule has nothing to say about it. `result` is null
+/// when no engine ran — a dry run or a refusal.
 fn render_response(response: &RenderResponse) -> CallToolResult {
     let structured = json!({
         "valid": response.valid,
@@ -171,10 +183,7 @@ fn render_response(response: &RenderResponse) -> CallToolResult {
             "path": e.path, "rule": e.rule, "message": e.message,
         })).collect::<Vec<_>>(),
         "summary": response.summary,
-        "result": response.result.as_ref().map(|result| json!({
-            "pcm_sha256": result.pcm_sha256,
-            "commits": result.commits,
-        })),
+        "result": response.result,
     });
     complete(structured, !response.valid)
 }

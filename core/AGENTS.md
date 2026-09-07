@@ -15,7 +15,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/manifest.rs` | `Manifest`: what one engine build can host, as `escribass_engine --scan` wrote it. Read, never written. | done |
 | `src/validate.rs` | `validate(song, manifest)` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
-| `tests/common/mod.rs` | The one thing every suite shares: the manifest fixture. Not a test target — a module. | done |
+| `tests/common/mod.rs` | What more than one suite shares: the manifest fixture, and the shell script that stands in for the engine. Not a test target — a module. | done |
 | `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json` v2 and its pins, atomic writes. Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
@@ -113,6 +113,7 @@ cargo test -p escribass-core
 | A device that is not a plugin is **not** judged by the manifest: a Cmajor, Faust or neural device declares its parameters in a source M4 compiles. Unchecked for a stated reason, in one marked place, with a test that says so | ADR 0010 §4 |
 | `lock.json`'s plugin block is **monotone**: `write` adds a pin for every referenced plugin that has none and removes nothing. A pure function of the current song loses a pin on an ordinary delete, and ADR 0005 §4's undo would re-pin from the running build | ADR 0010 §2 |
 | `open` compares only the pins the song *currently* references, so a stale pin is inert, and refuses a disagreement with `lock_mismatch` — a `ProjectError`, because every fix is an operator action. The `engine` block is the exception and re-pins: one engine, not chosen per project | ADR 0010 §3 |
+| A `SamplerRef` is pinned like a `PluginRef`, at the id the manifest's `sampler` names. Its `sfz_hash` pins the patch and says nothing about the build that turns it into samples, and a sampler-only project pinned nothing at all until M1 PR 13 | ADR 0010 §1, corrected |
 | A new dependency needs asking first, then a `lock.baseline.json` entry | CLAUDE.md #4; specs §17 |
 | Every order in the plan comes from a stated rule — mixer index, `Effect.index`, start tick, tick, parameter name — with ties by id, which is what a `BTreeMap` iterates in under a stable sort. Never from a hash table: a single-run test cannot catch that | ADR 0007 §1; CLAUDE.md #3 |
 | `compile` examines only what sounds. A track `mute` or `solo` silences is dropped before its devices, routing and lanes are looked at, so muting the Cmajor track is how a project exports the rest of itself before M4. The render length is the song's regardless: the last clip or section, sounding or not | ADR 0007 §1, §6 |

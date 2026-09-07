@@ -7,9 +7,13 @@
 mod common;
 use common::{manifest, MANIFEST};
 
-use escribass_core::{diff, entry, timestamp_from_ms, FixedClock, History, IdSource, Op, Project, SeededIds};
+use escribass_core::{
+    diff, entry, new_song, timestamp_from_ms, FixedClock, History, IdSource, Op, Project,
+    SeededIds, Session,
+};
+use escribass_proto::tools::AddTrackRequest;
 use escribass_schema::history::Refs;
-use escribass_schema::song::{Author, Provenance, Song};
+use escribass_schema::song::{device_ref, Author, DeviceRef, Provenance, SamplerRef, Song, TrackKind};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -211,6 +215,7 @@ fn a_lock_from_another_schema_version_is_refused_at_load() {
 // ---- lock.json v2 (ADR 0010) ----
 
 const SURGE: &str = "Surge Synth Team/Surge XT";
+const SFIZZ: &str = "SFZTools/sfizz";
 const SURGE_FX: &str = "/tracks/01M1FPMP00TRACKBASS0000002/fx_chain/01M1FPMP00FXSRGE0000000005";
 
 fn lock(root: &PathBuf) -> Value {
@@ -249,6 +254,51 @@ fn a_referenced_plugin_is_pinned_from_the_build_manifest() {
     // byte-compared by the determinism suite (ADR 0010 §1).
     assert!(lock["plugins"][SURGE].get("path").is_none(), "{lock}");
     assert!(lock["plugins"][SURGE].get("params").is_none(), "{lock}");
+}
+
+#[test]
+fn a_sampler_pins_the_plugin_that_plays_it() {
+    // ADR 0010 §1, amended 2026-09-07 in PR 13. "No entry for `SamplerRef` — the hash IS the
+    // pin" was true of the *patch* and false of everything that turns it into samples: the SFZ
+    // is played by a bundled plugin whose build decides every sample of the render. So
+    // `tests/renders/sfizz`, which names no `plugin_id` anywhere, wrote an empty `plugins`
+    // block; nothing in its `lock.json` moved when sfizz_ui moved, and `lock_mismatch` had no
+    // entry to fire on. §11's **[MUST]** with a whole device kind outside it.
+    let dir = Scratch::new();
+    let mut ids = SeededIds::default();
+    let clock = FixedClock(1_788_307_200_000);
+    let song = new_song(&mut ids, &clock, Author::Model);
+    let project =
+        Project::create(&dir.0, &song, &mut ids, &clock, Author::Model, manifest()).unwrap();
+    let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
+    // Through the tool API, like every other mutation (CLAUDE.md #2).
+    session
+        .add_track(&AddTrackRequest {
+            name: "Piano".to_string(),
+            kind: TrackKind::Instrument as i32,
+            r#ref: Some(DeviceRef {
+                kind: Some(device_ref::Kind::Sampler(SamplerRef {
+                    sfz_hash: "3c1de4f98b".to_string(),
+                })),
+            }),
+            dry_run: false,
+        })
+        .expect("a sampler track");
+
+    let written = lock(&dir.0);
+    assert_eq!(
+        written["plugins"][SFIZZ]["commit"],
+        json!("6ef7b89b6e5aa914593c7f3ca19b859915c30337"),
+        "the build that plays the SFZ is pinned, from the manifest's own `sampler`: {written}"
+    );
+
+    // And the pin is live, which is the only reason to write one down.
+    let mut edited = written;
+    edited["plugins"][SFIZZ]["commit"] = json!("0".repeat(40));
+    write_lock(&dir.0, &edited);
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
+    assert_eq!(e.rule, "lock_mismatch");
+    assert!(e.message.contains(SFIZZ), "{}", e.message);
 }
 
 #[test]

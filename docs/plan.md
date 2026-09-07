@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-03. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-07. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -30,6 +30,13 @@ stale.
 | M0.3 | Landed on `main` as one integration PR | done | PR #27 |
 | M0.4 | Determinism suite in `tests/` | done | PRs #29–#36 |
 | — | **M0 complete.** Schema, core, tool API, determinism suite | done | — |
+| M1.1–1.7 | The M1 plan, ADRs 0007–0011, `AudioClip`, `render.proto`, `compile`, the engine, its three plugins, VST3 hosting | done | PRs #38–#45 |
+| M1.8, 8b | Asset playback with gain, fades and Rubber Band stretch; the SFZ sampler | done | PRs #46, #47 |
+| M1.9 | `lock.json` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown` | done | PR #48 |
+| M1.10 | `render_export` over both transports | done | PR #49 |
+| M1.11 | Four golden renders, and the two defects blessing them found | done | PR #50 |
+| M1.12 | The bar-17 demo as a test, and §18.2's claim narrowed to what it can carry | done | PR #51 |
+| M1.13 | A four-lane review of M1: seven blockers, eleven majors | done | this PR |
 
 C++ codegen waits for M1 (`CLAUDE.md`, M0 step 1).
 
@@ -465,7 +472,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 10 | `m1.10-render-export` | `Session::render_export` over both transports. **Done.** The row said "and `add_asset`", which PR 3 had already delivered on both transports and the determinism suite already scripts — so this PR is `render_export` alone. Two things it settled that the row did not name: the engine binary is **told** (`--engine`), never searched, for the reason the manifest is (ADR 0010 §4); and `RenderExport` answers with `RenderResponse` rather than the shared `ToolResult`, because a render produces no ops and the hash it reports has nowhere else to go (ADR 0006 §1, extended). The determinism suite scripts it as a **dry run**, since the `checks` job builds no engine; the engine half is PR 11's, and `tests/AGENTS.md` says so where a reader will hit it |
 | 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip. Also **deletes the `RPC_SAME_RESPONSE_TYPE` exemption in the root `buf.yaml`**: it exists only while `main` still carries `RenderExport`'s old response type, which is what `buf breaking --against` compares to. **Done**, and it found two defects that nothing before it could have. **A render did not replace its output**: Tracktion opens the destination at end-of-file, so a second render to one path appended a whole second RIFF file and every reader — the engine's own read-back included — took the first `data` chunk. Every "renders the same twice" check that reused one path was therefore comparing a render against itself, which is why **Surge XT was believed deterministic at its factory patch and is not**: it needs `A Osc 1 Retrigger` set, which is trap 7 arriving exactly where trap 7 said it would. And **an asset in `assets/` could not be played at all**: JUCE picks a reader by file extension and a content-addressed asset has none, so every audio clip in a real project failed — invisible until a fixture built through the tool API rendered one |
 | 12 | `m1.12-locality` | The bar-17 demo as a test. **Done.** It also corrected §18.2's wording: "bytes changed only in bar 17" is false in general — a note's release tail outlives its note-off, so how far an edit reaches is a property of the note's length, not of the platform. What the test asserts exactly is that nothing *before* the edit moves; what comes after is measured and printed |
-| 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone |
+| 13 | `m1.13-review-fixes` | Whole-stack review findings — M0 averaged four to sixteen per milestone. **Done**, and the number was eighteen: seven blockers and eleven majors from four independent lanes (determinism, the tool-API boundary, the C++ engine, ADR-versus-code correspondence). The lesson is one sentence: **every one of them was behind a passing check**, and six of them exit 0 — an engine that renders nothing, a leftover scratch file that changes the audio, a NaN that renders silence, a killed render that destroys the last good one, a stdout that could not be written, and a golden suite that never checked the engine binary against `engine/src`. One reported finding did not survive measurement and is recorded as a correction in the other direction (ADR 0009 §4, the two-sample offset) |
 | 14 | `m1.14-close` | Docs, the §11 line checked, `CLAUDE.md` to M2 |
 
 PR 0 is a spike that is thrown away: the ADRs cannot be written honestly without knowing
@@ -603,7 +610,7 @@ Each of these was raised, judged, and put off. None is forgotten; none is blocki
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
 | `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler | M4 | ADR 0002 §7 |
-| `Instrument.state` as a content hash instead of inline `bytes` | Plugin states are large base64 in a file §2.6 wants diffable — but adding a hash field and deprecating `state` is additive, not breaking | before M1 renders a plugin | review, 2026-09-02 |
+| `Instrument.state` as a content hash instead of inline `bytes` | Plugin states are large base64 in a file §2.6 wants diffable — but adding a hash field and deprecating `state` is additive, not breaking. ~~Revisit before M1 renders a plugin~~ — that trigger passed at PR 7 and M1 re-judged it above, under "Deferred again, with reasons": nothing in M1 *writes* a state, fixtures use factory defaults plus `params`, so an ADR now would design against no producer. This row was left at the old trigger until PR 13 | M2, with the first plugin editor | review, 2026-09-02; re-judged M1 |
 | `ParamRef` reaching track mix params (gain, pan, mute) | The commonest automation in any DAW is not addressable today; additive to fix | M2, when the mixer exists | review, 2026-09-02 |
 | Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document. Deferred again at M0.3: the merge pipeline makes that failure loud (the validator refuses it) rather than silent, and closing it properly is a `song.proto` change with its own ADR | M2, with the mixer | review, 2026-09-03 |
 | Interactive merge conflict resolution | Designing the API with no UI and no real conflicts | M2 | ADR 0001 §4 |

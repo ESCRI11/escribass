@@ -6,5 +6,10 @@
     "rubberband": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
     "tracktion_engine": "0e02f709c4088b2aec427ba6bbbfee3639139bb9"
   },
-  "plugins": {}
+  "plugins": {
+    "SFZTools/sfizz": {
+      "commit": "6ef7b89b6e5aa914593c7f3ca19b859915c30337",
+      "version": "1.2.3"
+    }
+  }
 }
