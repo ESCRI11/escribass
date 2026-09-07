@@ -4,6 +4,9 @@
 //! appears. The shared starting point is the fixture, so a rule that fires on a *correct*
 //! song shows up immediately in `the_fixture_is_valid`.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{from_canonical_json, validate};
 use escribass_schema::song::*;
 
@@ -22,7 +25,7 @@ fn valid_song() -> Song {
 fn rules(mutate: impl FnOnce(&mut Song)) -> Vec<&'static str> {
     let mut song = valid_song();
     mutate(&mut song);
-    validate(&song).into_iter().map(|v| v.rule).collect()
+    validate(&song, &manifest()).into_iter().map(|v| v.rule).collect()
 }
 
 fn assert_fires(rule: &str, mutate: impl FnOnce(&mut Song)) {
@@ -34,7 +37,7 @@ fn assert_fires(rule: &str, mutate: impl FnOnce(&mut Song)) {
 fn the_fixture_is_valid() {
     // The strongest assertion here: a realistic song passes every rule. If a rule is wrong,
     // this fails before any of the negative tests do.
-    assert_eq!(validate(&valid_song()), vec![]);
+    assert_eq!(validate(&valid_song(), &manifest()), vec![]);
 }
 
 #[test]
@@ -54,14 +57,14 @@ fn every_violation_is_reported_not_just_the_first() {
 fn output_is_stable_for_a_given_song() {
     let mut song = valid_song();
     song.tracks.get_mut(BASS).unwrap().index = 1; // collides with master
-    assert_eq!(validate(&song), validate(&song));
+    assert_eq!(validate(&song, &manifest()), validate(&song, &manifest()));
 }
 
 #[test]
 fn violations_carry_a_json_pointer_to_the_offending_value() {
     let mut song = valid_song();
     song.tracks.get_mut(BASS).unwrap().mix.as_mut().unwrap().pan = 4.0;
-    let v = validate(&song);
+    let v = validate(&song, &manifest());
     assert_eq!(v.len(), 1, "{v:?}");
     assert_eq!(v[0].path, format!("/tracks/{BASS}/mix/pan"));
     assert_eq!(v[0].rule, "pan_out_of_range");
@@ -106,7 +109,7 @@ fn clips_may_not_overlap_unless_the_track_allows_it() {
     let mut song = valid_song();
     overlap(&mut song);
     song.tracks.get_mut(BASS).unwrap().allow_overlap = true;
-    assert_eq!(validate(&song), vec![], "allow_overlap permits it (§4.4)");
+    assert_eq!(validate(&song, &manifest()), vec![], "allow_overlap permits it (§4.4)");
 }
 
 #[test]

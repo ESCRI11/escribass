@@ -3,6 +3,9 @@
 //! Driven through `Session`, so each case also exercises the version bump, the validator and
 //! the entry that gets written.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
@@ -56,7 +59,7 @@ fn opened() -> (Scratch, Session, String) {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
 
     let added = session

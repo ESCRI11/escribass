@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "engine": {
     "juce": "37c894f83d379179b2070d437ccd0f1cd9af9576",
     "protobuf": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
@@ -9,6 +8,11 @@
   "plugins": {
     "Surge Synth Team/Surge XT": {
       "commit": "f7b97c682ade0b87da85ca5968b63d5c7c98e68d",
+      "params": {
+        "1243907205": "A Waveshaper Drive",
+        "1945359057": "A Filter 1 Cutoff",
+        "8095466": "A Filter 1 Resonance"
+      },
       "version": "1.3.4"
     }
   }

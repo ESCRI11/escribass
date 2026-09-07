@@ -4,6 +4,9 @@
 //! documents. The last two go through `commit`, because *where* the bump happens is the half
 //! of the decision that a unit test cannot see.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{bump_versions, FixedClock, Op, Project, SeededIds};
 use escribass_schema::song::{Author, Song};
 use serde_json::{json, Value};
@@ -153,7 +156,7 @@ fn a_plugin_version_is_not_an_entity_version() {
     let before = fixture();
     let mut patched = before.clone();
     patched["tracks"][BASS]["instrument"]["ref"] =
-        json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}});
+        json!({"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}});
     assert!(bump_versions(&before, &mut patched, false).is_empty(), "a plugin pin is not an entity");
 
     assert_eq!(patched["tracks"][BASS]["instrument"]["ref"]["plugin"]["version"], json!("1.3.4"));
@@ -221,7 +224,7 @@ fn a_version_removed_by_the_caller_is_disputed() {
 fn a_plugin_version_is_never_disputed() {
     let (_, disputed) = bumped_with_disputes(|d| {
         d["tracks"][BASS]["instrument"]["ref"] =
-            json!({"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}});
+            json!({"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}});
     });
     assert!(disputed.is_empty(), "{disputed:?}");
 }
@@ -265,7 +268,7 @@ fn opened() -> (Scratch, Project, SeededIds, FixedClock) {
     let dir = Scratch::new();
     let (mut ids, clock) = (SeededIds::default(), FixedClock(1_788_307_200_000));
     let song: Song = serde_json::from_value(fixture()).unwrap();
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     (dir, project, ids, clock)
 }
 
@@ -315,7 +318,7 @@ fn versions_survive_a_replay_of_the_log() {
     project.commit("set_param", &set_gain(-3.0), Author::Model, &mut ids, &clock).unwrap();
     project.commit("set_param", &set_gain(-4.0), Author::Model, &mut ids, &clock).unwrap();
 
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.song(), project.song());
     assert_eq!(reopened.song().tracks[BASS].version, 5); // 3, then two commits
     assert_eq!(reopened.song().version, 216);

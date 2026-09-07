@@ -5,14 +5,18 @@
 //! §5 requires errors an LLM can act on, and a model that gets one error per round trip
 //! spends its three retries (§6) on a document with four problems.
 //!
-//! Two limits are structural until later milestones, and are marked in the code where they
-//! bite: resolving a `DeviceRef` to a *pinned* plugin needs `lock.json`, which the project
-//! store writes (M0.2, next); resolving a `ParamRef` to a *real* parameter of a plugin needs
-//! the plugin's manifest, which arrives with the engine (M1). Until then both are checked as
-//! far as the model allows — the reference is well-formed and names something in this song.
+//! **The manifest is an argument, not an `Option`** (ADR 0010 §4). Two of §4.4's invariants —
+//! that a `DeviceRef` resolves to a known plugin, and that an automation target resolves to a
+//! real parameter of it — carried a "needs the engine (M1)" limit from M0.2 until the engine
+//! arrived to answer them. It answers by describing what it can host, and an optional
+//! description would give both rules a silent "skip if absent" arm: the determinism suite
+//! would pass on a machine with no engine and prove nothing, which is the failure M0.4 exists
+//! to catch. What is still unresolvable is unresolvable for a stated reason — a Cmajor, Faust
+//! or neural device's parameters come from a source M4 compiles — and is marked where it bites.
 
+use crate::manifest::{Manifest, Plugin};
 use escribass_schema::song::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// One broken rule.
 ///
@@ -38,8 +42,8 @@ impl std::fmt::Display for Violation {
 ///
 /// An empty result means valid. Violations are sorted, so the output is stable for a given
 /// song and can be compared byte for byte in tests (§11).
-pub fn validate(song: &Song) -> Vec<Violation> {
-    let mut v = Violations::default();
+pub fn validate(song: &Song, manifest: &Manifest) -> Vec<Violation> {
+    let mut v = Violations { found: Vec::new(), manifest };
 
     v.check_root(song);
     v.check_time_maps(song);
@@ -49,16 +53,75 @@ pub fn validate(song: &Song) -> Vec<Violation> {
     v.check_automation(song);
     v.check_generators(song);
 
-    v.0.sort();
-    v.0
+    v.found.sort();
+    v.found
 }
 
-#[derive(Default)]
-struct Violations(Vec<Violation>);
+struct Violations<'a> {
+    found: Vec<Violation>,
+    /// What this build can host (ADR 0010 §4). Never an `Option`; see the module note.
+    manifest: &'a Manifest,
+}
 
-impl Violations {
+/// The manifest entry for a device's plugin, with the id it was found under.
+///
+/// `None` covers three different things, and all three are already reported elsewhere or
+/// deliberately unreported: the device is not a plugin (its parameters come from a source M4
+/// compiles), its reference is unset (`device_ref_unset`), or this build does not declare it
+/// (`plugin_unknown`, once, at the device rather than again at every parameter).
+fn plugin_of<'a>(
+    manifest: &'a Manifest,
+    device: Option<&'a DeviceRef>,
+) -> Option<(&'a str, &'a Plugin)> {
+    let device_ref::Kind::Plugin(plugin) = device?.kind.as_ref()? else { return None };
+    let id = plugin.plugin_id.as_str();
+    Some((id, manifest.plugins.get(id)?))
+}
+
+impl Violations<'_> {
     fn add(&mut self, path: impl Into<String>, rule: &'static str, message: impl Into<String>) {
-        self.0.push(Violation { path: path.into(), rule, message: message.into() });
+        self.found.push(Violation { path: path.into(), rule, message: message.into() });
+    }
+
+    /// §4.4's "automation targets resolve to real parameters", asked of a `ParamRef.param` and
+    /// of a key of `Instrument.params`/`Effect.params` alike (ADR 0010 §4).
+    ///
+    /// The comparison is against the manifest's **keys**, which are the plugin's own parameter
+    /// ids. Display names cannot be the identifier — Surge XT repeats 176 of its 2855, one per
+    /// unassigned effect slot — and a JUCE plugin's readable internal id is hashed away by
+    /// JUCE's own VST3 wrapper before a host can see it. So the message says the key is an id,
+    /// because a caller that guessed `"cutoff"` needs to be told what to look up instead.
+    fn check_param(&mut self, path: String, id: &str, plugin: &Plugin, param: &str) {
+        if plugin.params.contains_key(param) {
+            return;
+        }
+        self.add(
+            path,
+            "param_unknown",
+            format!(
+                "`{param}` is not a parameter of `{id}`, which declares {}. A parameter is \
+                 named by the plugin's own id, not by its display name",
+                plugin.params.len()
+            ),
+        );
+    }
+
+    /// A plugin parameter's value is the plugin's *normalised* value, `0.0` to `1.0` (ADR 0010
+    /// §4, extended in PR 7). VST3 exposes exactly one numeric domain to a host and that is
+    /// it; a plugin's own units exist only as the display string beside the number.
+    ///
+    /// Checked here because nothing downstream reports it: the engine clamps, since
+    /// Tracktion's parameter range clamps it either way and a caller error is not the
+    /// engine's to discover (ADR 0008 §1). Only where a plugin is what the value reaches —
+    /// a Cmajor device's domain is its source's, and M1 cannot read one.
+    fn check_normalised(&mut self, path: String, value: f64) {
+        if value.is_finite() && !(0.0..=1.0).contains(&value) {
+            self.add(
+                path,
+                "param_out_of_range",
+                format!("{value} is outside a plugin parameter's normalised 0.0 to 1.0"),
+            );
+        }
     }
 
     /// `id` is a Crockford base32 ULID: 26 uppercase characters, excluding I, L, O and U.
@@ -307,8 +370,6 @@ impl Violations {
         self.check_id(path, id);
         self.check_provenance(&format!("{path}/provenance"), provenance);
         match device {
-            // Resolving the reference to a *pinned* entry needs lock.json, which the project
-            // store writes. Until then: the reference exists and names something.
             None => self.add(format!("{path}/ref"), "device_ref_unset", "a device needs a ref"),
             Some(d) => match &d.kind {
                 None => self.add(format!("{path}/ref"), "oneof_unset", "ref kind must be set"),
@@ -335,12 +396,37 @@ impl Violations {
                                 "a plugin reference is pinned to a version (§4.4)",
                             );
                         }
+                        // §4.4's "resolves to a known plugin" (ADR 0010 §4). What "known"
+                        // means is what this build can host, which is the manifest, and it is
+                        // also what ADR 0007 §6 relies on when it says a plugin outside the
+                        // bundled set never reaches `compile`. Not reported for an empty id,
+                        // which `device_ref_empty` above has already named.
+                        if !value.is_empty() && !self.manifest.plugins.contains_key(value) {
+                            self.add(
+                                format!("{path}/ref/plugin/plugin_id"),
+                                "plugin_unknown",
+                                format!(
+                                    "`{value}` is not a plugin this build can host; it hosts {}",
+                                    self.manifest.plugins.keys().cloned()
+                                        .collect::<Vec<_>>().join(", ")
+                                ),
+                            );
+                        }
                     }
                 }
             },
         }
+        // A parameter is judged only where it can be resolved. `ponytail:` a Cmajor, Faust or
+        // neural device's parameters are declared by a source M4 compiles and this build
+        // cannot read, so its keys and values go unchecked; the upgrade path is that compiler
+        // declaring its parameters the way the manifest declares a plugin's.
+        let plugin = plugin_of(self.manifest, device);
         for (name, value) in params {
             self.check_finite(&format!("{path}/params/{name}"), *value);
+            if let Some((id, plugin)) = plugin {
+                self.check_param(format!("{path}/params/{name}"), id, plugin, name);
+                self.check_normalised(format!("{path}/params/{name}"), *value);
+            }
         }
     }
 
@@ -502,24 +588,29 @@ impl Violations {
         self.check_keyed("/automation", &song.automation, |a| &a.id);
 
         // A device id is an instrument or effect anywhere in the song; ids are global (§4.3).
-        let mut devices: BTreeSet<&str> = BTreeSet::new();
+        // Its reference travels with it, because resolving a target's *parameter* means asking
+        // the manifest what that device's plugin declares (ADR 0010 §4).
+        let mut devices: BTreeMap<&str, Option<&DeviceRef>> = BTreeMap::new();
         for track in song.tracks.values() {
             if let Some(i) = &track.instrument {
-                devices.insert(i.id.as_str());
+                devices.insert(i.id.as_str(), i.r#ref.as_ref());
             }
-            devices.extend(track.fx_chain.values().map(|e| e.id.as_str()));
+            for effect in track.fx_chain.values() {
+                devices.insert(effect.id.as_str(), effect.r#ref.as_ref());
+            }
         }
 
         for (key, automation) in &song.automation {
             let at = format!("/automation/{key}");
             self.check_provenance(&format!("{at}/provenance"), automation.provenance.as_ref());
+            // The plugin this lane writes into, once the target has resolved to one: every
+            // point carries a value in that plugin's normalised domain (ADR 0010 §4, PR 7).
+            let mut plugin: Option<(&str, &Plugin)> = None;
             match &automation.target {
                 None => self.add(format!("{at}/target"), "message_missing", "`target` is required"),
                 Some(target) => {
-                    // §4.4 wants the parameter to be real, which needs the plugin's manifest
-                    // and therefore the engine (M1). Until then: the device exists and a
-                    // parameter is named.
-                    if !devices.contains(target.device_id.as_str()) {
+                    let device = devices.get(target.device_id.as_str());
+                    if device.is_none() {
                         self.add(format!("{at}/target/device_id"), "device_unknown",
                             format!("`{}` is not an instrument or effect in this song",
                                 target.device_id));
@@ -527,6 +618,17 @@ impl Violations {
                     if target.param.is_empty() {
                         self.add(format!("{at}/target/param"), "param_empty",
                             "an automation target names a parameter");
+                    }
+                    // §4.4's "automation targets resolve to real parameters", which needed the
+                    // plugin's manifest and therefore the engine — and now has it (ADR 0010
+                    // §4). Reported once, at the target: a lane pointing at a parameter that
+                    // does not exist is one mistake however many points it holds.
+                    plugin = plugin_of(self.manifest, device.copied().flatten());
+                    if let Some((id, entry)) = plugin {
+                        if !target.param.is_empty() {
+                            self.check_param(
+                                format!("{at}/target/param"), id, entry, &target.param);
+                        }
                     }
                 }
             }
@@ -539,6 +641,9 @@ impl Violations {
                 let pat = format!("{at}/points/{pkey}");
                 self.check_tick(&pat, point.tick);
                 self.check_finite(&format!("{pat}/value"), point.value);
+                if plugin.is_some() {
+                    self.check_normalised(format!("{pat}/value"), point.value);
+                }
                 if point.curve == Curve::Unspecified as i32 {
                     self.add(format!("{pat}/curve"), "enum_unspecified", "curve must be set");
                 }

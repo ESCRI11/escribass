@@ -1,13 +1,16 @@
 //! The `SongTools` gRPC server (§5).
 //!
 //! ```text
-//! escribass-grpc <project.escri>                  serve on 127.0.0.1:50051
-//! escribass-grpc --create <project.escri>         create one, then serve it
+//! escribass-grpc --manifest <m.json> <project.escri>            serve on 127.0.0.1:50051
+//! escribass-grpc --manifest <m.json> --create <project.escri>   create one, then serve it
 //! ```
 //!
-//! Flags, all optional:
+//! Flags:
 //!
 //! ```text
+//! --manifest <path>        **required**, and no default: what this build can host
+//!                          (ADR 0010 §4). Without it `plugin_unknown` and `param_unknown`
+//!                          would have a silent skip arm, so this process refuses to start
 //! --listen <addr>          default 127.0.0.1:50051
 //! --author human|model     provenance on everything this process writes, the project it
 //!                          creates included (default: human)
@@ -26,12 +29,14 @@
 
 use escribass_core::grpc::Server;
 use escribass_core::{
-    new_song, Clock, FixedClock, IdSource, Project, SeededIds, Session, SystemClock, UlidSource,
+    new_song, Clock, FixedClock, IdSource, Manifest, Project, SeededIds, Session, SystemClock,
+    UlidSource,
 };
 use escribass_schema::song::Author;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 fn main() -> ExitCode {
     match run() {
@@ -56,12 +61,17 @@ async fn run() -> Result<(), String> {
         None => Box::new(SystemClock),
     };
 
+    // Read before the project, because it is what decides whether the project is valid at
+    // all: the validator resolves plugin ids and parameters against it, and `open` compares
+    // it with what the project pinned (ADR 0010 §3, §4).
+    let manifest = Arc::new(Manifest::read(&options.manifest).map_err(|e| e.to_string())?);
+
     let project = if options.create {
         let song = new_song(&mut *ids, &*clock, options.author);
-        Project::create(&options.project, &song, &mut *ids, &*clock, options.author)
+        Project::create(&options.project, &song, &mut *ids, &*clock, options.author, manifest)
             .map_err(|e| format!("cannot create {}: {e}", options.project.display()))?
     } else {
-        Project::open(&options.project)
+        Project::open(&options.project, manifest)
             .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?
     };
 
@@ -80,6 +90,7 @@ async fn run() -> Result<(), String> {
 
 struct Options {
     project: PathBuf,
+    manifest: PathBuf,
     listen: SocketAddr,
     create: bool,
     author: Author,
@@ -90,6 +101,7 @@ struct Options {
 impl Options {
     fn parse(arguments: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut project = None;
+        let mut manifest = None;
         let mut listen: SocketAddr = "127.0.0.1:50051".parse().expect("a literal address");
         let mut create = false;
         let mut author = Author::Human;
@@ -102,6 +114,7 @@ impl Options {
                 |name: &str| arguments.next().ok_or_else(|| format!("{name} needs a value"));
             match argument.as_str() {
                 "--create" => create = true,
+                "--manifest" => manifest = Some(PathBuf::from(value("--manifest")?)),
                 "--listen" => {
                     let text = value("--listen")?;
                     listen = text.parse().map_err(|_| format!("`{text}` is not an address"))?;
@@ -136,6 +149,13 @@ impl Options {
 
         Ok(Options {
             project: project.ok_or_else(|| format!("no project directory given\n{USAGE}"))?,
+            // No default and no fallback. An absent manifest would give `plugin_unknown` and
+            // `param_unknown` a silent skip arm, which is the quiet failure M0.4 exists to
+            // prevent, so this process does not start without one (ADR 0010 §4).
+            manifest: manifest.ok_or_else(|| format!(
+                "--manifest [manifest_missing]: this build's manifest says what plugins and \
+                 parameters exist, and the validator has no answer without it (ADR 0010 §4). \
+                 It is written by `cmake --build engine/build --target manifest`\n{USAGE}"))?,
             listen,
             create,
             author,
@@ -145,6 +165,6 @@ impl Options {
     }
 }
 
-const USAGE: &str = "usage: escribass-grpc [--create] [--listen <addr>] \
+const USAGE: &str = "usage: escribass-grpc --manifest <manifest.json> [--create] [--listen <addr>] \
                      [--author human|model] [--seed-ids <ms>:<n>] [--fixed-clock <ms>] \
                      <project.escri>";

@@ -4,6 +4,9 @@
 //! back. No test hand-writes `song.json`, so CLAUDE.md #2 holds even in the loader's tests —
 //! the only exception is where a test deliberately corrupts a file to prove `open` notices.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{diff, entry, timestamp_from_ms, History, IdSource, Project, SeededIds};
 use escribass_schema::history::Refs;
 use escribass_schema::song::{Author, Provenance, Song};
@@ -69,7 +72,7 @@ fn sample(root: &PathBuf) -> Project {
         .unwrap();
     log.advance("main", &next).unwrap();
 
-    Project::new(root, serde_json::from_value(louder).unwrap(), log)
+    Project::new(root, serde_json::from_value(louder).unwrap(), log, manifest())
 }
 
 // ---- the round trip ----
@@ -77,10 +80,10 @@ fn sample(root: &PathBuf) -> Project {
 #[test]
 fn a_project_written_and_reopened_is_unchanged() {
     let dir = Scratch::new();
-    let original = sample(&dir.0);
+    let mut original = sample(&dir.0);
     original.write().unwrap();
 
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.song(), original.song());
     assert_eq!(reopened.history(), original.history());
     assert_eq!(reopened, original);
@@ -112,7 +115,7 @@ fn the_directory_holds_exactly_what_section_10_names() {
 #[test]
 fn writing_twice_produces_identical_bytes() {
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
     let first = std::fs::read_to_string(dir.0.join("song.json")).unwrap();
     project.write().unwrap();
@@ -122,7 +125,7 @@ fn writing_twice_produces_identical_bytes() {
 #[test]
 fn song_json_on_disk_is_the_canonical_form() {
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
     assert_eq!(
         std::fs::read_to_string(dir.0.join("song.json")).unwrap(),
@@ -135,14 +138,14 @@ fn song_json_on_disk_is_the_canonical_form() {
 #[test]
 fn a_song_that_does_not_match_a_replay_is_reported_not_repaired() {
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
 
     // Stand in for a hand-edited file, which §5 forbids and ADR 0004 says to report.
     let text = std::fs::read_to_string(dir.0.join("song.json")).unwrap();
     std::fs::write(dir.0.join("song.json"), text.replace("\"name\": \"Bass\"", "\"name\": \"Edited\"")).unwrap();
 
-    let e = Project::open(&dir.0).unwrap_err();
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
     assert_eq!(e.rule, "song_diverged");
     assert!(e.message.contains("/tracks/"), "the error names the differing path: {}", e.message);
     // Reported, not repaired.
@@ -153,7 +156,7 @@ fn a_song_that_does_not_match_a_replay_is_reported_not_repaired() {
 fn an_orphan_entry_left_by_a_crash_does_not_become_history() {
     // refs.json is written last, so a crash before it leaves an entry nothing references.
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
 
     let head = project.history().head_id().unwrap().to_string();
@@ -164,7 +167,7 @@ fn an_orphan_entry_left_by_a_crash_does_not_become_history() {
     )
     .unwrap();
 
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.history().entries().len(), 3, "the orphan is loaded");
     assert_eq!(reopened.song(), project.song(), "but it is not part of HEAD's history");
 }
@@ -174,7 +177,7 @@ fn an_orphan_entry_left_by_a_crash_does_not_become_history() {
 #[test]
 fn a_patch_file_whose_name_disagrees_with_its_id_is_refused() {
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
 
     let head = project.history().head_id().unwrap();
@@ -183,7 +186,7 @@ fn a_patch_file_whose_name_disagrees_with_its_id_is_refused() {
         dir.0.join("patches").join("01M1FPMP00CPYCPY000000000001.json"),
     )
     .unwrap();
-    assert_eq!(Project::open(&dir.0).unwrap_err().rule, "entry_filename_mismatch");
+    assert_eq!(Project::open(&dir.0, manifest()).unwrap_err().rule, "entry_filename_mismatch");
 }
 
 #[test]
@@ -192,7 +195,7 @@ fn a_file_that_is_not_a_patch_is_ignored() {
     sample(&dir.0).write().unwrap();
     std::fs::write(dir.0.join("patches").join("notes.txt"), "scratch").unwrap();
     std::fs::write(dir.0.join("patches").join(".song.json.swp"), "editor").unwrap();
-    assert!(Project::open(&dir.0).is_ok());
+    assert!(Project::open(&dir.0, manifest()).is_ok());
 }
 
 #[test]
@@ -200,7 +203,7 @@ fn a_lock_from_another_schema_version_is_refused_at_load() {
     let dir = Scratch::new();
     sample(&dir.0).write().unwrap();
     std::fs::write(dir.0.join("lock.json"), "{\n  \"schema_version\": 99\n}\n").unwrap();
-    let e = Project::open(&dir.0).unwrap_err();
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
     assert_eq!(e.rule, "schema_version_mismatch");
     assert!(e.message.contains("99"), "{}", e.message);
 }
@@ -210,11 +213,11 @@ fn a_missing_member_names_the_file() {
     let dir = Scratch::new();
     sample(&dir.0).write().unwrap();
     std::fs::remove_file(dir.0.join("refs.json")).unwrap();
-    let e = Project::open(&dir.0).unwrap_err();
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
     assert_eq!(e.rule, "unreadable");
     assert!(e.path.ends_with("refs.json"), "{}", e.path);
 
-    assert_eq!(Project::open(std::env::temp_dir().join("no-such.escri")).unwrap_err().rule, "unreadable");
+    assert_eq!(Project::open(std::env::temp_dir().join("no-such.escri"), manifest()).unwrap_err().rule, "unreadable");
 }
 
 // ---- atomic writes ----
@@ -236,7 +239,7 @@ fn a_failed_write_leaves_the_previous_file_intact() {
     // The point of writing through a rename: a reader sees the old file or the new one, never
     // half of one. Simulated by making the temporary path unwritable.
     let dir = Scratch::new();
-    let project = sample(&dir.0);
+    let mut project = sample(&dir.0);
     project.write().unwrap();
     let before = std::fs::read_to_string(dir.0.join("song.json")).unwrap();
 

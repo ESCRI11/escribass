@@ -4,6 +4,9 @@
 //! that buys is asserted here — a seeded run is reproducible, and every id it mints is a
 //! ULID the validator accepts.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{validate, Clock, FixedClock, IdSource, SeededIds, SystemClock, UlidSource};
 use escribass_core::{from_canonical_json, timestamp_from_ms};
 use escribass_schema::song::*;
@@ -58,7 +61,7 @@ fn every_minted_id_is_a_ulid_the_validator_accepts() {
             tick: 61_440,
         },
     );
-    assert_eq!(validate(&song), vec![]);
+    assert_eq!(validate(&song, &manifest()), vec![]);
 }
 
 #[test]

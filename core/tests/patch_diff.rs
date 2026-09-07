@@ -4,6 +4,9 @@
 //! seeded mutations of the real fixture rather than toy documents, because the fixture is the
 //! shape `core` will actually diff.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{apply, diff, to_canonical_json, validate, Op};
 use escribass_schema::song::Song;
 use serde_json::{json, Value};
@@ -143,7 +146,7 @@ fn a_diff_between_two_real_songs_round_trips_through_song_and_validates() {
     // The step that matters: back through Song. This is what catches an op that is legal
     // JSON but illegal for the schema — `43.0` at an int32 path (ADR 0002 §11).
     let song: Song = serde_json::from_value(applied).expect("a patched document is still a Song");
-    assert_eq!(validate(&song), vec![]);
+    assert_eq!(validate(&song, &manifest()), vec![]);
     assert_eq!(song.tracks["01M1FPMP00TRACKBASS0000002"].mix.as_ref().unwrap().gain_db, -3.0);
     assert!(to_canonical_json(&song).is_ok());
 }

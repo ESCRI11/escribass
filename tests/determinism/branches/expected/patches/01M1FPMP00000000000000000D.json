@@ -18,7 +18,7 @@
       "op": "add",
       "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/plugin",
       "value": {
-        "plugin_id": "com.surge-synth.surge-xt",
+        "plugin_id": "Surge Synth Team/Surge XT",
         "version": "1.3.4"
       }
     },

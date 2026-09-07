@@ -1,3 +1,10 @@
 {
-  "schema_version": 1
+  "schema_version": 1,
+  "engine": {
+    "juce": "37c894f83d379179b2070d437ccd0f1cd9af9576",
+    "protobuf": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+    "rubberband": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
+    "tracktion_engine": "0e02f709c4088b2aec427ba6bbbfee3639139bb9"
+  },
+  "plugins": {}
 }

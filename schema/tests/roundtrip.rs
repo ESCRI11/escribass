@@ -74,7 +74,11 @@ fn build() -> Song {
                 version: 1,
                 r#ref: Some(DeviceRef {
                     kind: Some(device_ref::Kind::Plugin(PluginRef {
-                        plugin_id: "org.surge-synth.surge-xt".to_string(),
+                        // The id Surge XT reports itself as — vendor and class name, as the
+                        // VST3 factory gives both (ADR 0010 §4, refined in PR 6). It was
+                        // invented until M1 PR 9, when the validator began resolving a
+                        // plugin id against the build manifest.
+                        plugin_id: "Surge Synth Team/Surge XT".to_string(),
                         version: "1.3.4".to_string(),
                     })),
                 }),

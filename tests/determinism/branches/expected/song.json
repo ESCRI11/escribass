@@ -82,7 +82,7 @@
         "version": 2,
         "ref": {
           "plugin": {
-            "plugin_id": "com.surge-synth.surge-xt",
+            "plugin_id": "Surge Synth Team/Surge XT",
             "version": "1.3.4"
           }
         },
