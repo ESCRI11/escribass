@@ -1,5 +1,8 @@
 //! Patch DAG tests: ancestry, replay, and refs (ADR 0001 §1, §2; ADR 0004).
 
+mod common;
+use common::manifest;
+
 use escribass_core::{
     diff, entry, timestamp_from_ms, validate, History, IdSource, Op, SeededIds,
 };
@@ -69,7 +72,7 @@ fn a_chain_replays_to_the_document_it_recorded() {
     // And the result is still a valid song, which is the whole point of replaying rather
     // than trusting a cached document (ADR 0004).
     let song: Song = serde_json::from_value(log.materialise(&head).unwrap()).unwrap();
-    assert_eq!(validate(&song), vec![]);
+    assert_eq!(validate(&song, &manifest()), vec![]);
 }
 
 #[test]

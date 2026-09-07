@@ -35,6 +35,21 @@ const AT: &str = "1788307200000";
 
 const SCRIPTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/determinism");
 
+/// The build manifest every script runs against (ADR 0010 §4).
+///
+/// A committed **subset** of a real `escribass_engine --scan`, not the manifest a build
+/// writes — that one is generated at build time and never committed, because a committed
+/// description of a plugin binary is a second pin on it with the stale one silent. The
+/// binaries refuse to start without a manifest and the validator takes it as an argument
+/// rather than an `Option`, so there is no path on which a missing one quietly means
+/// "everything is valid"; a machine with no engine build runs these scripts against this
+/// file, and every plugin id and parameter id in it came out of a real plugin.
+///
+/// It is also what puts an `engine` block and a `plugins` block in every golden `lock.json`.
+/// Moving a pin therefore moves this file *and* four goldens, in one pull request, which is
+/// §17's rule for golden renders arriving where it was always going to.
+const MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/manifest.json");
+
 // ---------------------------------------------------------------------------
 // Finding the binary
 // ---------------------------------------------------------------------------
@@ -185,6 +200,8 @@ fn run(name: &str, clock: &str) -> Run {
     let frames = speak(
         &[
             "--create",
+            "--manifest",
+            MANIFEST,
             "--seed-ids",
             &format!("{AT}:1"),
             "--fixed-clock",
@@ -417,7 +434,11 @@ fn pretty(value: &Value) -> Vec<u8> {
 /// file, so the path is opaque to it, and a run's temporary directory in a golden would be
 /// the one kind of input this suite exists to keep out.
 fn plan(root: &Path) -> Vec<u8> {
-    let project = escribass_core::Project::open(root).expect("a run leaves a project that opens");
+    let manifest = std::sync::Arc::new(
+        escribass_core::Manifest::read(MANIFEST).expect("the manifest fixture is readable"),
+    );
+    let project =
+        escribass_core::Project::open(root, manifest).expect("a run leaves a project that opens");
     let assets: BTreeMap<String, PathBuf> = std::fs::read_dir(root.join("assets"))
         .map(|listing| {
             listing
@@ -652,7 +673,8 @@ fn reopens(name: &str) {
     let session = run(name, AT);
 
     let frames = speak(
-        &["--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT, "--author", "model"],
+        &["--manifest", MANIFEST, "--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT,
+          "--author", "model"],
         &session.directory.0,
         &[
             json!({
@@ -766,6 +788,8 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
     let child = Command::new(binary("escribass-grpc"))
         .args([
             "--create",
+            "--manifest",
+            MANIFEST,
             "--seed-ids",
             &format!("{AT}:1"),
             "--fixed-clock",

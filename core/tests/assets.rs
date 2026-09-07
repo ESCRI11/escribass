@@ -3,6 +3,9 @@
 //! Every asset here is added through `Session`, never by writing a file: `assets/` is part of
 //! the project and CLAUDE.md #2's rule about the tool API is the one that keeps it honest.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{asset_hash, new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::AddAssetRequest;
 use escribass_schema::song::Author;
@@ -42,7 +45,7 @@ fn opened() -> (Scratch, Session) {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Model).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Model, manifest()).unwrap();
     let session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
     (dir, session)
 }

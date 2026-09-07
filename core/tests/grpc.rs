@@ -5,6 +5,9 @@
 //! `Session`, so the risk is not that the logic differs — it is that a transport quietly
 //! reclassifies a result on the way out.
 
+mod common;
+use common::manifest;
+
 use escribass_core::grpc::Server;
 use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::song_tools_client::SongToolsClient;
@@ -49,7 +52,7 @@ async fn serving(dir: &Scratch) -> SongToolsClient<Channel> {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     let server = Server::new(Session::new(project, Box::new(ids), Box::new(clock), Author::Model));
 
     let address: SocketAddr = std::net::TcpListener::bind("127.0.0.1:0")
@@ -305,7 +308,7 @@ async fn a_session_can_be_driven_end_to_end_over_the_wire() {
     assert!(tempo.valid, "{:?}", tempo.errors);
 
     // And what the wire did is what the disk holds.
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.history().refs().head, "darker");
     assert_eq!(reopened.song().clips.len(), 1);
 }

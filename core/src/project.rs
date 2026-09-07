@@ -21,10 +21,11 @@
 use crate::canonical::to_canonical_json;
 use crate::clock::Clock;
 use crate::id::IdSource;
+use crate::manifest::Manifest;
 use crate::patch::{apply, Op};
 use crate::validate::{validate, Violation};
 use crate::version::bump_versions;
-use escribass_schema::song::{Author, Provenance};
+use escribass_schema::song::{device_ref, Author, DeviceRef, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
 };
@@ -33,7 +34,9 @@ use crate::history::entry as new_entry;
 use escribass_schema::song::Song;
 use escribass_schema::SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const SONG: &str = "song.json";
 const PATCHES: &str = "patches";
@@ -67,13 +70,63 @@ fn err(path: impl AsRef<Path>, rule: &'static str, message: impl Into<String>) -
     }
 }
 
-/// `lock.json`. One field until there is something else to pin — plugins, models and
-/// compiled artefacts arrive at M1 and M4 (ADR 0003 §3, §17).
+/// `lock.json` v2: the build this project was authored against (ADR 0010 §1).
+///
+/// Not a protobuf message, and it does not become one. It is not song state — it describes a
+/// build, not a song — so CLAUDE.md #1 is not in play, and making it a proto would put a
+/// message in `song.proto` that no renderer needs (§14.7).
+///
+/// `engine` and `plugins` default to empty because an absent pin is one that has not been
+/// added yet. ADR 0010 §2 adds a pin on first *reference*, so a lock written before that
+/// reference existed — including every lock this repository wrote before M1 — has nothing to
+/// disagree with, and saying so costs one attribute rather than a migration.
+///
+/// M4 adds the compiled artefacts and model hashes ADR 0003 §3 named.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Lock {
     schema_version: u32,
+    #[serde(default)]
+    engine: BTreeMap<String, String>,
+    #[serde(default)]
+    plugins: BTreeMap<String, Pin>,
 }
+
+/// What a project pins about one plugin.
+///
+/// No path and no parameter list. Where a binary lives is machine-specific and `lock.json` is
+/// committed to the user's repository (§2.6) and byte-compared by the determinism suite;
+/// parameters are large, derived from the binary, and belong to the manifest (ADR 0010 §1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Pin {
+    commit: String,
+    version: String,
+}
+
+/// Every `plugin_id` a song references, in id order.
+///
+/// `SourceRef`, `ModelRef` and `SamplerRef` are absent on purpose: they name content by hash,
+/// and the hash *is* the pin (ADR 0010 §1).
+fn referenced_plugins(song: &Song) -> BTreeSet<&str> {
+    fn plugin_of(device: Option<&DeviceRef>) -> Option<&str> {
+        match device?.kind.as_ref()? {
+            device_ref::Kind::Plugin(p) => Some(p.plugin_id.as_str()),
+            _ => None,
+        }
+    }
+    let mut found = BTreeSet::new();
+    for track in song.tracks.values() {
+        found.extend(plugin_of(track.instrument.as_ref().and_then(|i| i.r#ref.as_ref())));
+        found.extend(track.fx_chain.values().filter_map(|e| plugin_of(e.r#ref.as_ref())));
+    }
+    found
+}
+
+/// What an operator can do about a `lock_mismatch`. All three are operator actions, which is
+/// why the refusal is a `ProjectError` and not a `Violation` (ADR 0006 §2, ADR 0010 §3).
+const REPIN: &str = "install the build it names, rebuild, or edit lock.json deliberately \
+                     (ADR 0010 §3; the tool for it is M2's)";
 
 /// A change that has been applied, bumped and validated, but not recorded.
 ///
@@ -103,12 +156,27 @@ pub struct Project {
     root: PathBuf,
     song: Song,
     history: History,
+    /// What this build can host (ADR 0010 §4). Held rather than threaded through every call
+    /// because all three of the paths that need it — validating, opening and pinning — are
+    /// reached from the outside separately. `Arc` because the manifest is one shared,
+    /// read-only description of the build and `record` builds a fresh `Project` per commit;
+    /// deep-copying 3000 parameter names per tool call would be the cost of a plain field.
+    manifest: Arc<Manifest>,
+    /// The plugin pins this project carries, as `lock.json` last held them. Monotone: `write`
+    /// adds an entry for every referenced plugin that has none and removes nothing
+    /// (ADR 0010 §2).
+    pins: BTreeMap<String, Pin>,
 }
 
 impl Project {
     /// Assembles a project in memory. Writes nothing.
-    pub fn new(root: impl Into<PathBuf>, song: Song, history: History) -> Self {
-        Self { root: root.into(), song, history }
+    pub fn new(
+        root: impl Into<PathBuf>,
+        song: Song,
+        history: History,
+        manifest: Arc<Manifest>,
+    ) -> Self {
+        Self { root: root.into(), song, history, manifest, pins: BTreeMap::new() }
     }
 
     pub fn root(&self) -> &Path {
@@ -138,12 +206,13 @@ impl Project {
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
         author: Author,
+        manifest: Arc<Manifest>,
     ) -> Result<Project, ProjectError> {
         let root = root.into();
         if root.join(SONG).exists() {
             return Err(err(root.join(SONG), "project_exists", "a project is already here"));
         }
-        refuse_if_invalid(&root, song)?;
+        refuse_if_invalid(&root, song, &manifest)?;
 
         let empty = serde_json::to_value(Song::default()).expect("a default Song serialises");
         let full = serde_json::to_value(song).expect("a Song serialises");
@@ -157,7 +226,8 @@ impl Project {
         history.create_ref("main", &id).map_err(|e| err(&root, e.rule, e.message))?;
         history.set_head("main").map_err(|e| err(&root, e.rule, e.message))?;
 
-        let project = Project { root, song: song.clone(), history };
+        let mut project =
+            Project { root, song: song.clone(), history, manifest, pins: BTreeMap::new() };
         project.write()?;
         Ok(project)
     }
@@ -249,7 +319,7 @@ impl Project {
             }]
         })?;
 
-        let violations = validate(&song);
+        let violations = validate(&song, &self.manifest);
         if !violations.is_empty() {
             return Err(violations);
         }
@@ -286,7 +356,13 @@ impl Project {
         history.append(entry).map_err(|e| err(&self.root, e.rule, e.message))?;
         history.advance(&branch, &id).map_err(|e| err(&self.root, e.rule, e.message))?;
 
-        let next = Project { root: self.root.clone(), song: prepared.song, history };
+        let mut next = Project {
+            root: self.root.clone(),
+            song: prepared.song,
+            history,
+            manifest: Arc::clone(&self.manifest),
+            pins: self.pins.clone(),
+        };
         next.write()?;
         *self = next;
         Ok(id)
@@ -366,14 +442,21 @@ impl Project {
 
     /// Writes a proposed state and adopts it only once the write succeeded.
     fn swap(&mut self, song: Song, history: History) -> Result<(), ProjectError> {
-        let next = Project { root: self.root.clone(), song, history };
+        let mut next = Project {
+            root: self.root.clone(),
+            song,
+            history,
+            manifest: Arc::clone(&self.manifest),
+            pins: self.pins.clone(),
+        };
         next.write()?;
         *self = next;
         Ok(())
     }
 
-    /// Reads a project directory, verifying that `song.json` matches a replay of the log.
-    pub fn open(root: impl AsRef<Path>) -> Result<Project, ProjectError> {
+    /// Reads a project directory, verifying that `song.json` matches a replay of the log and
+    /// that every plugin it references is pinned at what this build has (§11, ADR 0010 §3).
+    pub fn open(root: impl AsRef<Path>, manifest: Arc<Manifest>) -> Result<Project, ProjectError> {
         let root = root.as_ref().to_path_buf();
 
         let lock: Lock = serde_json::from_str(&read(&root.join(LOCK))?)
@@ -391,6 +474,8 @@ impl Project {
 
         let song: Song = crate::from_canonical_json(&read(&root.join(SONG))?)
             .map_err(|e| err(root.join(SONG), "song_unreadable", e.to_string()))?;
+
+        refuse_if_unpinned(&root, &song, &lock, &manifest)?;
 
         let refs = refs_from_json(&read(&root.join(REFS))?)
             .map_err(|e| err(root.join(REFS), e.rule, e.message))?;
@@ -422,7 +507,12 @@ impl Project {
         let history = History::from_parts(entries, refs)
             .map_err(|e| err(&patches, e.rule, e.message))?;
 
-        let project = Project { root, song, history };
+        // The engine block is not compared, and it is not carried: `write` records the running
+        // build's. ADR 0010 §3 makes this the one block that re-pins rather than refusing —
+        // there is exactly one engine and a project cannot choose it, so refusing would refuse
+        // every project on the machine at once, repaired by hand-editing each. Nothing is lost
+        // by it, because what a render was made with travels with the render (ADR 0008 §5).
+        let project = Project { root, song, history, manifest, pins: lock.plugins };
         project.verify_against_replay()?;
         Ok(project)
     }
@@ -460,14 +550,42 @@ impl Project {
     /// next; `refs.json` last, so advancing the ref is the moment the write becomes real. A
     /// crash before that leaves an orphan entry, which `open` reports rather than mistaking
     /// for history.
-    pub fn write(&self) -> Result<(), ProjectError> {
+    pub fn write(&mut self) -> Result<(), ProjectError> {
         for directory in [&self.root, &self.root.join(PATCHES), &self.root.join(ASSETS)] {
             std::fs::create_dir_all(directory)
                 .map_err(|e| err(directory, "unwritable", e.to_string()))?;
         }
 
-        let lock = serde_json::to_string_pretty(&Lock { schema_version: SCHEMA_VERSION })
-            .expect("the lock serialises")
+        // ADR 0010 §2: the pins that already exist, plus one from the build manifest for
+        // every referenced plugin that has none. Never rewritten and never dropped — a block
+        // derived purely from the current song loses a pin on an ordinary delete, and ADR
+        // 0005 §4's undo appends an inverse entry that re-adds the reference, which would
+        // re-pin from whatever build is running now. That is a silent re-pin performed by
+        // pressing undo. The cost is a stale pin, which `open` makes inert by reading only
+        // the pins the song currently references.
+        //
+        // The mutation is the *reference*, made by a tool and in the log like every other
+        // one; no entry can appear here that no logged op caused, and no tool writes this
+        // file (CLAUDE.md #2).
+        for id in referenced_plugins(&self.song) {
+            if self.pins.contains_key(id) {
+                continue;
+            }
+            // A referenced plugin the manifest lacks cannot reach here: the validator refuses
+            // it as `plugin_unknown` before anything is written. Skipping rather than
+            // panicking keeps a write from being where a bug elsewhere becomes data loss.
+            if let Some(built) = self.manifest.plugins.get(id) {
+                let pin = Pin { commit: built.commit.clone(), version: built.version.clone() };
+                self.pins.insert(id.to_string(), pin);
+            }
+        }
+
+        let lock = serde_json::to_string_pretty(&Lock {
+            schema_version: SCHEMA_VERSION,
+            engine: self.manifest.engine.clone(),
+            plugins: self.pins.clone(),
+        })
+        .expect("the lock serialises")
             + "\n";
         write_atomically(&self.root.join(LOCK), &lock)?;
 
@@ -500,10 +618,58 @@ fn authorship(author: Author, clock: &dyn Clock) -> Provenance {
     }
 }
 
+/// §11's load check (ADR 0010 §3): a referenced plugin this build cannot match refuses to
+/// open, and nothing is substituted, silenced or re-pinned.
+///
+/// **Only the pins the song currently references.** The block is monotone (§2), so a project
+/// that once used Surge and no longer does still carries the entry; an inert pin is a record
+/// of history, not a hostage.
+///
+/// A referenced plugin with *no* pin is not a disagreement. §2 adds a pin on first reference,
+/// which happens at `write`, so an unpinned reference means the lock predates it — including
+/// every lock written before M1 — or that an operator deleted the entry, which §3 makes the
+/// way to re-pin while M1 ships no tool for it. The next write pins it.
+///
+/// This is `ProjectError`, not a `Violation`: every fix is an operator action, and inside
+/// §6's retry loop a model would only spend retries on it (ADR 0006 §2, ADR 0010 §3).
+fn refuse_if_unpinned(
+    root: &Path,
+    song: &Song,
+    lock: &Lock,
+    manifest: &Manifest,
+) -> Result<(), ProjectError> {
+    for id in referenced_plugins(song) {
+        let Some(pinned) = lock.plugins.get(id) else { continue };
+        let at = || err(root.join(LOCK), "lock_mismatch", String::new());
+        match manifest.plugins.get(id) {
+            Some(built) if built.commit == pinned.commit && built.version == pinned.version => {}
+            Some(built) => {
+                return Err(ProjectError {
+                    message: format!(
+                        "`{id}` is pinned at {} ({}) and this build has {} ({}); {REPIN}",
+                        pinned.version, pinned.commit, built.version, built.commit
+                    ),
+                    ..at()
+                })
+            }
+            None => {
+                return Err(ProjectError {
+                    message: format!(
+                        "`{id}` is pinned at {} ({}) and this build cannot host it; {REPIN}",
+                        pinned.version, pinned.commit
+                    ),
+                    ..at()
+                })
+            }
+        }
+    }
+    Ok(())
+}
+
 /// §5: every mutation is validated before it is applied, so an invalid song never reaches
 /// the log. Reports every violation, not the first (§6 allows three retries).
-fn refuse_if_invalid(root: &Path, song: &Song) -> Result<(), ProjectError> {
-    let violations = validate(song);
+fn refuse_if_invalid(root: &Path, song: &Song, manifest: &Manifest) -> Result<(), ProjectError> {
+    let violations = validate(song, manifest);
     if violations.is_empty() {
         return Ok(());
     }

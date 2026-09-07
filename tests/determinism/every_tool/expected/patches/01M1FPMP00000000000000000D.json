@@ -7,7 +7,7 @@
   "ops": [
     {
       "op": "add",
-      "path": "/tracks/01M1FPMP000000000000000006/instrument/params/drive",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/params/1243907205",
       "value": 0.62
     },
     {

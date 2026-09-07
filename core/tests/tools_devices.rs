@@ -5,6 +5,9 @@
 //! invalid song would fail here even if its own arguments were fine, which is the arrangement
 //! ADR 0006 §1 is for.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
 const AT: i64 = 1_788_307_200_000;
 use escribass_proto::tools::{
@@ -43,7 +46,7 @@ fn opened() -> (Scratch, Session) {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     (dir, Session::new(project, Box::new(ids), Box::new(clock), Author::Model))
 }
 
@@ -473,7 +476,7 @@ fn set_notes_keeps_the_provenance_of_a_note_it_recognises() {
     let mut ids = SeededIds::default();
     let created = FixedClock(AT);
     let song = new_song(&mut ids, &created, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &created, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &created, Author::Human, manifest()).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(created), Author::Human);
     let track = instrument_track(&mut session, "Bass");
 
@@ -505,7 +508,7 @@ fn set_notes_keeps_the_provenance_of_a_note_it_recognises() {
     let (id, before) = held.iter().next().unwrap();
 
     // A later session, a minute on, run by a model rather than the person who wrote the note.
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     let mut later = Session::new(
         reopened,
         Box::new(SeededIds::new(AT + 60_000, 100)),

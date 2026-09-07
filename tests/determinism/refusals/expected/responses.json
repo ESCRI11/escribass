@@ -249,6 +249,45 @@
     "valid": false
   },
   {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`com.example.not-a-plugin` is not a plugin this build can host; it hosts Surge Synth Team/Surge XT",
+        "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/plugin/plugin_id",
+        "rule": "plugin_unknown"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`cutoff` is not a parameter of `Surge Synth Team/Surge XT`, which declares 3. A parameter is named by the plugin's own id, not by its display name",
+        "path": "/tracks/01M1FPMP000000000000000006/instrument/params/cutoff",
+        "rule": "param_unknown"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "1.5 is outside a plugin parameter's normalised 0.0 to 1.0",
+        "path": "/tracks/01M1FPMP000000000000000006/instrument/params/1945359057",
+        "rule": "param_out_of_range"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
     "entry_id": "01M1FPMP00000000000000000E",
     "errors": [],
     "patch": [

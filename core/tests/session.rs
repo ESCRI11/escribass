@@ -3,6 +3,9 @@
 //! Every project here is built by `Project::create` and changed only through `Session`, so
 //! CLAUDE.md #2 holds: no test writes `song.json` or hand-builds an entry.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{new_song, ops_of, to_canonical_json, validate, Project, Session};
 use escribass_core::{FixedClock, SeededIds};
 use escribass_proto::tools::{AddTrackRequest, ApplyPatchRequest, GetSongAtRequest};
@@ -49,7 +52,7 @@ fn opened() -> (Scratch, Session) {
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
-    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
     let session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
     (dir, session)
 }
@@ -239,7 +242,7 @@ fn negative_zero_is_normalised_where_it_enters() {
     let song = session.get_song().song.unwrap();
     let text = to_canonical_json(&song).unwrap();
     assert!(!text.contains("-0.0"), "a negative zero reached the document");
-    assert!(validate(&song).is_empty());
+    assert!(validate(&song, &manifest()).is_empty());
 }
 
 // ---- summary ----
@@ -264,7 +267,7 @@ fn a_new_song_is_the_smallest_valid_document() {
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
 
-    assert!(validate(&song).is_empty(), "{:?}", validate(&song));
+    assert!(validate(&song, &manifest()).is_empty(), "{:?}", validate(&song, &manifest()));
     assert_eq!(song.tracks.len(), 1, "a master track and nothing else");
     assert!(song.clips.is_empty());
     assert_eq!(song.tempo_map.as_ref().unwrap().events.len(), 1);
@@ -288,7 +291,7 @@ fn a_session_can_be_driven_from_a_new_song() {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
 
     let master = song.tracks.keys().next().unwrap().clone();
@@ -300,7 +303,7 @@ fn a_session_can_be_driven_from_a_new_song() {
         .unwrap();
 
     assert!(result.valid, "{:?}", result.errors);
-    assert_eq!(Project::open(&dir.0).unwrap().song(), session.project().song());
+    assert_eq!(Project::open(&dir.0, manifest()).unwrap().song(), session.project().song());
 }
 
 #[test]

@@ -45,7 +45,15 @@ impl Drop for Scratch {
 /// is testable through a real process.
 fn session(project: &Path, requests: &[Value]) -> Vec<String> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_escribass-mcp"))
-        .args(["--create", "--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT])
+        .args([
+            "--create",
+            "--manifest",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/manifest.json"),
+            "--seed-ids",
+            &format!("{AT}:1"),
+            "--fixed-clock",
+            AT,
+        ])
         .arg(project)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

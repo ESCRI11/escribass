@@ -11,6 +11,7 @@ pub mod grpc;
 pub mod history;
 pub mod id;
 pub mod mcp;
+pub mod manifest;
 pub mod merge;
 pub mod patch;
 pub mod project;
@@ -27,6 +28,7 @@ pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops
     refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
+pub use manifest::Manifest;
 pub use project::{asset_hash, Prepared, Project, ProjectError};
 pub use render::compile;
 pub use mcp::SongTools;

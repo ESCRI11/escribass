@@ -12,9 +12,11 @@ The schema itself: `/schema/AGENTS.md`.
 | `tests/canonical.rs` | Fixed-point, idempotence, non-finite rejection, seeded double round-trip, key order. Reads `/tests/fixtures/song/minimal.json`. | done |
 | `src/patch.rs` | RFC 6902 `apply` and `diff`, and the RFC 6901 pointers they address with. Operates on `serde_json::Value`; knows nothing about `Song`. | done |
 | `src/history.rs` | The on-disk shape of `patches/*.json` and `refs.json`, the ADR 0001 §2 ref-name rules, and `History`: the DAG, `ancestry`, `materialise`, refs and `switch`. No I/O. | done |
-| `src/validate.rs` | `validate` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
+| `src/manifest.rs` | `Manifest`: what one engine build can host, as `escribass_engine --scan` wrote it. Read, never written. | done |
+| `src/validate.rs` | `validate(song, manifest)` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
-| `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json`, atomic writes. Reads and writes only. | done |
+| `tests/common/mod.rs` | The one thing every suite shares: the manifest fixture. Not a test target — a module. | done |
+| `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json` v2 and its pins, atomic writes. Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
 | `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | done |
@@ -24,10 +26,10 @@ The schema itself: `/schema/AGENTS.md`.
 | `tests/tools_merge.rs` | `merge_branch`: both sides of the conflict line, `version` resolution, and the auto-merge that produces an invalid song. | done |
 | `tests/tools_branches.rs` | `create_branch`, `switch_branch`, `delete_branch`. Mostly one claim from several angles: leaving a branch and coming back is byte for byte. | done |
 | `src/grpc.rs` | The gRPC surface: the generated `SongTools` trait over the same `Session`. Translation only. | done |
-| `src/bin/escribass-grpc.rs` | The server binary. Loopback and no TLS — the service edits local files with no authentication. | done |
+| `src/bin/escribass-grpc.rs` | The server binary. `--manifest` is required. Loopback and no TLS — the service edits local files with no authentication. | done |
 | `tests/grpc.rs` | Over a real socket with the generated client: the `Ok(valid=false)` / `Status` line, and the two MCP hazards that do not arise here. | done |
 | `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
-| `src/bin/escribass-mcp.rs` | The server binary. Project as a launch argument; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
+| `src/bin/escribass-mcp.rs` | The server binary. Project and `--manifest` are launch arguments; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
 | `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
 | `src/descriptor.rs` | `tool_schemas`: the protobuf descriptor turned into one JSON Schema per tool (ADR 0006 §6). Proto3 JSON's own mapping, with proto field names. `message_fields`: the same index read out as messages and fields, for the coverage guard. | done |
 | `tests/descriptor.rs` | Correspondence with the proto, one mapping rule per test. Every failure here is otherwise silent. | done |
@@ -101,6 +103,11 @@ cargo test -p escribass-core
 | `diff` recurses to the leaf. A coarse whole-subtree diff would make every pair of edits to one track collide on the same path and conflict under merge | ADR 0001 §4 |
 | `serde_json` carries the `float_roundtrip` feature | ADR 0002 §4 |
 | The writer rejects non-finite doubles; it does not rewrite values. `-0.0` is the tool API's to normalise, presence the validator's, timestamp precision the clock's | ADR 0002 §4, as amended 2026-09-02 |
+| The validator takes the build manifest as an **argument, never an `Option`**, and both binaries refuse to start without `--manifest` (`manifest_missing`). An optional manifest gives `plugin_unknown` and `param_unknown` a silent skip arm, and the determinism suite would then pass on a machine with no engine and prove nothing | ADR 0010 §4 |
+| A parameter is named by the plugin's own `ParamID`, not its display name — Surge XT repeats 176 of its 2855 — and a parameter's value is normalised `0..1`. Both are what a VST3 shows a host, and neither is a choice | ADR 0010 §4, refined and extended |
+| A device that is not a plugin is **not** judged by the manifest: a Cmajor, Faust or neural device declares its parameters in a source M4 compiles. Unchecked for a stated reason, in one marked place, with a test that says so | ADR 0010 §4 |
+| `lock.json`'s plugin block is **monotone**: `write` adds a pin for every referenced plugin that has none and removes nothing. A pure function of the current song loses a pin on an ordinary delete, and ADR 0005 §4's undo would re-pin from the running build | ADR 0010 §2 |
+| `open` compares only the pins the song *currently* references, so a stale pin is inert, and refuses a disagreement with `lock_mismatch` — a `ProjectError`, because every fix is an operator action. The `engine` block is the exception and re-pins: one engine, not chosen per project | ADR 0010 §3 |
 | A new dependency needs asking first, then a `lock.baseline.json` entry | CLAUDE.md #4; specs §17 |
 | Every order in the plan comes from a stated rule — mixer index, `Effect.index`, start tick, tick, parameter name — with ties by id, which is what a `BTreeMap` iterates in under a stable sort. Never from a hash table: a single-run test cannot catch that | ADR 0007 §1; CLAUDE.md #3 |
 | `compile` examines only what sounds. A track `mute` or `solo` silences is dropped before its devices, routing and lanes are looked at, so muting the Cmajor track is how a project exports the rest of itself before M4. The render length is the song's regardless: the last clip or section, sounding or not | ADR 0007 §1, §6 |
@@ -114,10 +121,11 @@ cargo test -p escribass-core
   the schema shape, or §4.4 if it is architectural. Add a `check_*` in `src/validate.rs` and a
   test in `tests/validate.rs` that breaks the fixture in exactly one way. `rule` ids are a
   stable API — tests and the AI orchestrator match on them, so they do not change with wording.
-- **Two limits are structural, not oversights.** A `DeviceRef` is checked as well-formed but
-  not resolved against `lock.json` (needs the project store); a `ParamRef` is checked to name a
-  device in this song but not a real parameter of it (needs the plugin manifest, M1). Both are
-  marked in the code.
+- **Both of M0.2's structural limits are closed** (M1 PR 9). A `DeviceRef` now resolves against
+  the build manifest (`plugin_unknown`) and a `ParamRef` against the plugin's own parameter ids
+  (`param_unknown`), because the engine finally says what it can host. What is left unresolved
+  is a *non-plugin* device's parameters, which need the compiler M4 brings; that is marked in
+  `check_device` and has a test that fails the day it stops being true.
 - **A normalisation:** decide where the value *enters* before writing code. The writer is not
   the default answer — see the Rules row above and ADR 0002 §4.
 - **A test:** `tests/*.rs`. Anything asserting byte-level output reads the shared fixture

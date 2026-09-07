@@ -3,6 +3,9 @@
 //! Everything a project contains here was produced by `create` and `commit` — no test builds
 //! a history by hand or writes `song.json` — so CLAUDE.md #2 holds end to end.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{
     to_canonical_json, validate, Clock, FixedClock, Op, Project, SeededIds,
 };
@@ -73,13 +76,13 @@ fn assert_head_matches_disk(project: &Project) {
 fn create_writes_a_project_whose_root_entry_builds_the_song() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
 
     assert_eq!(project.history().entries().len(), 1);
     assert_eq!(project.history().refs().head, "main");
     assert_eq!(project.song(), &fixture_song());
     assert_head_matches_disk(&project);
-    assert_eq!(Project::open(&dir.0).unwrap().song(), &fixture_song());
+    assert_eq!(Project::open(&dir.0, manifest()).unwrap().song(), &fixture_song());
 }
 
 #[test]
@@ -89,7 +92,7 @@ fn create_refuses_an_invalid_song_and_writes_nothing() {
     let mut broken = fixture_song();
     broken.tracks.get_mut(BASS).unwrap().mix.as_mut().unwrap().pan = 4.0;
 
-    let e = Project::create(&dir.0, &broken, &mut ids, &clock, Author::Human).unwrap_err();
+    let e = Project::create(&dir.0, &broken, &mut ids, &clock, Author::Human, manifest()).unwrap_err();
     // The rule that was actually broken, not a generic one: a caller matching on it can act.
     assert_eq!(e.rule, "pan_out_of_range");
     assert!(!dir.0.join("song.json").exists(), "nothing was written");
@@ -99,8 +102,8 @@ fn create_refuses_an_invalid_song_and_writes_nothing() {
 fn create_refuses_to_overwrite_an_existing_project() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
-    let e = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap_err();
+    Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
+    let e = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap_err();
     assert_eq!(e.rule, "project_exists");
 }
 
@@ -110,7 +113,7 @@ fn create_refuses_to_overwrite_an_existing_project() {
 fn a_commit_records_the_patch_and_advances_the_branch() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
 
     let id = project.commit("set_notes", &set_pitch(45), Author::Model, &mut ids, &clock).unwrap();
 
@@ -149,14 +152,14 @@ fn the_replay_invariant_holds_after_every_commit() {
     // The single assertion standing between the log and a document core cannot read.
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
 
     for pitch in [40, 41, 42, 43, 44] {
         project.commit("set_notes", &set_pitch(pitch), Author::Model, &mut ids, &clock).unwrap();
         assert_head_matches_disk(&project);
     }
     // And a project rebuilt from disk equals the live one.
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.song(), project.song());
     assert_eq!(reopened.history(), project.history());
 }
@@ -165,7 +168,7 @@ fn the_replay_invariant_holds_after_every_commit() {
 fn a_commit_that_fails_validation_leaves_the_project_untouched() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
     let before_song = std::fs::read_to_string(dir.0.join("song.json")).unwrap();
     let before_head = project.history().head_id().unwrap().to_string();
 
@@ -185,7 +188,7 @@ fn an_op_that_is_legal_json_and_illegal_for_the_schema_is_refused() {
     // is not a Song. The re-deserialisation in commit is what catches it.
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
 
     let float_pitch: Vec<Op> =
         serde_json::from_value(json!([{"op": "replace", "path": format!("{NOTE}/pitch"), "value": 43.5}])).unwrap();
@@ -199,7 +202,7 @@ fn an_op_that_is_legal_json_and_illegal_for_the_schema_is_refused() {
 fn an_op_that_does_not_apply_is_refused_before_anything_else() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
     let missing: Vec<Op> =
         serde_json::from_value(json!([{"op": "replace", "path": "/nope", "value": 1}])).unwrap();
     assert_eq!(
@@ -215,7 +218,7 @@ fn an_op_that_does_not_apply_is_refused_before_anything_else() {
 fn branch_edit_and_switch_back_returns_the_original_byte_for_byte() {
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
     let original = to_canonical_json(project.song()).unwrap();
 
     project.commit("set_notes", &set_pitch(45), Author::Model, &mut ids, &clock).unwrap();
@@ -233,7 +236,7 @@ fn branch_edit_and_switch_back_returns_the_original_byte_for_byte() {
 
     let back: Song = serde_json::from_value(escribass_core::apply(&current, &ops).unwrap()).unwrap();
     assert_eq!(to_canonical_json(&back).unwrap(), original);
-    assert_eq!(validate(&back), vec![]);
+    assert_eq!(validate(&back, &manifest()), vec![]);
 }
 
 // ---- determinism (§11) ----
@@ -243,7 +246,7 @@ fn two_identical_scripted_sessions_produce_byte_identical_directories() {
     // M0.4's claim, proved early: same input, same bytes, with no normalisation step.
     let run = |dir: &PathBuf| {
         let (mut ids, clock) = sources();
-        let mut project = Project::create(dir, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+        let mut project = Project::create(dir, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
         for pitch in [40, 41, 42] {
             project.commit("set_notes", &set_pitch(pitch), Author::Model, &mut ids, &clock).unwrap();
         }
@@ -283,7 +286,7 @@ fn the_clock_is_the_only_source_of_time() {
     // A different clock changes only the timestamps, proving nothing reads the wall clock.
     let dir = Scratch::new();
     let mut ids = SeededIds::default();
-    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &FixedClock(0), Author::Human).unwrap();
+    let project = Project::create(&dir.0, &fixture_song(), &mut ids, &FixedClock(0), Author::Human, manifest()).unwrap();
     let head = project.history().head_id().unwrap();
     let created = project.history().get(head).unwrap().provenance.as_ref().unwrap();
     assert_eq!(created.created_at.as_ref().unwrap().seconds, 0);
@@ -298,7 +301,7 @@ fn a_commit_records_the_effect_not_the_callers_spelling() {
     // project that had just been committed cleanly.
     let dir = Scratch::new();
     let (mut ids, clock) = sources();
-    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human).unwrap();
+    let mut project = Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest()).unwrap();
 
     let quoted: Vec<Op> = serde_json::from_value(
         json!([{"op": "replace", "path": format!("{NOTE}/pitch"), "value": "64"}]),
@@ -313,5 +316,5 @@ fn a_commit_records_the_effect_not_the_callers_spelling() {
     assert_eq!(recorded["ops"][0]["value"], json!(64), "the log holds the canonical spelling");
 
     // The invariant that matters: what was written can be read back.
-    assert_eq!(Project::open(&dir.0).unwrap().song(), project.song());
+    assert_eq!(Project::open(&dir.0, manifest()).unwrap().song(), project.song());
 }

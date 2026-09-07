@@ -8,6 +8,9 @@
 //! The plan golden in `tests/determinism` is what pins the bytes; these pin the rules, one
 //! claim each, so a golden that moves can be read against a rule that changed.
 
+mod common;
+use common::manifest;
+
 use escribass_core::render::UNSUPPORTED;
 use escribass_core::{compile, new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::render::{plan_clip, PlanClip, PlanTrack, RenderPlan};
@@ -55,7 +58,7 @@ fn opened() -> (Scratch, Session) {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Model).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Model, manifest()).unwrap();
     (dir, Session::new(project, Box::new(ids), Box::new(clock), Author::Model))
 }
 
@@ -63,9 +66,21 @@ fn device(kind: Kind) -> Option<DeviceRef> {
     Some(DeviceRef { kind: Some(kind) })
 }
 
+/// Surge XT as it names itself: vendor and class name, which is what the VST3 factory
+/// reports and what the manifest keys an entry by (ADR 0010 §4, refined in PR 6).
+const SURGE: &str = "Surge Synth Team/Surge XT";
+
+/// Three of Surge XT's own parameter ids, from the manifest fixture. They are opaque
+/// integers because that is all a VST3 host is shown: JUCE's wrapper hashes the readable
+/// internal id away, and display names are not unique (ADR 0010 §4). The names are here for
+/// the reader; `param_unknown` compares the ids.
+const CUTOFF: &str = "1945359057"; // A Filter 1 Cutoff
+const RESONANCE: &str = "8095466"; // A Filter 1 Resonance
+const DRIVE: &str = "1243907205"; // A Waveshaper Drive
+
 fn plugin() -> Option<DeviceRef> {
     device(Kind::Plugin(PluginRef {
-        plugin_id: "com.surge-synth.surge-xt".to_string(),
+        plugin_id: SURGE.to_string(),
         version: "1.3.4".to_string(),
     }))
 }
@@ -359,12 +374,12 @@ fn automation_nests_under_the_device_it_targets() {
     set(&mut session, format!("/tracks/{muted}/mix/mute"), json!(true));
 
     // Two entities on one parameter are one curve; a later entity's earlier point sorts first.
-    automation(&mut session, &i, "cutoff", &[(0, 0.1), (1920, 0.9)]);
-    automation(&mut session, &i, "cutoff", &[(960, 0.5)]);
-    automation(&mut session, &i, "resonance", &[(0, 0.3)]);
-    automation(&mut session, &e, "drive", &[(480, 0.7)]);
+    automation(&mut session, &i, CUTOFF, &[(0, 0.1), (1920, 0.9)]);
+    automation(&mut session, &i, CUTOFF, &[(960, 0.5)]);
+    automation(&mut session, &i, RESONANCE, &[(0, 0.3)]);
+    automation(&mut session, &e, DRIVE, &[(480, 0.7)]);
     // A lane on a device the render never sees changes no sample: dropped with its track.
-    automation(&mut session, &orphan, "cutoff", &[(0, 1.0)]);
+    automation(&mut session, &orphan, CUTOFF, &[(0, 1.0)]);
 
     let plan = compiled(&session);
     assert_eq!(plan.tracks.len(), 1);
@@ -376,12 +391,12 @@ fn automation_nests_under_the_device_it_targets() {
         .collect();
     assert_eq!(
         lanes,
-        vec![("cutoff", vec![(0, 0.1), (960, 0.5), (1920, 0.9)]), ("resonance", vec![(0, 0.3)])],
+        vec![(CUTOFF, vec![(0, 0.1), (960, 0.5), (1920, 0.9)]), (RESONANCE, vec![(0, 0.3)])],
         "lanes in parameter order, points in tick order"
     );
     let effect = &plan.tracks[0].effects[0];
     assert_eq!(effect.lanes.len(), 1);
-    assert_eq!((effect.lanes[0].param.as_str(), effect.lanes[0].points[0].tick), ("drive", 480));
+    assert_eq!((effect.lanes[0].param.as_str(), effect.lanes[0].points[0].tick), (DRIVE, 480));
     assert!(instrument.lanes.iter().all(|l| l.points.iter().all(|p| p.id.is_empty())));
 }
 
@@ -430,8 +445,8 @@ fn the_plan_carries_no_id_provenance_or_version() {
     let i = instrument_of(&session, &t);
     let e = effect(&mut session, &t, plugin(), 0);
     clip(&mut session, &t, 0, BAR, &[note(60, 0, 240)]);
-    automation(&mut session, &i, "cutoff", &[(0, 0.1)]);
-    automation(&mut session, &e, "drive", &[(0, 0.1)]);
+    automation(&mut session, &i, CUTOFF, &[(0, 0.1)]);
+    automation(&mut session, &e, DRIVE, &[(0, 0.1)]);
     ok(session.set_tempo(&SetTempoRequest { bpm: 90.0, tick: BAR, dry_run: false }).unwrap());
 
     let plan = serde_json::to_value(compiled(&session)).unwrap();

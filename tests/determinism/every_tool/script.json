@@ -5,17 +5,17 @@
     "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}}},
 
   {"tool": "set_track_instrument", "args": {"track_id": "01M1FPMP000000000000000006",
-    "ref": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}}, "dry_run": true}},
+    "ref": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}, "dry_run": true}},
   {"tool": "set_track_instrument", "args": {"track_id": "01M1FPMP000000000000000006",
-    "ref": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.3.4"}}}},
+    "ref": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}}},
 
   {"tool": "add_effect", "args": {"track_id": "01M1FPMP000000000000000006",
     "ref": {"faust": {"source_hash": "3c1de4f98b0000000000000000000000"}}, "dry_run": true}},
   {"tool": "add_effect", "args": {"track_id": "01M1FPMP000000000000000006",
     "ref": {"faust": {"source_hash": "3c1de4f98b0000000000000000000000"}}}},
 
-  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "drive", "value": 0.62, "dry_run": true}},
-  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "drive", "value": 0.62}},
+  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "1243907205", "value": 0.62, "dry_run": true}},
+  {"tool": "set_param", "args": {"device_id": "01M1FPMP000000000000000009", "param": "1243907205", "value": 0.62}},
 
   {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840, "dry_run": true}},
   {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}},
@@ -38,11 +38,11 @@
   {"tool": "transpose", "args": {"clip_id": "01M1FPMP00000000000000000E", "semitones": -12}},
 
   {"tool": "add_automation", "args": {
-    "target": {"device_id": "01M1FPMP000000000000000009", "param": "drive"},
+    "target": {"device_id": "01M1FPMP000000000000000009", "param": "1243907205"},
     "points": {"p": {"tick": 0, "value": 0.2, "curve": "CURVE_LINEAR"},
                "q": {"tick": 1920, "value": 0.9, "curve": "CURVE_HOLD"}}, "dry_run": true}},
   {"tool": "add_automation", "args": {
-    "target": {"device_id": "01M1FPMP000000000000000009", "param": "drive"},
+    "target": {"device_id": "01M1FPMP000000000000000009", "param": "1243907205"},
     "points": {"p": {"tick": 0, "value": 0.2, "curve": "CURVE_LINEAR"},
                "q": {"tick": 1920, "value": 0.9, "curve": "CURVE_HOLD"}}}},
 

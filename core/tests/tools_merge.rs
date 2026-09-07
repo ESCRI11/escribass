@@ -5,6 +5,9 @@
 //! it — and about the two things a merge could get quietly wrong, `version` resolution and an
 //! auto-merge that produces an invalid song.
 
+mod common;
+use common::manifest;
+
 use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
@@ -52,7 +55,7 @@ fn opened() -> (Scratch, Session) {
     let mut ids = SeededIds::default();
     let clock = FixedClock(AT);
     let song = new_song(&mut ids, &clock, Author::Model);
-    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human).unwrap();
+    let project = Project::create(&dir.0, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
     (dir, Session::new(project, Box::new(ids), Box::new(clock), Author::Model))
 }
 
@@ -169,7 +172,7 @@ fn a_merge_leaves_the_project_readable() {
     switch(&mut session, "main");
     merge(&mut session, "other", false);
 
-    let reopened = Project::open(&dir.0).unwrap();
+    let reopened = Project::open(&dir.0, manifest()).unwrap();
     assert_eq!(reopened.song(), session.project().song());
 }
 
@@ -392,7 +395,7 @@ fn a_merge_is_reproducible() {
         let mut ids = SeededIds::default();
         let clock = FixedClock(AT);
         let song = new_song(&mut ids, &clock, Author::Model);
-        let project = Project::create(dir, &song, &mut ids, &clock, Author::Human).unwrap();
+        let project = Project::create(dir, &song, &mut ids, &clock, Author::Human, manifest()).unwrap();
         let mut session = Session::new(project, Box::new(ids), Box::new(clock), Author::Model);
 
         branch(&mut session, "other");
@@ -471,7 +474,7 @@ fn a_merge_that_brings_in_a_removal_leaves_a_replayable_log() {
     assert!(merged.valid, "{:?}", merged.errors);
 
     // Every way the log is read back must agree with the document beside it (ADR 0004).
-    let reopened = Project::open(&dir.0).expect("the project reopens");
+    let reopened = Project::open(&dir.0, manifest()).expect("the project reopens");
     assert_eq!(reopened.song(), session.project().song());
     assert_eq!(clip_note_ids(&session, &clip).len(), 1, "the note stayed dropped");
 }
@@ -503,7 +506,7 @@ fn a_plugin_pin_is_not_auto_resolved_by_the_merge_rule() {
     let plugin = serde_json::to_vec(&serde_json::json!([{
         "op": "replace",
         "path": at,
-        "value": {"plugin": {"plugin_id": "com.surge-synth.surge-xt", "version": "1.0.0"}}
+        "value": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.0.0"}}
     }]))
     .unwrap();
     assert!(apply(&mut session, plugin).valid);
