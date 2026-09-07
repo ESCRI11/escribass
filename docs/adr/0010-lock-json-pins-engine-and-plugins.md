@@ -44,17 +44,24 @@ looks kind.
   "schema_version": 1,
   "engine": {
     "juce": "37c894f83d379179b2070d437ccd0f1cd9af9576",
+    "protobuf": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
     "rubberband": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
     "tracktion_engine": "0e02f709c4088b2aec427ba6bbbfee3639139bb9"
   },
   "plugins": {
-    "com.surge-synth.surge-xt": {
+    "Surge Synth Team/Surge XT": {
       "commit": "f7b97c682ade0b87da85ca5968b63d5c7c98e68d",
       "version": "1.3.4"
     }
   }
 }
 ```
+
+**Corrected 2026-09-07, in PR 9, which wrote the first one.** The example above is what the
+code writes; as first recorded it showed an invented plugin id, `com.surge-synth.surge-xt`, and
+three engine components. The id is the one decision 4 was later refined to require — vendor and
+class name, as the plugin reports itself — and `engine` is a map rather than a fixed set of
+fields precisely so a fourth component (protobuf, PR 5) is a value and not an edit to a struct.
 
 Keys are sorted and the file stays pretty-printed JSON, because M0.4 byte-compares it across
 two processes and two transports; a map with a nondeterministic order would fail that suite
