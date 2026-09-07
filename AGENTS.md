@@ -33,6 +33,9 @@ Never at the root: source code, generated code, project files, or any representa
 | `buf`, `protoc-gen-es`, `tsx`, `typescript` | see lock | `cd schema && npm ci` | `schema/package-lock.json` |
 | Python, `uv`, `betterproto2-compiler` | 3.12 | `cd schema && uv sync` | `schema/uv.lock` |
 
+`make` lists the shortcuts for all of this — running the app, the Vite loop, a scratch
+project, and the checks below. It shells out to exactly these commands and CI does not use it.
+
 ## Checks — all four before any step is called done (CLAUDE.md, Working style)
 
 ```
