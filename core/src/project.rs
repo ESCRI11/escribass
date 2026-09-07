@@ -25,7 +25,7 @@ use crate::manifest::Manifest;
 use crate::patch::{apply, Op};
 use crate::validate::{validate, Violation};
 use crate::version::bump_versions;
-use escribass_schema::song::{Author, Provenance};
+use escribass_schema::song::{device_ref, Author, DeviceRef, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
 };
@@ -109,9 +109,9 @@ struct Pin {
 /// `SourceRef`, `ModelRef` and `SamplerRef` are absent on purpose: they name content by hash,
 /// and the hash *is* the pin (ADR 0010 §1).
 fn referenced_plugins(song: &Song) -> BTreeSet<&str> {
-    fn plugin_of(device: Option<&escribass_schema::song::DeviceRef>) -> Option<&str> {
+    fn plugin_of(device: Option<&DeviceRef>) -> Option<&str> {
         match device?.kind.as_ref()? {
-            escribass_schema::song::device_ref::Kind::Plugin(p) => Some(p.plugin_id.as_str()),
+            device_ref::Kind::Plugin(p) => Some(p.plugin_id.as_str()),
             _ => None,
         }
     }
