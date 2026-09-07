@@ -621,6 +621,182 @@ other than the x86-64 the goldens were blessed on are unclaimed rather than cont
 sfizz's dispatcher again and found the AVX switch empty at this pin — so trap 1 stays open on
 the mechanism and not merely on the sample (ADR 0009 §6).
 
+## M2 — UI
+
+Planned 2026-09-07 against `main` at `831fbc5`. Same reason as the M0.4 and M1 plans: the
+reasoning is the expensive part, none of it is in code yet, and a conversation is not where it
+should live. M1's planning PR raised eight questions and a second PR answered them; this is the
+first half only. Nothing below is decided.
+
+### What was already decided, so M2 does not re-decide it
+
+| Decided | Where | Consequence |
+|---|---|---|
+| `app` is a Tauri host in Rust with a web frontend, and the host **embeds `core`** and supervises `ai` and `engine` | §3, tier 1 and tier 2 rows; §9 | `core` is a library dependency of `app`, not a server it dials. What the *webview* talks to is a different question, and it is question 1 |
+| React, with the timeline drawn on canvas/WebGL, and CodeMirror 6 | §15 (Frontend); §3 | Not M2's choice to make again. The timeline is custom rendering under any framework, which is what §15's rationale already says |
+| `app/` is in §13 | §13; `AGENTS.md` | No new-directory ADR. The precedent is `engine/`, created in M1 PR 5 under the same line |
+| Every view is a projection, and nothing but the model is persisted as authoritative state | §2.1, §14.2, CLAUDE.md #1 | No per-view model and no editable client store. The constraint most easily broken by an ordinary performance fix (trap 1) |
+| Every control is a tool call, and the UI uses the same API the AI does | §5, §14.3; wireframes, "Scope check" | A drag is a `set_notes`, and nothing in `app` writes `song.json`. *Where* the call is made from is question 1; *when* it is made is trap 2 |
+| The mixer and the history view are M2's, not only the timeline and the roll | ADR 0003 §5 | Four of §9's seven views. The AI panel is M3 (§16) and code views are M4 (ADR 0003 §8); the seventh is question 8 |
+| `Render` gains its gRPC implementation, and **the stdio path is deleted rather than kept beside it** | ADR 0008 §1; §3 | `core/src/engine.rs`, its EOF framing, `render_export` and the render suite's driver all move together. Two transports for one boundary is precisely what that decision refused |
+| Preview audio plays from the engine straight to the device; audio is never streamed over IPC | §15 (Preview audio); §3 | The engine opens an audio device for the first time. "Headless works and needs no display" was measured for instantiating a VST3, not for a device (trap 13) |
+| Preview's process lifetime is M2's to decide against a real UI, and is **not** implied by "one render, one process" | ADR 0008 §2, and its Consequences | Handed forward on purpose rather than generalised. Question 5 |
+| TypeScript codegen for `proto/` lands at M2 | ADR 0006 §7 | The service, not the model — `schema/` has generated TypeScript since M0.1. Python waits for M3 |
+| Undo and redo become **tools**, because ⌘Z is their first consumer | ADR 0005 §4; deferred ledger | Undo appends an inverse entry and never rewinds a ref (§5). A frontend undo stack is trap 10 |
+| Bit-exactness is claimed for Linux x86-64 on one pinned image and compiler | ADR 0009 §1 | M2 inherits that claim and does not widen it. What M2 *runs* on is question 12, and half of it is `[OPEN]` |
+
+**The deferred ledger already sends eight rows and both known gaps here**, and they are M2 scope
+whether or not §16 names them: `Instrument.state` as a content hash, whose trigger is "the first
+plugin editor" (question 8); `ParamRef` reaching track mix params and dense unique `index` on
+tracks and effects, both triggered by the mixer (question 3); interactive merge conflict
+resolution and recursive merge for a criss-cross base (question 3); undo/redo tools (decided
+above); user VST3 plugins (question 8); `Project::write`'s O(history) rewrite, whose named
+trigger is "a session that stays open and keeps appending, which is `app`" (trap 8); and the
+missing lock file on an `.escri` directory, deferred to "when `app` supervises the processes"
+(question 10). Two of those are `song.proto` changes, so each is an ADR before code
+(CLAUDE.md #5) and each regenerates the M0.4 goldens — the shape M1 PR 9 had to walk byte by
+byte.
+
+One loose end in the tool list, too. `render_preview` is one of §5's tools; this file's M0.3
+section placed it in M1 with `render_export`, and M1 shipped `render_export` alone.
+`proto/song_tools.proto` already records why — "render_preview waits for M2's live engine
+process (ADR 0008 §2)" — so this is where it lands, and question 4 is what it means.
+
+### The open questions
+
+Twelve. Each changes what gets built rather than how, which is the test M1 used for what had to
+be answered before code.
+
+| # | Question | Options, and what each costs |
+|---|---|---|
+| 1 | **Is `app` one process or two, and what does the webview actually call?** | (a) The host holds a `Session` and exposes Tauri IPC commands to the webview; a gRPC server is added at M3 for `ai`, on the same session. Fewest moving parts, lowest latency — and the path the UI uses is then *not* the wire path the determinism suite drives, so the two are free to drift, which is ADR 0006 §1's argument against sixteen copies of one contract. (b) The host runs the `SongTools` server and the webview is an ordinary client over grpc-web or Connect. Makes §5's "used by the UI and the AI identically" literally true and puts the UI on the tested path, at the cost of a browser-side transport, a second serialisation of every timeline read, and a proxy or protocol choice §3 does not name. (c) Two OS processes, host and server — contradicts §3's table, which puts `core` in `app` |
+| 2 | **How does the frontend hold what it draws, without being a second representation?** | (a) One decoded `Song` from the generated TypeScript types (§4.1 forbids hand-written ones), every view a pure selector over it, a full `get_song` after every applied call. The only shape that cannot drift; costs a canonical round trip per edit, and `every_tool`'s golden is already tens of kilobytes for a song with almost nothing in it. (b) The same, but applying `ToolResult.patch` locally to avoid the re-read — a second RFC 6902 apply, in a third language, whose failure mode is a view and a `song.json` that disagree with nothing comparing them. M0.4's cross-language replay proves TypeScript *can*; ADR 0006 §3's reasoning is why it should not. (c) A normalised view store, which is what a React app looks like by default and what §14.2 forbids |
+| 3 | **Which schema changes does the mixer force, and do they land in M2?** | Three ledger rows converge on it: `ParamRef` cannot reach `Mix.gain`, `pan` or `mute`, which is the commonest automation in any DAW and which Plate 1 draws as a lane; dense unique `index` on tracks and effects, where two branches inserting at one index auto-merge into a document the validator refuses; and merge conflict resolution, interactive and recursive. Taking all three means three ADRs and two schema changes before a pixel is drawn, and regenerating the M0.4 goldens. Taking only what a view needs leaves the automation lane unable to address a fader. Deferring again needs a trigger better than "the mixer", which is this milestone |
+| 4 | **What *is* preview playback?** | §16 says "preview playback", §8 says the engine "either streams preview audio or renders offline", and nothing says what a preview is. Options: (a) play a compiled `RenderPlan` from a tick, stop, recompile on the next edit — one message shape, and a note drag recompiles the whole plan; (b) load a plan once and seek, loop and transport inside it, which needs `Render` to be more than one RPC; (c) a plan diff, which is a second patch format for a message ADR 0007 §5 proved is derived. This decides `render.proto`'s shape, and `buf breaking` guards it (trap 12) |
+| 5 | **What is the engine's lifetime once preview exists?** | (a) One long-lived process serving preview *and* `Render`. Then an export can share a process with a preview and ADR 0008 §2's entire argument is live again — a resident plugin instance whose smoothers ramp from their previous value. (b) A long-lived process for preview and a fresh one per offline render: keeps the determinism guarantee, costs two lifetimes in one binary and a second path through `main()`. (c) A resident process that spawns a child per export — both guarantees, most machinery. Underneath all three: who pumps the JUCE message loop when the process is simultaneously a gRPC server and the owner of an audio callback |
+| 6 | **Does gRPC in the engine mean vendoring grpc++?** | ADR 0008 §1 declined it in M1 for reasons M2 does not remove — a second C++ protobuf coupling, its own pin, its own build in a job that already compiles JUCE, Tracktion and three plugins. (a) Vendor it: a new dependency needing sign-off (CLAUDE.md #4) and a §17 row, and it must build against the pinned protobuf v21.12, which is from 2022 and constrains which grpc releases are even candidates. (b) A framed protocol over a socket, which is stdio renamed and makes §3's "`app` ↔ `engine` over gRPC" false. (c) Put the `Render` server on the Rust side and keep a private engine protocol — same objection, one layer over. Whichever it is, the answer belongs in an ADR before PR 9, and (a) needs the user's approval before anything is written |
+| 7 | **What does "the determinism suite" mean for a UI?** | (a) Nothing new: `app` is in neither CLAUDE.md #3's list nor §11's first bullet, both of which name `core`, compilers and `engine`. Cheapest, and it leaves the largest new surface in the repository uncovered — and makes question 2's failure mode permanently silent. (b) A headless projection test: from a fixed `Song`, render each view to a serialisable description and golden it, proving the projection is a pure function of the model. Catches the class that matters for the price of an ordinary test, and proves nothing about wiring. (c) A driven session — a UI automation driver replaying gestures and comparing `song.json` and `patches/` byte for byte, which is the strongest reading of "every control is a tool call" and brings a browser driver, a display in CI and a flake class this repository has never had. §11 is a `[MUST]`, so an answer of "nothing" is a sentence someone has to write into §11, not an omission |
+| 8 | **Where do §9's instrument/effect editors live?** | They are in **no milestone**. §16 names timeline, piano roll, mixer, history and preview; ADR 0003 §5 placed the mixer and history, §8 placed code views in M4, §16 places the AI panel in M3. The seventh view was never placed — the exact class of gap ADR 0003 exists to close — and two ledger rows already assume M2 has one (`Instrument.state` "with the first plugin editor", user VST3 plugins "when `app` could show a plugin browser"). Options: (a) a generic parameter editor built from the build manifest, which already maps `ParamID` to display name (ADR 0010 §4) and whose values are normalised `0..1`, so the UI shows numbers a user cannot interpret without the plugin's own units; (b) the plugin's own VST3 editor, which needs a window handle inside the engine process and is a different feature; (c) place them in M4 beside the code views and move both ledger rows with them. This is scope placement, so it amends ADR 0003 |
+| 9 | **What does the UI do with a dry run it is holding?** | The wireframes draw an unapplied edit in the timeline, dashed, and a pending row at the head of the patch log. A dry run mints ids from a fork so a preview burns none (M0.3 PR 11), and the model can move underneath it — an agent edit, a branch switch, another window. Options: apply optimistically and let §4.3's `version` check refuse; re-run the dry run before applying and diff the two; or forbid the model moving while one is pending, which is a lock by another name. The first is the only one that does not add a rule, and it is the one whose error message a user reads |
+| 10 | **Who may open an `.escri`, and what enforces it?** | ADR 0006 §5 made one project per process *structural*: named at launch, no `open_project` tool, because MCP's stdio transport is not a session and ADR 0004's commit is three renames under a single-writer assumption. A desktop app has File · Open and Recent, and §18.2 sells leaving an MCP client pointed at the same directory. Options: (a) a process per project, so ADR 0006 §5 stays literally true and `app` re-execs or spawns a host per window; (b) an `open_project` tool, which that decision refused and which is a wire change; (c) the host constructs a `Session` per window as a library, which is not a tool call and is not forbidden — `--create` was never a tool either. All three still leave the known gap: nothing locks the directory, and `app` is the first thing that makes two writers ordinary rather than hypothetical (trap 9) |
+| 11 | **What does §17 gain, and what is a pin for a frontend?** | `lock.baseline.json` has `app.react: null` and `app.codemirror: "6.x"`; neither is a pin, and §17's table lists Tauri by tag with no commit. §17's registry rule already covers npm by exact version with hashes in `package-lock.json`, so applying it is the small half. The large half is that the frontend's dependency tree is bigger than everything else in the repository combined, and the thing it actually renders in — WebKitGTK, WKWebView or WebView2 — is the operating system's and cannot be pinned at all (trap 7). Options: enumerate `app/`'s direct dependencies in `lock.baseline.json` the way `schema.typescript` is enumerated, or record the lockfile by reference and say so in §17's rules |
+| 12 | **Which platforms does M2 target?** | M1 claims Linux x86-64 only (ADR 0009 §1), and a UI is the first artefact a user installs. Tauri's webview differs per OS, so "it runs" is three answers. Linux-only keeps M2's surface honest and postpones nothing that is not already postponed; all three of §1's platforms triples CI and needs the minimum supported OS versions. **That item is `[OPEN]` in §15 and is not an agent's to resolve** — `roadmap.md` places its resolution at M5's installer, and this question is only whether M2 needs it earlier. Stop and ask |
+
+### PRs
+
+| # | Branch | Adds |
+|---|---|---|
+| 0 | `m2.0-spike` (**never merged**) | Three measurements the ADRs cannot honestly be written without: whether grpc++ (or whatever question 6 picks) builds in `engine/` against protobuf v21.12 and what it adds to a job that is already up to an hour; whether a JUCE audio device opens and plays while the same process serves a socket, and what pumps the message loop; and what a real `.escri` costs to reach a webview both ways in question 1, since that question is currently being argued without a number |
+| 1 | `m2.1-adrs` | The ADRs the twelve questions resolve into, their §15 rows, the §17 pins question 11 settles, and the ADR 0003 amendment question 8 needs. No code |
+| 2 | `m2.2-proto-ts` | TypeScript codegen for `proto/` (ADR 0006 §7), and `render.proto`'s M2 shape if question 4 changes it — once, early, so `buf breaking` sees it against `main` in one PR |
+| 3 | `m2.3-app-shell` | `app/`: the Tauri host embedding `core`, the frontend build, its place in the workspace and in CI, and one window that opens a project and shows the status bar and nothing else |
+| 4 | `m2.4-read-views` | Arrangement and piano roll, read-only. Projections of `get_song` with no edit path at all, so question 2's answer is reviewed on its own |
+| 5 | `m2.5-edits` | The first control that is a tool call, its dry-run and diff, and the undo/redo tools behind ⌘Z |
+| 6 | `m2.6-schema` | Whichever of question 3's schema changes land here — an ADR and a PR each, as M1 PR 2 was, and the M0.4 goldens move in these and nowhere else |
+| 7 | `m2.7-mixer` | The mixer, over the schema PR 6 laid down |
+| 8 | `m2.8-history` | The patch-log view with its provenance column, branch switching, and whatever question 3 leaves of merge conflict resolution |
+| 9 | `m2.9-engine-grpc` | `Render` over gRPC, the stdio path deleted, `core/src/engine.rs` and the render suite moved onto the new transport. **The silent PR**: the four goldens must not move, and any byte that does needs a named cause (trap 5) |
+| 10 | `m2.10-preview` | Preview playback: the live process, the audio device, the transport, and `render_preview` |
+| 11 | `m2.11-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen per milestone and M1 returned eighteen; budgeting a PR for it is cheaper than discovering it |
+| 12 | `m2.12-close` | Docs, whatever §11 gains from question 7, `CLAUDE.md` to M3 |
+
+**Which rows cannot be sized yet, and why.** PR 3 is entirely question 1's answer — a Tauri host
+exposing IPC commands and a host serving grpc-web to its own webview are different amounts of
+work, and the second one may need a proxy. PRs 4, 5, 7 and 8 are all question 2's: a pure
+selector over one decoded `Song` and a locally patched store differ by a re-read that may or may
+not be fast enough, which PR 0 is meant to measure. PR 6 has no size until question 3 says how
+many schema changes it is; it may be one PR or three. PRs 9 and 10 depend on questions 5 and 6,
+and if question 6 goes the way ADR 0008 §1 went in M1, PR 9 is a build investigation before it
+is a feature. Only PRs 1, 2, 11 and 12 are the size they look.
+
+The split follows M0.2's lesson, which M1 confirmed twice: PR 4 is the loud concern (do the
+views draw the model), PR 9 the silent one (did anything about the audio change when the
+transport did). Mixing them gets the silent half reviewed as plumbing.
+
+### Traps
+
+1. **The store that becomes a second model.** React's answer to many views over one document is
+   a normalised store, and it arrives as a performance fix in PR 7, not as a design decision in
+   PR 4. §14.2 forbids it; nothing in the toolchain checks it. Its failure mode is a mixer
+   showing a gain the model does not have, which looks like a rendering bug and is not. Whatever
+   question 2 decides needs a mechanical check, because the prose has existed since §2.1 and
+   would not have stopped it.
+2. **A drag is not one tool call.** Dragging a note fires a hundred pointer events. One
+   `set_notes` each puts a hundred entries in the log §5 calls both the audit trail and the undo
+   history, and ⌘Z then undoes one pixel. Coalescing on release is the obvious fix and has a
+   sharp edge: the intermediate states are unvalidated, so a drag can pass through a position
+   the validator would refuse and land somewhere legal, and the refusal a user should have seen
+   at the boundary never happens.
+3. **Preview and export do not agree, and that is correct.** sfizz switches to freewheeling
+   quality settings for an offline render, so §8 already says a golden is deliberately not what
+   a preview plays; Surge XT's factory patch reaches a wall-clock RNG unless `A Osc 1 Retrigger`
+   is set; and the audio device's sample rate is the user's while the render's is
+   `RenderTarget`'s, which puts a resampler in one path and not the other. A UI that publishes a
+   hash and plays a different sound will be reported as a bug by the first person who checks.
+4. **The status bar is a `[MUST]` rendered as a widget.** Plate 1 shows the `song.json` hash,
+   the patch count, the last render hash and `lock.json 14/14 verified`; Plate 6 shows "0
+   differing samples outside the edited range". Every one of those is a §11 claim, and a widget
+   that computes it a second way is a second implementation of the thing the suite exists to
+   check. They come from the same code or they drift, and the drift is invisible until a demo.
+5. **Deleting stdio deletes the only tested path.** `core/src/engine.rs`, `render_export` and
+   the four goldens in `tests/renders.rs` all reach the engine over stdio today. ADR 0008 §1 is
+   explicit that both are not kept, so the order matters: implement, move the suite, delete —
+   never a window in which the goldens are compared through a transport nothing has exercised.
+6. **A live engine is a resident plugin instance, which is the thing ADR 0008 §2 refused.** The
+   moment preview holds a process open, smoothers ramp from their previous value and an export
+   sharing that process depends on what was played before it. "We destroy the plugins between"
+   is, in ADR 0008's own words, a claim maintained by discipline in C++ and checked by nothing,
+   whose failure mode is a golden that passes alone and fails in a suite.
+7. **The webview cannot be pinned.** §17 pins by commit or exact version; the engine the
+   frontend renders in ships with the operating system, moves under the user, and paints a
+   canvas differently across versions. Nothing about the *model* depends on it — but any test
+   that compares an image does, and a screenshot golden would be the flakiest artefact in this
+   repository.
+8. **`Project::write` is O(history) and `app` is the first long session.** The known gap names
+   this trigger exactly: "a session that stays open and keeps appending, which is `app`". Every
+   edit rewrites every entry file. It will present as UI lag, be diagnosed in the frontend, and
+   live in `core`.
+9. **Two writers, and nothing locks the directory.** ADR 0006 §5 made the single writer
+   structural by giving one process one project; `app` plus an MCP client on the same `.escri`
+   is not a corner case, it is what §18.2 sells. The failure is ADR 0004's three renames
+   interleaved — a project that will not open, and a patch log that no longer matches the
+   `song.json` beside it.
+10. **Undo is not a stack.** ADR 0005 §4: undo appends an inverse entry and never rewinds a ref.
+    Every editor framework ships an undo stack, and one here disagrees with the log the moment a
+    branch is switched or a second writer commits. Plate 5's entire point is that there is no
+    second stack.
+11. **Ids that the UI mints.** A pending edit needs something to key a React list by, and the
+    nearest value is an id — but ids come from `core`'s injectable source (ADR 0001 §5), a dry
+    run mints them from a fork so a preview burns none, and anything the frontend generates for
+    itself is unseeded randomness one process away from the model. It will not be caught by
+    CLAUDE.md #3, which names `core`, compilers and `engine`.
+12. **`buf breaking` is the only guard on `render.proto`, and it runs on pull requests only.** If
+    preview needs a different service shape, that change lands once and early. Spread across
+    PRs 9 and 10 it is compared against a `main` that already moved.
+13. **CI has no sound card.** M1 measured that headless works and needs no display, for
+    *instantiating* a VST3. Opening an audio device is a different question, and preview
+    playback would be the first thing in this repository that cannot be tested where everything
+    else is tested. Whether that is acceptable is question 7's problem; that it is true is this
+    trap's.
+
+### What M2 will not claim
+
+- **Not that the UI is deterministic** in the sense §11 means. `app` is in neither CLAUDE.md #3's
+  list nor §11's first bullet, and unless question 7 changes that, no golden covers a pixel.
+- **Not macOS or Windows.** M1 claims Linux x86-64 on one image and compiler, and a desktop
+  application does not widen an audio claim. What M2 runs on is question 12, and its `[OPEN]`
+  half is not an agent's to answer.
+- **Not that a preview sounds like an export.** §8 already says the opposite for sfizz, and
+  trap 3 lists two more reasons.
+- **Not the AI panel.** It is M3 (§16), and it is drawn in Plate 1 of the wireframes, which is
+  exactly why this needs saying: the plate a reader remembers is the one M2 does not build.
+- **Not code views** (M4, ADR 0003 §8), **not DAWproject or MIDI** (M5), **not an installer**
+  (M5). M2 runs from a build tree.
+- **Not that two writers on one project are safe**, unless question 10 puts a lock file in this
+  milestone.
+- **Not a resolution of any `[OPEN]` item.** Minimum supported OS versions is the one M2 walks
+  into; the other three are unchanged.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -652,6 +828,7 @@ neither reached nor moved it.
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result — the same shape as the interactive resolution already deferred there | M2 | review, 2026-09-03 |
 | Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2 | ADR 0005 §4 |
 | `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
+| Refusing a plugin parameter that reaches an RNG nothing can seed | §8 forbids Surge XT's `rand_pm1`, Dexed's LFO waveform 5 and sfizz's `*_random` **in a fixture**, and nothing refuses them in a user's song. §11's first bullet is about our own code and holds; §2.2's promise — "every source of randomness carries an explicit seed stored in the project" — is wider, and neither of those two RNGs can be seeded at all (Surge's is the wall clock with `seed_rand` commented out; Dexed's `randstate_` is indeterminate memory). Closing it is a validator rule and therefore an ADR — and the rule has no producer: something must say which parameter values reach an unseedable RNG, and today that is prose in §8 for three plugins vetted by hand. Deferred rather than opened as an M2 question because M2 adds no plugin and no randomness: the gap is M1's, unchanged, and an ADR now would design a denylist against a build manifest that carries none, which is ADR 0002 §7's reason | The first milestone that lets a user *choose* a patch or supply a plugin — the same trigger `Instrument.state` and user VST3 plugins already wait on. Whether that is M2 is M2's open question 8 | §8's per-plugin notes; M2 planning, 2026-09-07 |
 
 ## Known gaps
 
@@ -670,7 +847,10 @@ neither reached nor moved it.
 
 ## Open — not ours to decide
 
-`docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocks M0.
+`docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocked M0 or M1.
+Minimum supported OS versions now touches M2's path — a desktop application runs on an operating
+system, and M1 claims one — while `roadmap.md` places its resolution at M5's installer. M2's open
+question 12 states the choice and takes none of it.
 
 - Neural runtime packaging: ONNX Runtime linked into `engine`, or a separate process. Now due
   before M4, which is where the neural runtime lands (ADR 0003 §7).
