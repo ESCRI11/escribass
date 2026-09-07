@@ -865,8 +865,11 @@ private:
         // ADR 0009 §4: an asset that does not match the render's rate is **converted, not
         // stretched**, and that happens whether or not the clip asks for a stretch.
         if (reader->sampleRate != rate)
+            // At least one frame: an asset shorter than one frame at the render's rate would
+            // otherwise become an empty buffer and a clip of silence with nothing to say so.
             buffer = resampled (buffer, reader->sampleRate / rate,
-                                (int) std::llround (buffer.getNumSamples() * rate / reader->sampleRate));
+                                std::max (1, (int) std::llround (buffer.getNumSamples() * rate
+                                                                 / reader->sampleRate)));
 
         // ADR 0011 §3: a stretched clip fills its own musical length. `compile` unrolled a loop
         // into one plan clip per iteration and refused one whose last iteration is short, so
@@ -907,9 +910,18 @@ private:
         // before that reads back as zero frames long — a clip of silence with nothing to say
         // it went wrong.
 
-        // The file is at the render's rate and holds exactly the clip's frames, so Tracktion
-        // has nothing left to decide: no resample, no stretch, no gain, no fade, and an offset
-        // of zero. The clip is a placement.
+        // The file is at the render's rate and holds exactly the clip's frames, so nothing the
+        // clip could carry is set: no stretch, no gain, no fade, no loop, no offset. The clip
+        // is a placement.
+        //
+        // Tracktion still reads it through a `juce::LagrangeInterpolator` — `WaveNode::
+        // processSection` does that for every wave clip whatever the ratio. At the 1:1 the line
+        // above guarantees, the kernel is a delta and the samples come back bit-identical
+        // (measured: zero difference over a rendered clip), but the interpolator's two-sample
+        // base latency is not compensated, so the clip sounds two samples after its position.
+        // Upstream's, deterministic, and written down in ADR 0009 §4 and §8 rather than worked
+        // around here, because the workaround would be a compensation coupled to a JUCE
+        // internal for 42 microseconds.
         const te::ClipPosition position { te::TimeRange (at (first), at (last)), te::TimeDuration() };
         auto inserted = target.insertWaveClip (processed.getFileNameWithoutExtension(), processed, position, false);
         if (inserted == nullptr)

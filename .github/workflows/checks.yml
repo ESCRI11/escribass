@@ -210,6 +210,7 @@ jobs:
         run: |
           git submodule update --init --depth 1 \
             engine/vendor/tracktion_engine engine/vendor/protobuf \
+            engine/vendor/rubberband \
             engine/vendor/surge engine/vendor/sfizz-ui engine/vendor/dexed
           git -C engine/vendor/tracktion_engine config submodule.modules/juce.url https://github.com/juce-framework/JUCE.git
           git -C engine/vendor/tracktion_engine submodule update --init --depth 1 modules/juce
@@ -284,7 +285,7 @@ jobs:
               exit 1
             fi
           }
-          for component in tracktion_engine juce protobuf; do
+          for component in tracktion_engine juce protobuf rubberband; do
             check "$component" "$(jq -r ".engine.${component}.commit" lock.baseline.json)"
           done
           for component in surge_xt sfizz_ui dexed; do
@@ -369,3 +370,146 @@ jobs:
           echo "run 2 $two"
           [ -n "$one" ] && [ "$one" = "$two" ] \
             || { echo "::error::two renders of one plan disagree: $one vs $two"; exit 1; }
+
+      # An asset plays, at its gain, with its fades, and stretched to fill its clip (PR 8).
+      # Like the step above this is not the golden suite — it is the standing answer to "does
+      # asset playback still work at all", which nothing else in this workflow asks, and PR 11
+      # is three PRs away.
+      #
+      # The fixture is generated here rather than committed, because a committed asset belongs
+      # to the golden suite and its `assets/` comparison (trap 16), and this step needs a
+      # signal whose envelope can be checked rather than a recording. A constant is that
+      # signal: the rendered sample at index n is then exactly the formula ADR 0011 §2 states,
+      # with nothing of the asset's own shape in the way.
+      - name: An asset plays, at its gain and with its fades
+        if: env.SKIP != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          protoc=engine/build/vendor/protobuf/protoc
+          python3 - <<'PY'
+          import struct, wave
+          # One second of constant 0.5 at 48 kHz, mono, 24-bit — the render's own rate, so
+          # nothing resamples and the envelope is the only thing under test.
+          w = wave.open("dc.wav", "wb")
+          w.setnchannels(1); w.setsampwidth(3); w.setframerate(48000); w.setnframes(48000)
+          w.writeframes(struct.pack("<i", round(0.5 * 8388607))[:3] * 48000)
+          w.close()
+          PY
+          # 1920 ticks at 120 bpm is one second. -6.0206 dB is exactly half in amplitude; the
+          # fades are 960 and 480 ticks, so 24000 and 12000 samples, and they overlap for the
+          # middle of the clip at neither ramp's full value — which is the case ADR 0011 §2
+          # needs no rule for.
+          cat > audio.txtpb <<EOF
+          tracks {
+            mix { gain_db: 0.0 pan: 0.0 }
+            clips { start_tick: 0 length_ticks: 1920
+                    audio { clip { asset_hash: "fixture" gain_db: -6.0206 fade_in_ticks: 960
+                                   fade_out_ticks: 480 }
+                            path: "$PWD/dc.wav" } }
+          }
+          master { mix { gain_db: 0.0 pan: 0.0 } }
+          tempo { tick: 0 bpm: 120.0 }
+          target { kind: RENDER_KIND_MASTER sample_rate: 48000 bit_depth: 24 }
+          length_ticks: 1920
+          output_path: "$PWD/audio.wav"
+          EOF
+          "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+            --encode=escribass.render.v1.RenderPlan proto/render.proto < audio.txtpb > audio.binpb
+          hash_of() {
+            "$engine" engine/build/manifest.json < audio.binpb > "$1"
+            "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+              --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
+              | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
+          }
+          one=$(hash_of audio1.binpb)
+          python3 - <<'PY'
+          import wave
+          w = wave.open("audio.wav")
+          assert (w.getnchannels(), w.getframerate(), w.getsampwidth(), w.getnframes()) \
+                 == (2, 48000, 3, 48000), w.getparams()
+          d = w.readframes(w.getnframes())
+          s = [int.from_bytes(d[i:i+3], "little", signed=True) / 8388608.0 for i in range(0, len(d), 3)]
+          N, FIN, FOUT, GAIN, DC = 48000, 24000, 12000, 10 ** (-6.0206 / 20.0), 0.5
+          # Tracktion reads every wave clip through a juce::LagrangeInterpolator even at a 1:1
+          # ratio and does not compensate its 2-sample base latency, so the clip's own sample n
+          # lands at n + 2 (docs/specs.md §8, sample-rate conversion).
+          worst = max(
+              abs(s[n * 2 + c] - (0.0 if n < 2 else
+                                  DC * GAIN * min(1.0, (n - 2) / FIN) * min(1.0, (N - (n - 2)) / FOUT)))
+              for n in range(N) for c in (0, 1))
+          print(f"worst deviation from ADR 0011 §2's formula: {worst:.9f} ({worst * 8388608:.2f} LSB)")
+          # Two LSB of 24-bit. Anything larger is a different envelope, not a rounding.
+          assert worst < 2 / 8388608, f"the rendered envelope is not the formula's: {worst}"
+          assert s[0] == 0.0 and s[2] == 0.0, "a fade-in does not start at silence"
+          PY
+          two=$(hash_of audio2.binpb)
+          echo "run 1 $one"
+          echo "run 2 $two"
+          [ -n "$one" ] && [ "$one" = "$two" ] \
+            || { echo "::error::two renders of one audio clip disagree: $one vs $two"; exit 1; }
+
+      # The other half of PR 8: Rubber Band. A one-second asset in a two-second clip has to
+      # come out two seconds long with its pitch unchanged, and it has to do it the same way
+      # twice — a phase vocoder is the surface ADR 0009 §4 says is most at the mercy of its own
+      # configuration.
+      - name: A stretched clip fills its clip, keeps its pitch, and does it twice
+        if: env.SKIP != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          protoc=engine/build/vendor/protobuf/protoc
+          python3 - <<'PY'
+          import math, struct, wave
+          # 441 Hz for one second: a whole number of cycles at 48 kHz, so the pitch check is
+          # not measuring a truncated one.
+          w = wave.open("tone.wav", "wb")
+          w.setnchannels(1); w.setsampwidth(3); w.setframerate(48000); w.setnframes(48000)
+          w.writeframes(b"".join(
+              struct.pack("<i", round(0.5 * math.sin(2 * math.pi * 441 * n / 48000) * 8388607))[:3]
+              for n in range(48000)))
+          w.close()
+          PY
+          cat > stretch.txtpb <<EOF
+          tracks {
+            mix { gain_db: 0.0 pan: 0.0 }
+            clips { start_tick: 0 length_ticks: 3840
+                    audio { clip { asset_hash: "fixture" time_stretch: true }
+                            path: "$PWD/tone.wav" } }
+          }
+          master { mix { gain_db: 0.0 pan: 0.0 } }
+          tempo { tick: 0 bpm: 120.0 }
+          target { kind: RENDER_KIND_MASTER sample_rate: 48000 bit_depth: 24 }
+          length_ticks: 3840
+          output_path: "$PWD/stretch.wav"
+          EOF
+          "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+            --encode=escribass.render.v1.RenderPlan proto/render.proto < stretch.txtpb > stretch.binpb
+          hash_of() {
+            "$engine" engine/build/manifest.json < stretch.binpb > "$1"
+            "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
+              --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
+              | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
+          }
+          one=$(hash_of stretch1.binpb)
+          python3 - <<'PY'
+          import wave
+          w = wave.open("stretch.wav")
+          assert (w.getnchannels(), w.getframerate(), w.getnframes()) == (2, 48000, 96000), w.getparams()
+          d = w.readframes(w.getnframes())
+          s = [int.from_bytes(d[i:i+3], "little", signed=True) / 8388608.0 for i in range(0, len(d), 3)][0::2]
+          # An unstretched clip would run out after one second and leave the rest silent; this
+          # is the assertion that the stretch happened at all.
+          last = max(i for i, v in enumerate(s) if abs(v) > 1e-4)
+          assert last > 95000, f"the stretched clip goes quiet at frame {last} of 96000"
+          # Pitch, by zero crossings over the middle half. Rubber Band changes the duration and
+          # not the frequency; a resample would have halved it to 220.5 Hz.
+          mid = s[24000:72000]
+          crossings = sum(1 for i in range(1, len(mid)) if (mid[i-1] < 0) != (mid[i] < 0))
+          hz = crossings * 48000 / (2.0 * len(mid))
+          print(f"stretched to frame {last}, pitch {hz:.1f} Hz")
+          assert abs(hz - 441.0) < 5.0, f"the stretch moved the pitch to {hz} Hz"
+          PY
+          two=$(hash_of stretch2.binpb)
+          echo "run 1 $one"
+          echo "run 2 $two"
+          [ -n "$one" ] && [ "$one" = "$two" ] \
+            || { echo "::error::two stretched renders disagree: $one vs $two"; exit 1; }

@@ -24,7 +24,7 @@
     "rubberband": {
       "version": "4.0.0",
       "commit": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
-      "note": "options pinned in full by ADR 0011 §3: OptionProcessOffline | OptionEngineFiner | OptionThreadingNever, with every other group written out at its current default."
+      "note": "time-stretch (GPL-2.0-or-later; compatible with this repository's AGPL-3.0 through the 'or later'). Options pinned in full by ADR 0011 §3: all twelve groups written out, which comes to OptionEngineFiner | OptionThreadingNever with the other ten at their zero defaults. Vendored 2026-09-07 in M1 PR 8 as a submodule, built from upstream's single/RubberBandSingle.cpp — one source file that hard-defines USE_BUILTIN_FFT and USE_BQRESAMPLER, so the FFT is not chosen from what the build machine has installed, and NO_THREADING, so ADR 0009 §3's single thread is compiled in as well as requested (ADR 0009 §4)."
     },
     "onnxruntime": {
       "version": "1.29.0",

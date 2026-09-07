@@ -143,16 +143,28 @@ signals, both correct. Read off the pinned 4.0.0 header
 (`1d95888bec3ae0a17c0c4af791810d5a63f6bc35`), the option word is written out in full rather
 than OR-ing a few flags onto the defaults:
 
+**Completed 2026-09-07, in PR 8.** The table below listed eight of the twelve option groups
+`RubberBandStretcher.h` declares, and the sentence above it says "in full". The four missing
+ones — `OptionStretch`, `OptionSmoothing`, `OptionFormant` and `OptionChannels` — are added to
+the table's last row, all at their zero-valued defaults, for the same reason as the five that
+were already there. Nothing changes about what the engine computes; what changes is that
+"written out in full" is now true. The same PR found that the vendored build is a stronger pin
+than this table alone: it is upstream's own `single/RubberBandSingle.cpp`, which hard-defines
+`USE_BUILTIN_FFT` and `USE_BQRESAMPLER`, so the FFT is not chosen from what the build machine
+happens to have installed — which would be a determinism hazard this ADR had not named, since
+a phase vocoder over two FFTs is two different signals.
+
 | Option | Why |
 |---|---|
-| `OptionProcessOffline` | The whole clip is known before the render starts; offline processing uses the study pass and is the higher-quality path. There is no real-time constraint in an offline render. |
+| `OptionProcessOffline` | The whole clip is known before the render starts; offline processing uses the study pass and is the higher-quality path. There is no real-time constraint in an offline render. It is also what makes Rubber Band pad and compensate its own delay so the result has an exact start and duration, which is what lets the engine ask for a buffer exactly the clip's length. |
 | `OptionEngineFiner` | The R3 engine, for quality. Determinism does not prefer either engine — it requires only that the choice is fixed and not inherited from a default that a future version may move. |
-| `OptionThreadingNever` | Trap 15 and ADR 0009 §3's single-thread requirement. `OptionThreadingAuto` is the default and lets Rubber Band decide, which makes the output a function of the machine's core count. |
-| `OptionTransientsCrisp`, `OptionDetectorCompound`, `OptionPhaseLaminar`, `OptionWindowStandard`, `OptionPitchHighSpeed` | Each of these is the current default (numerically zero). They are written explicitly so that an upstream change to any of them shows up as a diff in our source rather than as a golden that moved for no reason anyone can find. |
+| `OptionThreadingNever` | Trap 15 and ADR 0009 §3's single-thread requirement. `OptionThreadingAuto` is the default and lets Rubber Band decide, which makes the output a function of the machine's core count. **Measured 2026-09-07, in PR 8:** it is inert twice over, and passed anyway. The flag is read only by the R2 engine — `src/faster/R2Stretcher.cpp` is the only file in the library that mentions it — and the single-file build compiles threading out with `NO_THREADING`. A configuration that would change meaning if the engine choice moved is not a configuration. |
+| `OptionTransientsCrisp`, `OptionDetectorCompound`, `OptionPhaseLaminar`, `OptionWindowStandard`, `OptionPitchHighSpeed`, `OptionStretchElastic`, `OptionSmoothingOff`, `OptionFormantShifted`, `OptionChannelsApart` | Each of these is the current default (numerically zero), so the word comes to `OptionEngineFiner` \| `OptionThreadingNever` and nothing else. They are written explicitly so that an upstream change to any of them shows up as a diff in our source rather than as a golden that moved for no reason anyone can find. `OptionStretchElastic` is marked obsolete in the pinned header and named for completeness, not effect. |
 
 An asset whose sample rate differs from the render target is **converted, not stretched** —
 that is resampling, and it happens whether or not `time_stretch` is set. ADR 0009 §4 lists the
-converter as a DSP surface of its own for exactly that reason.
+converter as a DSP surface of its own for exactly that reason. **Chosen 2026-09-07, in PR 8:**
+`juce::LagrangeInterpolator`, and its note is in §8.
 
 ### 4. `schema_version` stays 1, and `buf breaking` has nothing to report
 

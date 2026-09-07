@@ -460,6 +460,7 @@ precedes the `.proto` change (CLAUDE.md #5, `docs/adr/AGENTS.md`).
 | 6 | `m1.6-plugins` | Three plugin submodules, manifests, the bundle cache |
 | 7 | `m1.7-host` | VST3 loading, MIDI, tempo, automation, single-threaded fixed-block render |
 | 8 | `m1.8-audio` | Asset playback, gain and fades, Rubber Band vendored and pinned for stretch |
+| 8b | `m1.8b-sampler` | `Instrument.kind: sampler` — an SFZ from `assets/` loaded into sfizz. §16 puts the sampler in M1 and no PR owned it; §11 wants a golden per bundled instrument, and sfizz with no SFZ loaded silences its whole track, so PR 11's sfizz fixture depends on this |
 | 9 | `m1.9-lock` | `Lock` v2, `lock_mismatch`, `plugin_unknown`, `param_unknown`. **The silent PR**: the M0.4 goldens regenerate here and nowhere else |
 | 10 | `m1.10-render-export` | `Session::render_export` and `add_asset` over both transports |
 | 11 | `m1.11-goldens` | `tests/renders.rs` behind a feature; A-vs-B and golden WAVs, including an audio clip |
@@ -533,10 +534,17 @@ prevent; a feature is absent where it cannot run and loud where it must.
     has to settle.
 14. **`Instrument.state` must not join `JSON_TEXT_FIELDS`** — it is opaque binary, and the
     comment there already names it as the counter-example.
-15. **Rubber Band is a second DSP surface.** A phase vocoder has modes, a threading option and
-    internal buffering; the same input at two settings is two different outputs, and its
-    threading is a summation-order hazard of its own. Pin the mode explicitly in the plan,
-    force single-threaded, and give it a determinism note in ADR 0009 as each plugin gets.
+15. ~~**Rubber Band is a second DSP surface.**~~ — **settled in PR 8, and the trap named the
+    wrong half.** The options are pinned in full by ADR 0011 §3 and the determinism note is in
+    ADR 0009 §4, as the trap asked. But the threading it warned about is inert: the option is
+    read only by the R2 engine, which the pinned word does not select, and the vendored build
+    compiles threading out entirely. What the trap missed is that the **build** picks the FFT —
+    the library's own build system takes FFTW, IPP, KissFFT or vDSP from whatever is installed
+    on the machine, and a phase vocoder over two FFTs is two different signals with every
+    option identical. The engine builds upstream's `single/RubberBandSingle.cpp`, which
+    hard-defines the built-in FFT and resampler. There is no runtime CPU dispatch anywhere in
+    the library, so unlike sfizz it is not a candidate for trap 1. A stretched clip hashed
+    identically in three fresh processes.
 16. **An audio asset makes `assets/` non-empty for the first time.** `Project::write` creates
     the directory and M0's comparison ignores it because git cannot store an empty one; a
     golden that now contains an asset changes what the determinism suite compares.
