@@ -7,6 +7,7 @@
 pub mod canonical;
 pub mod clock;
 pub mod descriptor;
+pub mod engine;
 pub mod grpc;
 pub mod history;
 pub mod id;
@@ -23,6 +24,7 @@ pub mod version;
 
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
+pub use engine::Engine;
 pub use descriptor::{message_fields, tool_names, tool_schemas, Field, ToolSchema};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
     refs_from_json, refs_to_json, History, HistoryError};

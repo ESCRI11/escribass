@@ -37,3 +37,16 @@ lint:
 breaking:
   use:
     - FILE
+  ignore_only:
+    # `RenderExport` answered with `ToolResult` from PR 3, where the RPC was defined before the
+    # engine existed to answer; PR 10 changed it to `RenderResponse`, because the hash and the
+    # engine commits a render reports have nowhere to go in `ToolResult`
+    # (proto/song_tools.proto, `RenderResponse`). No client had ever called it — the gRPC
+    # surface returned UNIMPLEMENTED and MCP did not advertise it — so the wire this protects
+    # was never spoken.
+    #
+    # This exemption exists only while `main` still carries the old response type, which is
+    # what `buf breaking --against` compares to. **M1 PR 11 deletes these four lines**, and
+    # `docs/plan.md` carries that as its row.
+    RPC_SAME_RESPONSE_TYPE:
+      - proto/song_tools.proto

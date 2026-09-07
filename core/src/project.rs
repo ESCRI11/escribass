@@ -440,6 +440,37 @@ impl Project {
         Ok(hash)
     }
 
+    /// The index `compile` resolves an `asset_hash` through (ADR 0007 §4): every file in
+    /// `assets/`, by name, at an absolute path.
+    ///
+    /// Built from the directory listing rather than from the song, because the song names
+    /// hashes and this is the only place that knows where they live. A project with no
+    /// `assets/` yet indexes nothing rather than failing — the directory arrives with the
+    /// first `add_asset`.
+    ///
+    /// `ponytail:` `std::path::absolute` is lexical, so it makes a path the engine can open
+    /// from any working directory without resolving a symlink or touching the disk. Canonical
+    /// paths would be the upgrade if a project is ever reached through one.
+    pub fn assets(&self) -> Result<BTreeMap<String, PathBuf>, ProjectError> {
+        let assets = self.root.join(ASSETS);
+        let listing = match std::fs::read_dir(&assets) {
+            Ok(listing) => listing,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+            Err(e) => return Err(err(&assets, "unreadable", e.to_string())),
+        };
+        let mut found = BTreeMap::new();
+        for entry in listing {
+            let path = entry.map_err(|e| err(&assets, "unreadable", e.to_string()))?.path();
+            let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                continue;
+            };
+            let absolute =
+                std::path::absolute(&path).map_err(|e| err(&path, "unreadable", e.to_string()))?;
+            found.insert(name, absolute);
+        }
+        Ok(found)
+    }
+
     /// Writes a proposed state and adopts it only once the write succeeded.
     fn swap(&mut self, song: Song, history: History) -> Result<(), ProjectError> {
         let mut next = Project {

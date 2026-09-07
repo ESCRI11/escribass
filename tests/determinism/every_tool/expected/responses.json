@@ -1010,6 +1010,18 @@
     "asset_hash": "2286d76f7fa133642170637e5c7635d116dbd96cb8b9892281b945b350870636"
   },
   {
+    "errors": [
+      {
+        "message": "`faust` devices are compiled and hosted from M4; M1 hosts the bundled plugins and the sampler",
+        "path": "/tracks/01M1FPMP000000000000000006/fx_chain/01M1FPMP00000000000000000B/ref/faust",
+        "rule": "render_unsupported"
+      }
+    ],
+    "result": null,
+    "summary": "",
+    "valid": false
+  },
+  {
     "automation": {
       "01M1FPMP00000000000000000N": {
         "id": "01M1FPMP00000000000000000N",

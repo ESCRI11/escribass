@@ -70,18 +70,23 @@ fn the_generated_serde_impl_base64_encodes_patch() {
 }
 
 /// ADR 0006 §1: every mutating RPC returns the one result contract, and only an RPC that
-/// produces no ops — a read, or `AddAsset`, whose answer is an address — returns its own.
+/// produces no ops — a read, `AddAsset`, whose answer is an address, or `RenderExport`, whose
+/// answer is the engine's — returns its own.
 ///
 /// Read from the `.proto` rather than the generated code because the rule is about the service
 /// definition, and because a new RPC added with its own response message would otherwise be
 /// caught by nothing until a reviewer noticed.
 #[test]
 fn every_mutating_rpc_returns_the_shared_result() {
-    const OWN_SHAPE: [(&str, &str); 4] = [
+    const OWN_SHAPE: [(&str, &str); 5] = [
         ("GetSong", "SongResponse"),
         ("GetSongAt", "SongResponse"),
         ("GetHistory", "HistoryResponse"),
         ("AddAsset", "AssetResponse"),
+        // Revised 2026-09-07, in M1 PR 10: a render records nothing, so `patch` and
+        // `entry_id` would be permanently empty — and the hash it reports has nowhere to go
+        // in `ToolResult` (song_tools.proto, `RenderResponse`; ADR 0006 §1, amended).
+        ("RenderExport", "RenderResponse"),
     ];
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/song_tools.proto"))
         .expect("song_tools.proto");

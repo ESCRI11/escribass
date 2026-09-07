@@ -53,6 +53,29 @@ return what they read; `valid`, `patch`, `summary` and `entry_id` have no meanin
 and a result whose fields are mostly inapplicable teaches a caller to ignore fields. A read
 that cannot be served fails as `Err` — there is no caller-fixable half.
 
+**Extended 2026-09-07, in M1 PR 10, before any client had called it.** The test above is
+"produces ops", not "is not a read", and two tools land on the read's side of it without being
+reads. `AddAsset` was the first, at M1 PR 3: an asset is neither in the song nor in the log, so
+what a caller needs back is the address. `RenderExport` is the second, and this ADR did not
+see it coming — the RPC was defined in PR 3, returning `ToolResult`, when there was no engine
+to answer and the question looked like "which tools mutate". A render records nothing, so
+`patch` and `entry_id` are permanently empty; and it produces something `ToolResult` cannot
+carry at all — the PCM hash and the commits of the build that made it (ADR 0008 §5), which
+§18.2 publishes and which a caller driving this over MCP would otherwise never see. So
+`RenderExport` returns `RenderResponse`: the caller-fixable half (`valid`, `errors`, a
+`summary`) beside the engine's own `RenderResult`, by value rather than copied field by field.
+
+The rule as it now reads: **one `ToolResult` for every tool that produces ops**, and its own
+message for a tool that produces something else. That is a narrower claim than the one this
+decision made and it is still one contract, not sixteen — the seventeen op-producing tools
+share theirs, and nothing was added to the shape they share.
+
+Changing an RPC's response type is a wire break, and `buf breaking` said so. It was taken
+because nothing spoke this wire: the gRPC surface answered `UNIMPLEMENTED` and MCP did not
+advertise the tool, so there was no client to break. The exemption in the root `buf.yaml` is
+scoped to that one rule and that one file, and it goes when `main` no longer carries the old
+type — M1 PR 11's row in `docs/plan.md`.
+
 `patch` is `bytes` holding the canonical JSON text produced by the same function that fills
 `PatchEntry.ops`. This is ADR 0002 §11 applied at a second boundary: the wire carries the same
 canonical *document* the disk does. It is the re-derived diff, so it includes ADR 0005's

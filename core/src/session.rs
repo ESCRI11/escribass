@@ -14,6 +14,7 @@
 //! dry run returns is produced by the same `ops_text` that fills the entry a commit writes.
 
 use crate::clock::Clock;
+use crate::engine::Engine;
 use crate::history::{ops_text, HistoryError};
 use crate::id::IdSource;
 use crate::patch::{diff, Op};
@@ -24,8 +25,8 @@ use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
     GetSongAtRequest, HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
-    SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
-    SwitchBranchRequest, ToolResult, TransposeRequest,
+    RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
+    SetTrackInstrumentRequest, SongResponse, SwitchBranchRequest, ToolResult, TransposeRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -43,6 +44,9 @@ pub struct Session {
     ids: Box<dyn IdSource + Send>,
     clock: Box<dyn Clock + Send>,
     author: Author,
+    /// Where the engine is, when this process was told (`--engine`). `None` is not a silent
+    /// skip: `render_export` says so and refuses, as an operator error (see it below).
+    engine: Option<Engine>,
 }
 
 impl Session {
@@ -52,7 +56,17 @@ impl Session {
         clock: Box<dyn Clock + Send>,
         author: Author,
     ) -> Self {
-        Self { project, ids, clock, author }
+        Self { project, ids, clock, author, engine: None }
+    }
+
+    /// Names the engine binary this session renders with (ADR 0008 §2).
+    ///
+    /// Separate from `new` because a session that never renders needs none, and every other
+    /// caller of `new` — M0's tests, both binaries opening a project — is one of those. A
+    /// process told nothing here still edits, validates and previews a render; it refuses only
+    /// the call that would need a binary.
+    pub fn set_engine(&mut self, engine: Engine) {
+        self.engine = Some(engine);
     }
 
     pub fn project(&self) -> &Project {
@@ -224,6 +238,77 @@ impl Session {
             self.project.add_asset(&request.content)?
         };
         Ok(AssetResponse { asset_hash })
+    }
+
+    // ---- rendering (§8) ----
+
+    /// §5 `render_export`: compile the song, hand the plan to a fresh engine, answer with what
+    /// the engine reported (ADR 0007 §4, ADR 0008 §1).
+    ///
+    /// The two halves of ADR 0006 §2's line meet here, and keeping them apart is the whole
+    /// job. `compile`'s refusals — a device M1 cannot render, an asset the project does not
+    /// hold — are `Vec<Violation>` and come back as `valid = false`, because the caller fixes
+    /// them by calling differently. An engine that is missing, will not start, crashes or
+    /// answers with nothing is `Err(ProjectError)`, because no retry fixes a crash and a model
+    /// told to retry one would spend §6's three turns learning that.
+    ///
+    /// Nothing in the song changes, so nothing is recorded: a render reads the document. The
+    /// answer is not a `ToolResult` for that reason and one more — the hash the engine
+    /// computed has nowhere to go in one (`proto/song_tools.proto`, `RenderResponse`).
+    pub fn render_export(
+        &self,
+        request: &RenderExportRequest,
+    ) -> Result<RenderResponse, ProjectError> {
+        // Both refusals are collected before either is returned, sorted, which is compile's own
+        // rule (ADR 0007 §4) for the reason ADR 0006 §1 gives: a model fixing one problem at a
+        // time spends §6's three retries on one call.
+        let mut refused = Vec::new();
+        // A relative path would resolve against this process's working directory, which the
+        // caller cannot see and the engine inherits. `render.proto` says the path is absolute;
+        // this is where a caller learns it, and it is caller-fixable like compile's own.
+        if !std::path::Path::new(&request.output_path).is_absolute() {
+            refused.push(Violation {
+                path: "/output_path".to_string(),
+                rule: "output_path_relative",
+                message: format!(
+                    "`{}` is not an absolute path, and a render writes where it is told",
+                    request.output_path
+                ),
+            });
+        }
+        let compiled = match crate::compile(self.project.song(), &self.project.assets()?) {
+            Ok(plan) => Some(plan),
+            Err(violations) => {
+                refused.extend(violations);
+                None
+            }
+        };
+        let Some(mut plan) = compiled.filter(|_| refused.is_empty()) else {
+            refused.sort();
+            return Ok(render_refused(refused));
+        };
+        // `compile` leaves it empty: where the WAV goes is this call's argument, not the
+        // document's (`core/src/render.rs`).
+        plan.output_path = request.output_path.clone();
+        let summary = describe(&plan);
+
+        // A dry run is the first half of the real path, as it is for every tool (ADR 0006 §3):
+        // the plan is compiled and described, and no process is started. That is also what
+        // lets the determinism suite exercise this tool on a machine with no engine build —
+        // what it cannot cover, `tests/AGENTS.md` names rather than skips.
+        if request.dry_run {
+            return Ok(RenderResponse { valid: true, errors: vec![], summary, result: None });
+        }
+
+        let engine = self.engine.as_ref().ok_or_else(|| ProjectError {
+            path: "--engine".to_string(),
+            rule: "engine_unset",
+            message: "this process was not told where the engine is, and does not look for one: \
+                      pass `--engine <path to escribass_engine>` (ADR 0008 §2)"
+                .to_string(),
+        })?;
+        let result = engine.render(&plan)?;
+        Ok(RenderResponse { valid: true, errors: vec![], summary, result: Some(result) })
     }
 
     // ---- branches (ADR 0001 §2) ----
@@ -477,6 +562,32 @@ fn described(summary: String) -> ToolResult {
         summary,
         entry_id: String::new(),
     }
+}
+
+/// A refused render: no engine ran, and every reason it was refused (ADR 0007 §6).
+fn render_refused(violations: Vec<Violation>) -> RenderResponse {
+    RenderResponse {
+        valid: false,
+        errors: violations.into_iter().map(wire).collect(),
+        summary: String::new(),
+        result: None,
+    }
+}
+
+/// One deterministic line describing a plan.
+///
+/// From the plan rather than from the request, so it says what will be rendered and carries no
+/// path: `output_path` is machine-specific, and a summary is compared byte for byte by the
+/// determinism suite (§11).
+fn describe(plan: &escribass_proto::render::RenderPlan) -> String {
+    let tracks = plan.tracks.len();
+    let clips: usize = plan.tracks.iter().map(|t| t.clips.len()).sum();
+    format!(
+        "{} ticks, {tracks} track{}, {clips} clip{}",
+        plan.length_ticks,
+        if tracks == 1 { "" } else { "s" },
+        if clips == 1 { "" } else { "s" },
+    )
 }
 
 /// `Violation` as it crosses the wire. Not a fifth error type — the transport of the one

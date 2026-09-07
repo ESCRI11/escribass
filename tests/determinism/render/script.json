@@ -65,5 +65,7 @@
       "a": {"pitch": 48, "start_tick": 0, "length_ticks": 960, "velocity": 70}
     }}}},
 
+  {"tool": "render_export", "args": {"output_path": "/escri/out.wav", "dry_run": true}},
+
   {"tool": "get_song", "args": {}}
 ]

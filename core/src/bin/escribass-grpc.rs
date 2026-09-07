@@ -11,6 +11,10 @@
 //! --manifest <path>        **required**, and no default: what this build can host
 //!                          (ADR 0010 §4). Without it `plugin_unknown` and `param_unknown`
 //!                          would have a silent skip arm, so this process refuses to start
+//! --engine <path>          the engine binary `render_export` renders with. Told, never
+//!                          searched, for the reason `--manifest` is (ADR 0008 §2); optional
+//!                          because only that one call needs it, and without it the call is
+//!                          refused as an operator error rather than skipped
 //! --listen <addr>          default 127.0.0.1:50051
 //! --author human|model     provenance on everything this process writes, the project it
 //!                          creates included (default: human)
@@ -75,7 +79,14 @@ async fn run() -> Result<(), String> {
             .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?
     };
 
-    let server = Server::new(Session::new(project, ids, clock, options.author));
+    let mut session = Session::new(project, ids, clock, options.author);
+    // The engine is told or absent, never searched (ADR 0008 §2, `core/src/engine.rs`). It is
+    // handed the same manifest the validator resolved against, so what the engine hosts and
+    // what `core` believes it hosts cannot be two files.
+    if let Some(engine) = options.engine {
+        session.set_engine(escribass_core::Engine::new(engine, options.manifest));
+    }
+    let server = Server::new(session);
     // The address this process was asked for, printed so a caller does not have to re-parse
     // its own flags. Not a readiness signal — `serve` binds below. stdout carries nothing
     // else; anything this process has to say goes to stderr.
@@ -91,6 +102,7 @@ async fn run() -> Result<(), String> {
 struct Options {
     project: PathBuf,
     manifest: PathBuf,
+    engine: Option<PathBuf>,
     listen: SocketAddr,
     create: bool,
     author: Author,
@@ -102,6 +114,7 @@ impl Options {
     fn parse(arguments: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut project = None;
         let mut manifest = None;
+        let mut engine = None;
         let mut listen: SocketAddr = "127.0.0.1:50051".parse().expect("a literal address");
         let mut create = false;
         let mut author = Author::Human;
@@ -115,6 +128,7 @@ impl Options {
             match argument.as_str() {
                 "--create" => create = true,
                 "--manifest" => manifest = Some(PathBuf::from(value("--manifest")?)),
+                "--engine" => engine = Some(PathBuf::from(value("--engine")?)),
                 "--listen" => {
                     let text = value("--listen")?;
                     listen = text.parse().map_err(|_| format!("`{text}` is not an address"))?;
@@ -156,6 +170,7 @@ impl Options {
                 "--manifest [manifest_missing]: this build's manifest says what plugins and \
                  parameters exist, and the validator has no answer without it (ADR 0010 §4). \
                  It is written by `cmake --build engine/build --target manifest`\n{USAGE}"))?,
+            engine,
             listen,
             create,
             author,
@@ -165,6 +180,6 @@ impl Options {
     }
 }
 
-const USAGE: &str = "usage: escribass-grpc --manifest <manifest.json> [--create] [--listen <addr>] \
-                     [--author human|model] [--seed-ids <ms>:<n>] [--fixed-clock <ms>] \
-                     <project.escri>";
+const USAGE: &str = "usage: escribass-grpc --manifest <manifest.json> [--engine <path>] [--create] \
+                     [--listen <addr>] [--author human|model] [--seed-ids <ms>:<n>] \
+                     [--fixed-clock <ms>] <project.escri>";
