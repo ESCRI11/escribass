@@ -201,6 +201,11 @@ struct Snapshot(BTreeMap<String, Vec<u8>>);
 /// contributes nothing on either side, so git's inability to store an empty directory never
 /// reads as a difference; non-empty, every asset is compared by name and by bytes like any
 /// other file. `add_asset` is what first puts one there (ADR 0011, Consequences).
+///
+/// `lock` is the one name skipped, and for the same reason the others are all kept: it is not
+/// part of the project. It is a live process's claim on the directory (ADR 0012 §3), holding a
+/// pid, removed when that process exits — so it is neither reproducible nor content, and a
+/// harness that kills its server leaves one behind where a harness that closes stdin does not.
 fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut found = BTreeMap::new();
     let mut pending = vec![root.to_path_buf()];
@@ -218,6 +223,9 @@ fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
                     .to_string_lossy()
                     // Normalised so the report reads the same on a future Windows runner.
                     .replace('\\', "/");
+                if name == "lock" {
+                    continue;
+                }
                 found.insert(name, std::fs::read(&path).expect("a project file is readable"));
             }
         }
@@ -933,7 +941,7 @@ fn every_implemented_tool_is_scripted() {
         .map(|step| step.tool)
         .collect();
 
-    for tool in escribass_core::mcp::IMPLEMENTED {
+    for tool in escribass_core::call::IMPLEMENTED {
         assert!(scripted.contains(*tool), "`{tool}` is implemented and no script calls it");
     }
 }

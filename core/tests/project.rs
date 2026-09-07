@@ -9,7 +9,7 @@ use common::{manifest, MANIFEST};
 
 use escribass_core::{
     diff, entry, new_song, timestamp_from_ms, FixedClock, History, IdSource, Op, Project,
-    SeededIds, Session,
+    ProjectLock, SeededIds, Session,
 };
 use escribass_proto::tools::AddTrackRequest;
 use escribass_schema::history::Refs;
@@ -484,4 +484,33 @@ fn a_log_missing_a_parent_is_still_refused() {
             .collect(),
     };
     assert_eq!(History::from_parts(vec![orphan], refs).unwrap_err().rule, "parent_missing");
+}
+
+// ---- the directory lock (ADR 0012 §3) ----
+
+#[test]
+fn a_second_opener_is_refused_and_the_lock_is_never_broken() {
+    // The race `app` makes ordinary rather than hypothetical: two processes on one `.escri`,
+    // interleaving ADR 0004's three renames. What closes it is one `O_EXCL`, and what makes
+    // the choice a real one is the second half of this test — the refusal leaves the lock
+    // exactly where it was. A crashed process therefore leaves a project that says why it
+    // will not open, which is git's `index.lock` bargain, taken deliberately.
+    let dir = Scratch::new();
+    std::fs::create_dir_all(&dir.0).expect("a directory to lock");
+
+    let held = ProjectLock::take(&dir.0).expect("the first opener takes it");
+    assert!(dir.0.join("lock").exists());
+
+    let refused = ProjectLock::take(&dir.0).expect_err("the second opener is refused");
+    assert_eq!(refused.rule, "project_locked");
+    assert!(
+        refused.message.contains(&std::process::id().to_string()),
+        "the refusal names the process holding it: {}",
+        refused.message
+    );
+    assert!(dir.0.join("lock").exists(), "a refused take must not remove the lock");
+
+    drop(held);
+    assert!(!dir.0.join("lock").exists(), "a clean close removes it");
+    ProjectLock::take(&dir.0).expect("and the next opener gets it");
 }

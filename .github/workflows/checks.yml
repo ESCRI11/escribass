@@ -17,9 +17,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Four jobs with very different appetites: `checks` is a few minutes, `engine` compiles
-# Tracktion Engine, JUCE and three VST3s and is up to an hour cold, and `renders` and
-# `cross-cpu` (M1 PR 11) render the goldens on three runners with the binary `engine` built.
+# Five jobs with very different appetites: `checks` is a few minutes, `app` (M2 PR 2) is a
+# frontend build and a Tauri host, `engine` compiles Tracktion Engine, JUCE and three VST3s
+# and is up to an hour cold, and `renders` and `cross-cpu` (M1 PR 11) render the goldens on
+# three runners with the binary `engine` built.
 # Paying that for a typo in docs/specs.md is the wall-clock cost of the whole workflow spent on
 # nothing, so each job below first asks whether the pull request touched anything it actually
 # reads — the last two by asking `engine`, whose inputs are theirs.
@@ -166,6 +167,97 @@ jobs:
             "+refs/heads/${GITHUB_BASE_REF}:refs/heads/${GITHUB_BASE_REF}"
           schema/node_modules/.bin/buf breaking --against ".git#branch=${GITHUB_BASE_REF}"
 
+  # `app`, which is two packages in one directory: the frontend under `app/` and the Tauri
+  # host under `app/src-tauri/`. Its own job rather than three steps in `checks`, for one
+  # reason that is not organisational — building the host needs WebKitGTK's development
+  # packages, and making every Rust change pay a minute of apt for a browser engine it does
+  # not link is the trade the root `Cargo.toml` refuses by keeping `app` out of
+  # `default-members`. This job is the other half of that split, and without it `app` would
+  # be a workspace member nothing builds.
+  #
+  # Order is not incidental: `tauri::generate_context!` embeds `app/dist`, so the frontend is
+  # built before cargo is asked for anything. A missing `dist` fails loudly here rather than
+  # producing a window with nothing in it.
+  #
+  # What it runs is ADR 0016's list — `tsc --noEmit` and the frontend build — plus
+  # `cargo test -p escribass-app`. ADR 0012 §5's projection golden joins it in PR 4, where
+  # there are views for it to cover.
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # What this job reads is app/ and everything app/ is built from: `core` and `schema` are
+      # path dependencies of the host, `schema`'s generated TypeScript is what the frontend
+      # decodes with, and the pins are in the two lockfiles. What it does not read is docs/,
+      # engine/, .githooks/ and the root prose files — the engine is a subprocess `app` does
+      # not yet launch, and no source path connects them (CLAUDE.md #6).
+      - name: Does this pull request touch anything this job reads?
+        if: github.event_name == 'pull_request'
+        run: |
+          base=$(git rev-parse --verify HEAD^1) || exit 0
+          changed=$(git diff --name-only "$base" HEAD) || exit 0
+          echo "$changed"
+          [ -n "$changed" ] || exit 0
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|engine/|\.githooks/|[^/]+\.md$)'; then
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "::notice::nothing this job reads has changed"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
+        with:
+          node-version: "25"
+
+      # Tauri's Linux build dependencies. The webview itself is not among them and cannot be:
+      # it ships with the operating system and moves under the user, which is why ADR 0016 §5
+      # records it as unpinnable rather than pretending otherwise — and why nothing this job
+      # runs compares an image.
+      - name: Install the host's build dependencies
+        if: env.SKIP != '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libxdo-dev
+
+      # `schema` first, and only its runtime half. `@escribass/schema` is a `file:` link, and
+      # node, Vite and `tsc` all resolve a linked package's own imports from the package's own
+      # directory — so `schema/gen/ts/song_pb.ts` looks for `@bufbuild/protobuf` in
+      # `schema/node_modules`, never in `app/node_modules`. `--omit=dev` installs exactly that
+      # one package and skips buf and protoc-gen-es, which only codegen needs. Without this
+      # step every model type degrades to `unknown` and the whole frontend type-checks against
+      # nothing — which is how it was found, rather than by reading npm's documentation.
+      - name: Install JavaScript dependencies
+        if: env.SKIP != '1'
+        run: |
+          npm --prefix schema ci --omit=dev
+          npm --prefix app ci
+
+      - name: TypeScript
+        if: env.SKIP != '1'
+        working-directory: app
+        run: npx tsc --noEmit
+
+      # Before cargo, because the host embeds what this writes.
+      - name: Frontend
+        if: env.SKIP != '1'
+        working-directory: app
+        run: npm run build
+
+      # `--features custom-protocol` on purpose, and it is not a detail. Without it the host
+      # builds in Tauri's dev mode, where the window dials `devUrl` and `generate_context!`
+      # never looks at `app/dist` — so a job that omitted it would compile a binary nobody
+      # ships and would stay green with the frontend build broken or `frontendDist` pointing
+      # at nothing. This is the shipping path, and it is the one that fails if `dist` is not
+      # there. Measured: deleting `app/dist` leaves the default build green and fails this one.
+      - name: Host
+        if: env.SKIP != '1'
+        run: cargo test -p escribass-app --features custom-protocol
+
   # The engine, its three bundled plugins and the manifest that says what this build can host
   # (ADR 0010 §4), on the image and compiler every M1 golden render is valid for (ADR 0009 §1,
   # §5). ubuntu-latest moves, and every golden would drift with no PR to blame; this job names
@@ -210,6 +302,14 @@ jobs:
       # Tracktion for an hour to learn what a plan diff already says is the trade this exclusion
       # is making.
       #
+      # `app/` joins it in M2 PR 2, and by the same argument one step further out: the frontend
+      # is downstream of `core`, talks to the host in-process, and never touches `engine`, a
+      # `RenderPlan` or a WAV — which is exactly what ADR 0016 §4 says when it calls §17's
+      # golden-render pass vacuous for that package set. A CSS file cannot move a sample, and
+      # an hour of Tracktion plus three render jobs to prove it is the coverage this exclusion
+      # is *not* giving up. `lock.baseline.json` stays outside every exclusion, so a pin that
+      # moves still runs the pass.
+      #
       # Everything else runs
       # the build, because the failure mode is a plugin or a pin silently no longer compiling
       # — the thing this job exists to catch — and an hour of runner time is the cheaper half
@@ -225,7 +325,7 @@ jobs:
           changed=$(git diff --name-only "$base" HEAD) || exit 0
           echo "$changed"
           [ -n "$changed" ] || exit 0
-          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|\.githooks/|[^/]+\.md$)'; then
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|app/|\.githooks/|[^/]+\.md$)'; then
             echo "SKIP=1" >> "$GITHUB_ENV"
             echo "skip=1" >> "$GITHUB_OUTPUT"
             echo "::notice::nothing the engine is built from has changed"

@@ -1,0 +1,35 @@
+[package]
+name = "escribass-app"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "The desktop host: the song model core embedded in a Tauri window"
+publish = false
+
+# The Rust crate lives under `src-tauri/` and the frontend package at `app/`, which is Tauri's
+# own layout and what `@tauri-apps/cli` expects to find without being told. `docs/specs.md` §13
+# names `/app` as "Tauri host (Rust) + web frontend"; this is both of them.
+
+[build-dependencies]
+# Tauri's build half, on its own version line as `@tauri-apps/cli` is on the npm side. It
+# reads `tauri.conf.json` and emits what `tauri::generate_context!` expands against.
+tauri-build = "2.6.3"
+
+[dependencies]
+# `core` is embedded, not dialled (§3, tier 2: "`app` (embedded in Tauri host)").
+escribass-core = { path = "../../core" }
+# For `Author` alone: the host says whose edits a window's are. Model types are generated and
+# never redefined (§4.1).
+escribass-schema = { path = "../../schema" }
+# Pinned in lock.baseline.json under `app.tauri` (ADR 0016 §2). No feature is enabled: no tray,
+# no dialog plugin, no updater — this step opens one window and reads one project.
+tauri = "2.11.5"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[features]
+# What tells the built binary to serve the frontend it embedded rather than to dial
+# `devUrl`. `@tauri-apps/cli`'s `tauri build` passes it; a plain `cargo build --release` has
+# to be told, which is why the command in the pull request body names it. Without it a
+# release binary opens a window saying "Connection refused" and looks broken — observed, not
+# guessed.
+custom-protocol = ["tauri/custom-protocol"]

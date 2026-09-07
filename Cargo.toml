@@ -1,3 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["schema", "proto", "core", "tests"]
+members = ["schema", "proto", "core", "tests", "app/src-tauri"]
+
+# `cargo test` and `cargo build` with no `-p` and no `--workspace` build these four. `app` is
+# a member — one dependency tree, one `Cargo.lock`, one `cargo test --workspace` that covers
+# everything — and deliberately not a *default* member, because building it needs two things
+# the rest of this repository does not: WebKitGTK's development packages, and `app/dist`,
+# which only `npm run build` produces. A developer changing `core` should not have to install
+# a browser engine to run the suite, and CI's `checks` job should not spend a minute of apt on
+# every Rust change. What covers `app` is CI's `app` job, which installs both and runs
+# `cargo test -p escribass-app` — so this is a split of where the work happens, not a hole.
+default-members = ["schema", "proto", "core", "tests"]

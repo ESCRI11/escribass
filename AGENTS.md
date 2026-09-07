@@ -10,14 +10,15 @@
 | `proto/` | The tool API: `song_tools.proto`, the wire contract of §5. Generated Rust only. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
 | `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
 | `tests/` | Cross-language fixtures and the determinism suite (`escribass-tests`). See `tests/AGENTS.md`. | hand + tests |
+| `app/` | The desktop UI: the Tauri host in `app/src-tauri/` (Rust, embedding `core`) and the frontend at `app/` (React, Vite). One decoded `Song` and pure selectors over it (ADR 0012 §2). | hand |
 | `docs/` | `specs.md` (architecture source of truth), `adr/`, `landscape-2026-09.md`, `wireframes.html`, `plan.md`, `roadmap.md`. See `docs/AGENTS.md` and `docs/adr/AGENTS.md`. | hand |
-| `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`, `tests`. | hand |
+| `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`, `tests`, `app/src-tauri`. The last is **not** a default member: building it needs WebKitGTK's development headers and a built `app/dist`, so `cargo test` skips it and CI's `app` job runs `cargo test -p escribass-app` instead. | hand |
 | `Cargo.lock` | Integrity hashes for crates.io packages (specs §17). Never edit. | cargo |
 | `buf.yaml` | buf workspace: modules `schema` and `proto`; lint and breaking config. `proto` relaxes three STANDARD rules that contradict §5's service shape. At the root, not in `schema/`, because buf v2 wants one `buf.yaml` at the common ancestor of every module. | hand |
 | `rust-toolchain.toml` | Rust 1.98.0; mirrors `lock.baseline.json` `schema.rust.toolchain`. | hand |
 | `lock.baseline.json` | Every pinned dependency and toolchain (specs §17). | hand |
 
-Top-level directories are fixed by specs §13. `app/`, `ai/` and `compilers/` do not exist yet; M0 created `core/` (M0.2) and `proto/` (M0.3), and M1 PR 5 created `engine/`. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
+Top-level directories are fixed by specs §13. `ai/` and `compilers/` do not exist yet; M0 created `core/` (M0.2) and `proto/` (M0.3), M1 PR 5 created `engine/`, and M2 PR 2 created `app/`. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
 
 Never at the root: source code, generated code, project files, or any representation of song state other than `schema/song.proto` (CLAUDE.md #1).
 
@@ -41,6 +42,18 @@ export PATH="$HOME/.cargo/bin:$PATH"
 cargo test
 cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 cd schema && uv run python -m unittest discover -s tests
+```
+
+`cargo test` builds the four default members. The fifth, `app/src-tauri`, needs
+`libwebkit2gtk-4.1-dev` and a built `app/dist`; where both are present, add:
+
+```
+npm --prefix schema ci --omit=dev   # `@escribass/schema` is a `file:` link, and its own
+                                    # imports resolve from `schema/node_modules`, not app's
+cd app && npm ci && npx tsc --noEmit && npm run build
+cargo test -p escribass-app --features custom-protocol   # the shipping path: without the
+                                                         # feature the host dials `devUrl`
+                                                         # and never embeds `app/dist`
 ```
 
 ## Working by pull request

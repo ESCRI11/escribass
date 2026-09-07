@@ -166,6 +166,7 @@ Each layer materialises into the layer below. Layer 2 + layer 3 together are alw
 ## 10. Persistence and interoperability
 
 - Project directory, named `<name>.escri/` and presented by the OS as a single item where the platform supports package bundles: `song.json` (canonical model), `patches/` (append-only DAG of patch entries), `refs.json` (branch pointers and `HEAD`), `assets/` (content-addressed samples, compiled plugins, models), `lock.json` (pinned versions of every toolchain, plugin, and model; the platform baseline is in §17 and `lock.baseline.json`).
+- A **`lock`** file appears beside them while a process has the project open: one `O_EXCL` create holding that process's pid, removed on a clean close, and **never broken automatically** (ADR 0012 §3). It is not part of the project and does not belong in a commit — it says who is writing, not what was written — and a crash therefore leaves a project that refuses to open until someone removes it by hand, which is the trade taken against two writers interleaving ADR 0004's three-rename commit.
 - Import/export: **DAWproject** (lossless for layer 2 + plugin references), MIDI (layer 2 notes), WAV/stems.
 - `song.json` is a **derived cache** of `patches/`: the log is authoritative, and opening a project replays it and reports any mismatch rather than silently preferring either side (ADR 0004). The snapshot is kept because §2.6 requires the project be readable, diffable text.
 - Assets referenced by hash; missing assets are reported by the validator, never silently substituted.

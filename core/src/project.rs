@@ -43,6 +43,9 @@ const PATCHES: &str = "patches";
 const REFS: &str = "refs.json";
 const ASSETS: &str = "assets";
 const LOCK: &str = "lock.json";
+/// The directory lock, and not to be confused with `lock.json` beside it: that one pins the
+/// build a project was authored against, this one says a process has the project open.
+const HELD: &str = "lock";
 
 /// A project that could not be read or written.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +160,75 @@ impl Prepared {
     /// The document this change produces.
     pub fn song(&self) -> &Song {
         &self.song
+    }
+}
+
+/// The `.escri` directory lock, held for as long as a process has the project open
+/// (ADR 0012 §3).
+///
+/// One `O_EXCL` create and no dependency. `ponytail:` advisory, and it assumes a local
+/// filesystem — a network filesystem where `O_EXCL` is not atomic gets no protection from
+/// this. Nothing in v1 is expected to run a project over NFS, and a real lock protocol is
+/// worth writing when something is (ADR 0012 §3).
+///
+/// Not a field of [`Project`], which is `Clone` and which `record` rebuilds and reassigns on
+/// every commit — a guard living there would delete the lock file the replacement is still
+/// holding. The lock belongs to whoever opened the project and outlives every `Project` value
+/// built from it, which is the host, or one of the two server binaries.
+///
+/// **It is never broken automatically.** A lock whose owner may still be alive is not
+/// something a program can adjudicate, and git's `index.lock` has taught a generation of users
+/// what to do with the message. The cost is deliberate and is the reason this is chosen over
+/// the alternative: a crash leaves a project that says why it will not open, rather than two
+/// interleaved commits and a patch log that no longer matches the `song.json` beside it.
+#[derive(Debug)]
+pub struct ProjectLock {
+    path: PathBuf,
+}
+
+impl ProjectLock {
+    /// Takes the lock on an existing project directory.
+    ///
+    /// The directory has to be there already, which is why a `--create` takes this *after*
+    /// [`Project::create`] rather than before: creating the directory in order to lock it
+    /// would leave one behind for every mistyped path. Two simultaneous creates are still a
+    /// race, and a much smaller one — `create` refuses outright if a project is already there.
+    pub fn take(root: impl AsRef<Path>) -> Result<Self, ProjectError> {
+        let path = root.as_ref().join(HELD);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                // Best effort: the pid is what the refusal below names, and a lock that was
+                // taken but not annotated is still a lock.
+                let _ = std::io::Write::write_all(
+                    &mut file,
+                    format!("{}\n", std::process::id()).as_bytes(),
+                );
+                Ok(Self { path })
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                let held = std::fs::read_to_string(&path).unwrap_or_default();
+                let owner = held.trim();
+                let owner = if owner.is_empty() { "an unnamed process" } else { owner };
+                Err(err(
+                    &path,
+                    "project_locked",
+                    format!(
+                        "process {owner} has this project open. Close it, or — if that process \
+                         is gone — remove the file by hand. It is never removed automatically: \
+                         a lock whose owner may still be alive is not something a program can \
+                         adjudicate (ADR 0012 §3)"
+                    ),
+                ))
+            }
+            Err(e) => Err(err(&path, "unwritable", e.to_string())),
+        }
+    }
+}
+
+impl Drop for ProjectLock {
+    fn drop(&mut self) {
+        // A close is clean or it is a crash; there is no third case to report to.
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 
