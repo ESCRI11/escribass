@@ -38,8 +38,13 @@ add_compile_options(-march=x86-64 -mtune=generic -ffp-contract=off)
 # ------------------------------------------------------------------------------------------
 
 set(VENDOR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
-foreach(sub tracktion_engine tracktion_engine/modules/juce protobuf surge sfizz-ui dexed)
-    if(NOT EXISTS ${VENDOR}/${sub}/CMakeLists.txt)
+foreach(sub tracktion_engine/CMakeLists.txt tracktion_engine/modules/juce/CMakeLists.txt
+            protobuf/CMakeLists.txt surge/CMakeLists.txt sfizz-ui/CMakeLists.txt
+            dexed/CMakeLists.txt
+            # Rubber Band ships no CMakeLists at all; it is checked by the one file this build
+            # compiles, which is the whole of it (see the target below).
+            rubberband/single/RubberBandSingle.cpp)
+    if(NOT EXISTS ${VENDOR}/${sub})
         message(FATAL_ERROR "vendor/${sub} is not checked out; see the engine job in .github/workflows/checks.yml for the submodule steps (JUCE needs its URL overridden first)")
     endif()
 endforeach()
@@ -66,6 +71,7 @@ engine_commit_of(${VENDOR}/protobuf                      COMMIT_PROTOBUF)
 engine_commit_of(${VENDOR}/surge                         COMMIT_SURGE_XT)
 engine_commit_of(${VENDOR}/sfizz-ui                      COMMIT_SFIZZ_UI)
 engine_commit_of(${VENDOR}/dexed                         COMMIT_DEXED)
+engine_commit_of(${VENDOR}/rubberband                    COMMIT_RUBBERBAND)
 configure_file(src/provenance.h.in ${CMAKE_BINARY_DIR}/gen/provenance.h @ONLY)
 
 # ------------------------------------------------------------------------------------------
@@ -89,6 +95,26 @@ add_custom_command(
     COMMAND protoc -I ${REPO}/schema -I ${REPO}/proto -I ${VENDOR}/protobuf/src --cpp_out=${GEN} ${PROTOS}
     DEPENDS protoc ${PROTOS}
     COMMENT "protoc: song.proto and render.proto to C++")
+
+# ------------------------------------------------------------------------------------------
+# Rubber Band, for the time-stretch of ADR 0011 §3
+# ------------------------------------------------------------------------------------------
+#
+# One source file, and it is upstream's own: `single/RubberBandSingle.cpp` is the compilation
+# unit Rubber Band ships for exactly this — a build with no external FFT, no external
+# resampler and nothing to configure. That is not laziness about the build system, it is the
+# determinism note. The full build system picks an FFT from what it finds installed (FFTW,
+# IPP, KissFFT, vDSP), and a phase vocoder over two different FFTs is two different signals;
+# the single-file unit hard-defines `USE_BUILTIN_FFT` and `USE_BQRESAMPLER`, so what this
+# binary computes is decided by this repository rather than by the machine it was built on.
+# It also defines `NO_THREADING`, which is ADR 0009 §3's single-thread requirement compiled
+# in rather than requested (ADR 0011 §3 asks for it a second time, as an option).
+#
+# The flags are ours, because the target is ours: `add_compile_options` above reaches this
+# translation unit, so -march and -ffp-contract apply and check_flags.cmake reads the result.
+# Rubber Band's own meson build adds -ffast-math on some configurations; none of it runs here.
+add_library(rubberband STATIC ${VENDOR}/rubberband/single/RubberBandSingle.cpp)
+target_include_directories(rubberband PUBLIC ${VENDOR}/rubberband)
 
 # ------------------------------------------------------------------------------------------
 # Tracktion Engine, which brings JUCE from the commit it pins (§17: never upgraded apart)
@@ -130,6 +156,8 @@ target_link_libraries(escribass_engine PRIVATE
     # SHA-256 of the PCM (ADR 0009 §2, amended): a module of the pinned JUCE that Tracktion
     # does not pull in on its own.
     juce::juce_cryptography
+    # Time-stretch for an audio clip that asks for it (ADR 0011 §3).
+    rubberband
     libprotobuf
     # Spike, 2026-09-04: tracktion_engine_playback references __atomic_store for 16-byte
     # atomics GCC does not lower inline.
