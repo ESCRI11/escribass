@@ -1,0 +1,33 @@
+[
+  {
+    "tool": "add_track",
+    "args": {
+      "name": "Lead",
+      "kind": "TRACK_KIND_INSTRUMENT",
+      "ref": {
+        "plugin": {
+          "plugin_id": "Digital Suburban/Dexed",
+          "version": "1.0.1"
+        }
+      }
+    }
+  },
+  {
+    "tool": "add_clip",
+    "args": {
+      "track_id": "01M1FPMP000000000000000006",
+      "start_tick": 0,
+      "length_ticks": 960,
+      "note_clip": {
+        "notes": {
+          "a": {
+            "pitch": 60,
+            "start_tick": 0,
+            "length_ticks": 480,
+            "velocity": 100
+          }
+        }
+      }
+    }
+  }
+]

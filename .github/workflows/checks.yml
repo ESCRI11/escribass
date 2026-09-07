@@ -7,10 +7,12 @@ on:
     branches: [main]
   pull_request:
 
-# Two jobs with two very different appetites: `checks` is a few minutes, `engine` compiles
-# Tracktion Engine, JUCE and three VST3s and is up to an hour cold. Paying that for a typo in
-# docs/specs.md is the wall-clock cost of the whole workflow spent on nothing, so each job
-# below first asks whether the pull request touched anything it actually reads.
+# Four jobs with very different appetites: `checks` is a few minutes, `engine` compiles
+# Tracktion Engine, JUCE and three VST3s and is up to an hour cold, and `renders` and
+# `cross-cpu` (M1 PR 11) render the goldens on three runners with the binary `engine` built.
+# Paying that for a typo in docs/specs.md is the wall-clock cost of the whole workflow spent on
+# nothing, so each job below first asks whether the pull request touched anything it actually
+# reads — the last two by asking `engine`, whose inputs are theirs.
 #
 # Three decisions, because a gate that gets any of them wrong is a silent hole — it does not
 # fail, it just stops testing something and nobody notices until the thing it stopped testing
@@ -163,6 +165,11 @@ jobs:
   # the scan step below instantiates all three VST3s and would fail here first.
   engine:
     runs-on: ubuntu-24.04
+    # The gate below skips steps rather than the job (see the header), so the jobs that need
+    # this one's build have to be told what it decided. A skipped *step* leaves this empty,
+    # which is what a push to main gets, and everything downstream then runs.
+    outputs:
+      skipped: ${{ steps.gate.outputs.skip }}
     # Three plugins roughly triple what this job compiles; the cache below is what keeps it
     # from being the wall-clock cost of the whole workflow on every run.
     timeout-minutes: 60
@@ -189,6 +196,7 @@ jobs:
       # of that trade. `schema/` is not narrowed to song.proto: a rebuild triggered by a
       # Python test file is a few warm-ccache minutes, a missed one is a broken engine.
       - name: Does this pull request touch anything the engine is built from?
+        id: gate
         if: github.event_name == 'pull_request'
         run: |
           # As in the `checks` job above: HEAD is the pull request's merge commit, HEAD^1 the
@@ -199,6 +207,7 @@ jobs:
           [ -n "$changed" ] || exit 0
           if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|\.githooks/|[^/]+\.md$)'; then
             echo "SKIP=1" >> "$GITHUB_ENV"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
             echo "::notice::nothing the engine is built from has changed"
           fi
 
@@ -336,10 +345,19 @@ jobs:
             || { echo "::error::tests/fixtures/manifest.json is no longer a subset of what this build declares"; exit 1; }
 
       # A note through a real plugin, twice, in two fresh processes. This is not the golden
-      # render suite — that is PR 11, with committed WAVs and a first-differing-sample report —
-      # it is the standing answer to "does hosting still work at all", which nothing else in
-      # this workflow asks. Dexed because it is pure FM with no RNG and no resampling
-      # (docs/specs.md §8), so a difference here is the engine's, not a plugin's.
+      # render suite — that is the `renders` job below, with committed WAVs and a
+      # first-differing-sample report — it is the standing answer to "does hosting still work at
+      # all", which nothing else in this workflow asks. Dexed because it is pure FM with no RNG
+      # and no resampling (docs/specs.md §8), so a difference here is the engine's, not a
+      # plugin's.
+      #
+      # The two runs share one output path, and until M1 PR 11 that made this comparison and the
+      # three below it **vacuous**: Tracktion opened the destination at end-of-file, so the
+      # second render appended a whole second RIFF file and every reader — this one included —
+      # took the first `data` chunk, which was the first run's. The engine now removes the
+      # destination first (`engine/src/main.cpp`), which is what makes rendering twice to one
+      # path a real question again. `tests/renders.rs` gives every render a path of its own as
+      # well, so it would catch a regression here rather than inherit it.
       #
       # The plan is written as protobuf text and encoded by the protoc this build already
       # produced, so the check adds no tool and no dependency. The comparison is the engine's
@@ -613,3 +631,170 @@ jobs:
           echo "run 2 $two"
           [ -n "$one" ] && [ "$one" = "$two" ] \
             || { echo "::error::two sampler renders disagree: $one vs $two"; exit 1; }
+
+      # What the two jobs below render with: this engine binary, these plugin binaries, this
+      # manifest. Uploaded rather than rebuilt, because ADR 0009 §6's question is whether *the
+      # same binary* hashes the same on two CPUs — a second build would answer a different one,
+      # and would also cost another hour.
+      #
+      # The manifest holds absolute plugin paths (ADR 0010 §4), and every runner unpacks the
+      # workspace at the same `/home/runner/work/<repo>/<repo>`, so restoring this into
+      # `engine/build` puts the plugins back where the manifest says they are. The jobs below
+      # check that rather than assume it.
+      - name: The engine, for the runners that will render with it
+        if: env.SKIP != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-build
+          # `actions/upload-artifact` drops the executable bit, so the jobs below put it back.
+          path: |
+            engine/build/escribass_engine_artefacts/Release/escribass_engine
+            engine/build/manifest.json
+            engine/build/plugins/**/*.vst3/**
+          retention-days: 1
+          if-no-files-found: error
+
+  # The golden renders (ADR 0009; `tests/renders.rs`), and ADR 0009 §6's experiment.
+  #
+  # §6 asks one question this repository could not answer from one machine: does the same engine
+  # binary and the same plan produce the same PCM on two runner CPUs of the same architecture?
+  # sfizz and JUCE choose their SIMD at run time, so an AVX2 runner and an SSE4 runner could
+  # round differently, and the compile-time `-march` pin does nothing about it.
+  #
+  # The shape of the answer is the goldens themselves. Every one of these jobs renders the same
+  # four fixtures and compares them, with no tolerance, against the same committed bytes — so
+  # three runners agreeing *is* three runners producing identical PCM, and any one of them
+  # disagreeing fails here with the first differing sample rather than as a summary. What the
+  # matrix adds over one job is the chance of drawing two different CPU models from GitHub's
+  # pool, which is not something a workflow can ask for; `cross-cpu` below reports which models
+  # actually turned up, because "they agreed" is only evidence if they were different machines.
+  renders:
+    needs: engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      # Every runner reports, including when one of them is the one that disagrees.
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Evidence, not an assertion. The comparison above is over committed bytes either way;
+      # this is what says whether two of these jobs were different hardware.
+      - name: Which CPU did this runner get?
+        id: cpu
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          model=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)
+          flags=$(grep -m1 '^flags' /proc/cpuinfo | grep -o '\bavx512f\|\bavx2\|\bavx\|\bsse4_2' | sort -u | tr '\n' ' ')
+          echo "$model"
+          echo "SIMD the runtime dispatchers can pick from: $flags"
+          echo "model=$model" >> "$GITHUB_OUTPUT"
+
+      - name: The engine that was built, not one built here
+        if: needs.engine.outputs.skipped != '1'
+        uses: actions/download-artifact@v4
+        with:
+          name: engine-build
+          path: engine/build
+
+      # The libraries the plugins link or dlopen. This is the engine job's build list rather
+      # than a runtime subset of it: the -dev packages pull in exactly the runtime ones, and one
+      # list that is known to be sufficient beats two that have to be kept in agreement.
+      - name: The libraries the plugins load
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libjack-jackd2-dev \
+            libxcb1-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev libxcb-xkb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libcairo2-dev libpango1.0-dev libglib2.0-dev
+
+      - name: The build arrived intact
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          chmod +x "$engine"
+          find engine/build/plugins -name '*.so' -exec chmod +x {} +
+          "$engine" --version
+          # The manifest names absolute paths. If a runner ever unpacks the workspace somewhere
+          # else, that is the failure to report — not `plugin_unknown` three layers up.
+          python3 - <<'PY'
+          import json, pathlib, sys
+          plugins = json.loads(pathlib.Path("engine/build/manifest.json").read_text())["plugins"]
+          missing = [p["path"] for p in plugins.values() if not pathlib.Path(p["path"]).exists()]
+          if missing:
+              sys.exit("::error::the manifest names plugins this runner does not have: %s" % missing)
+          print(f"{len(plugins)} plugin classes, all where the manifest says")
+          PY
+
+      # `cargo test -p escribass-tests` cannot build the binaries it drives — cargo holds the
+      # build lock while tests run — so they are built first, which is what `cargo test` from
+      # the root does for the determinism suite.
+      - name: Golden renders
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          cargo build --bins
+          cargo test -p escribass-tests --features renders -- --nocapture
+
+      - name: What this runner rendered
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          mkdir -p report
+          {
+            echo "${{ steps.cpu.outputs.model }}"
+            for hash in tests/renders/*/golden.wav.sha256; do
+              echo "$(basename "$(dirname "$hash")") $(cat "$hash")"
+            done
+          } > "report/runner-${{ matrix.runner }}.txt"
+          cat "report/runner-${{ matrix.runner }}.txt"
+
+      - name: Keep it for the comparison
+        if: needs.engine.outputs.skipped != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-report-${{ matrix.runner }}
+          path: report/
+          retention-days: 1
+
+  # ADR 0009 §6's experiment, reported rather than asserted.
+  #
+  # The agreement is already enforced: each `renders` job compared its own PCM against the same
+  # committed goldens with no tolerance, so reaching here at all means every runner produced
+  # identical bytes. What is left to say is *whether the runners were different CPUs*, which
+  # nothing can request from GitHub and which decides whether the agreement is evidence for §6's
+  # broader claim or just three draws of the same machine. One model across the matrix is
+  # **inconclusive**, and says so — it is not a failure, because the runner pool is not ours to
+  # choose, and calling it a pass would be the quiet skip this repository keeps refusing.
+  cross-cpu:
+    needs: [engine, renders]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every runner's CPU and every hash it reproduced
+        if: needs.engine.outputs.skipped != '1'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: render-report-*
+          merge-multiple: true
+          path: report
+
+      - name: Were they different CPUs?
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          for file in report/*.txt; do
+            echo "--- $(basename "$file" .txt)"
+            cat "$file"
+          done
+          models=$(head -1 -q report/*.txt | sort -u)
+          count=$(printf '%s\n' "$models" | wc -l)
+          echo "CPU models seen: $count"
+          printf '%s\n' "$models"
+          if [ "$count" -ge 2 ]; then
+            echo "::notice::ADR 0009 §6: identical PCM on $count different CPU models"
+          else
+            echo "::warning::ADR 0009 §6 is inconclusive this run: every runner was the same CPU model, so the agreement says nothing about cross-CPU. The claim stays where ADR 0009 §1 puts it."
+          fi
