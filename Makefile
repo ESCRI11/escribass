@@ -35,7 +35,28 @@ MANIFEST ?= tests/fixtures/manifest.json
 # On a machine with the packages installed it stays empty and nothing wraps anything.
 LAUNCH ?=
 
-.PHONY: help run dev project check check-core check-app deps
+.PHONY: help run dev webkit project check check-core check-app deps
+
+# Named rather than left to position: make's default goal is the first target in the file, so
+# adding a rule above `help` silently changes what a bare `make` does. It did, once.
+.DEFAULT_GOAL := help
+
+# Both windowed targets need WebKitGTK, and its absence arrives as
+# "libwebkit2gtk-4.1.so.0: cannot open shared object file" from the loader — which names the
+# library and not the package, and says nothing about what to type. One check, in front of the
+# two targets that need it, replacing that with the apt line CI already uses. Skipped when
+# LAUNCH is set, since a wrapper is how a machine without the packages supplies them.
+webkit:
+	@ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so\.0' || test -n '$(LAUNCH)' || { \
+		echo 'WebKitGTK is not installed, so no window can open. Install it with:'; \
+		echo; \
+		echo '  sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \'; \
+		echo '                      libayatana-appindicator3-dev libxdo-dev'; \
+		echo; \
+		echo 'That is the list .github/workflows/checks.yml installs, so it is known to work.'; \
+		echo 'On a machine where you cannot install it, set LAUNCH to a wrapper that supplies'; \
+		echo 'it — see the comment above LAUNCH in this file.'; \
+		exit 1; }
 
 help:
 	@echo 'make run       build the frontend and open $$(PROJECT) in a window'
@@ -52,7 +73,7 @@ help:
 # `--features custom-protocol` is not optional and not a detail: without it the host builds in
 # Tauri's dev mode, dials `devUrl`, and opens a window that says "Connection refused". With it
 # the binary serves the `app/dist` it embedded, which is why the frontend is built first.
-run: project app/dist
+run: webkit project app/dist
 	cargo build --release -p escribass-app --features custom-protocol
 	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(PROJECT)
 
@@ -77,7 +98,7 @@ run: project app/dist
 # mid-write, and a lock released then is worse than one left behind. The next launch says so
 # and names the file to remove. Closing the window releases it cleanly, and this recipe ends
 # with the window.
-dev: project app/node_modules
+dev: webkit project app/node_modules
 	@( cd app && exec ./node_modules/.bin/vite ) & \
 	vite=$$!; \
 	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
