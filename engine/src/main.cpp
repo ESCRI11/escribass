@@ -12,9 +12,9 @@
 // than a scan (ADR 0008 §2). Where a shipped engine finds that file is still PR 9's question —
 // core is the one that will pass it — so it is an argument here and not a search.
 //
-// ponytail: a sampler instrument is still refused rather than voiced — an SFZ from assets/
-// loaded into sfizz is PR 8b's — because a render that completes with a device missing is the
-// failure ADR 0010 §3 spends a table refusing: it sounds wrong and says nothing.
+// A sampler instrument is an SFZ from assets/ played by the bundled sfizz (PR 8b, §16). What
+// M1 renders is the restricted case `checkSfz` below enforces, because assets/ is flat and
+// content-addressed and an SFZ that reaches out of it reaches nothing.
 //
 // `--scan` is the build's second use of this binary (ADR 0010 §4). It opens each bundled VST3
 // once, asks it what it is, and writes the manifest. It lives here rather than in a second
@@ -370,6 +370,173 @@ private:
 };
 
 // -----------------------------------------------------------------------------------------
+// The sampler (PR 8b)
+// -----------------------------------------------------------------------------------------
+
+// What an `Instrument.ref.sampler` is played by. The model names an SFZ and never a plugin —
+// which is why ADR 0010 §1 gives `SamplerRef` no lock.json entry, since it already references
+// content by hash — so *which* sampler plays it is the renderer's fact and belongs here. §8
+// bundles sfizz; what pins it is this binary's own sfizz_ui commit, which every RenderResult
+// reports (ADR 0008 §5).
+constexpr const char* kSamplerPluginId = "SFZTools/sfizz";
+
+// The restricted case M1 renders, enforced rather than described.
+//
+// `assets/` is flat and content-addressed: one file per asset, named by its SHA-256, with no
+// directory and no extension (core/src/project.rs, §10). sfizz resolves a `sample=` against
+// the directory the SFZ was loaded from (FilePool::checkSample joins `rootDirectory` to it),
+// so an SFZ stored in `assets/` can reach a sample only by naming a sibling — which, there,
+// means naming it by its own hash. An SFZ carrying the relative paths of a sample library
+// resolves none of them.
+//
+// The failure that makes this a check rather than a comment is silent. sfizz drops a region
+// whose sample it cannot find and says nothing about it (Synth.cpp: the removal is a `DBG`,
+// which a release build compiles out), so an unresolvable SFZ renders as a track of silence
+// that reports success — the failure ADR 0010 §3 spends a table refusing.
+//
+// ponytail: a `sample=` value is read as one whitespace-delimited token, which is the
+// restricted form and not the SFZ language — a name with a space in it, a `default_path`
+// prefix or an `#include` is refused here rather than half-understood. The upgrade is the
+// general case, an SFZ that arrives with its samples under the names it was written against,
+// and that needs an asset that knows its own name; no ADR has decided one.
+std::string checkSfz (const juce::File& sfz)
+{
+    if (! sfz.existsAsFile())
+        // core resolved this path from `SamplerRef.sfz_hash` and refused a hash `assets/` does
+        // not hold (core/src/render.rs), so what is left is a file that has gone since.
+        return "'" + sfz.getFullPathName().toStdString() + "' is not a file";
+    const auto text = sfz.loadFileAsString();
+
+    // Comments first, so an opcode inside one is not read as an opcode.
+    juce::String body;
+    for (const auto& line : juce::StringArray::fromLines (text))
+        body << line.upToFirstOccurrenceOf ("//", false, false) << "\n";
+
+    for (const auto* directive : { "#include", "default_path" })
+        if (body.containsIgnoreCase (directive))
+            return std::string ("this SFZ uses `") + directive + "`, which moves where its samples"
+                   " are looked for; M1 plays an SFZ whose samples are its siblings in assets/";
+
+    const juce::String opcode ("sample=");
+    int found = 0;
+    for (auto at = body.indexOfIgnoreCase (opcode); at >= 0;
+         at = body.indexOfIgnoreCase (at + 1, opcode))
+    {
+        // `sample` and not the tail of a longer opcode. Anything that is not an opcode
+        // character ends the one before, which is how `<region>sample=` is one and
+        // `hint_sample=` is not.
+        const auto before = at == 0 ? juce::juce_wchar (' ') : body[at - 1];
+        if (juce::CharacterFunctions::isLetterOrDigit (before) || before == '_')
+            continue;
+        ++found;
+        const auto value = body.substring (at + opcode.length()).initialSectionNotContaining (" \t\r\n");
+        if (value.isEmpty())
+            return "this SFZ has a `sample=` with nothing after it";
+        // sfizz's built-in generators — *sine, *saw, *noise and the rest — are not files and
+        // resolve to nothing on disk.
+        if (value.startsWithChar ('*'))
+            continue;
+        if (! sfz.getSiblingFile (value).existsAsFile())
+            return "this SFZ plays `" + value.toStdString() + "`, which is not beside it in assets/."
+                   " An SFZ in a content-addressed store names its samples by their own hash";
+    }
+    if (found == 0)
+        return "this SFZ names no sample, so nothing on this track could sound";
+    return {};
+}
+
+// The SFZ path sfizz's component state holds: past a little-endian `uint64` version, an
+// IBStreamer `str8` — an `int32` byte count that includes the terminating NUL, then the bytes
+// (VST3 SDK, `base/source/fstreamer.cpp`; sfizz's own order is `SfizzVstState::store`). Those
+// two fields are the whole of what this file assumes about that format.
+constexpr int kSfizzPathAt = 8 + 4;
+
+tl::expected<std::string, std::string> sfzPathIn (const juce::MemoryBlock& state)
+{
+    const auto* bytes = static_cast<const char*> (state.getData());
+    const auto size = (juce::int64) state.getSize();
+    const auto count = size < kSfizzPathAt
+                         ? 0
+                         : (juce::int64) (juce::uint32) juce::ByteOrder::littleEndianInt (bytes + 8);
+    if (count < 1 || kSfizzPathAt + count > size)
+        return tl::unexpected ("sfizz's state is " + std::to_string (size) + " bytes declaring a "
+                               + std::to_string (count) + "-byte path; this is not the state"
+                               " SfizzVstState writes");
+    return std::string (bytes + kSfizzPathAt, (size_t) count - 1);
+}
+
+// A VST3's component state, out of the XML JUCE wraps it in: `getStateInformation` writes one
+// document with the component's and the controller's states base64-encoded inside it
+// (juce_VST3PluginFormatImpl.h, `appendStateFrom`).
+tl::expected<juce::MemoryBlock, std::string> componentStateOf (juce::AudioPluginInstance& instance)
+{
+    juce::MemoryBlock blob;
+    instance.getStateInformation (blob);
+    const auto head = juce::AudioProcessor::getXmlFromBinary (blob.getData(), (int) blob.getSize());
+    const auto* component = head == nullptr ? nullptr : head->getChildByName ("IComponent");
+    juce::MemoryBlock state;
+    if (component == nullptr || ! state.fromBase64Encoding (component->getAllSubText()))
+        return tl::unexpected (std::string ("the plugin's state is not the document JUCE writes"));
+    return state;
+}
+
+// Loads an SFZ into an instance of sfizz.
+//
+// A state is the only channel: the plugin exposes no parameter and no host-sendable message
+// that names a file, and `SfizzVstProcessor::setState` is what calls `loadSfzFileOrDefault`.
+// So the plugin's *own* state is read back and the path spliced into it, rather than a state
+// of ours written from scratch — which would freeze this build's copy of every default sfizz
+// has, and would silently pin them to whatever they were the day it was written. Everything
+// after the path is copied through untouched, so a field sfizz adds later travels with it.
+std::string loadSfz (juce::AudioPluginInstance& instance, const juce::File& sfz)
+{
+    if (const auto why = checkSfz (sfz); ! why.empty())
+        return why;
+
+    const auto state = componentStateOf (instance);
+    if (! state)
+        return state.error();
+    const auto held = sfzPathIn (*state);
+    if (! held)
+        return held.error();
+
+    const auto path = sfz.getFullPathName();
+    const auto length = (juce::uint32) (path.getNumBytesAsUTF8() + 1);
+    const auto* bytes = static_cast<const char*> (state->getData());
+    const auto tail = kSfizzPathAt + held->size() + 1;
+
+    juce::MemoryBlock spliced;
+    spliced.append (bytes, 8);
+    const auto count = juce::ByteOrder::swapIfBigEndian (length);
+    spliced.append (&count, sizeof (count));
+    spliced.append (path.toRawUTF8(), length);
+    spliced.append (bytes + tail, state->getSize() - tail);
+
+    juce::XmlElement head ("VST3PluginState");
+    head.createNewChildElement ("IComponent")->addTextElement (spliced.toBase64Encoding());
+    juce::MemoryBlock blob;
+    juce::AudioProcessor::copyXmlToBinary (head, blob);
+    instance.setStateInformation (blob.getData(), (int) blob.getSize());
+
+    // Read back, because every line above is an assumption about a format this repository does
+    // not own. A state sfizz declined leaves it playing the sine of its own default patch — a
+    // track that sounds, at the wrong everything, with no error anywhere. The read-back is also
+    // the plugin agreeing it found the file: `SfizzVstProcessor::setState` searches the machine
+    // for a path that does not exist and stores whatever it finds, which would come back as a
+    // different path (and is a render reading a file nobody named — `checkSfz` above is what
+    // keeps it out of reach).
+    const auto after = componentStateOf (instance);
+    if (! after)
+        return after.error();
+    const auto loaded = sfzPathIn (*after);
+    if (! loaded)
+        return loaded.error();
+    if (*loaded != path.toStdString())
+        return "sfizz kept '" + *loaded + "' rather than the SFZ the plan named";
+    return {};
+}
+
+// -----------------------------------------------------------------------------------------
 // Audio clips (PR 8)
 // -----------------------------------------------------------------------------------------
 
@@ -585,7 +752,8 @@ private:
         if (source.has_instrument())
         {
             const auto& held = source.instrument().instrument();
-            auto plugin = device (held.ref(), held.state(), held.params(), source.instrument().lanes());
+            auto plugin = device (held.ref(), held.state(), held.params(), source.instrument().lanes(),
+                                  source.instrument().sfz_path());
             if (! plugin)
                 return plugin.error();
             target.pluginList.insertPlugin (*plugin, slot++, nullptr);
@@ -628,16 +796,21 @@ private:
     tl::expected<te::Plugin::Ptr, std::string> device (const escribass::song::v1::DeviceRef& ref,
                                                        const std::string& state,
                                                        const google::protobuf::Map<std::string, double>& params,
-                                                       const google::protobuf::RepeatedPtrField<PlanLane>& lanes)
+                                                       const google::protobuf::RepeatedPtrField<PlanLane>& lanes,
+                                                       const std::string& sfz = {})
     {
-        if (! ref.has_plugin())
-            // compile refuses the compiled kinds (ADR 0007 §6) and lets a SamplerRef through,
-            // because §16 puts the sampler in M1 — but a sampler is an SFZ from assets/ loaded
-            // into sfizz, which is PR 8b's. Refused rather than rendered silent: sfizz with no
-            // SFZ loaded is a plugin that opens, reports nothing wrong and silences its track.
-            return tl::unexpected (std::string ("a device in the plan is not a plugin; a sampler is"
-                                                " an SFZ from assets/, which no PR has hosted yet"));
-        const auto& id = ref.plugin().plugin_id();
+        // Two kinds reach here. A plugin names itself; a sampler names an SFZ, and compile
+        // resolved that to the path beside it (ADR 0007 §2, amended) — which plugin plays it is
+        // this engine's decision, above. compile refuses every other kind (ADR 0007 §6), and a
+        // sampler whose hash is not in assets/ never becomes a plan at all.
+        std::string id;
+        if (ref.has_plugin())
+            id = ref.plugin().plugin_id();
+        else if (ref.has_sampler() && juce::File::isAbsolutePath (sfz))
+            id = kSamplerPluginId;
+        else
+            return tl::unexpected (std::string ("a device in the plan is neither a plugin nor a"
+                                                " sampler with the absolute path of an SFZ"));
         const auto desc = plugins.describe (id);
         if (! desc)
             return tl::unexpected (desc.error());
@@ -656,6 +829,14 @@ private:
         // bytes the model holds, unparsed and unexamined.
         if (! state.empty())
             instance->setStateInformation (state.data(), (int) state.size());
+
+        // After the state and before the parameters, for the reason the order above is what it
+        // is: the SFZ is spliced into whatever state the plugin holds at this point, so a
+        // sampler that also carries an `Instrument.state` keeps everything in it except the
+        // file it names — which the model already named, by hash.
+        if (! sfz.empty())
+            if (const auto why = loadSfz (*instance, juce::File (sfz)); ! why.empty())
+                return tl::unexpected ("'" + id + "': " + why);
 
         // The plugin's own parameter ids, which are what --scan wrote as the manifest's keys
         // and therefore what a `ParamRef.param` and a `params` key match (ADR 0010 §4).

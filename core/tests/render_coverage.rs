@@ -30,6 +30,12 @@ const SONG: &str = ".escribass.song.v1.";
 const RENDER: &str = ".escribass.render.v1.";
 
 /// Fields `compile` reads to derive plan content rather than copy it: `(message, field)`.
+///
+/// A field that is *both* carried and read needs no entry: its message crosses, so it is
+/// covered, and the list is for what would otherwise reach the plan nowhere. `AudioClip
+/// .asset_hash` and `SamplerRef.sfz_hash` are the two — compile resolves each to the absolute
+/// path beside it (ADR 0007 §2) and the hash crosses anyway, inside the message that carries
+/// it. The plan golden is what shows the path is really there.
 const CONSUMED: &[(&str, &str)] = &[
     // The root: each collection is walked, the target is checked and then copied whole.
     ("Song", "tempo_map"),

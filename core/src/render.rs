@@ -239,6 +239,8 @@ impl Compiler<'_> {
     /// The device kinds M4 compiles and hosts (ADR 0007 §6). A plugin outside the bundled set
     /// never reaches here: that is the validator's `plugin_unknown` (ADR 0010 §4).
     fn check_device(&mut self, at: &str, device: Option<&DeviceRef>) {
+        // A `sampler` is not here: §16 puts it in M1, and `sampler_path` below resolves it.
+        // On an *effect* it is refused, by the caller that knows which it is building.
         let arm = match device.and_then(|d| d.kind.as_ref()) {
             Some(device_ref::Kind::Cmajor(_)) => "cmajor",
             Some(device_ref::Kind::Faust(_)) => "faust",
@@ -253,6 +255,33 @@ impl Compiler<'_> {
                  and the sampler"
             ),
         );
+    }
+
+    /// Where the SFZ of a sampler instrument is, resolved from `SamplerRef.sfz_hash` the way an
+    /// audio clip's asset is (ADR 0007 §2, amended). Empty for every other device kind, which
+    /// is what tells the engine this instrument is not a sampler.
+    ///
+    /// The path is all that crosses. What the SFZ *says* — which samples it plays, and where
+    /// they are — is the file's own content, and compile reads no file (ADR 0007 §4); the
+    /// engine is where an SFZ that names something `assets/` does not hold is refused.
+    fn sampler_path(&mut self, at: &str, device: Option<&DeviceRef>) -> String {
+        let Some(device_ref::Kind::Sampler(sampler)) = device.and_then(|d| d.kind.as_ref()) else {
+            return String::new();
+        };
+        match self.assets.get(&sampler.sfz_hash) {
+            Some(path) => path.to_string_lossy().into_owned(),
+            None => {
+                self.refuse(
+                    format!("{at}/ref/sampler/sfz_hash"),
+                    "asset_missing",
+                    format!(
+                        "`{}` is not in assets/; add_asset is what puts it there",
+                        sampler.sfz_hash
+                    ),
+                );
+                String::new()
+            }
+        }
     }
 
     /// A note this engine cannot voice as it is written (ADR 0007 §6).
@@ -285,7 +314,8 @@ impl Compiler<'_> {
 
     fn track(&mut self, at: &str, track: &Track, clips: Vec<&Clip>, lanes: &mut Lanes) -> PlanTrack {
         let instrument = track.instrument.as_ref().map(|held| {
-            self.check_device(&format!("{at}/instrument"), held.r#ref.as_ref());
+            let at = format!("{at}/instrument");
+            self.check_device(&at, held.r#ref.as_ref());
             PlanInstrument {
                 // The §4.3 fields cross empty (ADR 0007 §2).
                 instrument: Some(Instrument {
@@ -295,6 +325,7 @@ impl Compiler<'_> {
                     ..held.clone()
                 }),
                 lanes: take_lanes(lanes, &held.id),
+                sfz_path: self.sampler_path(&at, held.r#ref.as_ref()),
             }
         });
 
@@ -304,7 +335,20 @@ impl Compiler<'_> {
         let effects = chain
             .into_iter()
             .map(|held| {
-                self.check_device(&format!("{at}/fx_chain/{}", held.id), held.r#ref.as_ref());
+                let at = format!("{at}/fx_chain/{}", held.id);
+                self.check_device(&at, held.r#ref.as_ref());
+                if matches!(held.r#ref.as_ref().and_then(|d| d.kind.as_ref()),
+                            Some(device_ref::Kind::Sampler(_)))
+                {
+                    // The one device kind that is an instrument and nothing else: sfizz plays
+                    // notes, and an effect is handed audio. The model can hold it — a DeviceRef
+                    // is one type in both places — and no engine of ours can render it.
+                    self.refuse(
+                        format!("{at}/ref/sampler"),
+                        UNSUPPORTED,
+                        "a sampler is an instrument; an effect chain is handed audio, not notes",
+                    );
+                }
                 PlanEffect {
                     effect: Some(Effect {
                         id: String::new(),

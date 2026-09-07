@@ -38,7 +38,8 @@
               }
             ]
           }
-        ]
+        ],
+        "sfz_path": ""
       },
       "effects": [
         {
@@ -273,13 +274,14 @@
           "version": 0,
           "ref": {
             "sampler": {
-              "sfz_hash": "5d41402abc4b2a76b9719d911017c592"
+              "sfz_hash": "3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"
             }
           },
           "state": "",
           "params": {}
         },
-        "lanes": []
+        "lanes": [],
+        "sfz_path": "/escri/assets/3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"
       },
       "effects": [],
       "mix": {

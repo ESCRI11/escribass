@@ -57,8 +57,9 @@
   {"tool": "set_tempo", "args": {"bpm": 90.0, "tick": 3840}},
   {"tool": "add_section", "args": {"name": "Outro", "start_tick": 7680, "end_tick": 9600}},
 
+  {"tool": "add_asset", "args": {"content": "PHJlZ2lvbj4Kc2FtcGxlPTIyODZkNzZmN2ZhMTMzNjQyMTcwNjM3ZTVjNzYzNWQxMTZkYmQ5NmNiOGI5ODkyMjgxYjk0NWIzNTA4NzA2MzYKcGl0Y2hfa2V5Y2VudGVyPTYwCg=="}},
   {"tool": "add_track", "args": {"name": "Keys", "kind": "TRACK_KIND_INSTRUMENT",
-    "ref": {"sampler": {"sfz_hash": "5d41402abc4b2a76b9719d911017c592"}}}},
+    "ref": {"sampler": {"sfz_hash": "3835bcb2ea8ef051dae9c95baadd1fbb3e03b85424f6324bdfea5b84d5e27597"}}}},
   {"tool": "add_clip", "args": {"track_id": "01M1FPMP00000000000000001J", "start_tick": 960, "length_ticks": 960,
     "note_clip": {"notes": {
       "a": {"pitch": 48, "start_tick": 0, "length_ticks": 960, "velocity": 70}

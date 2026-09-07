@@ -378,12 +378,18 @@ impl serde::Serialize for PlanInstrument {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.render.v1.PlanInstrument", len)?;
         if let Some(v) = self.instrument.as_ref() {
             struct_ser.serialize_field("instrument", v)?;
         }
         if true {
             struct_ser.serialize_field("lanes", &self.lanes)?;
+        }
+        if true {
+            struct_ser.serialize_field("sfz_path", &self.sfz_path)?;
         }
         struct_ser.end()
     }
@@ -397,12 +403,15 @@ impl<'de> serde::Deserialize<'de> for PlanInstrument {
         const FIELDS: &[&str] = &[
             "instrument",
             "lanes",
+            "sfz_path",
+            "sfzPath",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             Instrument,
             Lanes,
+            SfzPath,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -426,6 +435,7 @@ impl<'de> serde::Deserialize<'de> for PlanInstrument {
                         match value {
                             "instrument" => Ok(GeneratedField::Instrument),
                             "lanes" => Ok(GeneratedField::Lanes),
+                            "sfzPath" | "sfz_path" => Ok(GeneratedField::SfzPath),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -447,6 +457,7 @@ impl<'de> serde::Deserialize<'de> for PlanInstrument {
             {
                 let mut instrument__ = None;
                 let mut lanes__ = None;
+                let mut sfz_path__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::Instrument => {
@@ -461,11 +472,18 @@ impl<'de> serde::Deserialize<'de> for PlanInstrument {
                             }
                             lanes__ = Some(map_.next_value()?);
                         }
+                        GeneratedField::SfzPath => {
+                            if sfz_path__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("sfzPath"));
+                            }
+                            sfz_path__ = Some(map_.next_value()?);
+                        }
                     }
                 }
                 Ok(PlanInstrument {
                     instrument: instrument__,
                     lanes: lanes__.unwrap_or_default(),
+                    sfz_path: sfz_path__.unwrap_or_default(),
                 })
             }
         }

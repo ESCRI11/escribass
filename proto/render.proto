@@ -92,6 +92,19 @@ message PlanTrack {
 message PlanInstrument {
   escribass.song.v1.Instrument instrument = 1;
   repeated PlanLane lanes = 2;
+
+  // Absolute path of the SFZ file, resolved by core from `SamplerRef.sfz_hash` (§10), and
+  // empty for every other device kind. The same shape as `PlanAudio.path`, for the same
+  // reason: an asset crosses as a path the engine is handed, never as bytes in the plan
+  // (ADR 0007 §2, amended 2026-09-07).
+  //
+  // ponytail: what M1 renders is an SFZ whose `sample=` opcodes name assets in the SFZ's own
+  // directory. `assets/` is flat and content-addressed, so an SFZ stored there resolves a
+  // sibling by its hash — and a `sample=` written as a relative path into a sample library
+  // resolves to nothing. The engine refuses one it cannot resolve rather than rendering the
+  // silence sfizz would; carrying a whole sample library needs an asset that knows its own
+  // name, which no ADR has decided.
+  string sfz_path = 3;
 }
 
 message PlanEffect {

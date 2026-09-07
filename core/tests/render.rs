@@ -19,7 +19,7 @@ use escribass_proto::tools::{
 use escribass_schema::song::device_ref::Kind;
 use escribass_schema::song::{
     AudioClip, Author, AutomationPoint, Curve, DeviceRef, ModelRef, Note, NoteClip, ParamRef,
-    PluginRef, SourceRef, TrackKind,
+    PluginRef, SamplerRef, SourceRef, TrackKind,
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -105,6 +105,10 @@ fn master_of(session: &Session) -> String {
 
 fn cmajor() -> Option<DeviceRef> {
     device(Kind::Cmajor(source("8b31c0de4f9c00000000000000000000")))
+}
+
+fn sampler(hash: &str) -> Option<DeviceRef> {
+    device(Kind::Sampler(SamplerRef { sfz_hash: hash.to_string() }))
 }
 
 fn effect(session: &mut Session, track: &str, r#ref: Option<DeviceRef>, index: u32) -> String {
@@ -470,6 +474,9 @@ fn everything_m1_cannot_render_is_refused_at_once() {
     let faust = effect(&mut session, &t, device(Kind::Faust(source("3c1de4f98b"))), 0);
     let model = ModelRef { model_hash: "ab12".to_string() };
     let neural = effect(&mut session, &t, device(Kind::Neural(model)), 1);
+    // A sampler is an instrument. The model holds one DeviceRef in both places, so a sampler
+    // on a chain is a legal document and not a renderable one.
+    let sampled = effect(&mut session, &t, sampler("3c1de4f98b"), 2);
     let bus = track(&mut session, TrackKind::Bus, None);
     patch(
         &mut session,
@@ -491,6 +498,7 @@ fn everything_m1_cannot_render_is_refused_at_once() {
         format!("/tracks/{bus}/kind"),
         format!("/tracks/{t}/fx_chain/{faust}/ref/faust"),
         format!("/tracks/{t}/fx_chain/{neural}/ref/neural"),
+        format!("/tracks/{t}/fx_chain/{sampled}/ref/sampler"),
         format!("/tracks/{t}/instrument/ref/cmajor"),
         format!("/tracks/{t}/routing/output_track_id"),
         format!("/tracks/{t}/routing/sends"),
@@ -611,4 +619,42 @@ fn a_stretched_loop_fills_a_whole_number_of_loops_or_is_refused() {
     let plan = compile(session.project().song(), &index).unwrap();
     let lengths: Vec<i32> = plan.tracks[0].clips.iter().map(|c| c.length_ticks).collect();
     assert_eq!(lengths, vec![960, 960, 80]);
+}
+
+#[test]
+fn a_sampler_crosses_beside_its_sfz_and_a_missing_one_is_refused() {
+    // The audio clip's shape, applied to the instrument (ADR 0007 §2, amended): the SFZ is an
+    // asset, so it crosses as the absolute path core resolved from its hash, and the engine
+    // learns nothing about where it came from. What the SFZ *says* — which samples it plays,
+    // and whether `assets/` holds them — is the file's content, and compile reads no file.
+    let (dir, mut session) = opened();
+    let sfz = b"<region>\nsample=beef\n".to_vec();
+    let hash = session
+        .add_asset(&AddAssetRequest { content: sfz, dry_run: false })
+        .unwrap()
+        .asset_hash;
+    let t = track(&mut session, TrackKind::Instrument, sampler(&hash));
+    clip(&mut session, &t, 0, BAR, &[note(60, 0, 240)]);
+
+    assert_eq!(
+        refused(&session, &BTreeMap::new()),
+        vec![(format!("/tracks/{t}/instrument/ref/sampler/sfz_hash"), "asset_missing")],
+        "caller-fixable, like an audio clip whose asset is not in the index"
+    );
+
+    let plan = compile(session.project().song(), &assets(&dir)).unwrap();
+    let instrument = plan.tracks[0].instrument.as_ref().unwrap();
+    assert_eq!(PathBuf::from(&instrument.sfz_path), dir.0.join("assets").join(&hash));
+    // The hash crosses too: SamplerRef is carried by value inside Instrument, and the path is
+    // beside it rather than in place of it.
+    match instrument.instrument.as_ref().unwrap().r#ref.as_ref().unwrap().kind.as_ref() {
+        Some(escribass_schema::song::device_ref::Kind::Sampler(held)) => {
+            assert_eq!(held.sfz_hash, hash)
+        }
+        other => panic!("not a sampler: {other:?}"),
+    }
+    // Every other device kind leaves it empty, which is what tells the engine which it is.
+    track(&mut session, TrackKind::Instrument, plugin());
+    let plan = compile(session.project().song(), &assets(&dir)).unwrap();
+    assert!(plan.tracks[1].instrument.as_ref().unwrap().sfz_path.is_empty());
 }

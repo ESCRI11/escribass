@@ -14,7 +14,8 @@
           "state": "",
           "params": {}
         },
-        "lanes": []
+        "lanes": [],
+        "sfz_path": ""
       },
       "effects": [],
       "mix": {
