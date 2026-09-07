@@ -258,7 +258,7 @@ impl Compiler<'_> {
     }
 
     /// Where the SFZ of a sampler instrument is, resolved from `SamplerRef.sfz_hash` the way an
-    /// audio clip's asset is (ADR 0007 §2, amended). Empty for every other device kind, which
+    /// audio clip's asset is (ADR 0007 §2, extended). Empty for every other device kind, which
     /// is what tells the engine this instrument is not a sampler.
     ///
     /// The path is all that crosses. What the SFZ *says* — which samples it plays, and where

@@ -800,7 +800,7 @@ private:
                                                        const std::string& sfz = {})
     {
         // Two kinds reach here. A plugin names itself; a sampler names an SFZ, and compile
-        // resolved that to the path beside it (ADR 0007 §2, amended) — which plugin plays it is
+        // resolved that to the path beside it (ADR 0007 §2, extended) — which plugin plays it is
         // this engine's decision, above. compile refuses every other kind (ADR 0007 §6), and a
         // sampler whose hash is not in assets/ never becomes a plan at all.
         std::string id;
@@ -834,7 +834,7 @@ private:
         // is: the SFZ is spliced into whatever state the plugin holds at this point, so a
         // sampler that also carries an `Instrument.state` keeps everything in it except the
         // file it names — which the model already named, by hash.
-        if (! sfz.empty())
+        if (ref.has_sampler())
             if (const auto why = loadSfz (*instance, juce::File (sfz)); ! why.empty())
                 return tl::unexpected ("'" + id + "': " + why);
 

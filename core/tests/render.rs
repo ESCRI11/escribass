@@ -623,7 +623,7 @@ fn a_stretched_loop_fills_a_whole_number_of_loops_or_is_refused() {
 
 #[test]
 fn a_sampler_crosses_beside_its_sfz_and_a_missing_one_is_refused() {
-    // The audio clip's shape, applied to the instrument (ADR 0007 §2, amended): the SFZ is an
+    // The audio clip's shape, applied to the instrument (ADR 0007 §2, extended): the SFZ is an
     // asset, so it crosses as the absolute path core resolved from its hash, and the engine
     // learns nothing about where it came from. What the SFZ *says* — which samples it plays,
     // and whether `assets/` holds them — is the file's content, and compile reads no file.
