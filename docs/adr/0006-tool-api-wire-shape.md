@@ -72,9 +72,10 @@ share theirs, and nothing was added to the shape they share.
 
 Changing an RPC's response type is a wire break, and `buf breaking` said so. It was taken
 because nothing spoke this wire: the gRPC surface answered `UNIMPLEMENTED` and MCP did not
-advertise the tool, so there was no client to break. The exemption in the root `buf.yaml` is
-scoped to that one rule and that one file, and it goes when `main` no longer carries the old
-type — M1 PR 11's row in `docs/plan.md`.
+advertise the tool, so there was no client to break. The exemption in the root `buf.yaml` was
+scoped to that one rule and that one file, and **PR 11 deleted it** once `main` no longer
+carried the old type; the `breaking` block has carried no `except` since (this paragraph and
+`proto/AGENTS.md` were still in the present tense until PR 13 read them).
 
 `patch` is `bytes` holding the canonical JSON text produced by the same function that fills
 `PatchEntry.ops`. This is ADR 0002 §11 applied at a second boundary: the wire carries the same

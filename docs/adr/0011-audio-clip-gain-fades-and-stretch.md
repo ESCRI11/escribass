@@ -212,7 +212,7 @@ project, and so the first change that *would* strand a real document is the one 
   `./schema/codegen.sh` for all three languages, `tests/fixtures/song/minimal.json` regenerated
   with `UPDATE_FIXTURES=1`, and the Rust, TypeScript and Python round-trip suites that read it
   (`schema/AGENTS.md`, Adding things). No new construct is introduced — a `double`, two `int32`
-  and a `bool` are all already exercised — so `build()` in `tests/roundtrip.rs` needs only the
+  and a `bool` are all already exercised — so `build()` in `schema/tests/roundtrip.rs` needs only the
   new values, not a new case.
 - **ADR 0002 §8's `AudioClip` row** gains a pointer to this ADR in the same commit, following
   the precedent that ADR text relying on a superseded state is updated with it

@@ -79,10 +79,26 @@ Three things are deliberately absent:
   path would make the file differ between two machines that pin exactly the same thing.
 - **No parameter lists.** They are large, derived from the plugin binary, and belong to the
   manifest (decision 4), which is regenerated rather than stored.
-- **No entry for `SourceRef`, `ModelRef` or `SamplerRef`.** Those already reference content by
-  hash — the hash *is* the pin, and the asset is either in `assets/` or reported missing by
-  §10's existing rule. M4 adds the compiled artefacts ADR 0003 §3 named; M1 adds only what M1
-  can host.
+- **No entry for `SourceRef` or `ModelRef`.** Those already reference content by hash — the
+  hash *is* the pin, and the asset is either in `assets/` or reported missing by §10's existing
+  rule. M4 adds the compiled artefacts ADR 0003 §3 named; M1 adds only what M1 can host.
+
+  ~~`SamplerRef` too~~ — **corrected 2026-09-07, in PR 13, and the reason it gave was the
+  wrong shape of reason.** A `SamplerRef`'s hash pins the *patch*. It says nothing at all about
+  the thing that turns the patch into samples, which is a bundled plugin whose build decides
+  every one of them — the same fact that puts `PluginRef` in this file. The consequence was
+  concrete and had been shipping since PR 8b: `tests/renders/sfizz` names no `plugin_id`
+  anywhere, so its `plugins` block was empty; nothing in its `lock.json` moved when `sfizz_ui`
+  moved, and decision 3's `lock_mismatch` had no entry to fire on. §11's **[MUST]** —
+  "`lock.json` pins every external tool and plugin version" — with a whole device kind outside
+  it.
+
+  So a `SamplerRef` pins the sampler, by the same mechanism and in the same `plugins` block as
+  a `PluginRef`. *Which* plugin that is comes from the build manifest: `--scan` writes a
+  top-level `sampler` naming the class the engine plays an SFZ through, and `core` reads it.
+  Stated by the engine rather than known by `core` for decision 4's own reason one field over —
+  it is a fact about the binary, and a second copy of it in Rust is the copy that stops
+  agreeing (CLAUDE.md #6).
 
 The `engine` block holds submodule commits rather than a version string because that is what
 ADR 0008 §5 has the engine report about itself, and a comparison between two things is easier
@@ -177,7 +193,12 @@ engine binary:
 - the `engine` block of decision 1, from the submodule commits ADR 0008 §5 embeds;
 - for each bundled plugin: its `plugin_id` as the plugin itself reports it, its version, the
   vendored commit, the path to its binary, and its **parameter list** — the identifiers a
-  `ParamRef.param` and an `Instrument.params` key must match.
+  `ParamRef.param` and an `Instrument.params` key must match;
+- **added 2026-09-07, in PR 13**: a top-level `sampler`, naming which of those classes the
+  engine plays an `Instrument.ref.sampler` through. That fact lived only in the engine's own
+  source, so decision 1's amended `SamplerRef` pin had nothing to pin *to*; here it travels the
+  same way everything else about this build does, and `core` reads it rather than holding a
+  second copy (CLAUDE.md #6).
 
 **Refined 2026-09-06, in PR 6, which built the first manifest.** This section assumed a VST3
 reports one id and one name per parameter. It reports neither in a form that does both jobs, and

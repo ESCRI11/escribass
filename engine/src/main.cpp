@@ -682,8 +682,10 @@ constexpr auto kStretchOptions = RubberBand::RubberBandStretcher::OptionProcessO
 // ADR 0009 §4's sample-rate conversion, and the only place in the engine a rate is converted.
 //
 // `juce::LagrangeInterpolator` is a fixed 5-point Lagrange polynomial: no options to pin, no
-// runtime CPU dispatch, and `reset()` zeroes the four samples of history it carries, so its
-// output is a pure function of the input, the ratio and the JUCE commit §17 pins. `ratio` is
+// runtime CPU dispatch, and `reset()` zeroes the five samples of history it carries —
+// `Interpolators::Lagrange` is `GenericInterpolator<LagrangeTraits, 5>`, and "four" here was
+// wrong until M1 PR 13 — so its output is a pure function of the input, the ratio and the JUCE
+// commit §17 pins. `ratio` is
 // the asset's rate over the render's — input samples consumed per output sample.
 //
 // ponytail: no anti-aliasing filter, so downsampling folds everything above the new Nyquist.

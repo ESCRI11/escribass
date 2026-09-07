@@ -168,8 +168,11 @@ outside the cargo graph entirely — nothing in `cargo test` knows it exists, le
 is stale — and its inputs are submodules, which drift by being left alone.
 
 So the engine **embeds its provenance at configure time**: the commit of each submodule as
-`git rev-parse` reports it — Tracktion Engine, JUCE, Rubber Band, and each bundled plugin —
-compiled in as constants. It reports them in two places: on `--version`, and in `RenderResult`.
+`git rev-parse` reports it — Tracktion Engine, JUCE, **protobuf**, Rubber Band, and each
+bundled plugin, which is **seven** — compiled in as constants. (Protobuf added to this list
+2026-09-07 in PR 13: §4's own amendment made it a pinned submodule in PR 7 and the binary has
+reported it since, while this sentence still named six. ADR 0010 §1 was corrected for the same
+drift in PR 9; this one was not.) It reports them in two places: on `--version`, and in `RenderResult`.
 The render suite compares them against `lock.baseline.json` before it compares a single sample,
 and a mismatch fails naming the component, not as a golden diff.
 
