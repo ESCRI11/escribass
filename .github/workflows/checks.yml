@@ -300,6 +300,22 @@ jobs:
           cmake --build engine/build --target manifest
           ccache --show-stats
 
+      # The guard above only guards while it can see the thing it forbids. Its header claimed
+      # to catch "code compiled for a wider ISA than the pin" and its regex matched `-march=`
+      # alone, so `-mavx2` on a bumped Dexed or Surge XT would have passed in silence — and
+      # their CPU independence is what makes their goldens portable (§8). Doctoring a real
+      # compile database is how that stays true: the check has to fail on this file, and the
+      # four real ones above have to pass, and neither is evidence for the other (M1 PR 13).
+      - name: The flag check catches a wider ISA, not just a wider -march
+        if: env.SKIP != '1'
+        run: |
+          sed 's/-march=x86-64/-march=x86-64 -mavx2/' \
+            engine/build/plugins/dexed/compile_commands.json > doctored.json
+          if cmake -DCOMPILE_COMMANDS=$PWD/doctored.json -P engine/cmake/check_flags.cmake; then
+            echo "::error::check_flags.cmake passed a compile line carrying -mavx2"
+            exit 1
+          fi
+
       # ADR 0008 §5 and §17: the binary reports the commits it was compiled from, and they are
       # the ones lock.baseline.json pins. A drifted submodule fails here, naming the component.
       - name: Built from the pinned commits
@@ -355,6 +371,7 @@ jobs:
         run: |
           jq -e --slurpfile built engine/build/manifest.json '
             .engine == ($built[0].engine)
+            and .sampler == ($built[0].sampler)
             and (.plugins | to_entries | all(
               ($built[0].plugins[.key]) as $b
               | $b != null
@@ -827,6 +844,14 @@ jobs:
         if: needs.engine.outputs.skipped != '1'
         run: |
           model=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)
+          # A blank model is a failure of this step, not a data point. Left to travel, it
+          # reaches the cross-cpu job as a distinct first line and makes the count 2 — which is
+          # the one positive claim that job exists to make, emitted from the absence of an
+          # answer (M1 PR 13).
+          if [ -z "$model" ]; then
+            echo "::error::/proc/cpuinfo declares no model name on this runner, so ADR 0009 §6 has nothing to compare"
+            exit 1
+          fi
           flags=$(grep -m1 '^flags' /proc/cpuinfo | grep -o '\bavx512f\|\bavx2\|\bavx\|\bsse4_2' | sort -u | tr '\n' ' ')
           echo "$model"
           echo "SIMD the runtime dispatchers can pick from: $flags"
@@ -929,10 +954,16 @@ jobs:
             echo "--- $(basename "$file" .txt)"
             cat "$file"
           done
-          models=$(head -1 -q report/*.txt | sort -u)
-          count=$(printf '%s\n' "$models" | wc -l)
+          # Blank lines dropped before they are counted, and `grep -c .` rather than `wc -l`,
+          # which counts the single empty line an empty variable prints as one model (M1 PR 13).
+          models=$(head -1 -q report/*.txt | sed '/^[[:space:]]*$/d' | sort -u)
+          count=$(printf '%s\n' "$models" | grep -c . || true)
           echo "CPU models seen: $count"
           printf '%s\n' "$models"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no runner reported a CPU model; the cpu step should have failed before this"
+            exit 1
+          fi
           if [ "$count" -ge 2 ]; then
             echo "::notice::ADR 0009 §6: identical PCM on $count different CPU models"
           else

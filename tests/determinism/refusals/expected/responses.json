@@ -252,7 +252,7 @@
     "entry_id": "",
     "errors": [
       {
-        "message": "`com.example.not-a-plugin` is not a plugin this build can host; it hosts Surge Synth Team/Surge XT",
+        "message": "`com.example.not-a-plugin` is not a plugin this build can host; it hosts SFZTools/sfizz, Surge Synth Team/Surge XT",
         "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/plugin/plugin_id",
         "rule": "plugin_unknown"
       }

@@ -104,21 +104,31 @@ struct Pin {
     version: String,
 }
 
-/// Every `plugin_id` a song references, in id order.
+/// Every plugin build a song depends on, in id order.
 ///
-/// `SourceRef`, `ModelRef` and `SamplerRef` are absent on purpose: they name content by hash,
-/// and the hash *is* the pin (ADR 0010 §1).
-fn referenced_plugins(song: &Song) -> BTreeSet<&str> {
-    fn plugin_of(device: Option<&DeviceRef>) -> Option<&str> {
+/// `SourceRef` and `ModelRef` are absent on purpose: they name content by hash, and the hash
+/// *is* the pin (ADR 0010 §1).
+///
+/// **`SamplerRef` is not, corrected 2026-09-07 in PR 13.** Its hash pins the SFZ, and an SFZ is
+/// not what renders it: the engine plays it through a bundled plugin whose build decides every
+/// sample, and that build is exactly what §11 requires a project to pin. Before this, a
+/// sampler-only project — `tests/renders/sfizz`, which names no `plugin_id` at all — had an
+/// empty `plugins` block, so nothing in its `lock.json` moved when sfizz did and
+/// `lock_mismatch` could not fire. Which plugin that is comes from the manifest, because it is
+/// a fact about the engine build and `core` holding a second copy of it is how the two stop
+/// agreeing (ADR 0010 §4, CLAUDE.md #6).
+fn referenced_plugins<'a>(song: &'a Song, sampler: &'a str) -> BTreeSet<&'a str> {
+    fn plugin_of<'a>(device: Option<&'a DeviceRef>, sampler: &'a str) -> Option<&'a str> {
         match device?.kind.as_ref()? {
             device_ref::Kind::Plugin(p) => Some(p.plugin_id.as_str()),
+            device_ref::Kind::Sampler(_) => Some(sampler),
             _ => None,
         }
     }
     let mut found = BTreeSet::new();
     for track in song.tracks.values() {
-        found.extend(plugin_of(track.instrument.as_ref().and_then(|i| i.r#ref.as_ref())));
-        found.extend(track.fx_chain.values().filter_map(|e| plugin_of(e.r#ref.as_ref())));
+        found.extend(plugin_of(track.instrument.as_ref().and_then(|i| i.r#ref.as_ref()), sampler));
+        found.extend(track.fx_chain.values().filter_map(|e| plugin_of(e.r#ref.as_ref(), sampler)));
     }
     found
 }
@@ -598,7 +608,7 @@ impl Project {
         // The mutation is the *reference*, made by a tool and in the log like every other
         // one; no entry can appear here that no logged op caused, and no tool writes this
         // file (CLAUDE.md #2).
-        for id in referenced_plugins(&self.song) {
+        for id in referenced_plugins(&self.song, &self.manifest.sampler) {
             if self.pins.contains_key(id) {
                 continue;
             }
@@ -669,7 +679,7 @@ fn refuse_if_unpinned(
     lock: &Lock,
     manifest: &Manifest,
 ) -> Result<(), ProjectError> {
-    for id in referenced_plugins(song) {
+    for id in referenced_plugins(song, &manifest.sampler) {
         let Some(pinned) = lock.plugins.get(id) else { continue };
         let at = || err(root.join(LOCK), "lock_mismatch", String::new());
         match manifest.plugins.get(id) {

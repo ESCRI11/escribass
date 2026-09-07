@@ -795,7 +795,11 @@ fn shaped(result: &escribass_proto::tools::ToolResult) -> Value {
 
 /// A `RenderResponse` in the shape MCP puts on the wire (`core/src/mcp.rs`).
 ///
-/// `result` is null unless an engine ran, which no scripted step does: every one is a dry run.
+/// `result` goes through the generated serializer here for the same reason it does there, and
+/// this line is half the point: a second hand copy would drop a new field identically on both
+/// sides of the comparison, so the parity check would keep passing while both transports lost
+/// it (M1 PR 13). `result` is null unless an engine ran, which no scripted step does: every one
+/// is a dry run.
 fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
     json!({
         "valid": response.valid,
@@ -803,10 +807,7 @@ fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
             "path": e.path, "rule": e.rule, "message": e.message,
         })).collect::<Vec<_>>(),
         "summary": response.summary,
-        "result": response.result.as_ref().map(|result| json!({
-            "pcm_sha256": result.pcm_sha256,
-            "commits": result.commits,
-        })),
+        "result": response.result,
     })
 }
 

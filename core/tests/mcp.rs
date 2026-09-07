@@ -5,6 +5,8 @@
 //! the stream, a handshake that only one generation of client can complete. None of those show
 //! up when the handler is called directly.
 
+mod common;
+
 use escribass_core::mcp::{IMPLEMENTED, JSON_TEXT_FIELDS};
 use escribass_core::tool_names;
 use escribass_proto::DESCRIPTOR;
@@ -44,6 +46,11 @@ impl Drop for Scratch {
 /// from reading a wall clock or taking entropy, and these flags are the only way that promise
 /// is testable through a real process.
 fn session(project: &Path, requests: &[Value]) -> Vec<String> {
+    served(project, &[], requests)
+}
+
+/// The same, with extra flags — `--engine`, so far, which only the render test needs.
+fn served(project: &Path, extra: &[&str], requests: &[Value]) -> Vec<String> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_escribass-mcp"))
         .args([
             "--create",
@@ -54,6 +61,7 @@ fn session(project: &Path, requests: &[Value]) -> Vec<String> {
             "--fixed-clock",
             AT,
         ])
+        .args(extra)
         .arg(project)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -376,4 +384,61 @@ fn a_dry_run_that_is_not_a_boolean_is_refused_rather_than_applied() {
         .unwrap()
         .len();
     assert_eq!(entries, 1, "a refused call wrote an entry");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_real_render_answer_carries_the_engine_s_own_result() {
+    // `song_tools.proto` says `RenderResponse.result` crosses "by value rather than copied
+    // field by field — a field added to RenderResult reaches a caller without touching this
+    // file". That was true over gRPC and false here: `mcp.rs` copied its two fields by hand
+    // (M1 PR 13). Nothing caught it, because every scripted `render_export` is a dry run and so
+    // `result` is always null, the parity harness had a second hand copy that would drop a
+    // field identically on both sides, and the only test that reads a real render answer is
+    // behind the `renders` feature, whose CI job skips a `core/`-only change.
+    //
+    // So this one drives a real `escribass-mcp` process, over real pipes, against the shell
+    // engine `engine.rs` already uses — no build, no plugin, no WAV — and asserts the whole of
+    // what the engine said arrives. It runs in the `checks` job, which is the point.
+    let dir = Scratch::new();
+    let work = Scratch::new();
+    std::fs::create_dir_all(&work.0).expect("a scratch directory");
+
+    let answer = escribass_proto::render::RenderResult {
+        pcm_sha256: "ab".repeat(32),
+        commits: [
+            ("juce".to_string(), "deadbeef".to_string()),
+            ("dexed".to_string(), "cafef00d".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let canned = work.0.join("answer.binpb");
+    std::fs::write(&canned, prost::Message::encode_to_vec(&answer)).expect("the canned answer");
+    let engine = common::fake_engine(&work.0, &format!("cat '{}'", canned.display()));
+
+    let wav = work.0.join("out.wav");
+    let lines = served(
+        &dir.0,
+        &["--engine", engine.to_str().expect("a utf-8 path")],
+        &[call(1, "render_export", json!({"output_path": wav, "dry_run": false}))],
+    );
+    let answered = response(&lines, 1);
+    let structured = &answered["result"]["structuredContent"];
+    assert_eq!(answered["result"]["isError"], json!(false), "{answered}");
+    // Against the generated serializer, not against a literal. Today a literal would pass with
+    // either implementation — the hand copy and the serializer happen to agree on the two
+    // fields `RenderResult` has — and that agreement is exactly what nothing was checking. A
+    // field added to the message moves this comparison's right-hand side on its own, so the
+    // day it is added is the day this fails rather than the day someone reads `mcp.rs`.
+    assert_eq!(
+        structured["result"],
+        serde_json::to_value(&answer).expect("a RenderResult serialises"),
+        "the engine's own answer, whole and in the proto's own field names: {structured}"
+    );
+    assert_eq!(
+        structured["result"]["pcm_sha256"],
+        json!("ab".repeat(32)),
+        "and the names are the proto's, not serde's defaults"
+    );
 }

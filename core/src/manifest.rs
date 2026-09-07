@@ -32,6 +32,19 @@ pub struct Manifest {
     /// as: `"<vendor>/<class name>"` (ADR 0010 §4, refined in PR 6, because JUCE's own
     /// identifier string hashes the plugin's path and a path cannot go in `lock.json`).
     pub plugins: BTreeMap<String, Plugin>,
+    /// Which of those classes plays a `SamplerRef` (ADR 0010 §1, amended 2026-09-07 in PR 13).
+    ///
+    /// A sampler's `sfz_hash` pins the *patch*, not the build that plays it, and until this
+    /// existed a sampler-only project pinned nothing about sfizz at all: `lock.json` had no
+    /// entry, so `lock_mismatch` had nothing to fire on when sfizz_ui moved, and §11's
+    /// **[MUST]** was unsatisfied for a whole device kind. Read from here rather than known by
+    /// `core`, because which plugin plays an SFZ is the renderer's fact and a second copy of it
+    /// is the copy that stops agreeing (CLAUDE.md #6).
+    ///
+    /// Required, like everything else here: a manifest written by an engine that does not say
+    /// is a manifest from before this, and the honest answer to it is `manifest_unreadable`
+    /// and a rebuild, not a silent skip.
+    pub sampler: String,
 }
 
 /// One hostable plugin.

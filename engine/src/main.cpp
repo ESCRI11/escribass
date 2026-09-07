@@ -63,6 +63,15 @@ constexpr int kPpq = 960;
 // pin and not a default.
 constexpr int kBlockSize = 512;
 
+// What an `Instrument.ref.sampler` is played by. The model names an SFZ and never a plugin, so
+// *which* sampler plays it is the renderer's fact and lives here. §8 bundles sfizz; what pins
+// it is this binary's own sfizz_ui commit, which every RenderResult reports (ADR 0008 §5) and
+// which `--scan` now writes into the manifest under `sampler`, so a project that references a
+// sampler pins that build the way a project that references a plugin does (ADR 0010 §1,
+// amended 2026-09-07 in PR 13). Declared up here rather than beside the sampler code below
+// because `scan` is above it and needs the same one fact.
+constexpr const char* kSamplerPluginId = "SFZTools/sfizz";
+
 // Failure is an exit code (ADR 0008 §1). By the time a plan is here every caller-fixable
 // failure was refused upstream, so a plan this engine cannot take is an operator error like
 // the other two, and the code only says which stage the render died in.
@@ -388,6 +397,13 @@ int scan (const juce::StringArray& args)
     auto* root = new juce::DynamicObject();
     root->setProperty ("engine", juce::var (engine));
     root->setProperty ("plugins", juce::var (pluginsVar));
+    // Which of those classes plays a `SamplerRef` (M1 PR 13). The id is compiled in below and
+    // was nowhere else, so a sampler-only project pinned *nothing* about the sampler: the SFZ's
+    // hash pins the patch, not the build that plays it, and `lock_mismatch` had no entry to
+    // fire on when sfizz moved — §11's [MUST] unsatisfied for one whole device kind. Stated by
+    // the engine rather than known by `core`, because it is a fact about this binary and the
+    // manifest is already where this binary says what it can host (ADR 0010 §4, CLAUDE.md #6).
+    root->setProperty ("sampler", juce::String (kSamplerPluginId));
 
     const juce::File out (args[0]);
     if (! out.replaceWithText (juce::JSON::toString (juce::var (root), false) + "\n"))
@@ -475,13 +491,6 @@ private:
 // -----------------------------------------------------------------------------------------
 // The sampler (PR 8b)
 // -----------------------------------------------------------------------------------------
-
-// What an `Instrument.ref.sampler` is played by. The model names an SFZ and never a plugin —
-// which is why ADR 0010 §1 gives `SamplerRef` no lock.json entry, since it already references
-// content by hash — so *which* sampler plays it is the renderer's fact and belongs here. §8
-// bundles sfizz; what pins it is this binary's own sfizz_ui commit, which every RenderResult
-// reports (ADR 0008 §5).
-constexpr const char* kSamplerPluginId = "SFZTools/sfizz";
 
 // The restricted case M1 renders, enforced rather than described.
 //

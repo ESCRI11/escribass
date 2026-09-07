@@ -61,20 +61,10 @@ fn opened(dir: &Scratch) -> Session {
     Session::new(project, Box::new(ids), Box::new(clock), Author::Model)
 }
 
-/// An engine that is a script: it records that it ran, keeps the plan it was given, and then
-/// does whatever `body` says.
+/// An engine that is a script, in this suite's scratch directory (`common::fake_engine`).
 #[cfg(unix)]
 fn fake_engine(dir: &Scratch, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = dir.at("fake-engine");
-    let script = format!(
-        "#!/bin/sh\ncat > '{plan}'\necho \"$1\" > '{argument}'\n{body}\n",
-        plan = dir.at("plan.binpb").display(),
-        argument = dir.at("argument").display(),
-    );
-    std::fs::write(&path, script).expect("the fake engine is writable");
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-    path
+    common::fake_engine(&dir.0, body)
 }
 
 #[cfg(unix)]
