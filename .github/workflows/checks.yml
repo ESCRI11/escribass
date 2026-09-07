@@ -630,6 +630,11 @@ jobs:
           after=$(sha256sum keep.wav | cut -d' ' -f1)
           echo "before the kill $before"
           echo "after  the kill $after"
+          # The `.part` is what proves the render was actually in flight when it died. Without
+          # this the test would still fail if the victim finished first, but it would fail
+          # saying the wrong thing.
+          [ -f keep.wav.part ] \
+            || { echo "::error::the victim render finished before it was killed; lengthen its plan"; exit 1; }
           [ "$before" = "$after" ] \
             || { echo "::error::a killed render replaced the previous one with a fragment"; exit 1; }
           rm -f keep.wav.part
