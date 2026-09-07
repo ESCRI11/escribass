@@ -350,7 +350,11 @@ Source: landscape analysis of 2026-09-02 (see `docs/landscape-2026-09.md`). Summ
 
 *Stage 1 — establish the wedge (M0–M3)*
 - **Expose the tool API (§5) as an MCP server from M0.** Same tool definitions, served over MCP, so Claude/Cursor/any MCP client can drive a project immediately. This is a hard requirement, not a nice-to-have: MCP is the de facto agent protocol in audio software and the alternative is competing with 20+ hobby bridges on their terms.
-- **Lead every demo with reproducibility**: the canonical demo is "edit bar 17, re-render, WAV diff shows bytes changed only in bar 17". Publish render hashes in golden tests and in release notes.
+- **Lead every demo with reproducibility**: the canonical demo is "edit bar 17, re-render, and everything the edit did not reach is byte for byte what it was". Publish render hashes in golden tests and in release notes.
+
+  **Amended 2026-09-07, when M1 PR 12 measured it.** This bullet used to say "WAV diff shows bytes changed only in bar 17", and that half is not true — not because controllability is weak, but because an instrument is not a pure function of the current block. A note's release tail outlives its note-off, so an edit inside bar 17 goes on changing samples after bar 17 ends: measured on this build, a half-bar note's tail runs about 5,800 frames (0.12 s) past its note-off, and the same edit to a whole-bar note puts the last differing frame 24,119 frames *inside bar 18*. "Only bar 17" is an artefact of how long the edited note is, not a property of the platform, and a demo that claimed it would be caught by the first person who tried it with a longer note.
+
+  What is true is the half the claim is actually sold on, and `tests/renders.rs` asserts it exactly with no tolerance: **nothing before the edit moves by one sample.** What comes after is measured and printed rather than asserted, bounded only by the one failure that would matter — a difference that never recovers, which would mean the edit changed the instrument's state for the rest of the song rather than an instrument decaying (§1, ADR 0009 §2).
 - **Adopt a Libretto-style grammar for the composition layer's LLM-facing view**: integer onset slots on a bar grid (already implied by 960 PPQ ticks), explicit voices, bar-level blocks; and adopt its structural evaluation axes (rhythm, harmony, melody, texture, form, within-song variation) as the AI orchestrator's self-check metrics. Record this in an ADR before M3.
 
 *Stage 2 — interoperability and credibility (M4–M5)*

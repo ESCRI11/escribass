@@ -41,6 +41,11 @@
 //! golden here would have to have that path erased from it the way `determinism.rs` erases its
 //! asset root. The upgrade, if a render ever disagrees with a plan that looks right, is to
 //! commit the plan beside the WAV and normalise the two paths in it.
+//!
+//! **The bar-17 demo lives here too** (M1 PR 12, at the bottom of this file). It is not a
+//! golden — it commits nothing and compares two renders of the same session — but it needs the
+//! same engine, the same WAV walker and the same sample-by-sample report, and a second harness
+//! for that would be a second thing to keep true.
 
 #[path = "common/mod.rs"]
 mod common;
@@ -127,25 +132,27 @@ struct Rendered {
     reported: String,
 }
 
-/// Runs a fixture's script through `escribass-mcp` and renders it for real.
+/// One tool call, as `tools/call` takes it.
+fn call(tool: &str, args: Value) -> Value {
+    json!({"name": tool, "arguments": args})
+}
+
+/// Runs a scripted conversation through one `escribass-mcp` process and reads back every WAV it
+/// rendered, in the order it rendered them.
 ///
-/// The `render_export` call is appended here rather than written in the script, because its
-/// `output_path` is a scratch path that only exists at run time — and `render.proto` requires an
-/// absolute one. Everything before it is the fixture.
-fn render(name: &str) -> Rendered {
-    let directory = Scratch::new("renders", name);
-    let wav = directory.0.with_extension("wav");
+/// One process for the whole script, which is what makes the bar-17 demo below a *re-render of
+/// the same project* rather than two projects that happen to differ. The engine is still a
+/// fresh process per render, so nothing carries from one to the next (ADR 0008 §2).
+///
+/// Every step must succeed. A golden fixture that refuses renders nothing, and so does an edit
+/// whose path was mistyped — which is the failure this would otherwise hide behind two
+/// identical WAVs.
+fn drive(what: &str, project: &Path, steps: &[Value]) -> (Vec<Value>, Vec<Rendered>) {
     let engine = told("ESCRIBASS_ENGINE", ENGINE);
     // The manifest a real build wrote, not `tests/fixtures/manifest.json`: that one is a
     // committed subset with the machine's plugin paths dropped, and an engine handed it would
     // have nothing to load (ADR 0010 §4).
     let manifest = told("ESCRIBASS_MANIFEST", "engine/build/manifest.json");
-
-    let path = PathBuf::from(FIXTURES).join(name).join("script.json");
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let steps: Vec<Step> = serde_json::from_str(&text)
-        .unwrap_or_else(|e| panic!("{} is not a script: {e}", path.display()));
 
     let mut requests = vec![
         json!({
@@ -160,17 +167,9 @@ fn render(name: &str) -> Rendered {
     ];
     for (position, step) in steps.iter().enumerate() {
         requests.push(json!({
-            "jsonrpc": "2.0", "id": position + 1, "method": "tools/call",
-            "params": {"name": step.tool, "arguments": step.args}
+            "jsonrpc": "2.0", "id": position + 1, "method": "tools/call", "params": step
         }));
     }
-    let last = steps.len() + 1;
-    requests.push(json!({
-        "jsonrpc": "2.0", "id": last, "method": "tools/call",
-        "params": {"name": "render_export", "arguments": {
-            "output_path": wav.display().to_string(), "dry_run": false,
-        }}
-    }));
 
     let frames = speak(
         &[
@@ -186,54 +185,64 @@ fn render(name: &str) -> Rendered {
             "--author",
             "model",
         ],
-        &directory.0,
+        project,
         &requests,
     );
-    let answer = |id: usize| -> &Value {
-        frames.iter().find(|frame| frame["id"] == json!(id)).unwrap_or_else(|| {
-            panic!("`{name}` step {id} got no answer")
-        })
-    };
 
+    let mut answers = Vec::new();
+    let mut rendered = Vec::new();
     for (position, step) in steps.iter().enumerate() {
-        let frame = answer(position + 1);
+        let id = position + 1;
+        let frame = frames
+            .iter()
+            .find(|frame| frame["id"] == json!(id))
+            .unwrap_or_else(|| panic!("{what} step {id} got no answer"));
+        let tool = step["name"].as_str().expect("a step names its tool");
+        // A missing engine, a plugin that will not instantiate and a crash are all operator
+        // errors and arrive as a protocol error rather than as `valid: false` (ADR 0006 §2,
+        // ADR 0008 §1), so the message is what a person needs and the assertion prints it whole.
+        assert!(frame.get("error").is_none(), "{what} step {id} (`{tool}`) failed: {}", frame["error"]);
         let content = &frame["result"]["structuredContent"];
         assert!(
-            frame.get("error").is_none() && content.get("valid") != Some(&json!(false)),
-            "`{name}` step {} (`{}`) did not succeed: {frame}",
-            position + 1,
-            step.tool
+            content.get("valid") != Some(&json!(false)),
+            "{what} step {id} (`{tool}`) was refused: {content}"
         );
+        answers.push(content.clone());
+        if tool == "render_export" && step["arguments"]["dry_run"] != json!(true) {
+            let wav = PathBuf::from(
+                step["arguments"]["output_path"].as_str().expect("a render names its output"),
+            );
+            rendered.push(read_back(what, id, content, &wav));
+        }
     }
-    // A missing engine, a plugin that will not instantiate and a crash are all operator errors
-    // and arrive as a protocol error rather than as `valid: false` (ADR 0006 §2, ADR 0008 §1),
-    // so the message is what a person needs and the assertion prints it whole.
-    let frame = answer(last);
-    assert!(frame.get("error").is_none(), "`{name}` did not render: {}", frame["error"]);
-    let content = &frame["result"]["structuredContent"];
-    assert_eq!(content["valid"], json!(true), "`{name}` was refused: {content}");
+    (answers, rendered)
+}
+
+/// Checks a `render_export` answer and reads the WAV it wrote.
+fn read_back(what: &str, id: usize, content: &Value, wav: &Path) -> Rendered {
     let reported = content["result"]["pcm_sha256"]
         .as_str()
-        .unwrap_or_else(|| panic!("`{name}` rendered and reported no hash: {content}"))
+        .unwrap_or_else(|| panic!("{what} step {id} rendered and reported no hash: {content}"))
         .to_string();
 
     // Before a single sample is compared (ADR 0008 §5). A drifted submodule would otherwise
     // arrive as a golden diff, which says the audio changed and not why.
-    let commits: BTreeMap<String, String> = serde_json::from_value(content["result"]["commits"].clone())
-        .unwrap_or_else(|e| panic!("`{name}`'s commits are not a map: {e}"));
+    let commits: BTreeMap<String, String> =
+        serde_json::from_value(content["result"]["commits"].clone())
+            .unwrap_or_else(|e| panic!("{what}'s commits are not a map: {e}"));
     let drifted = stale(&commits);
     assert!(
         drifted.is_empty(),
-        "the engine that rendered `{name}` is not the one lock.baseline.json pins:\n{}\n\n\
+        "the engine that rendered {what} is not the one lock.baseline.json pins:\n{}\n\n\
          Rebuild it from the pinned submodules — this is not a golden failure, and blessing \
          one against this engine would commit whatever it happens to produce (ADR 0008 §5).",
         drifted.join("\n")
     );
 
-    let file = std::fs::read(&wav).unwrap_or_else(|e| {
-        panic!("`{name}` reported a render and {} is not readable: {e}", wav.display())
+    let file = std::fs::read(wav).unwrap_or_else(|e| {
+        panic!("{what} reported a render and {} is not readable: {e}", wav.display())
     });
-    let (format, pcm) = data(&file, &format!("`{name}`'s render"));
+    let (format, pcm) = data(&file, &format!("{what}'s render"));
     // The engine's number, checked against a second one computed here: another language,
     // another SHA-256, and another walk of the same file. `asset_hash` is `core`'s hasher for
     // §10's content addressing — borrowed for its bytes-in, hex-out, not for its meaning — so
@@ -242,14 +251,41 @@ fn render(name: &str) -> Rendered {
     assert_eq!(
         escribass_core::asset_hash(&pcm),
         reported,
-        "`{name}`: the engine's hash is not of the `data` chunk this suite read (ADR 0009 §2)"
+        "{what}: the engine's hash is not of the `data` chunk this suite read (ADR 0009 §2)"
     );
     // A plugin that loaded, was never given the note and rendered silence exits zero and says
     // nothing. Blessing that as a golden would pin the failure (`checks.yml` asserts the same
     // thing of its own renders, for the same reason).
-    assert!(pcm.iter().any(|byte| *byte != 0), "`{name}` rendered silence");
-    let _ = std::fs::remove_file(&wav);
+    assert!(pcm.iter().any(|byte| *byte != 0), "{what} rendered silence");
+    let _ = std::fs::remove_file(wav);
     Rendered { file, pcm, format, reported }
+}
+
+/// Runs a fixture's script through `escribass-mcp` and renders it for real.
+///
+/// The `render_export` call is appended here rather than written in the script, because its
+/// `output_path` is a scratch path that only exists at run time — and `render.proto` requires an
+/// absolute one. Everything before it is the fixture.
+fn render(name: &str) -> Rendered {
+    let directory = Scratch::new("renders", name);
+    let wav = directory.0.with_extension("wav");
+
+    let path = PathBuf::from(FIXTURES).join(name).join("script.json");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let steps: Vec<Step> = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("{} is not a script: {e}", path.display()));
+
+    let mut calls: Vec<Value> =
+        steps.iter().map(|step| call(&step.tool, step.args.clone())).collect();
+    calls.push(call(
+        "render_export",
+        json!({"output_path": wav.display().to_string(), "dry_run": false}),
+    ));
+
+    let (_, mut rendered) = drive(&format!("`{name}`"), &directory.0, &calls);
+    assert_eq!(rendered.len(), 1, "`{name}` asked for one render");
+    rendered.pop().expect("one render")
 }
 
 /// Every component whose compiled-in commit is not the one `lock.baseline.json` pins.
@@ -361,6 +397,54 @@ fn sample(pcm: &[u8], at: usize, width: usize) -> i32 {
     (value << unused) >> unused
 }
 
+/// Where two `data` chunks differ, over the samples they share.
+///
+/// Split out from [`differences`] in M1 PR 12, which needs the same scan as numbers rather than
+/// as prose: "where did it start" is what the goldens ask, "where did it stop" is what locality
+/// asks, and one walk answers both.
+#[derive(Debug, Clone, Copy)]
+struct Spread {
+    /// Index of the first differing sample, interleaved — so `frame * channels + channel`.
+    first: usize,
+    /// Index of the last. `last - first + 1` is how far the change reaches, `count` how solid it is.
+    last: usize,
+    count: usize,
+    /// Both values at [`Spread::first`], left then right.
+    values: (i32, i32),
+    /// The largest absolute difference anywhere, in counts of the format's full scale.
+    largest: i64,
+}
+
+/// Scans two `data` chunks for the samples they disagree on, or `None` if they agree.
+///
+/// Only over the samples both hold: a length difference is the caller's to report, and it is
+/// a different finding from a changed sample.
+fn spread(format: Format, left: &[u8], right: &[u8]) -> Option<Spread> {
+    let width = (format.bits / 8) as usize;
+    let shared = left.len().min(right.len()) / width * width;
+    let (mut found, mut count, mut largest) = (None::<Spread>, 0usize, 0i64);
+    for at in (0..shared).step_by(width) {
+        let (a, b) = (sample(left, at, width), sample(right, at, width));
+        if a != b {
+            count += 1;
+            largest = largest.max((a as i64 - b as i64).abs());
+            match &mut found {
+                None => {
+                    found = Some(Spread {
+                        first: at / width,
+                        last: at / width,
+                        count: 0,
+                        values: (a, b),
+                        largest: 0,
+                    })
+                }
+                Some(so_far) => so_far.last = at / width,
+            }
+        }
+    }
+    found.map(|so_far| Spread { count, largest, ..so_far })
+}
+
 /// How two `data` chunks differ, in the terms a person can act on — or `None` when they do not.
 ///
 /// M0.4's harness reports RFC 6902 operations rather than two documents; this is the same rule
@@ -384,28 +468,34 @@ fn differences(format: Format, left: &[u8], right: &[u8]) -> Option<String> {
         ));
     }
     let shared = left.len().min(right.len()) / width * width;
-    let (mut first, mut differing, mut largest) = (None, 0usize, 0i64);
-    for at in (0..shared).step_by(width) {
-        let (a, b) = (sample(left, at, width), sample(right, at, width));
-        if a != b {
-            differing += 1;
-            largest = largest.max((a as i64 - b as i64).abs());
-            first.get_or_insert((at / width, a, b));
-        }
-    }
-    match first {
-        Some((index, a, b)) => {
+    match spread(format, left, right) {
+        Some(found) => {
             let full = 1i64 << (format.bits - 1);
+            let channels = format.channels.max(1) as usize;
             report.push(format!(
-                "  {differing} of {} samples differ, first at sample {index} \
-                 (frame {}, channel {}): left {a}, right {b}",
+                "  {} of {} samples differ, first at sample {} \
+                 (frame {}, channel {}): left {}, right {}",
+                found.count,
                 shared / width,
-                index / format.channels.max(1) as usize,
-                index % format.channels.max(1) as usize,
+                found.first,
+                found.first / channels,
+                found.first % channels,
+                found.values.0,
+                found.values.1,
+            ));
+            // Where it stops, which is half of what a locality question asks and useful in a
+            // golden failure too: a change that reaches the last sample of the render is a
+            // different diagnosis from one that ends with a note.
+            report.push(format!(
+                "  last at sample {} (frame {}), so the change spans {} frames",
+                found.last,
+                found.last / channels,
+                found.last / channels - found.first / channels + 1,
             ));
             report.push(format!(
-                "  largest difference {largest} of {full} full scale ({:.9})",
-                largest as f64 / full as f64
+                "  largest difference {} of {full} full scale ({:.9})",
+                found.largest,
+                found.largest as f64 / full as f64
             ));
         }
         // Reachable only through the length branch above: one is a prefix of the other.
@@ -586,4 +676,250 @@ fn a_stale_engine_is_named_rather_than_arriving_as_a_golden_diff() {
     let mut missing = honest.clone();
     missing.remove("rubberband");
     assert!(stale(&missing)[0].contains("no commit for it at all"), "{:?}", stale(&missing));
+}
+
+// ---------------------------------------------------------------------------
+// The bar-17 demo (§1, §18.2)
+// ---------------------------------------------------------------------------
+//
+// §1 states the product claim: *"Change the bass line in bar 17 and re-render, everything else
+// identical" must always be possible*, and §18.2 makes it the canonical demo. Everything above
+// this line tests that a render repeats; this tests that an **edit is local**, which is a
+// different claim and the one the product is sold on.
+//
+// **What is asserted and what is measured, because they are not the same half.**
+//
+// *Before the edit is the falsifiable half, and it is asserted exactly.* If one sample before
+// bar 17's first changes, controllability is broken — not the test. There is no tolerance here
+// for the same reason there is none in the goldens (ADR 0009 §2).
+//
+// *After the edit, "only bar 17" is not true and asserting it would be asserting a wish.* A
+// note's release tail outlives its note-off, and an instrument is not a pure function of the
+// current block. So the spread past the edit is **measured, printed, and bounded only by
+// something with a reason**: a difference that never recovered would mean the edit changed the
+// instrument's state for the rest of the song, and that is what the ceiling below watches for.
+// The numbers this run measured go to stderr, so a reader of a CI log sees them.
+
+/// 960 PPQ (§4.2) in the 4/4 `new_song` writes: one bar is four beats of 960 ticks.
+const BAR: i64 = 4 * 960;
+
+/// Bar 17 starts after sixteen whole bars. Bars are one-based on a timeline; ticks are not.
+const BAR_17: i64 = 16 * BAR;
+
+/// The fixture runs to bar 18 inclusive, so the edited bar has a bar after it to be local *to*.
+const BARS: i64 = 18;
+
+/// The tempo `new_song` writes, which nothing in this script moves (`core/src/session.rs`).
+///
+/// Named rather than derived: the sample bar 17 falls on is arithmetic over this, and reading
+/// it back from the document would make the test agree with whatever the document said.
+const BPM: i64 = 120;
+
+/// The bass line: one note a bar, walking, low enough to be a bass part.
+const PITCHES: [i64; 4] = [36, 43, 38, 45];
+
+/// What bar 17's note is edited to — an octave up from the 36 the pattern puts there.
+const EDITED: i64 = 48;
+
+/// Ids this script mints, named literally the way every determinism script does (`tests/AGENTS.md`).
+///
+/// Under `--seed-ids` an id is a pure function of how many were minted before it, so writing
+/// them out is what makes a change in mint order fail loudly rather than quietly edit a
+/// different note. The assertion below checks the note is the one at bar 17 before anything is
+/// rendered, which is what makes a literal id safe to write.
+const CLIP: &str = "01M1FPMP000000000000000009";
+const BAR_17_NOTE: &str = "01M1FPMP00000000000000000T";
+
+/// The plan `core` compiles for a song, as text a line-by-line comparison can use.
+///
+/// ADR 0007 §4 splits a render in two — the plan `core` compiles and the rendering the engine
+/// does — and says a mismatch is diagnosed by comparing the plan first. Doing that here is what
+/// turns "the audio changed before bar 17" into either "core moved something" or "the engine
+/// did", which are different bugs in different processes.
+fn plan_of(song: &Value) -> String {
+    let song = escribass_core::from_canonical_json(
+        &serde_json::to_string(song).expect("a song value serialises"),
+    )
+    .expect("get_song answers with canonical JSON");
+    // No assets: this fixture is notes and a plugin, and `compile` opens no file anyway.
+    let plan = escribass_core::compile(&song, &BTreeMap::new()).expect("the fixture compiles");
+    serde_json::to_string_pretty(&plan).expect("a plan serialises")
+}
+
+#[test]
+fn a_note_edited_in_bar_17_changes_nothing_before_bar_17() {
+    let directory = Scratch::new("renders", "bar17");
+    // Two paths, never one. PR 11 found that a render over an existing file appended a second
+    // RIFF and every reader took the first, so two renders to one path compared a run against
+    // itself. The engine deletes its destination now; the habit is what made that visible.
+    let before_wav = directory.0.with_extension("before.wav");
+    let after_wav = directory.0.with_extension("after.wav");
+
+    // One note a bar, keyed so the map's own order is bar order: `add_clip` mints from a
+    // `BTreeMap`, so the note at bar 17 is the seventeenth id minted (`core/src/tools.rs`).
+    let notes: BTreeMap<String, Value> = (0..BARS)
+        .map(|bar| {
+            (
+                format!("n{bar:02}"),
+                json!({
+                    "pitch": PITCHES[bar as usize % PITCHES.len()],
+                    "start_tick": bar * BAR,
+                    // Half a bar, so each note's tail has the rest of its bar to decay in.
+                    "length_ticks": BAR / 2,
+                    "velocity": 100,
+                }),
+            )
+        })
+        .collect();
+
+    let steps = vec![
+        call(
+            "add_track",
+            json!({
+                "name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+                // Dexed: pure FM, no RNG, no runtime dispatch, no resampling — the cheapest
+                // deterministic instrument of the three, and this test is about the edit and
+                // not about the synthesiser (§8).
+                "ref": {"plugin": {"plugin_id": "Digital Suburban/Dexed", "version": "1.0.1"}}
+            }),
+        ),
+        call(
+            "add_clip",
+            json!({
+                "track_id": "01M1FPMP000000000000000006",
+                "start_tick": 0, "length_ticks": BARS * BAR,
+                "note_clip": {"notes": notes},
+            }),
+        ),
+        call("get_song", json!({})),
+        call("render_export", json!({"output_path": before_wav.display().to_string(), "dry_run": false})),
+        // The edit, as a model or a UI would make it: one RFC 6902 operation through the tool
+        // API, never a write to `song.json` (CLAUDE.md #2). That it goes through the pipeline
+        // is the half of the demo the audio cannot show.
+        call(
+            "apply_patch",
+            json!({"patch": [
+                {"op": "replace", "path": format!("/clips/{CLIP}/note_clip/notes/{BAR_17_NOTE}/pitch"),
+                 "value": EDITED}
+            ]}),
+        ),
+        call("get_song", json!({})),
+        call("render_export", json!({"output_path": after_wav.display().to_string(), "dry_run": false})),
+    ];
+
+    let (answers, rendered) = drive("the bar-17 demo", &directory.0, &steps);
+    let [before, after] = &rendered[..] else { panic!("two renders, one before and one after") };
+
+    // The literal id is the note at bar 17, checked before a sample is read. A change in mint
+    // order would otherwise edit some other bar and the test would still pass.
+    let note = &answers[2]["clips"][CLIP]["note_clip"]["notes"][BAR_17_NOTE];
+    assert_eq!(
+        note["start_tick"],
+        json!(BAR_17),
+        "`{BAR_17_NOTE}` is no longer the note at bar 17 (tick {BAR_17}); \
+         ids are minted in order and this script names them literally (tests/AGENTS.md)"
+    );
+    assert_eq!(answers[5]["clips"][CLIP]["note_clip"]["notes"][BAR_17_NOTE]["pitch"], json!(EDITED));
+
+    // ADR 0007 §4's split, done first: the plan changed in exactly one number, so anything the
+    // audio does before bar 17 is the engine's and not `core`'s.
+    let (was, now) = (plan_of(&answers[2]), plan_of(&answers[5]));
+    assert_eq!(was.lines().count(), now.lines().count(), "the edit changed the plan's shape");
+    // Trimmed, because the indentation is the plan's nesting and not the claim.
+    let moved: Vec<(&str, &str)> = was
+        .lines()
+        .zip(now.lines())
+        .filter(|(a, b)| a != b)
+        .map(|(a, b)| (a.trim(), b.trim()))
+        .collect();
+    assert_eq!(
+        moved,
+        vec![(
+            format!("\"pitch\": {},", PITCHES[0]).as_str(),
+            format!("\"pitch\": {EDITED},").as_str(),
+        )],
+        "the plan should differ in one note's pitch and nothing else"
+    );
+
+    // Bar 17 in samples, under this fixture's tempo map: ticks are musical time and the engine
+    // derives sample positions from the tempo map at render time (§4.2). At 120 BPM and 48 kHz
+    // that is tick 61440 → frame 1,536,000, exactly 32 seconds in.
+    assert_eq!(before.format, after.format, "the two renders disagree about the format");
+    let format = before.format;
+    let channels = format.channels.max(1) as i64;
+    let rate = format.sample_rate as i64;
+    let frame_of = |tick: i64| tick * 60 * rate / (BPM * 960);
+    let (bar_17_frame, bar_18_frame) = (frame_of(BAR_17), frame_of(BAR_17 + BAR));
+    let width = (format.bits / 8) as usize;
+    let cut = (bar_17_frame * channels) as usize * width;
+
+    // The falsifiable half. Everything the edit did not reach is bit-identical, asserted whole
+    // rather than sampled — and reported through the same walker a golden failure uses, so a
+    // violation names the sample rather than saying the prefixes differ.
+    if let Some(report) = differences(format, &before.pcm[..cut], &after.pcm[..cut]) {
+        panic!(
+            "editing a note in bar 17 changed audio *before* bar 17 (frame {bar_17_frame}).\n\
+             Left is the render before the edit, right is after it.\n{report}\n\n\
+             This is §1's claim failing, not a threshold to loosen: the plan differed in one \
+             note's pitch, so whatever moved here moved inside the engine."
+        );
+    }
+
+    let found = spread(format, &before.pcm, &after.pcm)
+        .expect("an edited note changes the audio it plays in");
+    assert_eq!(
+        before.pcm.len(),
+        after.pcm.len(),
+        "the edit changed the render's length; §1's claim is about content, and this is not it"
+    );
+    assert_eq!(
+        found.first as i64,
+        bar_17_frame * channels,
+        "the first differing sample is bar 17's first, or the edit did not land where it was aimed"
+    );
+
+    // The measured half. Printed rather than tuned into an assertion — `ponytail:` this is a
+    // number this build produced, not a bound the platform promises.
+    let last_frame = found.last as i64 / channels;
+    let note_off = frame_of(BAR_17 + BAR / 2);
+    eprintln!(
+        "bar 17 starts at tick {BAR_17}, frame {bar_17_frame} ({} s) of {} frames.\n\
+         The edit changed {} of {} samples, from frame {bar_17_frame} to frame {last_frame} \
+         — {} frames ({:.4} s) past the edited note's own note-off at frame {note_off}, and \
+         {} frames before bar 18 at frame {bar_18_frame}.\n\
+         Largest difference {} of {} full scale.",
+        bar_17_frame as f64 / rate as f64,
+        before.pcm.len() / (width * channels as usize),
+        found.count,
+        before.pcm.len() / width,
+        last_frame - note_off,
+        (last_frame - note_off) as f64 / rate as f64,
+        bar_18_frame - last_frame,
+        found.largest,
+        1i64 << (format.bits - 1),
+    );
+
+    // ponytail: one bar, because a release tail is bounded and plugin state carried forward is
+    // not. Measured on this build the tail runs ~5,800 frames (0.12 s) past the note-off, so
+    // this ceiling is two orders of magnitude of headroom and is not a tuned number; what it
+    // catches is the failure that matters — an edit whose effect never ends, which is state
+    // divergence rather than an instrument decaying. It is deliberately *not* "inside bar 17":
+    // that is true of this fixture's arithmetic (a half-bar note leaves half a bar for its
+    // tail) and false in general — the same edit with a whole-bar note puts the last differing
+    // frame 24,119 frames into bar 18 (measured in M1 PR 12, and §18.2 amended to say so).
+    assert!(
+        last_frame - note_off < frame_of(BAR),
+        "the edit was still changing audio {} frames after the note it edited ended; \
+         a release tail is bounded and this is not one",
+        last_frame - note_off
+    );
+
+    // The check itself, seen to fail: a golden test that has only ever passed has not been
+    // tested, and neither has this one. One sample moved by one count *before* bar 17 is
+    // exactly the violation the panic above exists for, and it costs no render.
+    let mut doctored = before.pcm.clone();
+    doctored[cut - width] = doctored[cut - width].wrapping_add(1);
+    let report = differences(format, &before.pcm[..cut], &doctored[..cut])
+        .expect("a changed sample before bar 17 is a locality violation");
+    assert!(report.contains(&format!("first at sample {}", bar_17_frame * channels - 1)), "{report}");
 }
