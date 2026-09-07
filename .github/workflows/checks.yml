@@ -7,6 +7,16 @@ on:
     branches: [main]
   pull_request:
 
+# One run per ref at a time, and a superseded pull-request run is cancelled. Added in M1 PR 11,
+# which took this workflow from two jobs to four and from "up to an hour" to that plus three
+# render jobs: pushing twice in a minute otherwise leaves two full engine builds racing, both
+# answering a question about a commit nobody is waiting on any more. A push to **main** is never
+# cancelled — main is the last line of defence, and a build abandoned halfway there is a green
+# tick nobody earned.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Four jobs with very different appetites: `checks` is a few minutes, `engine` compiles
 # Tracktion Engine, JUCE and three VST3s and is up to an hour cold, and `renders` and
 # `cross-cpu` (M1 PR 11) render the goldens on three runners with the binary `engine` built.
