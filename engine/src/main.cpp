@@ -1227,7 +1227,7 @@ int run (const juce::File& manifestFile)
     // file of exactly twice the size whose `bext` origination time is still the first run's, and
     // the read-back below hashed that first chunk and reported the old audio as this render's
     // answer. That made every "renders the same twice" check that reused one path vacuous, and
-    // it is why this suite gives each render a path of its own as well.
+    // it is why `tests/renders.rs` gives each render a path of its own as well.
     if (params.destFile.existsAsFile() && ! params.destFile.deleteFile())
         return fail (kRenderFailed, "cannot replace " + plan.output_path());
     params.audioFormat = wav;
