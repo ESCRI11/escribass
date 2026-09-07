@@ -190,7 +190,17 @@ jobs:
       # proto/render.proto (the C++ is generated from them at configure time), and tests/,
       # where the M1 golden renders this build has to reproduce live. What it does not read is
       # docs/, .githooks/, the root prose files, and core/: core is Rust and the engine is
-      # schema-agnostic (CLAUDE.md #6), so no source path connects them. Everything else runs
+      # schema-agnostic (CLAUDE.md #6), so no source path connects them.
+      #
+      # `core/` stays excluded even though the `renders` job below drives `core` into this
+      # build, and that is ADR 0007 §4's split doing its job rather than an oversight: a `core`
+      # change that would move a render moves the plan first, and the plan goldens are in the
+      # `checks` job, which every `core/` change runs. A render mismatch with those green is the
+      # engine's; a `core` change with those red never gets as far as asking. Rebuilding
+      # Tracktion for an hour to learn what a plan diff already says is the trade this exclusion
+      # is making.
+      #
+      # Everything else runs
       # the build, because the failure mode is a plugin or a pin silently no longer compiling
       # — the thing this job exists to catch — and an hour of runner time is the cheaper half
       # of that trade. `schema/` is not narrowed to song.proto: a rebuild triggered by a

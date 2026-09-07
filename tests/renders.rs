@@ -30,6 +30,17 @@
 //!
 //! Every fixture is built by driving the tool API over a real `escribass-mcp` process, like
 //! every other song in these suites (CLAUDE.md #2). Nothing here writes a `song.json`.
+//!
+//! **What this suite does not have to catch.** ADR 0007 §4 splits a render into the plan `core`
+//! compiles and the rendering the engine does, and the determinism suite already goldens the
+//! plan. So a mismatch here with those plan goldens green is the engine's, and a `core` change
+//! that would move a render shows up there first — which is why no fixture here carries a plan
+//! golden of its own, and why the engine CI job can leave `core/` out of what triggers it.
+//!
+//! `ponytail:` the fixtures live in a scratch directory with a run-specific path, so a plan
+//! golden here would have to have that path erased from it the way `determinism.rs` erases its
+//! asset root. The upgrade, if a render ever disagrees with a plan that looks right, is to
+//! commit the plan beside the WAV and normalise the two paths in it.
 
 #[path = "common/mod.rs"]
 mod common;
