@@ -229,6 +229,14 @@ string beside it. So `param_unknown` (below) has a companion the validator can a
 value outside `0..1` — and the engine clamps rather than refuses, because Tracktion's parameter
 range clamps it either way and a caller error is not the engine's to discover (ADR 0008 §1).
 
+**Amended 2026-09-07, in the M2 ADRs.** That holds for a parameter of a **device**, which is
+every parameter that existed when it was written. A `ParamRef` may now also name a *track*, and
+then it names a field of the model's own `Mix` — `gain_db` in decibels, `pan` in `-1.0`..`1.0` —
+with no plugin behind it to normalise against and no display string to read a unit off.
+Normalising those would mean choosing a maximum gain, which is a number nothing in the model
+has. So the domain follows what the target resolved to, and `param_out_of_range` checks `0..1`
+for a device, `-1..1` for `pan`, and nothing at all for `gain_db` (ADR 0015 §2).
+
 It is **generated at build time and never committed**, for ADR 0008 §4's reason applied to a
 different artefact: a committed manifest is a description of a plugin binary that must agree
 with the plugin binary, which is two pins for one fact, and the stale one is silent. It is also
