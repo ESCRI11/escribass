@@ -28,14 +28,15 @@
 //!
 //! **The project is a launch argument, not a tool.** An MCP stdio process is not a session,
 //! and two writers on one `.escri` would race the three renames ADR 0004's commit depends on
-//! (ADR 0006 §5).
+//! (ADR 0006 §5). From M2 that is enforced rather than assumed: this process takes
+//! `.escri/lock` and holds it until it exits (ADR 0012 §3).
 //!
 //! Nothing here writes to stdout but the transport. A stray `println!` corrupts the JSON-RPC
 //! stream; diagnostics go to stderr.
 
 use escribass_core::{
-    new_song, Clock, FixedClock, IdSource, Manifest, Project, SeededIds, Session, SongTools,
-    SystemClock, UlidSource,
+    new_song, Clock, FixedClock, IdSource, Manifest, Project, ProjectLock, SeededIds, Session,
+    SongTools, SystemClock, UlidSource,
 };
 use escribass_schema::song::Author;
 use rmcp::ServiceExt;
@@ -73,13 +74,23 @@ async fn run() -> Result<(), String> {
     // it with what the project pinned (ADR 0010 §3, §4).
     let manifest = Arc::new(Manifest::read(&options.manifest).map_err(|e| e.to_string())?);
 
-    let project = if options.create {
+    // One writer per `.escri`, enforced rather than assumed (ADR 0012 §3). Taken before an
+    // open, because reading a project another process is committing to is the race this
+    // closes; taken after a create, because the directory has to exist to hold the file.
+    // `_lock` and not `_`: the binding is what holds it open for the life of the process, and
+    // the file is removed when this function returns.
+    let (project, _lock) = if options.create {
         let song = new_song(&mut *ids, &*clock, options.author);
-        Project::create(&options.project, &song, &mut *ids, &*clock, options.author, manifest)
-            .map_err(|e| format!("cannot create {}: {e}", options.project.display()))?
+        let project =
+            Project::create(&options.project, &song, &mut *ids, &*clock, options.author, manifest)
+                .map_err(|e| format!("cannot create {}: {e}", options.project.display()))?;
+        let lock = ProjectLock::take(&options.project).map_err(|e| e.to_string())?;
+        (project, lock)
     } else {
-        Project::open(&options.project, manifest)
-            .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?
+        let lock = ProjectLock::take(&options.project).map_err(|e| e.to_string())?;
+        let project = Project::open(&options.project, manifest)
+            .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?;
+        (project, lock)
     };
 
     let mut session = Session::new(project, ids, clock, options.author);

@@ -40,7 +40,8 @@ stale.
 | M1.14 | §11 walked line by line against the code; docs closed; `CLAUDE.md` to M2 | done | this PR |
 | — | **M1 complete.** Render engine, four goldens, `lock.json` v2 | done | — |
 | — | The M2 plan: twelve questions, none answered | done | PR #54 |
-| M2.1 | The twelve answered: ADRs 0012–0016, the §15 rows, §17's gRPC and frontend pins | done | this PR |
+| M2.1 | The twelve answered: ADRs 0012–0016, the §15 rows, §17's gRPC and frontend pins | done | PR #55 |
+| M2.2 | `app/`: the Tauri host, the frontend, the shared `call` dispatch, `.escri/lock` | done | this PR |
 
 ## M0.2 — `core/`
 

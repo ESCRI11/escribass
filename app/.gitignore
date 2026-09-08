@@ -1,0 +1,5 @@
+dist/
+
+# Written by `tauri-build` on every build, and platform-specific: a macOS build adds a
+# schema this one has never seen. Regenerated, never read by a person.
+src-tauri/gen/schemas/

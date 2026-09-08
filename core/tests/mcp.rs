@@ -7,7 +7,7 @@
 
 mod common;
 
-use escribass_core::mcp::{IMPLEMENTED, JSON_TEXT_FIELDS};
+use escribass_core::call::{IMPLEMENTED, JSON_TEXT_FIELDS};
 use escribass_core::tool_names;
 use escribass_proto::DESCRIPTOR;
 use serde_json::{json, Value};

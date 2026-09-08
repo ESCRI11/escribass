@@ -1,0 +1,106 @@
+/* Plain CSS. No component or CSS framework, and ADR 0016 §3 says why: a timeline on canvas,
+   a mixer of faders and a patch log are not a form library's problem. */
+
+:root {
+  --surface: #16171a;
+  --panel: #1e2024;
+  --line: #4a4d55;
+  --faint: #2b2e34;
+  --text: #d6d8dd;
+  --dim: #878b95;
+  --block: #4d7ea8;
+  --block-text: #f2f5f8;
+
+  color-scheme: dark;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header,
+footer {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--faint);
+}
+
+footer {
+  margin-top: auto;
+  border-bottom: none;
+  border-top: 1px solid var(--faint);
+  color: var(--dim);
+}
+
+footer .mode {
+  margin-left: auto;
+}
+
+.arrangement {
+  display: flex;
+  overflow: auto;
+}
+
+.gutter {
+  flex: 0 0 168px;
+  border-right: 1px solid var(--line);
+}
+
+/* Matches the canvas ruler, so the first track row lines up with the first lane. */
+.gutter-head {
+  height: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--faint);
+}
+
+.track .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track .kind {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.timeline {
+  flex: 1;
+  display: block;
+  width: 100%;
+}
+
+.waiting,
+.failure {
+  padding: 24px;
+}
+
+.failure pre {
+  white-space: pre-wrap;
+  color: #e2a0a0;
+}

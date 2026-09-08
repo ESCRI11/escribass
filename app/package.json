@@ -1,0 +1,30 @@
+{
+  "name": "@escribass/app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The desktop UI's frontend: one decoded Song and pure selectors over it",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.14.1",
+    "@escribass/schema": "file:../schema",
+    "@tauri-apps/api": "2.11.1",
+    "codemirror": "6.0.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
+  }
+}

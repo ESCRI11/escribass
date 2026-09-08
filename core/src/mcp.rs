@@ -1,29 +1,18 @@
 //! The MCP surface (docs/specs.md §18.2, ADR 0006 §6).
 //!
-//! A translation layer and nothing else. Every decision about what a tool call means lives in
-//! [`crate::session`]; this module turns MCP's shapes into that one's and back, so a caller
-//! cannot get a different answer here than over gRPC.
+//! A JSON-RPC envelope and nothing else. Every decision about what a tool call means lives in
+//! [`crate::session`]; the translation from a tool name and a JSON object to one of its
+//! methods lives in [`crate::call`], which is where the two byte-level rules ADR 0006 §6
+//! pinned now live too. What is left here is rmcp's shapes, the advertised tool list, and the
+//! one place where an advertised *schema* has to say something the descriptor does not.
 //!
-//! Two things here are not translation, and both are named in ADR 0006 §6 because both look
-//! correct and are wrong at the byte level:
-//!
-//! 1. **`patch` is `bytes` in the proto**, and proto3 JSON encodes bytes as base64. Left
-//!    alone, a model would be asked to base64-encode an RFC 6902 array to call `apply_patch`,
-//!    and would be handed base64 back. The patch crosses this boundary as a JSON array, in
-//!    both directions, and [`JSON_TEXT_FIELDS`] is the one place that exception lives.
-//! 2. **A `Song` is rendered with [`crate::to_canonical_json`]**, never `serde_json::to_value`,
-//!    whose `Map` is a `BTreeMap` and would silently alphabetise the model's field order.
+//! It stopped owning the dispatch in M2 PR 2. `app` is handed a tool name and a JSON object
+//! exactly as this is, and a second `match` on the name would have been ADR 0006 §1's sixteen
+//! copies of the contract one milestone later, in a place no test drives (ADR 0012 §1).
 
+use crate::call::{call, Answer, CallError, ErrorKind, IMPLEMENTED, JSON_TEXT_FIELDS};
 use crate::descriptor::{tool_schemas, ToolSchema};
 use crate::session::Session;
-use crate::{to_canonical_json, ProjectError};
-use escribass_proto::tools::{
-    AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
-    AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
-    RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
-};
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
@@ -35,49 +24,6 @@ use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
-
-/// The tools this server implements, in the order it advertises them.
-///
-/// Every RPC the service declares, in the order this server advertises them. It is a list
-/// rather than the descriptor's own order because the order a model sees should be ours to
-/// choose, and because a tool that is declared but not wired up must never appear — a call
-/// that can only fail spends a model's turn. A test keeps it equal to what `call_tool`
-/// dispatches.
-pub const IMPLEMENTED: &[&str] = &[
-    "get_song",
-    "get_song_at",
-    "get_history",
-    "apply_patch",
-    "add_track",
-    "set_track_instrument",
-    "add_effect",
-    "set_param",
-    "add_clip",
-    "set_notes",
-    "transpose",
-    "quantize",
-    "add_automation",
-    "add_asset",
-    "render_export",
-    "set_tempo",
-    "add_section",
-    "move_section",
-    "create_branch",
-    "switch_branch",
-    "delete_branch",
-    "merge_branch",
-];
-
-/// Fields that carry canonical JSON *text* in a `bytes` field, and so must cross MCP as JSON
-/// rather than as base64 (ADR 0006 §6).
-///
-/// Deliberately a short explicit list rather than a heuristic: `Instrument.state`,
-/// `Effect.state` and `AddAssetRequest.content` are also `bytes` and *are* opaque binary, so
-/// a rule like "every bytes field is really JSON" would corrupt them. An asset crosses as the
-/// base64 proto3 JSON gives every `bytes` field, decoded by the generated deserializer like
-/// any other argument. `tests/mcp.rs` checks each entry names a real `bytes` field, so the
-/// list cannot rot silently.
-pub const JSON_TEXT_FIELDS: &[(&str, &str)] = &[("apply_patch", "patch")];
 
 /// One open project, served over MCP.
 ///
@@ -116,6 +62,10 @@ fn tools() -> Result<Vec<Tool>, String> {
 }
 
 /// Rewrites the advertised type of a canonical-JSON-text field from base64 to an array.
+///
+/// The rule itself is [`crate::call`]'s and applies to every carrier; what is MCP's alone is
+/// that MCP publishes a JSON Schema for each tool, so the exception has to be *said* here as
+/// well as honoured there.
 fn json_text_input(tool: &str, mut schema: Map<String, Value>) -> Map<String, Value> {
     let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
         return schema;
@@ -136,100 +86,27 @@ fn json_text_input(tool: &str, mut schema: Map<String, Value>) -> Map<String, Va
     schema
 }
 
-/// A [`ToolResult`] as MCP carries it.
+/// An [`Answer`] as MCP carries it: the readable text, the same document structured, and
+/// whether the session refused.
 ///
-/// Built field by field rather than with `serde_json::to_value(&result)`, which would base64
-/// the patch through the generated serde impl — a payload that parses, round-trips, and is
-/// unreadable to the model it was built for (ADR 0006 §6).
-fn tool_result(result: &ToolResult) -> CallToolResult {
-    let patch = if result.patch.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&result.patch).unwrap_or(Value::Null)
-    };
-    let structured = json!({
-        "valid": result.valid,
-        "errors": result.errors.iter().map(|e| json!({
-            "path": e.path, "rule": e.rule, "message": e.message,
-        })).collect::<Vec<_>>(),
-        "patch": patch,
-        "summary": result.summary,
-        "entry_id": result.entry_id,
-    });
-    complete(structured, !result.valid)
-}
-
-/// A [`RenderResponse`] as MCP carries it.
-///
-/// The response's own three fields are built here for the same reason a `ToolResult`'s are:
-/// the shape a model reads is decided here rather than by a generated serializer. `result` is
-/// **not** — it goes through the generated serializer, because `song_tools.proto` says it
-/// crosses "by value rather than copied field by field — a field added to `RenderResult`
-/// reaches a caller without touching this file", and copying its two fields by hand made that
-/// true over gRPC and false here (M1 PR 13). That is M0.3's dropped `provenance` in a second
-/// place, and three layers hid it: every scripted `render_export` is a dry run, so `result` was
-/// always null; the parity harness had a hand copy of its own, so a dropped field was dropped
-/// identically on both sides; and the one test reading a real render answer is behind a
-/// feature whose CI job skips a `core/`-only change.
-///
-/// The generated serializer is the right one to reach for: it emits the same snake_case names
-/// unconditionally (`preserve_proto_field_names`, `emit_fields`), and `RenderResult` has no
-/// `bytes` field, so ADR 0006 §6's base64 rule has nothing to say about it. `result` is null
-/// when no engine ran — a dry run or a refusal.
-fn render_response(response: &RenderResponse) -> CallToolResult {
-    let structured = json!({
-        "valid": response.valid,
-        "errors": response.errors.iter().map(|e| json!({
-            "path": e.path, "rule": e.rule, "message": e.message,
-        })).collect::<Vec<_>>(),
-        "summary": response.summary,
-        "result": response.result,
-    });
-    complete(structured, !response.valid)
-}
-
-fn complete(structured: Value, is_error: bool) -> CallToolResult {
-    let text = serde_json::to_string_pretty(&structured).expect("a Value serialises");
-    let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
-    result.structured_content = Some(structured);
-    // A refused call is a *tool* error, which is what lets a model self-correct — §6's three
-    // retries. It is not a protocol error: the call reached us and was answered.
-    result.is_error = Some(is_error);
+/// A refused call is a *tool* error, which is what lets a model self-correct — §6's three
+/// retries. It is not a protocol error: the call reached us and was answered.
+fn answered(answer: Answer) -> CallToolResult {
+    let mut result = CallToolResult::success(vec![ContentBlock::text(answer.text)]);
+    result.structured_content = Some(answer.structured);
+    result.is_error = Some(answer.refused);
     result
 }
 
-/// A song as a result: the canonical text a model reads, plus the same document structured.
+/// A call that was never answered, mapped onto JSON-RPC's two.
 ///
-/// The text comes from `to_canonical_json` so the field order is the model's own (ADR 0002
-/// §4). `structured_content` is a `Value`, whose map sorts keys — the same *document*, which
-/// is what ADR 0002 §11 requires of a wire form, but not the same bytes. The text block is the
-/// one to read.
-fn song_result(song: &escribass_schema::song::Song) -> Result<CallToolResult, McpError> {
-    let text = to_canonical_json(song).map_err(|e| McpError::internal_error(e.to_string(), None))?;
-    let structured: Value =
-        serde_json::from_str(&text).map_err(|e| McpError::internal_error(e.to_string(), None))?;
-    let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
-    result.structured_content = Some(structured);
-    result.is_error = Some(false);
-    Ok(result)
-}
-
-/// An operator error. Not a refusal: nothing the caller can say differently would help, so it
-/// leaves the retry loop rather than joining it (ADR 0006 §2).
-fn broken(e: ProjectError) -> McpError {
-    McpError::internal_error(format!("{} [{}]: {}", e.path, e.rule, e.message), None)
-}
-
-fn arguments(request: &CallToolRequestParams) -> Map<String, Value> {
-    request.arguments.clone().unwrap_or_default()
-}
-
-fn decode<T: serde::de::DeserializeOwned>(
-    tool: &str,
-    request: &CallToolRequestParams,
-) -> Result<T, McpError> {
-    serde_json::from_value(Value::Object(arguments(request)))
-        .map_err(|e| McpError::invalid_params(format!("`{tool}`: {e}"), None))
+/// `invalid_params` is what a caller can fix by calling differently, so it joins §6's retry
+/// loop; `internal_error` is an operator's and leaves it (ADR 0006 §2).
+fn unanswered(e: CallError) -> McpError {
+    match e.kind {
+        ErrorKind::BadRequest => McpError::invalid_params(e.message, None),
+        ErrorKind::Broken => McpError::internal_error(e.message, None),
+    }
 }
 
 impl ServerHandler for SongTools {
@@ -267,184 +144,13 @@ impl ServerHandler for SongTools {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
-        // A panic in one call must not make every later call fail. Nothing here can leave a
-        // session half-mutated — tools and `prepare` are pure, and `record` swaps state in only
-        // after the write succeeded — so the guard is recovered rather than propagated.
+        // A panic in one call must not make every later call fail. Nothing in `call` can leave
+        // a session half-mutated — tools and `prepare` are pure, and `record` swaps state in
+        // only after the write succeeded — so the guard is recovered rather than propagated.
         let mut session = self.session.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let result = match request.name.as_ref() {
-            "get_song" => {
-                let song = session.get_song().song.expect("a session always has a song");
-                song_result(&song)?
-            }
-            "get_song_at" => {
-                let arguments: GetSongAtRequest = decode("get_song_at", &request)?;
-                let song = session.get_song_at(&arguments).map_err(broken)?;
-                song_result(&song.song.expect("a replay yields a song"))?
-            }
-            "get_history" => {
-                let history = session.get_history();
-                complete(history_json(&history), false)
-            }
-            "apply_patch" => {
-                // Built by hand rather than through the proto deserializer: `patch` is `bytes`,
-                // so that route wants base64, and the only way to reach it from the JSON array
-                // a model sends is to encode text we already hold.
-                //
-                // Hand-built means hand-validated. `as_bool().unwrap_or(false)` read
-                // `"dry_run": "true"` as *false* and applied for real — a preview that writes,
-                // which is the one failure §9's approve-then-apply flow cannot tolerate, and a
-                // stringly-typed boolean is exactly what a model sends. Every other tool gets
-                // this strictness from the generated deserializer; this one has to say it.
-                let arguments = arguments(&request);
-                for key in arguments.keys() {
-                    if key != "patch" && key != "dry_run" {
-                        return Err(McpError::invalid_params(
-                            format!("`apply_patch` has no argument `{key}`"),
-                            None,
-                        ));
-                    }
-                }
-                let text = match arguments.get("patch") {
-                    Some(Value::Array(_)) => {
-                        serde_json::to_string_pretty(&arguments["patch"]).expect("a Value serialises")
-                            + "\n"
-                    }
-                    Some(Value::String(text)) => text.clone(),
-                    _ => {
-                        return Err(McpError::invalid_params(
-                            "`patch` is an RFC 6902 array".to_string(),
-                            None,
-                        ))
-                    }
-                };
-                let dry_run = match arguments.get("dry_run") {
-                    None => false,
-                    Some(Value::Bool(chosen)) => *chosen,
-                    Some(other) => {
-                        return Err(McpError::invalid_params(
-                            format!("`dry_run` is a boolean, not {other}"),
-                            None,
-                        ))
-                    }
-                };
-                let call = ApplyPatchRequest { patch: text.into_bytes(), dry_run };
-                tool_result(&session.apply_patch(&call).map_err(broken)?)
-            }
-            "add_track" => {
-                let arguments: AddTrackRequest = decode("add_track", &request)?;
-                tool_result(&session.add_track(&arguments).map_err(broken)?)
-            }
-            "set_track_instrument" => {
-                let arguments: SetTrackInstrumentRequest =
-                    decode("set_track_instrument", &request)?;
-                tool_result(&session.set_track_instrument(&arguments).map_err(broken)?)
-            }
-            "add_effect" => {
-                let arguments: AddEffectRequest = decode("add_effect", &request)?;
-                tool_result(&session.add_effect(&arguments).map_err(broken)?)
-            }
-            "set_param" => {
-                let arguments: SetParamRequest = decode("set_param", &request)?;
-                tool_result(&session.set_param(&arguments).map_err(broken)?)
-            }
-            "add_clip" => {
-                let arguments: AddClipRequest = decode("add_clip", &request)?;
-                tool_result(&session.add_clip(&arguments).map_err(broken)?)
-            }
-            "set_notes" => {
-                let arguments: SetNotesRequest = decode("set_notes", &request)?;
-                tool_result(&session.set_notes(&arguments).map_err(broken)?)
-            }
-            "transpose" => {
-                let arguments: TransposeRequest = decode("transpose", &request)?;
-                tool_result(&session.transpose(&arguments).map_err(broken)?)
-            }
-            "quantize" => {
-                let arguments: QuantizeRequest = decode("quantize", &request)?;
-                tool_result(&session.quantize(&arguments).map_err(broken)?)
-            }
-            "add_automation" => {
-                let arguments: AddAutomationRequest = decode("add_automation", &request)?;
-                tool_result(&session.add_automation(&arguments).map_err(broken)?)
-            }
-            "add_asset" => {
-                // Through the generated deserializer, which is what turns the base64 a model
-                // sends into bytes. Its answer is an address, not a `ToolResult`, so it is
-                // shaped like a read's.
-                let arguments: AddAssetRequest = decode("add_asset", &request)?;
-                let response = session.add_asset(&arguments).map_err(broken)?;
-                complete(json!({"asset_hash": response.asset_hash}), false)
-            }
-            "render_export" => {
-                // Its own arm, like `add_asset`: what comes back is what the render produced,
-                // not a `ToolResult` (song_tools.proto, `RenderResponse`). An engine that
-                // would not run leaves through `broken`, outside §6's retry loop, because
-                // nothing a model says differently would start it (ADR 0006 §2).
-                let arguments: RenderExportRequest = decode("render_export", &request)?;
-                let response = session.render_export(&arguments).map_err(broken)?;
-                render_response(&response)
-            }
-            "set_tempo" => {
-                let arguments: SetTempoRequest = decode("set_tempo", &request)?;
-                tool_result(&session.set_tempo(&arguments).map_err(broken)?)
-            }
-            "add_section" => {
-                let arguments: AddSectionRequest = decode("add_section", &request)?;
-                tool_result(&session.add_section(&arguments).map_err(broken)?)
-            }
-            "move_section" => {
-                let arguments: MoveSectionRequest = decode("move_section", &request)?;
-                tool_result(&session.move_section(&arguments).map_err(broken)?)
-            }
-            "create_branch" => {
-                let arguments: CreateBranchRequest = decode("create_branch", &request)?;
-                tool_result(&session.create_branch(&arguments).map_err(broken)?)
-            }
-            "switch_branch" => {
-                let arguments: SwitchBranchRequest = decode("switch_branch", &request)?;
-                tool_result(&session.switch_branch(&arguments).map_err(broken)?)
-            }
-            "delete_branch" => {
-                let arguments: DeleteBranchRequest = decode("delete_branch", &request)?;
-                tool_result(&session.delete_branch(&arguments).map_err(broken)?)
-            }
-            "merge_branch" => {
-                let arguments: MergeBranchRequest = decode("merge_branch", &request)?;
-                tool_result(&session.merge_branch(&arguments).map_err(broken)?)
-            }
-            unknown => {
-                return Err(McpError::invalid_params(
-                    format!("no tool `{unknown}`; call tools/list"),
-                    None,
-                ))
-            }
-        };
-        Ok(CallToolResponse::Complete(result))
+        let arguments = request.arguments.clone().unwrap_or_default();
+        let answer =
+            call(&mut session, request.name.as_ref(), &arguments).map_err(unanswered)?;
+        Ok(CallToolResponse::Complete(answered(answer)))
     }
-}
-
-/// The log, in the shape it has on disk.
-///
-/// `crate::entry_to_json` already solves this: `ops` as the RFC 6902 array it is rather than
-/// the base64 the generated impl would produce, and every field including `provenance`. Hand
-/// building the object here dropped provenance, which §5 calls the audit trail — and a
-/// transport that drops a field is deciding rather than translating (ADR 0006).
-fn history_json(history: &escribass_proto::tools::HistoryResponse) -> Value {
-    let entries: Map<String, Value> = history
-        .entries
-        .iter()
-        .map(|(id, entry)| {
-            let shape = crate::entry_to_json(entry)
-                .ok()
-                .and_then(|text| serde_json::from_str(&text).ok())
-                .unwrap_or(Value::Null);
-            (id.clone(), shape)
-        })
-        .collect();
-    let refs = history.refs.as_ref();
-    json!({
-        "entries": entries,
-        "head": refs.map(|r| r.head.clone()).unwrap_or_default(),
-        "refs": refs.map(|r| r.refs.clone()).unwrap_or_default(),
-    })
 }

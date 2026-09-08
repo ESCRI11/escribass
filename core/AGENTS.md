@@ -16,7 +16,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/validate.rs` | `validate(song, manifest)` → every `Violation` (path, stable rule id, message), not just the first. §4.4 plus the rules in ADR 0002 Consequences. | done |
 | `tests/validate.rs` | One rule per test, each breaking the fixture in exactly one way. | done |
 | `tests/common/mod.rs` | What more than one suite shares: the manifest fixture, and the shell script that stands in for the engine. Not a test target — a module. | done |
-| `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json` v2 and its pins, atomic writes. Reads and writes only. | done |
+| `src/project.rs` | The `.escri` directory: `open`, `write`, `lock.json` v2 and its pins, atomic writes, and `ProjectLock` — the `O_EXCL` directory lock a process holds while the project is open, never broken automatically (ADR 0012 §3). Reads and writes only. | done |
 | `Project::create`, `Project::commit` | The mutation entry point. `commit` is `prepare` then `record`. | done |
 | `Project::prepare`, `Project::record` | The two halves: `prepare` applies, bumps, validates and re-derives the patch, touching nothing; `record` mints the id, appends, advances and writes. A dry run *is* `prepare`. | done |
 | `src/tools.rs` | The typed tools of §5, as pure functions from arguments to operations. No I/O, no validation of what §4.4 already covers. | done |
@@ -28,7 +28,9 @@ The schema itself: `/schema/AGENTS.md`.
 | `src/grpc.rs` | The gRPC surface: the generated `SongTools` trait over the same `Session`. Translation only. | done |
 | `src/bin/escribass-grpc.rs` | The server binary. `--manifest` is required. Loopback and no TLS — the service edits local files with no authentication. | done |
 | `tests/grpc.rs` | Over a real socket with the generated client: the `Ok(valid=false)` / `Status` line, and the two MCP hazards that do not arise here. | done |
-| `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the two byte-level exceptions ADR 0006 §6 names. Translation only. | done |
+| `src/call.rs` | `call(session, name, args)`: the one dispatch from a tool name and a JSON object to a `Session` method, and the two byte-level exceptions ADR 0006 §6 names. Carrier-independent — MCP and the Tauri command are both envelopes around it (ADR 0012 §1). | done |
+| `tests/call.rs` | The same script through both carriers — a real `escribass-mcp` subprocess and `call` in-process — compared answer by answer. What makes "one dispatch" a claim rather than a comment. | done |
+| `src/mcp.rs` | The MCP surface: `ServerHandler`, the advertised tool list, and the `inputSchema` rewrite the JSON-text exception needs. A JSON-RPC envelope around `call` and nothing else. | done |
 | `src/bin/escribass-mcp.rs` | The server binary. Project and `--manifest` are launch arguments; `--seed-ids` / `--fixed-clock` make a session reproducible. | done |
 | `tests/mcp.rs` | Driven as a real subprocess over real pipes — where this layer's failures actually live. | done |
 | `src/descriptor.rs` | `tool_schemas`: the protobuf descriptor turned into one JSON Schema per tool (ADR 0006 §6). Proto3 JSON's own mapping, with proto field names. `message_fields`: the same index read out as messages and fields, for the coverage guard. | done |
@@ -38,7 +40,7 @@ The schema itself: `/schema/AGENTS.md`.
 | `tests/render_coverage.rs` | The field-coverage guard (ADR 0007 §5): every `song.v1` field is carried, consumed, or ignored with a reason, and a field on no list fails. | done |
 | `src/engine.rs` | `Engine`: where the engine binary is, and the stdio protocol of ADR 0008 §1 — one plan in, one `RenderResult` out, failure is an exit code. Every failure it returns is an operator's. | done |
 | `tests/engine.rs` | `render_export` from both sides of ADR 0006 §2's line, driven against a fake engine that is a shell script. What a *real* engine does is PR 11's. | done |
-| `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Both transports dispatch here and decide nothing. | done |
+| `src/session.rs` | The tool API, implemented once: `Session`, the reads, `apply_patch`, the summary, `-0.0` normalisation on input, and `new_song`. Every carrier dispatches here and decides nothing. | done |
 | `tests/session.rs` | Dry run equals the recorded patch; refusals keep their rule; the `Ok(valid=false)` / `Err` line. | done |
 | `src/version.rs` | `bump_versions` (ADR 0005 §2) and `version_writes`, the guard behind `version_not_writable`. Operates on `Value`, like `patch.rs`. | done |
 | `tests/version.rs` | The rule, one case per test, plus three through the pipeline. | done |
@@ -71,7 +73,7 @@ cargo test -p escribass-core
 | Tool schemas are derived from `escribass_proto::DESCRIPTOR`, never hand-written. A hand-written schema drifts, and the only symptom is a model that never learns a field exists | ADR 0006 §6 |
 | A tool with no proto comment has no description. `tests/descriptor.rs` fails on one, so documenting an RPC is not optional | ADR 0006 §6 |
 | `ToolResult.patch` and `PatchEntry.ops` are `bytes`, so the generated serde impl base64s them. MCP payloads are built field by field, with the patch parsed into a JSON array | ADR 0006 §6 |
-| A song sent over MCP is rendered by `to_canonical_json`, never `serde_json::to_value` — the text block carries the model's field order | `src/canonical.rs`; ADR 0002 §4 |
+| A song sent to any carrier is rendered by `to_canonical_json`, never `serde_json::to_value` — the text half carries the model's field order | `src/call.rs`; `src/canonical.rs`; ADR 0002 §4 |
 | Nothing but the transport writes to stdout in `escribass-mcp`. One `println!` desynchronises the JSON-RPC stream; diagnostics go to stderr | §18.2 |
 | `mcp::IMPLEMENTED` advertises only tools that are wired up. Advertising one that is not spends a model's turn on a call that can only fail | ADR 0006 |
 | A tool checks only what the validator structurally cannot: that an argument names something in *this* song, and that a double is finite before it becomes a JSON number. Everything else is §4.4's | specs §5 |
