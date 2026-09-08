@@ -7,7 +7,7 @@
 | Path | Role | Written by |
 |---|---|---|
 | `schema/` | The song model: `*.proto`, codegen, generated types and per-language round-trip tests. See `schema/AGENTS.md`. | hand + `schema/codegen.sh` |
-| `proto/` | The tool API: `song_tools.proto`, the wire contract of §5. Generated Rust only. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
+| `proto/` | The tool API: `song_tools.proto`, the wire contract of §5, and `render.proto`, the engine's. Generated Rust and — since M2 PR 3 gave it a consumer — TypeScript. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
 | `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
 | `tests/` | Cross-language fixtures and the determinism suite (`escribass-tests`). See `tests/AGENTS.md`. | hand + tests |
 | `app/` | The desktop UI: the Tauri host in `app/src-tauri/` (Rust, embedding `core`) and the frontend at `app/` (React, Vite). One decoded `Song` and pure selectors over it (ADR 0012 §2). | hand |
@@ -31,6 +31,7 @@ Never at the root: source code, generated code, project files, or any representa
 | `buf` | also drives `proto/`; the workspace `buf.yaml` covers both modules | `cd schema && npm ci` | `schema/package-lock.json` |
 | Node | 25.6.1 (`protoc-gen-es` needs ≥ 22) | — | `schema.typescript.node` |
 | `buf`, `protoc-gen-es`, `tsx`, `typescript` | see lock | `cd schema && npm ci` | `schema/package-lock.json` |
+| `@bufbuild/protobuf` for `proto/gen/ts` | 2.14.1, the version `schema` already pins | `npm --prefix proto ci` | `proto/package-lock.json` |
 | Python, `uv`, `betterproto2-compiler` | 3.12 | `cd schema && uv sync` | `schema/uv.lock` |
 
 `make` lists the shortcuts for all of this — running the app, the Vite loop, a scratch
@@ -44,6 +45,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 ./proto/codegen.sh --check
 cargo test
 cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
+npm --prefix proto ci && cd schema && npx tsc --noEmit --project ../proto
 cd schema && uv run python -m unittest discover -s tests
 ```
 

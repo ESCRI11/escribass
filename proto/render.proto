@@ -26,6 +26,9 @@
 // The plan is derived, never persisted, never edited, never read back. It has the standing
 // of a WAV, not of song.json, so it is not a second representation of song state
 // (CLAUDE.md #1, ADR 0007 §5).
+//
+// The preview messages at the bottom carry that same plan and add no artefact beside it
+// (ADR 0013 §2), so the two rules above decide those as well and are not restated there.
 
 syntax = "proto3";
 
@@ -39,7 +42,8 @@ import "song.proto";
 
 // One offline render. Exactly one of these arrives on the engine's stdin, read to
 // end-of-stream, and exactly one RenderResult leaves on stdout; the process then exits
-// (ADR 0008 §1). At M2 the same message is the argument of Render.Render.
+// (ADR 0008 §1). At M2 the same message is the argument of Render.Render — and, inside a
+// PreviewPlay, of a preview, which is this played from a tick rather than written to a file.
 message RenderPlan {
   // Every track that sounds, in mixer order. Tracks that solo and mute silence are already
   // gone, and every one of these outputs to `master`: sends, sidechains and buses are M2's,
@@ -83,6 +87,26 @@ message PlanTrack {
   // In timeline order. Loops are already expanded: a looping clip arrives as its unrolled
   // content, and no clip here carries a loop length.
   repeated PlanClip clips = 4;
+
+  // Automation of the fader and the pan the `mix` above holds still. A lane's `param` is
+  // `gain_db` or `pan` — the two names a ParamRef may carry when its device_id resolves to a
+  // track, and the only two, because a double automating a bool would need a threshold rule
+  // that is ours and pinned (ADR 0015 §1).
+  //
+  // Its points are in the **model's** units: decibels, unbounded, and -1..1. That is the one
+  // place the plan's parameter values are not the normalised 0..1 a plugin exposes, and the
+  // asymmetry is the honest one — there is no plugin behind a Mix field to normalise against,
+  // and inventing a normalisation means choosing a maximum gain the model does not have
+  // (ADR 0015 §2, amending ADR 0010 §4).
+  //
+  // Nested here rather than naming the track, for the reason PlanInstrument.lanes is nested:
+  // a name in the plan is an id crossing the boundary, which is what rule 1 keeps out.
+  //
+  // ponytail: always empty until M2 PR 6. `compile` cannot produce one yet, because the
+  // validator still refuses a ParamRef whose device_id names a track — so the field is here
+  // to be guarded by buf breaking once, with Preview, rather than to be filled (docs/plan.md,
+  // M2 trap 12). The upgrade path is PR 6: one arm in validate.rs, one in compile.
+  repeated PlanLane mix_lanes = 5;
 }
 
 // An instrument with the automation that targets it. Lanes nest under their device rather
@@ -112,9 +136,12 @@ message PlanEffect {
   repeated PlanLane lanes = 2;
 }
 
-// One automated parameter of the enclosing device.
+// One automated parameter of the enclosing device — or, under PlanTrack.mix_lanes, of the
+// track itself.
 message PlanLane {
-  // ParamRef.param, the identifier the plugin itself declares (ADR 0010 §4).
+  // ParamRef.param: the identifier the plugin itself declares (ADR 0010 §4), or `gain_db` or
+  // `pan` where the lane is a mix lane (ADR 0015 §1). Which of the two a point's value means
+  // follows from where the lane is nested, never from a field naming it.
   string param = 1;
 
   // In tick order. The curve on each point is one of the two shapes ADR 0002 §8 defines a
@@ -178,8 +205,86 @@ message RenderResult {
 }
 
 // ---------------------------------------------------------------------------
-// The service (ADR 0008 §1)
+// Preview (ADR 0013 §2)
 // ---------------------------------------------------------------------------
+
+// A preview is not a second artefact. It is the RenderPlan above, played from a tick instead
+// of written to a file — so everything the two rules at the top of this file decided about a
+// plan is already decided for a preview, and none of it is decided twice (ADR 0013 §2).
+
+// The plan to play, and where the transport starts in it.
+//
+// Also how a plan is *replaced*: ADR 0013 §2 replaces, never diffs, so a note drag recompiles
+// the whole plan and sends it again with the tick playback has reached. A plan diff would be a
+// second RFC 6902 for a document that is not the model, applied in C++ where the validator
+// does not run — which is the shape ADR 0007 §5's coverage test exists to keep out.
+message PreviewPlay {
+  RenderPlan plan = 1;
+  int32 start_tick = 2;
+}
+
+// Move the transport, leaving the plan where it is.
+message PreviewSeek {
+  int32 tick = 1;
+}
+
+// The loop range, in the same model ticks the plan is in. An empty range — `end_tick` at or
+// before `start_tick` — clears the loop, so there is neither a second command nor an
+// `optional` to carry the absence of one.
+message PreviewLoop {
+  int32 start_tick = 1;
+  int32 end_tick = 2;
+}
+
+// Stop the transport without ending the session: the plan stays loaded and its plugins stay
+// instantiated, which is the only reason a preview process is live at all (ADR 0013 §3).
+// Ending the preview is closing the stream, which the operating system does for free when
+// `app` dies.
+//
+// Empty, and its own message rather than google.protobuf.Empty, because an arm of a oneof
+// that may need a field later cannot grow one if it is the well-known empty.
+message PreviewStop {}
+
+// One command from `app` to a live engine.
+//
+// The stream is the session. Four unary calls would each need to say which preview they meant,
+// and inventing that handle is the surface ADR 0006 §5 declined to invent for projects
+// (ADR 0013 §2).
+message PreviewCommand {
+  oneof command {
+    PreviewPlay play = 1;
+    PreviewSeek seek = 2;
+    PreviewLoop loop = 3;
+    PreviewStop stop = 4;
+  }
+}
+
+enum PreviewState {
+  PREVIEW_STATE_UNSPECIFIED = 0;
+  PREVIEW_STATE_PLAYING = 1;
+  PREVIEW_STATE_STOPPED = 2;
+}
+
+// Where the transport is and what it is doing.
+//
+// There is no error arm, for the reason RenderResult carries no errors: by the time a plan
+// reaches the engine every caller-fixable failure has been refused upstream, and what is left
+// ends the stream with a gRPC status rather than travelling as a value someone may forget to
+// read (ADR 0008 §1).
+message PreviewEvent {
+  int32 tick = 1;
+  PreviewState state = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The services (ADR 0008 §1, ADR 0013 §3)
+// ---------------------------------------------------------------------------
+//
+// Two services, not one with two RPCs, because ADR 0013 §3 makes the engine's mode *which
+// service the process serves*. A process spawned to export registers Render and nothing else,
+// so a Preview call on it is refused by gRPC rather than by a check someone remembered to
+// write — which is how ADR 0008 §2's guarantee stays enforced rather than maintained by
+// discipline in C++: an export never shares a plugin instance with something played before it.
 
 // Defined in M1 so buf breaking guards the shape M2 implements; implemented by nobody in
 // M1, where the engine is a fresh subprocess per render speaking the same two messages over
@@ -187,4 +292,14 @@ message RenderResult {
 service Render {
   // One offline render of one plan to the file the plan names.
   rpc Render(RenderPlan) returns (RenderResult);
+}
+
+// Defined in M2 PR 3 and implemented in PR 10, for the reason Render was defined a milestone
+// before anything served it: buf breaking runs on pull requests only, so a service that grows
+// across two of them is compared against a main that has already moved (docs/plan.md, M2
+// trap 12).
+service Preview {
+  // One preview session, for as long as the stream is open. Closing it stops playback, and
+  // `app` dying closes it for free (ADR 0013 §2).
+  rpc Preview(stream PreviewCommand) returns (stream PreviewEvent);
 }

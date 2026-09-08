@@ -130,11 +130,12 @@ check: check-core check-app
 
 # `cargo test` and not `--workspace`: the workspace's default members are everything but the
 # host (see `Cargo.toml`), which is what makes this half portable.
-check-core: schema/node_modules
+check-core: schema/node_modules proto/node_modules
 	./schema/codegen.sh --check
 	./proto/codegen.sh --check
 	cargo test
 	cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
+	cd schema && npx tsc --noEmit --project ../proto
 	cd schema && uv run python -m unittest discover -s tests
 
 # `--features custom-protocol` for the reason `run` uses it: that is the binary that ships,
@@ -145,6 +146,7 @@ check-app: app/dist
 
 deps:
 	npm --prefix schema ci
+	npm --prefix proto ci
 	npm --prefix app ci
 
 # Directories as targets, so an install happens once and never again unless something is
@@ -158,6 +160,11 @@ schema/node_modules:
 
 app/node_modules: schema/node_modules
 	npm --prefix app ci
+
+# `proto`'s two runtime packages, for the `tsc` above. It has no toolchain of its own — the
+# `protoc-gen-es` that writes `proto/gen/ts` and the `tsc` that checks it are both schema's.
+proto/node_modules: schema/node_modules
+	npm --prefix proto ci
 
 app/dist: app/node_modules $(wildcard app/src/*) app/index.html
 	npm --prefix app run build

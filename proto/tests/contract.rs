@@ -11,6 +11,9 @@ use escribass_proto::DESCRIPTOR;
 use escribass_schema::song::{Mix, Note, NoteClip, Song};
 use prost::Message;
 
+/// The plan's own package, fully qualified as the descriptor names it.
+const RENDER: &str = ".escribass.render.v1.";
+
 /// The canonical RFC 6902 text of one operation, as `ops_text` in `core` produces it.
 const OPS: &str = "[\n  {\n    \"op\": \"replace\",\n    \"path\": \"/tracks/x/mix/gain_db\",\n    \"value\": -3.0\n  }\n]\n";
 
@@ -143,6 +146,13 @@ fn the_plan_carries_the_model_types_themselves() {
 ///
 /// Walked from the descriptor rather than the generated code, because a `map<...>` is a
 /// synthetic nested message with `map_entry` set, and that is the one place it cannot hide.
+///
+/// Seeded from what the engine is *handed* — every RPC's argument — rather than from
+/// `RenderPlan` by name. Revised 2026-09-08 in M2 PR 3: `PreviewCommand` carries a plan
+/// (ADR 0013 §2) and is not called `Plan*`, and the coverage assertion at the end of this test
+/// only required `Plan*` messages to have been reached, so a whole preview command tree would
+/// have been added outside the walk without anything saying so. Reading the seeds and the
+/// exemptions off the services means a later RPC joins the walk by existing.
 #[test]
 fn nothing_reachable_from_the_plan_is_a_map() {
     let set = FileDescriptorSet::decode(DESCRIPTOR).expect("the descriptor decodes");
@@ -153,7 +163,12 @@ fn nothing_reachable_from_the_plan_is_a_map() {
         }
     }
 
-    let mut pending = vec![".escribass.render.v1.RenderPlan".to_string()];
+    let methods = || set.file.iter().flat_map(|f| &f.service).flat_map(|s| &s.method);
+    let mut pending: Vec<String> = methods()
+        .map(|m| m.input_type().to_string())
+        .filter(|name| name.starts_with(RENDER))
+        .collect();
+    assert_eq!(pending.len(), 2, "the engine serves Render and Preview (ADR 0013 §3)");
     let mut visited = std::collections::BTreeSet::new();
     while let Some(name) = pending.pop() {
         if !visited.insert(name.clone()) {
@@ -175,18 +190,26 @@ fn nothing_reachable_from_the_plan_is_a_map() {
                 // scalars rather than the entity collection ADR 0001 §3's rule is about.
                 // Descending would assert the opposite of rule 1 — that a leaf is reshaped on
                 // the way in — which is the mirrored shape ADR 0006 §4 forbids.
-                if field.type_name().starts_with(".escribass.render.v1.") {
+                if field.type_name().starts_with(RENDER) {
                     pending.push(field.type_name().to_string());
                 }
             }
         }
     }
-    // Every plan-local message, so a new one cannot be added outside the walk.
-    for name in messages.keys().filter(|n| n.starts_with(".escribass.render.v1.")) {
-        let plan_local = name.strip_prefix(".escribass.render.v1.").expect("the prefix matched");
-        if plan_local.starts_with("Plan") {
-            assert!(visited.contains(name), "{name} is plan-local and the walk never reached it");
+
+    // Every message of this package, so a new one cannot be added outside the walk. The
+    // exceptions are what travels the other way — rule 2 is about a plan, and `RenderResult`
+    // carries a `map<string, string>` of build commits on purpose (ADR 0008 §5) — and the
+    // synthetic entry type that map generates.
+    let returned: std::collections::BTreeSet<&str> =
+        methods().map(|m| m.output_type()).filter(|n| n.starts_with(RENDER)).collect();
+    for (name, message) in messages.iter().filter(|(n, _)| n.starts_with(RENDER)) {
+        if returned.contains(name.as_str())
+            || message.options.as_ref().is_some_and(|o| o.map_entry())
+        {
+            continue;
         }
+        assert!(visited.contains(name), "{name} is plan-local and the walk never reached it");
     }
 }
 
