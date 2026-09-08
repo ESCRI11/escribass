@@ -42,7 +42,8 @@ stale.
 | — | The M2 plan: twelve questions, none answered | done | PR #54 |
 | M2.1 | The twelve answered: ADRs 0012–0016, the §15 rows, §17's gRPC and frontend pins | done | PR #55 |
 | M2.2 | `app/`: the Tauri host, the frontend, the shared `call` dispatch, `.escri/lock` | done | PR #56 |
-| M2.3 | `render.proto`'s whole M2 shape — `Preview` and `mix_lanes` — and TypeScript for `proto/` | done | this PR |
+| M2.3 | `render.proto`'s whole M2 shape — `Preview` and `mix_lanes` — and TypeScript for `proto/` | done | PR #57 |
+| M2.4 | The piano roll, the arrangement completed, and ADR 0012 §5's projection golden | done | this PR |
 
 ## M0.2 — `core/`
 

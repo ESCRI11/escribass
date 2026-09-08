@@ -140,8 +140,12 @@ check-core: schema/node_modules proto/node_modules
 
 # `--features custom-protocol` for the reason `run` uses it: that is the binary that ships,
 # and it is the one that fails if `app/dist` is not there.
+# The projection golden is here rather than in `check-core` because it is `app/`'s test, and
+# it is the one thing in this half that needs **no** WebKitGTK: `npm --prefix app test` runs
+# it on any machine with node, which is ADR 0012 §5's whole point about not needing a browser.
 check-app: app/dist
 	cd app && npx tsc --noEmit
+	npm --prefix app test
 	cargo test -p escribass-app --features custom-protocol
 
 deps:

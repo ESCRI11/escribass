@@ -143,10 +143,44 @@ name `core`, compilers and `engine`. Answering "nothing changes" would be a sent
 has to write into a `[MUST]` section, and it would make decision 2's failure mode permanently
 invisible.
 
-So: from a fixed `Song` — `tests/determinism/every_tool/expected/song.json`, which every tool has
-already touched and which is already committed — each view's projection function returns a
-serialisable description of what it would draw, and that description is goldened. It runs under
-`node:test` with `tsx`, both already pinned; it needs no browser, no display and no driver.
+So: from a fixed `Song` — already committed, and built through the tool API, because there is no
+other way to write a song in this repository (CLAUDE.md #2) — each view's projection function
+returns a serialisable description of what it would draw, and that description is goldened. It
+runs under `node:test` with `tsx`, both already pinned; it needs no browser, no display and no
+driver.
+
+**Amended 2026-09-08 in M2 PR 4, when the first views existed to point it at.** This named
+`tests/determinism/every_tool/expected/song.json` — "which every tool has already touched" — and
+that is the wrong half of what a *view* golden needs. Every tool having touched a document says
+nothing about whether the document has anything for a view to get wrong, and `every_tool`'s has
+almost nothing: one clip, two notes of equal length on one track, and its tempo change at tick
+3840, which is the last tick of the song. A projection that ignored the tempo map, the loop
+field, the audio content case, the second track and every ordering question would golden
+identically to one that did not.
+
+The fixture is **`tests/determinism/render/expected/song.json`**, which the same suite builds
+the same way from `determinism/render/script.json`. Five tracks with indices to order by, four
+clips across three of them — one audio, two looping — six notes at four pitches and four
+lengths, a section that ends past the last clip, and a tempo change at tick 3840 with three and
+a half thousand ticks of music after it. It is the document `compile` is already goldened
+against, so a view and a `RenderPlan` are read from one song.
+
+Two things the golden's first draft could not catch on its own, both found by breaking it on
+purpose rather than by reasoning about it, and both now covered:
+
+- **Order.** A protobuf map decodes to a JavaScript object and `Object.values` returns insertion
+  order, which for a song read from disk is the file's key order — lexical by ULID (ADR 0002
+  §4), and a ULID sorts by when it was minted. In any fixture whose entities were created in the
+  order they occur, "sorted by the model" and "whatever the map iterated" are the same list.
+  Deleting the piano roll's `sort` left the golden green. The suite therefore also projects the
+  same document with every object's keys reversed and requires the same answer, which is
+  ADR 0001 §3's rule stated as a test rather than as a comment.
+- **A case no fixture contains.** Nothing in the repository has a second time-signature event and
+  no tool mints one, so the piecewise bar grid — the thing a single `ticksPerBar` gets silently
+  wrong — has no golden input. Those conversions are asserted directly against constructed
+  values, which is the distinction `tests/AGENTS.md` already draws for the schema fixture: a
+  constructed value exercising a pure function is not a document under test, and CLAUDE.md #2 is
+  about mutations.
 
 It proves exactly one thing and it is the thing that matters: **every view is a pure function of
 the model.** A store that has drifted from the document shows up as a golden diff rather than as
