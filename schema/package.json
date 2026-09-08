@@ -7,7 +7,8 @@
   "type": "module",
   "exports": {
     "./song": "./gen/ts/song_pb.ts",
-    "./history": "./gen/ts/history_pb.ts"
+    "./history": "./gen/ts/history_pb.ts",
+    "./*_pb.js": "./gen/ts/*_pb.ts"
   },
   "scripts": {
     "codegen": "./codegen.sh",

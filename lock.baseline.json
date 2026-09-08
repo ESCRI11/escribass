@@ -259,6 +259,14 @@
         "version": "0.5.0",
         "note": "codegen plugin, cargo install; requires protoc-gen-prost ^0.5.0, which is the pinned one. Rejects the btree_map option, which is prost's business anyway. The CI cache key in .github/workflows/checks.yml names the plugin set and changed with it"
       }
+    },
+    "typescript": {
+      "_note": "The service's TypeScript, generated since 2026-09-08 in M2 PR 3 — the milestone ADR 0006 §7 deferred it to, once `app` existed to consume it. Nothing new is pinned: protoc-gen-es writes it and @bufbuild/protobuf is what it imports, and both are already pinned under `schema.typescript` at the versions below. `proto` is a new consumer, not a new dependency — the same relationship `app._reused` records — so this needs no sign-off under CLAUDE.md #4. It is written down anyway because proto/AGENTS.md's \"adding a language target\" checklist asks for the version here, and because a reader of §17 should be able to see that the tool API has a second language target without reading a buf.gen.yaml. The tree's integrity hashes are in proto/package-lock.json: two runtime packages and a `file:../schema` link, which is all the generated code imports. `tsc` is not a dependency of `proto` at all — schema's pinned one is pointed at it.",
+      "_reused": {
+        "protoc_gen_es": "2.14.1",
+        "bufbuild_protobuf": "2.14.1",
+        "typescript": "5.9.3"
+      }
     }
   },
   "ci": {

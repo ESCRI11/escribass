@@ -367,7 +367,13 @@ impl Compiler<'_> {
         let mix = track.mix.clone().map(|m| Mix { mute: false, solo: false, ..m });
 
         let clips = clips.into_iter().flat_map(|c| self.clip(c)).collect();
-        PlanTrack { instrument, effects, mix, clips }
+
+        // ponytail: empty until M2 PR 6. A mix lane is an `Automation` whose `ParamRef` names
+        // a track, and `validate` still refuses one with `device_unknown` — so nothing can
+        // reach here to be carried, and the field crosses as the empty list the plan goldens
+        // show. PR 6 resolves the track arm and fills it, sorted, with the same tick-ordered
+        // points a device lane gets (ADR 0015 §1, §2).
+        PlanTrack { instrument, effects, mix, clips, mix_lanes: Vec::new() }
     }
 
     /// One plan clip per loop iteration. A looping clip repeats its first `loop_length_ticks`

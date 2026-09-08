@@ -6,7 +6,8 @@
 
 /// One offline render. Exactly one of these arrives on the engine's stdin, read to
 /// end-of-stream, and exactly one RenderResult leaves on stdout; the process then exits
-/// (ADR 0008 §1). At M2 the same message is the argument of Render.Render.
+/// (ADR 0008 §1). At M2 the same message is the argument of Render.Render — and, inside a
+/// PreviewPlay, of a preview, which is this played from a tick rather than written to a file.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RenderPlan {
     /// Every track that sounds, in mixer order. Tracks that solo and mute silence are already
@@ -53,6 +54,26 @@ pub struct PlanTrack {
     /// content, and no clip here carries a loop length.
     #[prost(message, repeated, tag="4")]
     pub clips: ::prost::alloc::vec::Vec<PlanClip>,
+    /// Automation of the fader and the pan the `mix` above holds still. A lane's `param` is
+    /// `gain_db` or `pan` — the two names a ParamRef may carry when its device_id resolves to a
+    /// track, and the only two, because a double automating a bool would need a threshold rule
+    /// that is ours and pinned (ADR 0015 §1).
+    ///
+    /// Its points are in the **model's** units: decibels, unbounded, and -1..1. That is the one
+    /// place the plan's parameter values are not the normalised 0..1 a plugin exposes, and the
+    /// asymmetry is the honest one — there is no plugin behind a Mix field to normalise against,
+    /// and inventing a normalisation means choosing a maximum gain the model does not have
+    /// (ADR 0015 §2, amending ADR 0010 §4).
+    ///
+    /// Nested here rather than naming the track, for the reason PlanInstrument.lanes is nested:
+    /// a name in the plan is an id crossing the boundary, which is what rule 1 keeps out.
+    ///
+    /// ponytail: always empty until M2 PR 6. `compile` cannot produce one yet, because the
+    /// validator still refuses a ParamRef whose device_id names a track — so the field is here
+    /// to be guarded by buf breaking once, with Preview, rather than to be filled (docs/plan.md,
+    /// M2 trap 12). The upgrade path is PR 6: one arm in validate.rs, one in compile.
+    #[prost(message, repeated, tag="5")]
+    pub mix_lanes: ::prost::alloc::vec::Vec<PlanLane>,
 }
 /// An instrument with the automation that targets it. Lanes nest under their device rather
 /// than naming it: ParamRef.device_id is an id naming another entity, which is exactly what
@@ -85,10 +106,13 @@ pub struct PlanEffect {
     #[prost(message, repeated, tag="2")]
     pub lanes: ::prost::alloc::vec::Vec<PlanLane>,
 }
-/// One automated parameter of the enclosing device.
+/// One automated parameter of the enclosing device — or, under PlanTrack.mix_lanes, of the
+/// track itself.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PlanLane {
-    /// ParamRef.param, the identifier the plugin itself declares (ADR 0010 §4).
+    /// ParamRef.param: the identifier the plugin itself declares (ADR 0010 §4), or `gain_db` or
+    /// `pan` where the lane is a mix lane (ADR 0015 §1). Which of the two a point's value means
+    /// follows from where the lane is nested, never from a field naming it.
     #[prost(string, tag="1")]
     pub param: ::prost::alloc::string::String,
     /// In tick order. The curve on each point is one of the two shapes ADR 0002 §8 defines a
@@ -162,6 +186,119 @@ pub struct RenderResult {
     /// time. The render suite compares these before it compares a sample (ADR 0008 §5).
     #[prost(btree_map="string, string", tag="2")]
     pub commits: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+}
+// ---------------------------------------------------------------------------
+// Preview (ADR 0013 §2)
+// ---------------------------------------------------------------------------
+
+// A preview is not a second artefact. It is the RenderPlan above, played from a tick instead
+// of written to a file — so everything the two rules at the top of this file decided about a
+// plan is already decided for a preview, and none of it is decided twice (ADR 0013 §2).
+
+/// The plan to play, and where the transport starts in it.
+///
+/// Also how a plan is *replaced*: ADR 0013 §2 replaces, never diffs, so a note drag recompiles
+/// the whole plan and sends it again with the tick playback has reached. A plan diff would be a
+/// second RFC 6902 for a document that is not the model, applied in C++ where the validator
+/// does not run — which is the shape ADR 0007 §5's coverage test exists to keep out.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreviewPlay {
+    #[prost(message, optional, tag="1")]
+    pub plan: ::core::option::Option<RenderPlan>,
+    #[prost(int32, tag="2")]
+    pub start_tick: i32,
+}
+/// Move the transport, leaving the plan where it is.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreviewSeek {
+    #[prost(int32, tag="1")]
+    pub tick: i32,
+}
+/// The loop range, in the same model ticks the plan is in. An empty range — `end_tick` at or
+/// before `start_tick` — clears the loop, so there is neither a second command nor an
+/// `optional` to carry the absence of one.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreviewLoop {
+    #[prost(int32, tag="1")]
+    pub start_tick: i32,
+    #[prost(int32, tag="2")]
+    pub end_tick: i32,
+}
+/// Stop the transport without ending the session: the plan stays loaded and its plugins stay
+/// instantiated, which is the only reason a preview process is live at all (ADR 0013 §3).
+/// Ending the preview is closing the stream, which the operating system does for free when
+/// `app` dies.
+///
+/// Empty, and its own message rather than google.protobuf.Empty, because an arm of a oneof
+/// that may need a field later cannot grow one if it is the well-known empty.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreviewStop {
+}
+/// One command from `app` to a live engine.
+///
+/// The stream is the session. Four unary calls would each need to say which preview they meant,
+/// and inventing that handle is the surface ADR 0006 §5 declined to invent for projects
+/// (ADR 0013 §2).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreviewCommand {
+    #[prost(oneof="preview_command::Command", tags="1, 2, 3, 4")]
+    pub command: ::core::option::Option<preview_command::Command>,
+}
+/// Nested message and enum types in `PreviewCommand`.
+pub mod preview_command {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Command {
+        #[prost(message, tag="1")]
+        Play(super::PreviewPlay),
+        #[prost(message, tag="2")]
+        Seek(super::PreviewSeek),
+        #[prost(message, tag="3")]
+        Loop(super::PreviewLoop),
+        #[prost(message, tag="4")]
+        Stop(super::PreviewStop),
+    }
+}
+/// Where the transport is and what it is doing.
+///
+/// There is no error arm, for the reason RenderResult carries no errors: by the time a plan
+/// reaches the engine every caller-fixable failure has been refused upstream, and what is left
+/// ends the stream with a gRPC status rather than travelling as a value someone may forget to
+/// read (ADR 0008 §1).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreviewEvent {
+    #[prost(int32, tag="1")]
+    pub tick: i32,
+    #[prost(enumeration="PreviewState", tag="2")]
+    pub state: i32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PreviewState {
+    Unspecified = 0,
+    Playing = 1,
+    Stopped = 2,
+}
+impl PreviewState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PREVIEW_STATE_UNSPECIFIED",
+            Self::Playing => "PREVIEW_STATE_PLAYING",
+            Self::Stopped => "PREVIEW_STATE_STOPPED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PREVIEW_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PREVIEW_STATE_PLAYING" => Some(Self::Playing),
+            "PREVIEW_STATE_STOPPED" => Some(Self::Stopped),
+            _ => None,
+        }
+    }
 }
 include!("escribass.render.v1.serde.rs");
 include!("escribass.render.v1.tonic.rs");

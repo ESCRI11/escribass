@@ -5,13 +5,13 @@
 #   ./codegen.sh --check    regenerate, then fail if anything changed (CI gate)
 #
 # Separate from schema/codegen.sh because the two modules generate different things: the
-# model goes to Rust, TypeScript and Python (§14.1), the service to Rust only until it has a
-# consumer in either other language (ADR 0006 §7).
+# model goes to Rust, TypeScript and Python (§14.1); the service goes to Rust, and — since M2
+# PR 2 gave it a consumer — TypeScript. Python still waits for M3's orchestrator (ADR 0006 §7).
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.cargo/bin:$PWD/../schema/node_modules/.bin:$PATH"
 
-for bin in buf protoc-gen-prost protoc-gen-prost-serde protoc-gen-tonic; do
+for bin in buf protoc-gen-prost protoc-gen-prost-serde protoc-gen-tonic protoc-gen-es; do
   command -v "$bin" >/dev/null || { echo "missing codegen plugin: $bin" >&2; exit 1; }
 done
 

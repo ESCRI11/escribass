@@ -24,7 +24,8 @@
         "mute": false,
         "solo": false
       },
-      "clips": []
+      "clips": [],
+      "mix_lanes": []
     }
   ],
   "master": {
@@ -35,7 +36,8 @@
       "mute": false,
       "solo": false
     },
-    "clips": []
+    "clips": [],
+    "mix_lanes": []
   },
   "tempo": [
     {

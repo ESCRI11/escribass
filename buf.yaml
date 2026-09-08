@@ -4,7 +4,16 @@
 version: v2
 modules:
   - path: schema
+    excludes:
+      # `npm ci` puts a `.proto` under here the moment a dependency ships one, and a module
+      # walks everything below its path. Excluded in both modules for the same reason, and
+      # named rather than left to luck: in `proto` it is not hypothetical — `@escribass/schema`
+      # is a `file:` link, so `proto/node_modules` contains `song.proto` itself, and buf reads
+      # it as a second declaration of every `escribass.song.v1` message.
+      - schema/node_modules
   - path: proto
+    excludes:
+      - proto/node_modules
     lint:
       use:
         - STANDARD

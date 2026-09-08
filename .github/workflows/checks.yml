@@ -121,11 +121,17 @@ jobs:
           command -v protoc-gen-prost-serde >/dev/null || cargo install protoc-gen-prost-serde@0.4.0 --locked
           command -v protoc-gen-tonic       >/dev/null || cargo install protoc-gen-tonic@0.5.0 --locked
 
+      # `proto` is the third npm package in the tree, since M2 PR 3 gave the service its
+      # TypeScript (ADR 0006 §7). It has no toolchain of its own — schema's pinned `tsc` and
+      # `protoc-gen-es` are the ones that run — only the two runtime packages its generated
+      # code imports, installed here because a `file:` link resolves its own imports from its
+      # own directory and never from the caller's.
       - name: Install JavaScript and Python dependencies
         if: env.SKIP != '1'
         working-directory: schema
         run: |
           npm ci
+          npm --prefix ../proto ci
           uv sync --locked
 
       # 1/4 — generated code matches the protos. Two modules, two scripts: the model
@@ -141,13 +147,19 @@ jobs:
         if: env.SKIP != '1'
         run: cargo test
 
-      # 3/4
+      # 3/4 — the model's round trip, and that the service's generated TypeScript compiles
+      # against it. The second is not a formality: `proto/gen/ts` reaches the model through
+      # `@escribass/schema/song_pb.js`, an exports subpath that exists for the rewrite in
+      # `proto/buf.gen.yaml` and for nothing else, and a resolution that quietly fails degrades
+      # every model type to `unknown` rather than erroring — which is how the same failure was
+      # found in the `app` job below.
       - name: TypeScript
         if: env.SKIP != '1'
         working-directory: schema
         run: |
           npx tsc --noEmit
           node --import tsx --test tests/*.test.ts
+          npx tsc --noEmit --project ../proto
 
       # 4/4
       - name: Python

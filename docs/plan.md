@@ -37,11 +37,12 @@ stale.
 | M1.11 | Four golden renders, and the two defects blessing them found | done | PR #50 |
 | M1.12 | The bar-17 demo as a test, and §18.2's claim narrowed to what it can carry | done | PR #51 |
 | M1.13 | A four-lane review of M1: seven blockers, eleven majors | done | PR #52 |
-| M1.14 | §11 walked line by line against the code; docs closed; `CLAUDE.md` to M2 | done | this PR |
+| M1.14 | §11 walked line by line against the code; docs closed; `CLAUDE.md` to M2 | done | PR #53 |
 | — | **M1 complete.** Render engine, four goldens, `lock.json` v2 | done | — |
 | — | The M2 plan: twelve questions, none answered | done | PR #54 |
 | M2.1 | The twelve answered: ADRs 0012–0016, the §15 rows, §17's gRPC and frontend pins | done | PR #55 |
-| M2.2 | `app/`: the Tauri host, the frontend, the shared `call` dispatch, `.escri/lock` | done | this PR |
+| M2.2 | `app/`: the Tauri host, the frontend, the shared `call` dispatch, `.escri/lock` | done | PR #56 |
+| M2.3 | `render.proto`'s whole M2 shape — `Preview` and `mix_lanes` — and TypeScript for `proto/` | done | this PR |
 
 ## M0.2 — `core/`
 

@@ -103,6 +103,37 @@ patch format for a message ADR 0007 §5 already proved is derived. A plan diff w
 RFC 6902 for a document that is not the model, applied in C++, where the validator does not
 run; the reason is ADR 0007 §1's reason.
 
+**Amended 2026-09-08, when PR 3 had to write the messages.** The decision above named
+`PreviewCommand` and `PreviewEvent`, said what the first command carries and what the later ones
+do, and left the shape of both — and the service they hang off — unwritten. `render.proto`
+cannot be written without either, and `buf breaking` guards it from the moment it lands, so both
+are settled here rather than discovered in PR 10.
+
+**Four message arms of one `oneof`:** `PreviewPlay { RenderPlan plan; int32 start_tick; }`,
+`PreviewSeek { int32 tick; }`, `PreviewLoop { int32 start_tick; int32 end_tick; }`, and an empty
+`PreviewStop {}`. `PreviewPlay` is *also* the replacement plan — "carries a plan and a start
+tick" and "carries a replacement plan" are one message, because replacing a plan is starting
+again from wherever the transport has reached, and a second arm differing only in name is a
+second thing to keep in step. An empty loop range — `end_tick` at or before `start_tick` —
+clears the loop, so nothing `optional` carries the absence of one. `PreviewStop` is its own empty
+message rather than `google.protobuf.Empty`, because an arm that may need a field later cannot
+grow one if it is the well-known empty. Message arms rather than bare scalars is ADR 0002 §3's
+rule for the model, kept here for the reason it was made there.
+
+`PreviewEvent { int32 tick; PreviewState state; }`, with `PreviewState` one of `PLAYING` and
+`STOPPED`. **There is no error arm.** A failure ends the stream with a gRPC status, exactly as a
+failed render is an exit code and never a `RenderResult` carrying errors (ADR 0008 §1) — a
+transport already has a channel for "this did not work", and a second one is a value someone
+forgets to read.
+
+**And `Preview` is its own service, not a second RPC on `Render`.** Decision 3 below says the
+mode is *which service the process serves*, and that sentence has a meaning only if there are
+two. It is also the only version that leaves decision 3's guarantee where decision 3 puts it: a
+process spawned to export registers `Render` alone, so a `Preview` call on it is refused by gRPC
+rather than by a check someone wrote in C++ — the difference between ADR 0008 §2 being enforced
+and being maintained by discipline. `lock.baseline.json`'s gRPC entry has said "the engine's
+Render and Preview services", in the plural, since PR 1.
+
 ### 3. Two lifetimes in one binary, one transport: a live process for preview, a fresh one per export
 
 The engine is launched with a socket path on argv and `app` dials it. In **preview** mode the

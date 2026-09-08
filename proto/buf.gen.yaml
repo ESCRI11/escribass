@@ -40,3 +40,21 @@ plugins:
       - extern_path=.google.protobuf=::pbjson_types
       - extern_path=.escribass.song.v1=::escribass_schema::song
       - extern_path=.escribass.history.v1=::escribass_schema::history
+  # TypeScript, for `app` (ADR 0006 §7, which deferred it until a consumer existed; M2 PR 2 is
+  # the consumer). Messages, enums and service *descriptors* — protoc-gen-es generates no
+  # client, and `app` needs none: it reaches the tool API through one Tauri command into the
+  # `core` linked beside it, not over a port (ADR 0012 §1). Python still waits for M3.
+  - local: protoc-gen-es
+    out: gen/ts
+    opt:
+      - target=ts
+      # NodeNext resolution requires explicit extensions on relative imports, as in schema/.
+      - import_extension=js
+      # The TypeScript spelling of the four `extern_path` lines above, and it exists for the
+      # same reason. Without it the generated code imports `./song_pb.js` and
+      # `./history_pb.js` — files this module does not generate and must not, because
+      # generating them would put a second `Song` in the tree (CLAUDE.md #1). The rewrite
+      # sends them to the package that does generate them; the `_pb.js` names are what
+      # `@escribass/schema`'s exports map answers to for exactly this.
+      - rewrite_imports=./song_pb.js:@escribass/schema
+      - rewrite_imports=./history_pb.js:@escribass/schema
