@@ -822,6 +822,135 @@
     "valid": true
   },
   {
+    "entry_id": "01M1FPMP00000000000000001V",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/automation/01M1FPMP00000000000000001R",
+        "value": {
+          "id": "01M1FPMP00000000000000001R",
+          "points": {
+            "01M1FPMP00000000000000001S": {
+              "curve": "CURVE_LINEAR",
+              "id": "01M1FPMP00000000000000001S",
+              "tick": 0,
+              "value": -24.0
+            },
+            "01M1FPMP00000000000000001T": {
+              "curve": "CURVE_HOLD",
+              "id": "01M1FPMP00000000000000001T",
+              "tick": 7680,
+              "value": 0.0
+            }
+          },
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "target": {
+            "device_id": "01M1FPMP000000000000000006",
+            "param": "gain_db"
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 22
+      }
+    ],
+    "summary": "2 ops: /automation/01M1FPMP00000000000000001R, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000001Z",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/automation/01M1FPMP00000000000000001W",
+        "value": {
+          "id": "01M1FPMP00000000000000001W",
+          "points": {
+            "01M1FPMP00000000000000001X": {
+              "curve": "CURVE_LINEAR",
+              "id": "01M1FPMP00000000000000001X",
+              "tick": 0,
+              "value": -1.0
+            },
+            "01M1FPMP00000000000000001Y": {
+              "curve": "CURVE_LINEAR",
+              "id": "01M1FPMP00000000000000001Y",
+              "tick": 3840,
+              "value": 1.0
+            }
+          },
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "target": {
+            "device_id": "01M1FPMP000000000000000006",
+            "param": "pan"
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 23
+      }
+    ],
+    "summary": "2 ops: /automation/01M1FPMP00000000000000001W, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP000000000000000023",
+    "errors": [],
+    "patch": [
+      {
+        "op": "add",
+        "path": "/automation/01M1FPMP000000000000000020",
+        "value": {
+          "id": "01M1FPMP000000000000000020",
+          "points": {
+            "01M1FPMP000000000000000021": {
+              "curve": "CURVE_LINEAR",
+              "id": "01M1FPMP000000000000000021",
+              "tick": 0,
+              "value": 0.0
+            },
+            "01M1FPMP000000000000000022": {
+              "curve": "CURVE_LINEAR",
+              "id": "01M1FPMP000000000000000022",
+              "tick": 9600,
+              "value": -6.0
+            }
+          },
+          "provenance": {
+            "author": "AUTHOR_MODEL",
+            "created_at": "2026-09-02T00:00:00+00:00"
+          },
+          "target": {
+            "device_id": "01M1FPMP000000000000000002",
+            "param": "gain_db"
+          },
+          "version": 1
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 24
+      }
+    ],
+    "summary": "2 ops: /automation/01M1FPMP000000000000000020, /version",
+    "valid": true
+  },
+  {
     "errors": [],
     "result": null,
     "summary": "9600 ticks, 3 tracks, 8 clips",
@@ -912,6 +1041,84 @@
         "target": {
           "device_id": "01M1FPMP00000000000000000A",
           "param": "1945359057"
+        },
+        "version": 1
+      },
+      "01M1FPMP00000000000000001R": {
+        "id": "01M1FPMP00000000000000001R",
+        "points": {
+          "01M1FPMP00000000000000001S": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP00000000000000001S",
+            "tick": 0,
+            "value": -24.0
+          },
+          "01M1FPMP00000000000000001T": {
+            "curve": "CURVE_HOLD",
+            "id": "01M1FPMP00000000000000001T",
+            "tick": 7680,
+            "value": 0.0
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP000000000000000006",
+          "param": "gain_db"
+        },
+        "version": 1
+      },
+      "01M1FPMP00000000000000001W": {
+        "id": "01M1FPMP00000000000000001W",
+        "points": {
+          "01M1FPMP00000000000000001X": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP00000000000000001X",
+            "tick": 0,
+            "value": -1.0
+          },
+          "01M1FPMP00000000000000001Y": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP00000000000000001Y",
+            "tick": 3840,
+            "value": 1.0
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP000000000000000006",
+          "param": "pan"
+        },
+        "version": 1
+      },
+      "01M1FPMP000000000000000020": {
+        "id": "01M1FPMP000000000000000020",
+        "points": {
+          "01M1FPMP000000000000000021": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP000000000000000021",
+            "tick": 0,
+            "value": 0.0
+          },
+          "01M1FPMP000000000000000022": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP000000000000000022",
+            "tick": 9600,
+            "value": -6.0
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP000000000000000002",
+          "param": "gain_db"
         },
         "version": 1
       }
@@ -1319,6 +1526,6 @@
         "version": 1
       }
     },
-    "version": 21
+    "version": 24
   }
 ]

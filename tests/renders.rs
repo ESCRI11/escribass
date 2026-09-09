@@ -935,3 +935,228 @@ fn a_note_edited_in_bar_17_changes_nothing_before_bar_17() {
         .expect("a changed sample before bar 17 is a locality violation");
     assert!(report.contains(&format!("first at sample {}", bar_17_frame * channels - 1)), "{report}");
 }
+
+// ---------------------------------------------------------------------------
+// The fader, measured (M2 PR 6, ADR 0015)
+// ---------------------------------------------------------------------------
+//
+// A lane that compiles into the plan and moves no sample is this PR's silent failure, and a
+// golden cannot tell the two apart: a fader that never moved would be blessed as readily as one
+// that did. So the fader is **measured against the formula**, the way M1 PR 8 measured the
+// audio-clip fades rather than listening to them.
+//
+// The reference is a render of the same project *without* the lanes. Dividing one render by the
+// other cancels the instrument, the note and every rounding either of them did, and leaves the
+// two numbers `Mix` holds — which is the whole of what a mix lane is supposed to change:
+//
+//   left(n)  = plain(n) · g(n) · (1 - p(n))     under `PanLawLinear` (§8)
+//   right(n) = plain(n) · g(n) · (1 + p(n))
+//
+// so `g` is the half-sum of the two channels' ratios and `g·p` the half-difference. Nothing is
+// assumed about the reference's own level, and no asset has to be constructed to have one.
+//
+// **What separates the right answer from the plausible wrong ones.** `LINEAR` on a `gain_db`
+// lane is a straight line **in decibels**, because ADR 0002 §8's formula is ours and ADR 0015
+// §2's unit is the model's. Two other readings would each render something that sounds like a
+// fade, and at this ramp's midpoint the three disagree by more than a factor of four:
+//
+//   in decibels, which is ours                        10^(-18/20) = 0.126
+//   in Tracktion's slider position, two endpoints                 = 0.288
+//   in linear amplitude                                           = 0.508
+//
+// The assertion below is tight enough that only the first passes, which is the point of making
+// it a measurement.
+
+/// Where the ramps run, in the 120 bpm and 4/4 `new_song` writes: two seconds.
+const RIDE_TICKS: i64 = 3840;
+/// The gain ramp's ends, in decibels — clear of the fader's own floor and ceiling (`-100` and
+/// `+6`), so what is measured is the curve and not a clamp.
+const RIDE_DB: (f64, f64) = (0.0, -36.0);
+/// The pan ramp's ends. Short of hard left and right so that neither channel is driven to
+/// silence, where a ratio would be a division by the quantiser.
+const RIDE_PAN: (f64, f64) = (-0.75, 0.75);
+/// Only frames where the reference is at least this much of full scale are measured: a ratio
+/// taken where the reference is near a zero crossing is noise about a quotient of two small
+/// integers, not a measurement of the fader.
+const RIDE_FLOOR: f64 = 0.05;
+
+/// The value our formula gives at `tick` for a `LINEAR` segment between `ends` (ADR 0002 §8).
+fn ride(ends: (f64, f64), tick: f64) -> f64 {
+    ends.0 + (ends.1 - ends.0) * (tick / RIDE_TICKS as f64)
+}
+
+#[test]
+fn a_fader_ride_renders_the_curve_the_formula_draws() {
+    let directory = Scratch::new("renders", "fader");
+    let plain_wav = directory.0.with_extension("plain.wav");
+    let rode_wav = directory.0.with_extension("rode.wav");
+    let point = |tick: i64, value: f64| json!({"tick": tick, "value": value, "curve": "CURVE_LINEAR"});
+    let lane = |param: &str, ends: (f64, f64)| {
+        json!({
+            // The track's own id, which is what makes this a mix lane rather than a device's:
+            // ids are unique across every collection, so one field addresses both (ADR 0015 §1).
+            "target": {"device_id": "01M1FPMP000000000000000006", "param": param},
+            "points": {"a": point(0, ends.0), "b": point(RIDE_TICKS, ends.1)},
+        })
+    };
+
+    let steps = vec![
+        call(
+            "add_track",
+            json!({
+                "name": "Lead", "kind": "TRACK_KIND_INSTRUMENT",
+                // Dexed for the reason the bar-17 demo takes it: this test is about the fader
+                // and not about the synthesiser, and Dexed is the deterministic one (§8).
+                "ref": {"plugin": {"plugin_id": "Digital Suburban/Dexed", "version": "1.0.1"}}
+            }),
+        ),
+        // One note held for the whole render, so there is signal to divide by everywhere.
+        call(
+            "add_clip",
+            json!({
+                "track_id": "01M1FPMP000000000000000006",
+                "start_tick": 0, "length_ticks": RIDE_TICKS,
+                "note_clip": {"notes": {"a": {"pitch": 60, "start_tick": 0,
+                                              "length_ticks": RIDE_TICKS, "velocity": 100}}},
+            }),
+        ),
+        call("render_export", json!({"output_path": plain_wav.display().to_string(), "dry_run": false})),
+        call("add_automation", lane("gain_db", RIDE_DB)),
+        call("add_automation", lane("pan", RIDE_PAN)),
+        call("render_export", json!({"output_path": rode_wav.display().to_string(), "dry_run": false})),
+    ];
+
+    let (answers, rendered) = drive("the fader ride", &directory.0, &steps);
+    let [plain, rode] = &rendered[..] else { panic!("two renders, one plain and one automated") };
+    for (position, what) in [(3, "the gain lane"), (4, "the pan lane")] {
+        assert_eq!(answers[position]["valid"], json!(true), "{what} was refused: {}", answers[position]);
+    }
+    assert_eq!(plain.format, rode.format, "the two renders disagree about the format");
+
+    // The first claim, and the one a plan golden cannot make: the lanes changed samples at all.
+    let format = plain.format;
+    assert!(
+        differences(format, &plain.pcm, &rode.pcm).is_some(),
+        "the fader lanes compiled into the plan and moved no sample — which is what a lane that \
+         validates, compiles and renders as nothing looks like from every other test"
+    );
+
+    let width = (format.bits / 8) as usize;
+    let channels = format.channels as usize;
+    assert_eq!(channels, 2, "the pan half of this measurement needs two channels");
+    let full = (1i64 << (format.bits - 1)) as f64;
+    let floor = RIDE_FLOOR * full;
+    // A model tick in frames, under the tempo this fixture never changes: 120 bpm and 960 PPQ
+    // is 1920 ticks a second (§4.2).
+    let per_tick = format.sample_rate as f64 / 1920.0;
+    // Where a frame's gain comes from. Tracktion reads a curve once per **sub**-block and holds
+    // it, and the sub-block is not `kBlockSize`: `PluginNode::prepareToPlay` sets
+    // `max(128, 128 * round(rate / 44100))` for any plugin with automation and processes the
+    // render block in pieces that size (tracktion_PluginNode.cpp). That gate is also why the
+    // four committed goldens could not move — a plan with no lane leaves it off and the whole
+    // block is one call — and 128 frames at 48 kHz is 2.7 ms, four times finer than the block.
+    let sub_block = std::cmp::max(128, 128 * (format.sample_rate as f64 / 44100.0).round() as usize);
+
+    let frames = plain.pcm.len().min(rode.pcm.len()) / (width * channels);
+    let (mut measured, mut worst_gain, mut worst_pan) = (0usize, 0.0f64, 0.0f64);
+    let (mut at_gain, mut at_pan) = (String::new(), String::new());
+    let (mut first, mut last) = (frames, 0usize);
+    let mut midpoint: Option<(f64, f64)> = None;
+    for frame in 0..frames {
+        let of = |pcm: &[u8], channel: usize| {
+            sample(pcm, (frame * channels + channel) * width, width) as f64
+        };
+        let (left, right) = (of(&plain.pcm, 0), of(&plain.pcm, 1));
+        if left.abs() < floor || right.abs() < floor {
+            continue;
+        }
+        let (gl, gr) = (of(&rode.pcm, 0) / left, of(&rode.pcm, 1) / right);
+        let (gain, pan) = ((gl + gr) / 2.0, (gr - gl) / (gr + gl));
+
+        let tick = (frame - frame % sub_block) as f64 / per_tick;
+        let expected_gain = 10f64.powf(ride(RIDE_DB, tick) / 20.0);
+        let expected_pan = ride(RIDE_PAN, tick);
+        measured += 1;
+        first = first.min(frame);
+        last = frame;
+        if midpoint.is_none() && tick >= RIDE_TICKS as f64 / 2.0 {
+            midpoint = Some((tick, gain));
+        }
+        // Relative for the gain, because a fader is a ratio and 0.1% of -30 dB is not 0.1% of
+        // 0 dB; absolute for the pan, which is a position on a line and not a scale.
+        if ((gain - expected_gain) / expected_gain).abs() > worst_gain {
+            worst_gain = ((gain - expected_gain) / expected_gain).abs();
+            at_gain = format!(
+                "frame {frame} (tick {tick:.1}): {gain:.9} against {expected_gain:.9}, \
+                 which is {:.4} dB against {:.4} dB",
+                20.0 * gain.log10(),
+                ride(RIDE_DB, tick)
+            );
+        }
+        if (pan - expected_pan).abs() > worst_pan {
+            worst_pan = (pan - expected_pan).abs();
+            at_pan = format!("frame {frame} (tick {tick:.1}): {pan:.9} against {expected_pan:.9}");
+        }
+    }
+
+    // The numbers this run measured, so a reader of a CI log sees them rather than a pass.
+    eprintln!(
+        "fader ride: {measured} of {frames} frames above {:.0}% of full scale, \
+         from frame {first} to {last}\n  \
+         worst gain {worst_gain:.3e} relative, at {at_gain}\n  \
+         worst pan  {worst_pan:.3e} absolute, at {at_pan}",
+        RIDE_FLOOR * 100.0
+    );
+    // A measurement of the middle of a ramp is a measurement of one number, so how much of the
+    // ramp was reached is asserted too — in decibels, which is what the claim is about. The
+    // ends are the instrument's, not the fader's: Dexed's attack is over by frame 671 and its
+    // decay falls under the floor around frame 86,000, which still leaves more than 30 dB of
+    // ride, and 30 dB is where a curve read in the wrong domain has long since diverged.
+    let covered = ride(RIDE_DB, first as f64 / per_tick) - ride(RIDE_DB, last as f64 / per_tick);
+    eprintln!("  {covered:.2} dB of the {:.0} dB ride measured", RIDE_DB.0 - RIDE_DB.1);
+    assert!(measured > frames / 8, "only {measured} of {frames} frames were above the floor");
+    assert!(covered > 30.0, "only {covered:.2} dB of the ride was above the floor");
+
+    // The bounds. What is left after the block quantisation is taken out is the 24-bit
+    // quantisation of two renders divided by each other — the reference is at least 5% of full
+    // scale, so about 1e-4 — plus the subdivision `faderPieces` leaves, which is 1.1e-6 dB and
+    // therefore not what these numbers are made of. A ramp read in slider position or in linear
+    // amplitude is out by 1.3 and 3.0 at the midpoint, so the failure this catches is not a
+    // near miss.
+    assert!(
+        worst_gain < 1e-3,
+        "the rendered gain is not the curve `LINEAR` in decibels draws: worst {worst_gain:.3e} \
+         relative, at {at_gain}"
+    );
+    assert!(
+        worst_pan < 1e-3,
+        "the rendered pan is not the line the lane draws: worst {worst_pan:.3e}, at {at_pan}"
+    );
+
+    // The comparison, seen to discriminate. A test whose tolerance is wide enough to accept the
+    // wrong answer has measured nothing, so the two wrong answers are computed here at the
+    // ramp's own midpoint and asserted to be nowhere near what came back.
+    let (tick, gain) = midpoint.expect("the ramp's midpoint is above the floor");
+    let ours = 10f64.powf(ride(RIDE_DB, tick) / 20.0);
+    // Tracktion's fader domain, from `tracktion_AudioUtilities.cpp`: a straight line drawn
+    // between the two endpoints' slider positions rather than between their decibels.
+    let position = |db: f64| ((db - 6.0) / 20.0).exp();
+    let through = tick / RIDE_TICKS as f64;
+    let straight_position = position(RIDE_DB.0) + (position(RIDE_DB.1) - position(RIDE_DB.0)) * through;
+    let in_position = 10f64.powf((20.0 * straight_position.ln() + 6.0) / 20.0);
+    // And the reading that sounds most plausible of all: a straight line in linear amplitude.
+    let ends = (10f64.powf(RIDE_DB.0 / 20.0), 10f64.powf(RIDE_DB.1 / 20.0));
+    let in_amplitude = ends.0 + (ends.1 - ends.0) * through;
+    eprintln!(
+        "  at tick {tick:.0}: measured {gain:.6}, in decibels {ours:.6}, \
+         in slider position {in_position:.6}, in linear amplitude {in_amplitude:.6}"
+    );
+    assert!(((gain - ours) / ours).abs() < 1e-3, "{gain} is not {ours}");
+    for (wrong, what) in [(in_position, "slider position"), (in_amplitude, "linear amplitude")] {
+        assert!(
+            (wrong - gain).abs() > gain,
+            "a ramp read in {what} would give {wrong}, which this measurement cannot tell from \
+             the {gain} it got — the tolerance above is measuring nothing"
+        );
+    }
+}

@@ -78,6 +78,35 @@ fn plugin_of<'a>(
     Some((id, manifest.plugins.get(id)?))
 }
 
+/// The two parameters a `ParamRef` may name once its `device_id` has resolved to a **track**
+/// (ADR 0015 §1). Both are fields of `Mix`, not a plugin's, which is why they need no manifest
+/// to resolve and why their values are the model's own units (ADR 0015 §2).
+///
+/// `mute` and `solo` are absent on purpose and not by omission: both are booleans,
+/// `AutomationPoint.value` is a double, and automating one would need a threshold rule — is
+/// 0.4 muted? — that would be ours, pinned, and a determinism surface exactly as ADR 0002 §8's
+/// curve formulas are. Refusing removes a formula from the pinned set rather than adding one.
+const MIX_PARAMS: [&str; 2] = ["gain_db", "pan"];
+
+/// What a parameter value is a number **in**, and therefore what `param_out_of_range` holds it
+/// to. One rule id, three domains, and the choice belongs to whatever the `ParamRef` resolved
+/// to rather than to the value (ADR 0015 §2, amending ADR 0010 §4).
+#[derive(Clone, Copy)]
+enum Domain {
+    /// A plugin parameter's own **normalised** `0.0`–`1.0`. VST3 exposes exactly one numeric
+    /// domain to a host and that is it; a plugin's units exist only as the display string
+    /// beside the number, which is the same fact that keys the manifest by `ParamID`
+    /// (ADR 0010 §4, extended in M1 PR 7).
+    Normalised,
+    /// `Mix.gain_db`: decibels, unbounded. There is no plugin behind a `Mix` field to
+    /// normalise against, and a normalisation would mean choosing a maximum gain.
+    Decibels,
+    /// `Mix.pan`: `-1.0`..`1.0`, as `song.proto` has said since M0.1. The *static* field's
+    /// spelling of the same range is `pan_out_of_range`, reported at the field itself; a lane
+    /// is a parameter and answers to the parameter rule (ADR 0015 §2).
+    Pan,
+}
+
 impl Violations<'_> {
     fn add(&mut self, path: impl Into<String>, rule: &'static str, message: impl Into<String>) {
         self.found.push(Violation { path: path.into(), rule, message: message.into() });
@@ -106,21 +135,27 @@ impl Violations<'_> {
         );
     }
 
-    /// A plugin parameter's value is the plugin's *normalised* value, `0.0` to `1.0` (ADR 0010
-    /// §4, extended in PR 7). VST3 exposes exactly one numeric domain to a host and that is
-    /// it; a plugin's own units exist only as the display string beside the number.
+    /// `param_out_of_range`, asked in the domain the value is a number *in*.
     ///
     /// Checked here because nothing downstream reports it: the engine clamps, since
     /// Tracktion's parameter range clamps it either way and a caller error is not the
-    /// engine's to discover (ADR 0008 §1). Only where a plugin is what the value reaches —
-    /// a Cmajor device's domain is its source's, and M1 cannot read one.
-    fn check_normalised(&mut self, path: String, value: f64) {
-        if value.is_finite() && !(0.0..=1.0).contains(&value) {
-            self.add(
-                path,
-                "param_out_of_range",
-                format!("{value} is outside a plugin parameter's normalised 0.0 to 1.0"),
-            );
+    /// engine's to discover (ADR 0008 §1).
+    ///
+    /// The domain is never inferred here. It is decided once, where the target resolved, and
+    /// handed in — because at this point a value is a bare double and every one of the three
+    /// domains accepts `0.5`, meaning mid-range to a plugin, a quiet fader, and a little to
+    /// the right. A rule that guessed would pass all three and be wrong about two.
+    fn check_range(&mut self, path: String, value: f64, domain: Domain) {
+        let (range, what) = match domain {
+            Domain::Normalised => (0.0..=1.0, "a plugin parameter's normalised 0.0 to 1.0"),
+            Domain::Pan => (-1.0..=1.0, "`pan`'s -1.0 hard left to 1.0 hard right"),
+            // Unbounded above and below, so `check_finite` is the whole of it (ADR 0015 §2).
+            // The engine's fader stops somewhere; the model does not, and a ceiling invented
+            // here would be a maximum gain nothing in the model has.
+            Domain::Decibels => return,
+        };
+        if value.is_finite() && !range.contains(&value) {
+            self.add(path, "param_out_of_range", format!("{value} is outside {what}"));
         }
     }
 
@@ -425,7 +460,9 @@ impl Violations<'_> {
             self.check_finite(&format!("{path}/params/{name}"), *value);
             if let Some((id, plugin)) = plugin {
                 self.check_param(format!("{path}/params/{name}"), id, plugin, name);
-                self.check_normalised(format!("{path}/params/{name}"), *value);
+                // A device's `params` reach a plugin and nothing else, so the domain here is
+                // never in question the way an automation target's is.
+                self.check_range(format!("{path}/params/{name}"), *value, Domain::Normalised);
             }
         }
     }
@@ -603,32 +640,53 @@ impl Violations<'_> {
         for (key, automation) in &song.automation {
             let at = format!("/automation/{key}");
             self.check_provenance(&format!("{at}/provenance"), automation.provenance.as_ref());
-            // The plugin this lane writes into, once the target has resolved to one: every
-            // point carries a value in that plugin's normalised domain (ADR 0010 §4, PR 7).
-            let mut plugin: Option<(&str, &Plugin)> = None;
+            // What this lane's points are numbers in, once the target has resolved to
+            // something that has a domain. `None` covers every unresolved shape — an unknown
+            // id, an unnamed parameter, a device whose parameters come from a source M4
+            // compiles — each already reported at the target rather than again at every point.
+            let mut domain: Option<Domain> = None;
             match &automation.target {
                 None => self.add(format!("{at}/target"), "message_missing", "`target` is required"),
                 Some(target) => {
-                    let device = devices.get(target.device_id.as_str());
-                    if device.is_none() {
-                        self.add(format!("{at}/target/device_id"), "device_unknown",
-                            format!("`{}` is not an instrument or effect in this song",
-                                target.device_id));
-                    }
                     if target.param.is_empty() {
                         self.add(format!("{at}/target/param"), "param_empty",
                             "an automation target names a parameter");
                     }
-                    // §4.4's "automation targets resolve to real parameters", which needed the
-                    // plugin's manifest and therefore the engine — and now has it (ADR 0010
-                    // §4). Reported once, at the target: a lane pointing at a parameter that
-                    // does not exist is one mistake however many points it holds.
-                    plugin = plugin_of(self.manifest, device.copied().flatten());
-                    if let Some((id, entry)) = plugin {
-                        if !target.param.is_empty() {
-                            self.check_param(
-                                format!("{at}/target/param"), id, entry, &target.param);
+                    // §4.4's "automation targets resolve to real parameters", in the two
+                    // spellings it now has. Ids are globally unique across every collection
+                    // (§4.3, ADR 0001 §3), so one `device_id` names a track **or** a device and
+                    // never both — which is the whole of how a `ParamRef` reaches a fader with
+                    // no field added to `song.proto` (ADR 0015 §1). Reported once, at the
+                    // target: a lane pointing at a parameter that does not exist is one mistake
+                    // however many points it holds.
+                    if song.tracks.contains_key(target.device_id.as_str()) {
+                        // A track carries no plugin, so ADR 0010 §4's manifest has nothing to
+                        // say here — which is exactly why this arm can be written without one.
+                        domain = match target.param.as_str() {
+                            "gain_db" => Some(Domain::Decibels),
+                            "pan" => Some(Domain::Pan),
+                            "" => None,
+                            other => {
+                                self.add(format!("{at}/target/param"), "param_unknown", format!(
+                                    "`{other}` is not automatable on a track; `{}` and `{}` are, \
+                                     and `mute` and `solo` are booleans a double cannot address \
+                                     without a threshold rule (ADR 0015 §1)",
+                                    MIX_PARAMS[0], MIX_PARAMS[1]));
+                                None
+                            }
+                        };
+                    } else if let Some(device) = devices.get(target.device_id.as_str()) {
+                        if let Some((id, entry)) = plugin_of(self.manifest, *device) {
+                            if !target.param.is_empty() {
+                                self.check_param(
+                                    format!("{at}/target/param"), id, entry, &target.param);
+                            }
+                            domain = Some(Domain::Normalised);
                         }
+                    } else {
+                        self.add(format!("{at}/target/device_id"), "device_unknown",
+                            format!("`{}` is not a track, an instrument or an effect in this song",
+                                target.device_id));
                     }
                 }
             }
@@ -641,8 +699,8 @@ impl Violations<'_> {
                 let pat = format!("{at}/points/{pkey}");
                 self.check_tick(&pat, point.tick);
                 self.check_finite(&format!("{pat}/value"), point.value);
-                if plugin.is_some() {
-                    self.check_normalised(format!("{pat}/value"), point.value);
+                if let Some(domain) = domain {
+                    self.check_range(format!("{pat}/value"), point.value, domain);
                 }
                 if point.curve == Curve::Unspecified as i32 {
                     self.add(format!("{pat}/curve"), "enum_unspecified", "curve must be set");

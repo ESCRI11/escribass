@@ -401,6 +401,44 @@ fn automation_nests_under_the_device_it_targets() {
 }
 
 #[test]
+fn a_lane_naming_a_track_nests_under_that_tracks_mix() {
+    // ADR 0015 §1: ids are globally unique across every collection, so the same `device_id`
+    // that names a device names a track, and `take_lanes` needs no second lookup to tell them
+    // apart. ADR 0015 §2: the points are decibels and -1..1, not a plugin's normalised 0..1,
+    // which is why -24.0 below is a lane value and not a violation.
+    let (_dir, mut session) = opened();
+    let t = track(&mut session, TrackKind::Instrument, plugin());
+    let master = master_of(&session);
+    let muted = track(&mut session, TrackKind::Instrument, plugin());
+    set(&mut session, format!("/tracks/{muted}/mix/mute"), json!(true));
+
+    automation(&mut session, &t, "pan", &[(0, -1.0), (1920, 1.0)]);
+    automation(&mut session, &t, "gain_db", &[(0, -24.0), (960, 0.0)]);
+    automation(&mut session, &master, "gain_db", &[(0, -6.0)]);
+    // A fader on a track that does not sound is dropped with it, as a device's lane is.
+    automation(&mut session, &muted, "gain_db", &[(0, 12.0)]);
+
+    let plan = compiled(&session);
+    assert_eq!(plan.tracks.len(), 1);
+    let lanes: Vec<(&str, Vec<(i32, f64)>)> = plan.tracks[0]
+        .mix_lanes
+        .iter()
+        .map(|l| (l.param.as_str(), l.points.iter().map(|p| (p.tick, p.value)).collect()))
+        .collect();
+    assert_eq!(
+        lanes,
+        vec![("gain_db", vec![(0, -24.0), (960, 0.0)]), ("pan", vec![(0, -1.0), (1920, 1.0)])],
+        "lanes in parameter order, points in tick order"
+    );
+    // The instrument on the same track keeps its own lanes, and neither took the other's.
+    assert!(plan.tracks[0].instrument.as_ref().unwrap().lanes.is_empty());
+    let master = plan.master.as_ref().unwrap();
+    assert_eq!(master.mix_lanes.len(), 1, "the master fader is automated like any other");
+    assert_eq!(master.mix_lanes[0].param, "gain_db");
+    assert!(master.mix_lanes[0].points.iter().all(|p| p.id.is_empty()));
+}
+
+#[test]
 fn the_render_ends_at_the_last_clip_or_section() {
     // docs/plan.md, decisions of 2026-09-04: whichever is later. A section that outlasts
     // every clip is an outro someone named, and it renders as the silence they wrote.

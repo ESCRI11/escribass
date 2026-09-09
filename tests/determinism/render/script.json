@@ -65,6 +65,19 @@
       "a": {"pitch": 48, "start_tick": 0, "length_ticks": 960, "velocity": 70}
     }}}},
 
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000006", "param": "gain_db"},
+    "points": {"p": {"tick": 0, "value": -24.0, "curve": "CURVE_LINEAR"},
+               "q": {"tick": 7680, "value": 0.0, "curve": "CURVE_HOLD"}}}},
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000006", "param": "pan"},
+    "points": {"p": {"tick": 0, "value": -1.0, "curve": "CURVE_LINEAR"},
+               "q": {"tick": 3840, "value": 1.0, "curve": "CURVE_LINEAR"}}}},
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000002", "param": "gain_db"},
+    "points": {"p": {"tick": 0, "value": 0.0, "curve": "CURVE_LINEAR"},
+               "q": {"tick": 9600, "value": -6.0, "curve": "CURVE_LINEAR"}}}},
+
   {"tool": "render_export", "args": {"output_path": "/escri/out.wav", "dry_run": true}},
 
   {"tool": "get_song", "args": {}}

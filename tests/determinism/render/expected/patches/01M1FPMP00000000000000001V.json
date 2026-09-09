@@ -1,0 +1,49 @@
+{
+  "id": "01M1FPMP00000000000000001V",
+  "parents": [
+    "01M1FPMP00000000000000001Q"
+  ],
+  "tool": "add_automation",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/automation/01M1FPMP00000000000000001R",
+      "value": {
+        "id": "01M1FPMP00000000000000001R",
+        "points": {
+          "01M1FPMP00000000000000001S": {
+            "curve": "CURVE_LINEAR",
+            "id": "01M1FPMP00000000000000001S",
+            "tick": 0,
+            "value": -24.0
+          },
+          "01M1FPMP00000000000000001T": {
+            "curve": "CURVE_HOLD",
+            "id": "01M1FPMP00000000000000001T",
+            "tick": 7680,
+            "value": 0.0
+          }
+        },
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "target": {
+          "device_id": "01M1FPMP000000000000000006",
+          "param": "gain_db"
+        },
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 22
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

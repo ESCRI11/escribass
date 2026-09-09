@@ -500,11 +500,16 @@ pub fn add_automation(
     let Some(target) = request.target.clone() else {
         return Err(refuse("/target", "required", "an automation lane names a parameter"));
     };
-    if device_path(song, &target.device_id).is_none() {
+    // A track is a target too, and then `param` is `gain_db` or `pan` (ADR 0015 §1). Which of
+    // the two names it is, is the validator's to judge: this gate exists so a typo in an id is
+    // refused where a caller can see it, and duplicating the parameter rule here would be a
+    // second place for it to drift from.
+    if device_path(song, &target.device_id).is_none() && !song.tracks.contains_key(&target.device_id)
+    {
         return Err(refuse(
             "/target/device_id",
             "device_unknown",
-            format!("`{}` is not an instrument or effect in this song", target.device_id),
+            format!("`{}` is not a track, an instrument or an effect in this song", target.device_id),
         ));
     }
     for (key, point) in &request.points {
