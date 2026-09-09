@@ -159,6 +159,8 @@ service! {
     set_tempo: SetTempoRequest,
     add_section: AddSectionRequest,
     move_section: MoveSectionRequest,
+    undo: UndoRequest,
+    redo: RedoRequest,
     create_branch: CreateBranchRequest,
     switch_branch: SwitchBranchRequest,
     delete_branch: DeleteBranchRequest,

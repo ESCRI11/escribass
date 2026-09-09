@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-07. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-09. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -43,7 +43,8 @@ stale.
 | M2.1 | The twelve answered: ADRs 0012–0016, the §15 rows, §17's gRPC and frontend pins | done | PR #55 |
 | M2.2 | `app/`: the Tauri host, the frontend, the shared `call` dispatch, `.escri/lock` | done | PR #56 |
 | M2.3 | `render.proto`'s whole M2 shape — `Preview` and `mix_lanes` — and TypeScript for `proto/` | done | PR #57 |
-| M2.4 | The piano roll, the arrangement completed, and ADR 0012 §5's projection golden | done | this PR |
+| M2.4 | The piano roll, the arrangement completed, and ADR 0012 §5's projection golden | done | PR #58 |
+| M2.5 | The first control that is a tool call, its diff, `undo`/`redo`, and ADR 0017 | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -706,7 +707,7 @@ wrong answer, which is why the decision does not wait on them and the code does.
 | 2 | `m2.2-app-shell` | **The first PR that produces a window a person can open**, and deliberately the smallest one that can. `app/`: the Tauri host embedding `core`, `package.json` against ADR 0016 §2's list, the frontend build, its place in the workspace and in CI — and one window that opens an `.escri`, takes its lock, and draws the arrangement from a real `get_song`. It exercises ADR 0012 §1's call path end to end rather than stubbing it, including the `core/src/mcp.rs` refactor into `call(session, name, args)`: a transport a later PR is the first to exercise is the second wire path this milestone exists to avoid. **What it does not do**: no editing, no piano roll, no mixer, no history, no editors, no preview, no engine, and no `song.json` hash in the status bar — that number is a §11 claim and waits for `core` to report it rather than for the UI to compute it (trap 4). Named for what it delivers, as M1's PR 5 was: a window that opens a project and draws it |
 | 3 | `m2.3-proto-ts` | TypeScript codegen for `proto/` (ADR 0006 §7), and `render.proto`'s **whole** M2 shape in one change — `Preview` with its command and event messages (ADR 0013 §2) and `PlanTrack.mix_lanes` (ADR 0015 §2) — so `buf breaking` compares it once against a `main` that has not moved (trap 12). The plan goldens gain `"mix_lanes": []` here and nowhere else |
 | 4 | `m2.4-read-views` | The piano roll, and the arrangement completed. Read-only: projections of `get_song` with no edit path at all, so ADR 0012 §2's answer is reviewed on its own. **ADR 0012 §5's projection golden lands here**, with the first views it can cover, rather than at the close |
-| 5 | `m2.5-edits` | The first control that is a tool call, its dry-run and diff, and the undo/redo tools behind ⌘Z. Where trap 2 gets decided against a real drag |
+| 5 | `m2.5-edits` | The first control that is a tool call, its dry-run and diff, and the undo/redo tools behind ⌘Z. Where trap 2 gets decided against a real drag. **Done**, and the trap's sharp edge came apart under measurement: "coalescing" bundled *commit once* with *send nothing until the release*, and only the second is what makes an intermediate position unvalidated. ADR 0017 takes one of each — every position is a `dry_run`, one entry is committed — so a drag that crosses a refusal is drawn refused at the boundary and a drag that lands legally applies. The deciding number was not the dry run's cost but `Project::write`'s slope (trap 8): 30.6 ms per applied call at 300 entries against 17 ms at 21 |
 | 6 | `m2.6-mix-automation` | `ParamRef` reaching a fader: the validator arm, `param_out_of_range`'s two domains, `compile` emitting `mix_lanes`, and the engine driving Tracktion's track volume and pan with **our** curve formulas (ADR 0015 §1, §2). No `song.proto` change, so no M0.4 goldens move; the render goldens must not move either, and any byte that does needs a named cause |
 | 7 | `m2.7-mixer-and-editors` | The mixer over the automation PR 6 laid down, and §9's seventh view: the generic parameter editor over the build manifest (ADR 0014 §1). Two forms over two maps, in one PR because they are the same form |
 | 8 | `m2.8-history` | The patch-log view with its provenance column, branch switching, and `merge_branch`'s per-path resolution (ADR 0015 §3) |
@@ -736,13 +737,25 @@ did). Mixing them gets the silent half reviewed as plumbing.
    projection golden is the mechanical check the prose could not be, and ADR 0016 §3 keeps every
    library that would make one out of the dependency list. What is left is that a store can still
    be hand-written, and the golden is what would catch it.
-2. **A drag is not one tool call.** Dragging a note fires a hundred pointer events. One
-   `set_notes` each puts a hundred entries in the log §5 calls both the audit trail and the undo
-   history, and ⌘Z then undoes one pixel. Coalescing on release is the obvious fix and has a
-   sharp edge: the intermediate states are unvalidated, so a drag can pass through a position
-   the validator would refuse and land somewhere legal, and the refusal a user should have seen
-   at the boundary never happens. **Deliberately not decided**: there is no answer right for
-   every gesture, and PR 5 decides it against a real drag rather than an imagined one.
+2. ~~**A drag is not one tool call.**~~ — **decided in PR 5 against a real drag, as ADR 0017,
+   and the sharp edge turned out to rest on a hidden assumption.** "Coalescing on release" was
+   read as two things at once — commit once, *and send nothing until the release* — and only the
+   second is what leaves an intermediate position unvalidated. PR 5 takes one of each: every
+   position the pointer passes through goes out as a **`dry_run`**, which validates and writes
+   nothing, and one entry is committed when a person approves the diff. So a drag that crosses a
+   refused position is drawn refused *at the boundary*, naming the rule, and a drag that then
+   lands somewhere legal applies — correctly, because the intermediate positions were candidate
+   values and never states of the document. The frontend contains no rule of its own; predicting
+   the refusal in TypeScript would be ADR 0012 §2's rejected second implementation one language
+   over, and clamping the drag would be that *and* silent.
+
+   Measured, not argued. A real drag in the window: **100 pointer positions, 30 of them reaching
+   the tool API as dry runs, 0 entries in the log**; `Apply` appended one; ⌘Z appended one more.
+   And the number that actually decided it is not the dry run's cost (1–3 ms, writes nothing)
+   but the applied call's slope: **30.6 ms at 300 entries against 17 ms at 21**, because
+   `Project::write` rewrites every entry file. One call per pointer event is a hundred writes
+   that each rewrite the whole log — which is trap 8, arriving in the pull request this file
+   predicted it would.
 3. **Preview and export do not agree, and that is correct.** sfizz switches to freewheeling
    quality settings for an offline render, so §8 already says a golden is deliberately not what
    a preview plays; Surge XT's factory patch reaches a wall-clock RNG unless `A Osc 1 Retrigger`
@@ -771,7 +784,11 @@ did). Mixing them gets the silent half reviewed as plumbing.
 8. **`Project::write` is O(history) and `app` is the first long session.** The known gap names
    this trigger exactly: "a session that stays open and keeps appending, which is `app`". Every
    edit rewrites every entry file. It will present as UI lag, be diagnosed in the frontend, and
-   live in `core`. PR 5 is the first PR that appends in a loop.
+   live in `core`. PR 5 is the first PR that appends in a loop. **Measured in PR 5 rather than
+   fixed**: an applied `set_notes` on a five-track project takes ~17 ms at 21 entries and
+   ~30.6 ms at 300 — half again as expensive by the three-hundredth — and 300 in a row take
+   6.7 s. That measurement is half of ADR 0017's argument for one entry per gesture, and the gap
+   stays open with a number attached rather than a prediction.
 9. **Two writers, and nothing locks the directory. Answered:** ADR 0012 §3 takes `.escri/lock`
    in PR 2, with `create_new`, reported and never broken automatically. What is left is the
    failure mode that choice buys — a crashed process leaves a project that will not open until
@@ -780,7 +797,9 @@ did). Mixing them gets the silent half reviewed as plumbing.
     Every editor framework ships an undo stack, and one here disagrees with the log the moment a
     branch is switched or a second writer commits. Plate 5's entire point is that there is no
     second stack. ADR 0016 §3's empty dependency list is half the defence; the other half is that
-    ⌘Z calls a tool.
+    ⌘Z calls a tool. **Held in PR 5**: ⌘Z is `tool("undo", {})` and nothing else, and what the
+    session holds is a cursor into the *log's* first-parent chain — entry ids, cleared by any
+    other commit and by a branch switch, which is the case a frontend stack gets wrong.
 11. **Ids that the UI mints. Answered:** ADR 0012 §4 keys a pending edit by the ids the dry run
     already minted from a fork, so nothing in the frontend generates one. The trap survives as a
     rule with no enforcement: CLAUDE.md #3 names `core`, compilers and `engine`, and a
@@ -850,7 +869,8 @@ milestone cannot be checked at that milestone's close; it can only be argued abo
 | User VST3 plugins | §8 says "VST3 host" and §16 never says user plugins, so nothing places them. M1 refuses a plugin outside the bundled manifest, which makes the gap loud rather than silent. ~~M2, when `app` could show a plugin browser~~ — **retriggered 2026-09-07**: M2's editor is a *view over* the build manifest, and the manifest describes what this build hosts. A browser is not a view over one; it is a scanner that puts things into one, and it drags `lock.json` with it, since a user's plugin has no submodule commit to pin | When the build manifest can describe a plugin this build did not bundle | M1 planning, 2026-09-04; retriggered by ADR 0014 §3 |
 | `RenderTarget.tail` for release tails | A render ends at the last clip or section. Every golden controls its own content, so this does not affect the determinism claim — it affects whether a real export sounds truncated. **Measured in PR 12**, so the trigger is no longer abstract: a half-bar note's release runs about 5,800 frames (0.12 s) past its note-off on this build, and that is what a render ending at the last clip cuts off | when someone exports something with a long release | M1 planning, 2026-09-04 |
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result. ~~M2~~ — **deferred 2026-09-07** (ADR 0015 §3): refusing is the current behaviour and it is loud, and *nothing in the repository produces a criss-cross history yet*. M2's history view is what makes branch merging ordinary enough for one to appear | A real criss-cross base | review, 2026-09-03; ADR 0015 §3 |
-| Undo/redo **tools** | ADR 0005 §4 settles the mechanism — an inverse entry, never a rewind. The tools themselves have no consumer until ⌘Z exists | M2, PR 5 | ADR 0005 §4 |
+| ~~Undo/redo **tools**~~ | **Closed 2026-09-09 in M2 PR 5.** `undo` and `redo` are RPCs with `dry_run` and the shared `ToolResult`, and the one thing ADR 0005 §4 named without specifying — the session-held stack — is a cursor into the log's first-parent chain, cleared by any other commit and by a branch switch | closed — M2 PR 5 | ADR 0005 §4 |
+| Committing a direct-manipulation gesture on release, without a separate approval | ADR 0017 §4 gives the first control §9's flow whole — release proposes, a person applies — because it is the first control that has a diff to show and the flow should be reviewed where it can be seen. Whether *every* gesture should keep asking is a different question: undo is what would make committing on release safe, and it exists now | The first time per-gesture approval is measured as friction rather than argued about — a session where the Apply click is counted | ADR 0017 §4 |
 | `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
 | Refusing a plugin parameter that reaches an RNG nothing can seed | §8 forbids Surge XT's `rand_pm1`, Dexed's LFO waveform 5 and sfizz's `*_random` **in a fixture**, and nothing refuses them in a user's song. §11's first bullet is about our own code and holds; §2.2's promise — "every source of randomness carries an explicit seed stored in the project" — is wider, and neither of those two RNGs can be seeded at all (Surge's is the wall clock with `seed_rand` commented out; Dexed's `randstate_` is indeterminate memory). Closing it is a validator rule and therefore an ADR — and the rule has no producer: something must say which parameter values reach an unseedable RNG, and today that is prose in §8 for three plugins vetted by hand. Deferred rather than opened as an M2 question because M2 adds no plugin and no randomness: the gap is M1's, unchanged, and an ADR now would design a denylist against a build manifest that carries none, which is ADR 0002 §7's reason ~~The first milestone that lets a user *choose* a patch or supply a plugin~~ — **retriggered 2026-09-07** (ADR 0014 §3). That trigger has now fired: M2 places a parameter editor and choosing a patch is exactly how a user reaches those RNGs. It fired and the work still cannot be done, and the blocker is the second fact, not the first: closing it needs a **denylist of `ParamID`s per plugin in the build manifest**, and §8's prose names the paths in English — "oscillator random start phase, unison detune, the sample-and-hold LFO shape, and the effects that call `rand_pm1`" — which becomes `ParamID`s only by auditing Surge XT's 2855 parameters against its source. That is a source audit, and no user interface produces one. Half a denylist is worse than none, because it looks complete | A build manifest that can say which parameters reach an unseedable RNG | §8's per-plugin notes; M2 planning, 2026-09-07; retriggered by ADR 0014 §3 |
 

@@ -1,0 +1,9 @@
+{
+  "refused": [
+    {
+      "message": "`cmajor` devices are compiled and hosted from M4; M1 hosts the bundled plugins and the sampler",
+      "path": "/tracks/01M1FPMP000000000000000006/instrument/ref/cmajor",
+      "rule": "render_unsupported"
+    }
+  ]
+}

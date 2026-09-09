@@ -366,14 +366,20 @@ impl Project {
         self.prepare_inner(ops, true)
     }
 
-    /// [`prepare`](Self::prepare) for a merge, which is the one caller whose operations
-    /// legitimately carry an entity `version`.
+    /// [`prepare`](Self::prepare) for the callers whose operations legitimately carry an entity
+    /// `version`: a merge, and — since M2 PR 5 — `undo` and `redo`.
     ///
     /// A merge's patch is the diff between two states core itself produced, so the versions in
     /// it are core's own — the incoming branch's numbers, which ADR 0005 §2 needs in order to
     /// resolve to `max(ours, theirs) + 1`. Refusing them here would silently discard the other
     /// branch's count and let a client's version go backwards, which is what ADR 0005 §4
     /// rejected the rewind for.
+    ///
+    /// Undo is the same case by a different route: its ops are `diff(current, materialise(…))`,
+    /// so the versions in them were read back out of a document core wrote. `prepare` would
+    /// refuse this API's own history as though a caller had tried to write a field it does not
+    /// own, and the resolution rule is exactly the one undo needs — `max` of the number the
+    /// entity has now and the number it had then, plus one, which is one *past* where it is.
     pub fn prepare_merge(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
         self.prepare_inner(ops, false)
     }

@@ -359,6 +359,31 @@ pub struct RenderResponse {
     pub result: ::core::option::Option<super::super::render::v1::RenderResult>,
 }
 // ---------------------------------------------------------------------------
+// Undo and redo (ADR 0005 §4)
+// ---------------------------------------------------------------------------
+
+/// Reverses the last change by **appending its inverse**, never by rewinding a ref: a rewind
+/// decrements entity `version`, and §4.3's optimistic concurrency needs it monotonic
+/// (ADR 0005 §4). So an undo is a thing that happened rather than a thing that unhappened,
+/// and it appears in the audit trail §5 asks for like any other entry.
+///
+/// The session holds the entries it has undone. A second call therefore walks one further
+/// back rather than undoing the undo, and any other commit clears that list — which is the
+/// model every editor already implements. It is per session and per process: a session that
+/// has just opened has undone nothing, so its first call reverses whatever the log ends with.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UndoRequest {
+    #[prost(bool, tag="1")]
+    pub dry_run: bool,
+}
+/// Re-applies the change the last `undo` reversed, by the same mechanism and with the same
+/// guarantee. Refused with `nothing_to_redo` when this session has undone nothing.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RedoRequest {
+    #[prost(bool, tag="1")]
+    pub dry_run: bool,
+}
+// ---------------------------------------------------------------------------
 // Branches (ADR 0001 §2, §4)
 // ---------------------------------------------------------------------------
 

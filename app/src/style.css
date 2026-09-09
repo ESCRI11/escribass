@@ -20,6 +20,10 @@
   --note: #7fb2d8;
   --block-text: #f2f5f8;
   --accent: #c9a227;
+  /* A refused position. Read off the canvas element by `canvas.tsx` like every other
+     colour, so a dragged note that the validator will not accept is drawn refused while it
+     is being dragged (ADR 0017 §3). */
+  --refuse: #d46a6a;
 
   color-scheme: dark;
   font: 13px/1.4 system-ui, sans-serif;
@@ -163,4 +167,67 @@ footer .mode {
 .failure pre {
   white-space: pre-wrap;
   color: #e2a0a0;
+}
+
+/* The unapplied edit, and the diff a person approves (§9, ADR 0006 §1). Below the roll rather
+   than beside it: the patch is the widest thing in the window and the roll is the thing being
+   read while it is judged. */
+.pending {
+  border-top: 1px solid var(--accent);
+  background: var(--panel);
+  max-height: 40%;
+  overflow: auto;
+}
+
+.pending.refused {
+  border-top-color: var(--refuse);
+}
+
+.pending-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 10px;
+}
+
+.pending-head .buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.pending button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 10px;
+}
+
+.pending button:hover {
+  border-color: var(--accent);
+}
+
+.pending pre {
+  margin: 0;
+  padding: 0 10px 10px;
+  color: var(--dim);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.pending ul {
+  margin: 0;
+  padding: 0 10px 10px 26px;
+}
+
+.pending code {
+  color: var(--refuse);
+}
+
+/* A tool that refused outright — `nothing_to_undo` and its neighbours. In the pane head, where
+   the key that caused it was pressed. */
+.notice {
+  color: var(--refuse);
 }

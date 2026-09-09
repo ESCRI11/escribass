@@ -10,7 +10,7 @@
 | `proto/` | The tool API: `song_tools.proto`, the wire contract of §5, and `render.proto`, the engine's. Generated Rust and — since M2 PR 3 gave it a consumer — TypeScript. See `proto/AGENTS.md`. | hand + `proto/codegen.sh` |
 | `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
 | `tests/` | Cross-language fixtures and the determinism suite (`escribass-tests`). See `tests/AGENTS.md`. | hand + tests |
-| `app/` | The desktop UI: the Tauri host in `app/src-tauri/` (Rust, embedding `core`) and the frontend at `app/` (React, Vite). One decoded `Song` and pure selectors over it (ADR 0012 §2). | hand |
+| `app/` | The desktop UI: the Tauri host in `app/src-tauri/` (Rust, embedding `core`) and the frontend at `app/` (React, Vite). One decoded `Song` and pure selectors over it (ADR 0012 §2); one gesture, previewed with `dry_run` at every position and committed once (ADR 0017). | hand |
 | `docs/` | `specs.md` (architecture source of truth), `adr/`, `landscape-2026-09.md`, `wireframes.html`, `plan.md`, `roadmap.md`. See `docs/AGENTS.md` and `docs/adr/AGENTS.md`. | hand |
 | `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`, `tests`, `app/src-tauri`. The last is **not** a default member: building it needs WebKitGTK's development headers and a built `app/dist`, so `cargo test` skips it and CI's `app` job runs `cargo test -p escribass-app` instead. | hand |
 | `Cargo.lock` | Integrity hashes for crates.io packages (specs §17). Never edit. | cargo |

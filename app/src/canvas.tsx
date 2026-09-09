@@ -12,17 +12,18 @@
 // that shared boilerplate and is not an abstraction over "a view" — it knows nothing about
 // what is drawn on it.
 //
-// `ponytail:` no zoom, no scroll, no hit testing and no selection by pointer. The whole song
-// is scaled to the width it has, and the roll is chosen from a `<select>`. PR 5 makes a clip
-// draggable and needs pixel → tick as well as tick → pixel; inventing the inverse here against
-// no interaction would be inventing it twice, and `time.ts` is where it will go when it has a
-// caller.
+// `ponytail:` no zoom and no scroll: the whole song is scaled to the width it has, and the
+// roll is chosen from a `<select>`. The one gesture is dragging a note in the roll (PR 5), and
+// it is deliberately one — no marquee, no multi-select, no resize handle, no clip drag in the
+// timeline. Each of those is a second gesture with its own hit region, and what PR 5 had to
+// decide was *when a gesture becomes a tool call*, which one gesture answers as well as six.
 
 import { useEffect, useRef } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Arrangement } from "./arrangement.js";
-import type { PianoRoll } from "./pianoroll.js";
+import type { PianoRoll, RollNote } from "./pianoroll.js";
 import { isBlackKey, pitchName } from "./pianoroll.js";
-import { scale } from "./time.js";
+import { scale, unscale } from "./time.js";
 
 const TEMPO_ROW = 16;
 const RULER_ROW = 18;
@@ -244,9 +245,102 @@ export function Timeline({ view, selected }: { view: Arrangement; selected: stri
   return <canvas ref={canvas} className="timeline" />;
 }
 
-export function Roll({ view }: { view: PianoRoll }) {
-  const rows = view.highPitch - view.lowPitch + 1;
+/**
+ * Where a drag has asked to put a note: the clip-relative tick and the MIDI pitch the pointer
+ * is over, for one note named by id.
+ *
+ * Not a note and not a copy of one. It is three numbers describing a gesture in progress, and
+ * the note it moves is still the model's — which is what keeps a drag from being the local
+ * edit ADR 0012 §2 forbids. `startTick` and `pitch` here can be values the validator refuses;
+ * that is the point, and `App.tsx` is where the refusal is asked for and shown.
+ */
+export interface Moved {
+  readonly noteId: string;
+  readonly startTick: number;
+  readonly pitch: number;
+}
+
+export function Roll({
+  view,
+  moved,
+  refused,
+  onMoved,
+}: {
+  view: PianoRoll;
+  /** The position the gesture is proposing, drawn dashed over the model's own note. */
+  moved: Moved | null;
+  /** True when the tool API has refused that position — drawn, so the boundary is visible
+   *  while it is being crossed rather than only when the pointer is let go. */
+  refused: boolean;
+  /** `null` ends the gesture. A release is not "apply": what to do with the proposal is
+   *  `App.tsx`'s, because it is the diff-approval flow of §9 and not a drawing decision. */
+  onMoved: (next: Moved | null) => void;
+}) {
+  // The drawn band is the projection's, widened to hold whatever the gesture is proposing —
+  // otherwise dragging a note two semitones above the top note takes it off the canvas, and a
+  // legal edit becomes invisible while it is being made. A drawing decision, so it is here and
+  // not in `pianoroll.ts`: the projection stays a function of the model alone.
+  //
+  // Clamped to MIDI's own range, because beyond it the position is refused anyway and
+  // following the pointer to pitch 300 is 300 rows of flickering canvas rather than a view.
+  const low = Math.max(0, Math.min(view.lowPitch, moved?.pitch ?? view.lowPitch));
+  const high = Math.min(127, Math.max(view.highPitch, moved?.pitch ?? view.highPitch));
+  const rows = high - low + 1;
   const height = ROLL_HEAD + rows * NOTE_ROW;
+
+  // What the pointer grabbed, and where it grabbed it. Held in a ref rather than in state
+  // because nothing draws it: the drawn thing is `moved`, which the parent owns because it is
+  // the parent that has to ask the tool API about it.
+  const grabbed = useRef<{ note: RollNote; tick: number; pitch: number } | null>(null);
+
+  /** Where a pointer event falls, in the model's own units. */
+  const at = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const lane = Math.max(1, box.width - KEYS);
+    return {
+      tick: unscale(lane, view.lengthTicks)(event.clientX - box.left - KEYS),
+      // `floor`, because a row is the band between two lines and a pitch is the row it is in.
+      pitch: high - Math.floor((event.clientY - box.top - ROLL_HEAD) / NOTE_ROW),
+    };
+  };
+
+  const down = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const point = at(event);
+    // In tick space rather than in pixels, so a note two pixels wide is grabbed where it is
+    // rather than where the minimum drawn width put it.
+    const note = view.notes.find(
+      (candidate) =>
+        candidate.pitch === point.pitch &&
+        point.tick >= candidate.startTick &&
+        point.tick < candidate.startTick + candidate.lengthTicks,
+    );
+    if (!note) return;
+    // Capture, so a drag that leaves the canvas keeps arriving here and a release outside it
+    // still ends the gesture. Without it a pointer let go over the arrangement leaves a drag
+    // that never finishes.
+    event.currentTarget.setPointerCapture(event.pointerId);
+    grabbed.current = { note, ...point };
+    onMoved({ noteId: note.id, startTick: note.startTick, pitch: note.pitch });
+  };
+
+  const move = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const hold = grabbed.current;
+    if (!hold) return;
+    const point = at(event);
+    // The *delta* is rounded, not the position: a note that has not been dragged a whole tick
+    // stays exactly where it was, rather than snapping to whatever tick the pointer is over.
+    onMoved({
+      noteId: hold.note.id,
+      startTick: hold.note.startTick + Math.round(point.tick - hold.tick),
+      pitch: hold.note.pitch + (point.pitch - hold.pitch),
+    });
+  };
+
+  const up = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!grabbed.current) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    grabbed.current = null;
+  };
 
   const canvas = useCanvas(height, (context, width) => {
     const element = context.canvas;
@@ -263,12 +357,12 @@ export function Roll({ view }: { view: PianoRoll }) {
     const lane = Math.max(1, width - KEYS);
     const x = scale(lane, view.lengthTicks);
     // Pitch increases upwards, which is the one thing every piano roll agrees on.
-    const y = (pitch: number) => ROLL_HEAD + (view.highPitch - pitch) * NOTE_ROW;
+    const y = (pitch: number) => ROLL_HEAD + (high - pitch) * NOTE_ROW;
 
     context.fillStyle = surface;
     context.fillRect(0, 0, width, height);
 
-    for (let pitch = view.lowPitch; pitch <= view.highPitch; pitch += 1) {
+    for (let pitch = low; pitch <= high; pitch += 1) {
       const top = y(pitch);
       if (isBlackKey(pitch)) {
         context.fillStyle = faint;
@@ -343,6 +437,32 @@ export function Roll({ view }: { view: PianoRoll }) {
       }
     }
 
+    // The proposal, over the model rather than instead of it. Both are drawn: the solid note is
+    // where the document still says it is, and the dashed one is what a `set_notes` would ask
+    // for — which is the wireframes' dashed unapplied edit, and is what makes it visible that
+    // nothing has been written yet (ADR 0012 §2: no local apply, so the model does not move
+    // until it has moved).
+    //
+    // A refused position is drawn refused, at the moment it is refused. That is this pull
+    // request's answer to the sharp edge in trap 2: the boundary a coalesced drag would cross
+    // silently is the one thing on screen that changes when it is crossed.
+    if (moved) {
+      const note = view.notes.find((candidate) => candidate.id === moved.noteId);
+      if (note) {
+        const left = KEYS + x(moved.startTick);
+        const wide = Math.max(2, x(note.lengthTicks));
+        const top = y(moved.pitch);
+        context.strokeStyle = refused ? ink(element, "--refuse") : accent;
+        context.lineWidth = 2;
+        context.setLineDash([4, 3]);
+        context.beginPath();
+        context.roundRect(left, top + 1, wide, NOTE_ROW - 2, 2);
+        context.stroke();
+        context.setLineDash([]);
+        context.lineWidth = 1;
+      }
+    }
+
     context.strokeStyle = line;
     context.beginPath();
     context.moveTo(hairline(KEYS), 0);
@@ -352,5 +472,16 @@ export function Roll({ view }: { view: PianoRoll }) {
     context.stroke();
   });
 
-  return <canvas ref={canvas} className="roll" />;
+  return (
+    <canvas
+      ref={canvas}
+      className="roll"
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      // A cancelled pointer — the window losing focus mid-drag — ends the gesture the same way
+      // a release does. Left out, the next click would continue a drag nobody is making.
+      onPointerCancel={up}
+    />
+  );
 }

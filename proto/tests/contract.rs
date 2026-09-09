@@ -106,7 +106,7 @@ fn every_mutating_rpc_returns_the_shared_result() {
         }
         seen += 1;
     }
-    assert_eq!(seen, 22, "every rpc in the service is checked");
+    assert_eq!(seen, 24, "every rpc in the service is checked");
 }
 
 // ---- render.proto (ADR 0007 §2) ----
