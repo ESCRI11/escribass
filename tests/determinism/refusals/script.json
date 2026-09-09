@@ -62,6 +62,16 @@
   {"tool": "apply_patch", "args": {"patch": [
     {"op": "replace", "path": "/tracks/01M1FPMP000000000000000006/mix/pan", "value": -0.0}]}},
 
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000006", "param": "mute"},
+    "points": {"p": {"tick": 0, "value": 1.0, "curve": "CURVE_LINEAR"}}},
+    "refused": "param_unknown"},
+
+  {"tool": "add_automation", "args": {
+    "target": {"device_id": "01M1FPMP000000000000000006", "param": "pan"},
+    "points": {"p": {"tick": 0, "value": 1.5, "curve": "CURVE_LINEAR"}}},
+    "refused": "param_out_of_range"},
+
   {"tool": "add_track", "args": {"name": "Drums", "kind": "TRACK_KIND_INSTRUMENT",
     "ref": {"sampler": {"sfz_hash": "aa31c0de4f9c00000000000000000000"}}}},
 

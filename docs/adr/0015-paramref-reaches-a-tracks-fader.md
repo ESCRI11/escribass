@@ -77,6 +77,33 @@ The M0.4 goldens do **not** move: they are `song.json`, `refs.json` and `patches
 `expected/plan.json` gains `"mix_lanes": []` — and that is PR 3's mechanical diff, in the PR
 that makes it.
 
+**Extended 2026-09-09, in PR 6, where a lane first reached a fader.** This decision said the
+lane's units are the model's and left unsaid what the *engine's* fader keeps. It is not
+decibels: Tracktion's volume parameter is a **slider position**, `exp((dB - 6) / 20)`, and its
+header says so — so the conversion is the engine's, on the way in, and it has two consequences
+this decision did not foresee.
+
+*A straight line in decibels is not a straight line in that domain.* Tracktion interpolates a
+curve in the parameter's own units, so two endpoints render an exponential as a chord: a
+0 dB → -36 dB ride passes through -10.8 dB at its midpoint where ADR 0002 §8's formula says
+-18. The engine therefore **splits a `LINEAR` `gain_db` segment into pieces spanning at most
+0.02 dB**, beside the tempo split it already made — which holds the chord within 1.1e-6 dB,
+about one count of 24-bit full scale. Unlike the tempo split this is an approximation with a
+stated bound rather than an exact reconstruction, because no finite number of straight pieces
+is an exponential; it is in any case orders of magnitude below what the rate at which Tracktion
+*reads* a curve already contributes — it holds a parameter for a whole automation sub-block,
+2.7 ms at 48 kHz, which on the ride above is 0.048 dB. `pan` needs none of this: Tracktion's pan parameter *is* `Mix.pan`,
+same number, same range, so the lane crosses unconverted and the pan law turns the position
+into two gains afterwards, at the `PanLawLinear` §8 pins.
+
+*The domain brings Tracktion's own bounds with it.* The parameter stops at 1, which is +6 dB,
+and below -100 dB it is silence — so a `Mix.gain_db` above +6 renders as +6. That ceiling is
+not new and is not this decision's: `setVolumeDb` clamps the same parameter, so a *static* mix
+has had it since M1. It is written down here, and in §8, rather than discovered. The model
+stays unbounded, as this decision says, because a ceiling in the model would be the invented
+maximum gain the alternatives table rejects; if a project ever needs more, the upgrade is a
+gain applied ahead of the fader, the way an audio clip's is (ADR 0011 §2).
+
 ### 3. `merge_branch` gains a per-path resolution; recursive merge stays deferred
 
 ADR 0001 §4 auto-resolves disjoint paths and refuses the same path as a structured error, and
@@ -141,7 +168,11 @@ to do — bought for a gesture nothing in M2 makes.
 - `engine/`: a mix lane drives Tracktion's own track volume and pan parameters, and the engine
   still implements **our** curve formulas rather than Tracktion's — and does so on top of the pan
   law and the master gain §8 already pins, which is why those two were worth writing down before
-  anything automated them.
+  anything automated them. §2's extension says what that cost: a conversion into the fader's
+  slider position, a subdivision to keep our line straight through it, and one more Tracktion
+  default pinned beside the pan law — `smoothingRampTimeSeconds`, set to zero, because a 15 ms
+  ramp towards each sub-block's target is a shape the renderer chose and ADR 0002 §8 refuses
+  exactly that for an automation curve. None of it moves a render with no lane in it.
 - ADR 0007 §5's descriptor-driven coverage test is unaffected: no `song.v1` field is added, and
   `Mix` was already carried into the plan.
 - §4.4 gains a bullet and §5 a sentence. Neither is renumbered.

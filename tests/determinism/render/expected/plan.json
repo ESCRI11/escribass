@@ -227,7 +227,42 @@
           }
         }
       ],
-      "mix_lanes": []
+      "mix_lanes": [
+        {
+          "param": "gain_db",
+          "points": [
+            {
+              "id": "",
+              "tick": 0,
+              "value": -24.0,
+              "curve": "CURVE_LINEAR"
+            },
+            {
+              "id": "",
+              "tick": 7680,
+              "value": 0.0,
+              "curve": "CURVE_HOLD"
+            }
+          ]
+        },
+        {
+          "param": "pan",
+          "points": [
+            {
+              "id": "",
+              "tick": 0,
+              "value": -1.0,
+              "curve": "CURVE_LINEAR"
+            },
+            {
+              "id": "",
+              "tick": 3840,
+              "value": 1.0,
+              "curve": "CURVE_LINEAR"
+            }
+          ]
+        }
+      ]
     },
     {
       "effects": [],
@@ -324,7 +359,25 @@
       "solo": false
     },
     "clips": [],
-    "mix_lanes": []
+    "mix_lanes": [
+      {
+        "param": "gain_db",
+        "points": [
+          {
+            "id": "",
+            "tick": 0,
+            "value": 0.0,
+            "curve": "CURVE_LINEAR"
+          },
+          {
+            "id": "",
+            "tick": 9600,
+            "value": -6.0,
+            "curve": "CURVE_LINEAR"
+          }
+        ]
+      }
+    ]
   },
   "tempo": [
     {

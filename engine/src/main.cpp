@@ -415,16 +415,93 @@ int scan (const juce::StringArray& args)
 // Hosting the plan (PR 7)
 // -----------------------------------------------------------------------------------------
 
-// Every parameter value in a plan — `Instrument.params`, `Effect.params` and every
-// `AutomationPoint.value` — is the plugin's own **normalised** value. That is the only domain
-// a VST3 offers a host: the format's `ParamValue` is 0..1 and JUCE hands it through unchanged,
-// which is the same fact that leaves ADR 0010 §4's manifest keying a parameter by its opaque
-// `ParamID`. Out of range is clamped rather than refused, because Tracktion's own parameter
-// range clamps it either way and a value that means nothing is PR 9's `param_unknown` — a
-// caller error, which by ADR 0008 §1 is not one the engine is left to discover.
+// A parameter value of a **device** in a plan — `Instrument.params`, `Effect.params` and every
+// `AutomationPoint.value` under a device — is the plugin's own **normalised** value. That is
+// the only domain a VST3 offers a host: the format's `ParamValue` is 0..1 and JUCE hands it
+// through unchanged, which is the same fact that leaves ADR 0010 §4's manifest keying a
+// parameter by its opaque `ParamID`. Out of range is clamped rather than refused, because
+// Tracktion's own parameter range clamps it either way and a value that means nothing is PR 9's
+// `param_unknown` — a caller error, which by ADR 0008 §1 is not one the engine is left to
+// discover.
+//
+// A **mix** lane is the exception, and the three functions below it (ADR 0015 §2): its points
+// are the model's own units, and each has to be carried into whatever domain Tracktion's fader
+// keeps that parameter in.
 float normalised (double value)
 {
     return (float) juce::jlimit (0.0, 1.0, value);
+}
+
+// `Mix.pan` and Tracktion's pan parameter are the same number in the same range, so a pan lane
+// needs no conversion at all — and, `LINEAR` being straight in the value, no subdivision below.
+//
+// What the **pan law** does happens after this and to something else: it turns one position
+// into two channel gains, once per block, at the `PanLawLinear` §8 pins. Under that law a
+// straight line in `pan` is a straight line in each channel's linear gain (`g·(1∓pan)`), and a
+// hard pan is +6 dB on the surviving side — which is the law's property, already recorded, and
+// not a shape this curve has to carry.
+float panPosition (double pan)
+{
+    // Not Tracktion's own `setPan`, which snaps |pan| <= 0.005 to centre. That dead zone is for
+    // a mouse on a knob; a lane says what it says.
+    return (float) juce::jlimit (-1.0, 1.0, pan);
+}
+
+// **Tracktion's fader parameter is not decibels.** Its value is a *slider position*,
+// `exp((dB - 6) / 20)` (`decibelsToVolumeFaderPosition`, tracktion_AudioUtilities.cpp), and the
+// header says so: "NB the units used here are slider position". So the model's `gain_db`
+// (ADR 0015 §2) is carried across here, and — because the curve interpolates linearly in
+// *position* — a straight line in decibels is an exponential in the domain being interpolated.
+// Two endpoints alone would render a ramp from -60 dB to 0 dB passing through -12.9 dB at its
+// midpoint where our formula says -30 dB. `faderPieces` is what makes the segment straight
+// again; see `place`.
+//
+// The two bounds are Tracktion's, not ours: below -100 dB the position is silence, and the
+// parameter's range stops at 1, which is +6 dB. Clamped in double before the cast, because
+// ADR 0015 §2 leaves `gain_db` unbounded and converting 1e300 to a float is not defined.
+//
+// ponytail: that ceiling means a `Mix.gain_db` above +6 dB renders as +6 dB — the ceiling a
+// *static* `Mix` has had since M1 PR 7, since `setVolumeDb` clamps the same parameter, and it
+// is stated here rather than discovered. The upgrade path, if a project ever needs more, is a
+// gain the engine applies ahead of the fader, the way an audio clip's `gain_db` is applied
+// ahead of Tracktion (ADR 0011 §2) — not a wider Tracktion parameter, which does not exist.
+constexpr double kFaderMinDb = -100.0;
+constexpr double kFaderMaxDb = 6.0;
+
+float faderPosition (double db)
+{
+    if (! (db > kFaderMinDb))
+        return 0.0f;
+    return juce::jlimit (0.0f, 1.0f, te::decibelsToVolumeFaderPosition ((float) std::min (db, kFaderMaxDb)));
+}
+
+// How many straight pieces one `LINEAR` segment is split into so that the line stays straight
+// in the model's units after the mapping above. `one` is every domain whose mapping is affine —
+// a plugin's normalised value and `pan` — where a straight segment is already straight.
+//
+// The step is in decibels because the error is: linear interpolation of `exp(k·t)` over a piece
+// spanning `d` dB is off by about `d²/368` dB at its middle, so 0.02 dB per piece keeps the
+// worst point inside 1.1e-6 dB — about one count of 24-bit full scale, which is the bar M1 PR 8
+// held the audio-clip fades to. It is in any case dominated by the rate at which the curve is *read*:
+// Tracktion holds a parameter for a whole automation sub-block, `max(128, 128 * round(rate /
+// 44100))` frames — 2.7 ms at 48 kHz — so a fast ramp is a staircase at that pitch however many
+// points are under it (tracktion_PluginNode.cpp).
+//
+// Bounded by clamping the span to the fader's own useful range first, because `gain_db` is
+// unbounded and `ceil(2e9 / 0.02)` is not a number of points to allocate. `place` bounds it
+// again by the segment's tick span, since two points cannot share a tick and be two points.
+constexpr double kFaderStepDb = 0.02;
+
+juce::int64 one (double, double)
+{
+    return 1;
+}
+
+juce::int64 faderPieces (double from, double to)
+{
+    const auto reach = std::abs (juce::jlimit (kFaderMinDb, kFaderMaxDb, to)
+                                 - juce::jlimit (kFaderMinDb, kFaderMaxDb, from));
+    return (juce::int64) std::max (1.0, std::ceil (reach / kFaderStepDb));
 }
 
 // The build manifest (ADR 0010 §4) and the plugin descriptions it resolves to.
@@ -851,8 +928,9 @@ public:
                 return plugin.error();
             edit.getMasterPluginList().insertPlugin (*plugin, slot++, nullptr);
         }
-        if (auto fader = edit.getMasterVolumePlugin(); fader != nullptr && master.has_mix())
-            mix (*fader, master.mix());
+        if (auto fader = edit.getMasterVolumePlugin(); fader != nullptr)
+            if (const auto why = strip (*fader, master); ! why.empty())
+                return why;
         return {};
     }
 
@@ -880,17 +958,57 @@ private:
                 return plugin.error();
             target.pluginList.insertPlugin (*plugin, slot++, nullptr);
         }
-        if (auto* fader = target.getVolumePlugin(); fader != nullptr && source.has_mix())
-            mix (*fader, source.mix());
+        if (auto* fader = target.getVolumePlugin(); fader != nullptr)
+            if (const auto why = strip (*fader, source); ! why.empty())
+                return why;
         return clips (target, source);
     }
 
-    // `mute` and `solo` were applied by compile and cross false (ADR 0007 §1), so a mix is a
-    // level and a position and nothing else.
-    void mix (te::VolumeAndPanPlugin& fader, const escribass::song::v1::Mix& source)
+    // The strip's fader: the level and the position the plan holds still, then the lanes that
+    // move them (ADR 0015 §1). `mute` and `solo` were applied by compile and cross false
+    // (ADR 0007 §1), so a mix is a level and a position and nothing else.
+    std::string strip (te::VolumeAndPanPlugin& fader, const PlanTrack& source)
     {
-        fader.setVolumeDb ((float) source.gain_db());
-        fader.setPan ((float) source.pan());
+        // A pin, not a default, for the reason the pan law above it is one (§8): Tracktion
+        // ramps a fader towards each block's target over 15 ms to hide zipper noise, and that
+        // ramp is a shape *it* chose — a second renderer would not have it, and a version bump
+        // could move it with no pull request to blame. ADR 0002 §8 refuses exactly that for an
+        // automation curve, so the fader is driven with no smoothing of its own and what a
+        // sample hears is our formula, read at the fixed rate ADR 0009 §3's single thread and
+        // fixed block make repeatable.
+        //
+        // It moves no static render: with an unchanging mix the target equals the current value
+        // on every block and `juce::SmoothedValue::setTargetValue` returns without ramping
+        // either way, which is why every M1 golden is byte-identical across this line.
+        //
+        // ponytail: the ceiling is that a fast ramp is a staircase at the automation sub-block
+        // — `max(128, 128 * round(rate / 44100))` frames, which `PluginNode::prepareToPlay`
+        // turns on for any plugin that has automation and which is 2.7 ms at 48 kHz. That gate
+        // is also why no committed golden could move here: a plan with no lane leaves it off.
+        // The upgrade path, if the staircase is ever audible, is a finer read — a number
+        // Tracktion owns — rather than a smoother whose shape belongs to the renderer.
+        fader.smoothingRampTimeSeconds = 0.0;
+
+        if (source.has_mix())
+        {
+            fader.setVolumeDb ((float) source.mix().gain_db());
+            fader.setPan ((float) source.mix().pan());
+        }
+
+        for (const auto& lane : source.mix_lanes())
+        {
+            // The two names, and there is no third: `mute` and `solo` are booleans a double
+            // cannot address without a threshold rule (ADR 0015 §1). The validator refuses
+            // anything else, so this is the trust boundary saying so rather than a second
+            // validator — and a lane silently dropped here would be a fader that never moved.
+            if (lane.param() == "gain_db")
+                place (*fader.volParam, lane, faderPosition, faderPieces);
+            else if (lane.param() == "pan")
+                place (*fader.panParam, lane, panPosition);
+            else
+                return "a mix lane names '" + lane.param() + "'; a track automates `gain_db` or `pan`";
+        }
+        return {};
     }
 
     // One device on a chain: the plugin the manifest names, then its state, then its
@@ -1012,40 +1130,71 @@ private:
     //           musical time, and the axis a point is stored on.
     //   HOLD    the value stays at this point's until the next point, where it steps.
     //
-    // Tracktion's parameter curve is in seconds (tracktion_AutomatableParameter.cpp, where
-    // AutomationCurveSource builds it with TimeBase::time), and a straight segment there is a
-    // straight line in seconds. Within one tempo the two are the same line; across a tempo
-    // change they are not, so a LINEAR segment is split at every tempo event inside it, at the
-    // value our formula gives for that tick. Each piece then lies in one constant tempo, where
-    // the two definitions agree, and the result is our formula rather than an approximation to
-    // it. HOLD is a second point at the segment's end carrying the segment's own value:
-    // Tracktion draws a straight line between two equal values, which is the hold, and the next
-    // point at that same instant is the step.
-    void place (te::AutomatableParameter& param, const PlanLane& lane)
+    // A `LINEAR` segment is **split**, at every tick where the straight line our formula draws
+    // would stop being the straight line Tracktion draws between two curve points. There are
+    // two such places and they are independent, so the ticks are collected and the segment cut
+    // at all of them at once:
+    //
+    //   *A tempo event inside the segment.* Tracktion's parameter curve is in seconds
+    //   (tracktion_AutomatableParameter.cpp, where AutomationCurveSource builds it with
+    //   TimeBase::time), so a straight segment there is straight in seconds; ours is straight
+    //   in ticks. Within one tempo the two are the same line and across a change they are not.
+    //   Every piece then lies in one constant tempo, and the result is our formula rather than
+    //   an approximation to it.
+    //
+    //   *A mapping that is not affine.* Tracktion interpolates in the parameter's own domain,
+    //   and the fader's domain is a slider position rather than decibels (`faderPosition`), so
+    //   a line straight in dB is an exponential there. `pieces` cuts it into steps small enough
+    //   that the chord is the curve to well under a 24-bit count; unlike the tempo split this
+    //   one is an approximation with a stated bound, because no finite number of straight
+    //   pieces is an exponential. Every other domain passes `one` and is cut only by tempo.
+    //
+    // HOLD is a second point at the segment's end carrying the segment's own value: Tracktion
+    // draws a straight line between two equal values, which is the hold, and the next point at
+    // that same instant is the step.
+    void place (te::AutomatableParameter& param,
+                const PlanLane& lane,
+                float (*value) (double) = normalised,
+                juce::int64 (*pieces) (double, double) = one)
     {
         auto& curve = param.getCurve();
+        std::vector<juce::int64> splits;
 
         for (int i = 0; i < lane.points_size(); ++i)
         {
             const auto& point = lane.points (i);
-            curve.addPoint (at (point.tick()), normalised (point.value()), 0.0f, nullptr);
+            curve.addPoint (at (point.tick()), value (point.value()), 0.0f, nullptr);
             if (i + 1 == lane.points_size())
                 break;
 
             const auto& next = lane.points (i + 1);
             if (point.curve() == escribass::song::v1::CURVE_HOLD)
             {
-                curve.addPoint (at (next.tick()), normalised (point.value()), 0.0f, nullptr);
+                curve.addPoint (at (next.tick()), value (point.value()), 0.0f, nullptr);
                 continue;
             }
+
+            const juce::int64 span = (juce::int64) next.tick() - point.tick();
+            splits.clear();
             for (const auto tick : tempoTicks)
                 if (tick > point.tick() && tick < next.tick())
-                {
-                    const auto through = (tick - point.tick()) / (double) (next.tick() - point.tick());
-                    curve.addPoint (at (tick),
-                                    normalised (point.value() + through * (next.value() - point.value())),
-                                    0.0f, nullptr);
-                }
+                    splits.push_back (tick);
+            // At most one piece per tick: two points cannot share a tick and still be two
+            // points. The cap binds only where a segment has fewer ticks than the pieces it
+            // asks for, and each piece is then a single tick — finer than the model can say.
+            const auto cuts = std::min (span, pieces (point.value(), next.value()));
+            for (juce::int64 n = 1; n < cuts; ++n)
+                splits.push_back (point.tick() + (span * n) / cuts);
+            std::sort (splits.begin(), splits.end());
+            splits.erase (std::unique (splits.begin(), splits.end()), splits.end());
+
+            for (const auto tick : splits)
+            {
+                const auto through = (tick - point.tick()) / (double) span;
+                curve.addPoint (at (tick),
+                                value (point.value() + through * (next.value() - point.value())),
+                                0.0f, nullptr);
+            }
         }
 
         // Tracktion builds a curve's read iterator on a 10 ms timer (the deferredUpdateTimer in

@@ -259,6 +259,80 @@ fn a_plugin_parameter_value_is_normalised() {
     });
 }
 
+/// Points the fixture's one lane at `track`'s `param`, leaving one point at `value`.
+///
+/// The lane is the fixture's, so what changes is only where it points and what it carries —
+/// which is the whole of what decides the domain (ADR 0015 §1, §2).
+fn mix_lane<'a>(track: &'a str, param: &'a str, value: f64) -> impl FnOnce(&mut Song) + 'a {
+    move |song: &mut Song| {
+        let automation = song.automation.values_mut().next().unwrap();
+        let target = automation.target.as_mut().unwrap();
+        target.device_id = track.to_string();
+        target.param = param.to_string();
+        automation.points.values_mut().for_each(|p| p.value = value);
+    }
+}
+
+#[test]
+fn an_automation_target_may_name_a_track_and_then_it_is_gain_db_or_pan() {
+    // ADR 0015 §1: ids are globally unique across every collection (§4.3), so a `ParamRef`
+    // whose `device_id` is a track id addresses `Mix.gain_db` and `Mix.pan` — with no field
+    // added to `song.proto`, which is why no M0.4 golden moved for this.
+    let mut song = valid_song();
+    mix_lane(BASS, "gain_db", -12.0)(&mut song);
+    assert_eq!(validate(&song, &manifest()), vec![]);
+
+    let mut song = valid_song();
+    mix_lane(MASTER, "pan", -0.25)(&mut song);
+    assert_eq!(validate(&song, &manifest()), vec![]);
+
+    // The two that are refused, and the reason is that `AutomationPoint.value` is a double:
+    // automating a boolean needs a threshold rule that would be ours and pinned.
+    assert_fires("param_unknown", mix_lane(BASS, "mute", 1.0));
+    assert_fires("param_unknown", mix_lane(BASS, "solo", 1.0));
+    // A plugin's parameter id is not a track's, however real it is on the plugin.
+    assert_fires("param_unknown", mix_lane(BASS, CUTOFF, 0.5));
+    // And an id that is neither is still the failure it was.
+    assert_fires("device_unknown", mix_lane("01ZZZZZZZZZZZZZZZZZZZZZZZZ", "gain_db", 0.0));
+}
+
+#[test]
+fn param_out_of_range_judges_the_domain_the_target_resolved_to() {
+    // The subtlety of ADR 0015 §2: one rule id, three domains, and `0.5` is legal in each and
+    // means a different thing in each — mid-range to a plugin, a quiet fader, a little to the
+    // right. A rule that conflated them would pass all three and be wrong about two.
+    let mut song = valid_song();
+    surge_params(&mut song).insert(CUTOFF.to_string(), 0.5);
+    let mut with_plugin_lane = song.clone();
+    mix_lane(SURGE_FX, CUTOFF, 0.5)(&mut with_plugin_lane);
+    assert_eq!(validate(&with_plugin_lane, &manifest()), vec![]);
+
+    // `gain_db` is decibels and unbounded, so 0.5 is legal and very nearly nothing, and so is
+    // -60, and so is +40 — the engine's fader has a ceiling and the model does not.
+    for db in [0.5, -60.0, 40.0, 0.0] {
+        let mut song = valid_song();
+        mix_lane(BASS, "gain_db", db)(&mut song);
+        assert_eq!(validate(&song, &manifest()), vec![], "{db} dB is a legal fader ride");
+    }
+
+    // `pan` is -1..1, so 0.5 is legal and 1.5 is not — where the same 1.5 on `gain_db` above
+    // was fine and the same 1.5 on a plugin parameter is `param_out_of_range` too.
+    let mut song = valid_song();
+    mix_lane(BASS, "pan", 0.5)(&mut song);
+    assert_eq!(validate(&song, &manifest()), vec![]);
+    assert_fires("param_out_of_range", mix_lane(BASS, "pan", 1.5));
+    assert_fires("param_out_of_range", mix_lane(BASS, "pan", -1.5));
+
+    // And the normalised domain is unchanged where it applies: 1.5 is out of a plugin's 0..1
+    // while it is a perfectly ordinary number of decibels.
+    let mut song = valid_song();
+    surge_params(&mut song).insert(CUTOFF.to_string(), 0.5);
+    mix_lane(SURGE_FX, CUTOFF, 1.5)(&mut song);
+    let mut rules: Vec<&str> = validate(&song, &manifest()).into_iter().map(|v| v.rule).collect();
+    rules.dedup();
+    assert_eq!(rules, vec!["param_out_of_range"], "{rules:?}");
+}
+
 #[test]
 fn a_device_that_is_not_a_plugin_is_not_judged_by_the_manifest() {
     // The fixture's Cmajor instrument carries `drive: 0.62` and its lane targets `cutoff`,

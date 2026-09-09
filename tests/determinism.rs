@@ -617,8 +617,11 @@ fn the_plan_is_reproducible() {
     // The script is what compile resolves — clips added out of order, a chain out of index
     // order, a note loop with a short last iteration, a stretched audio loop, a muted track
     // with automation on its device, two entities on one parameter, a section past the last
-    // clip — and the golden is the plan those produce. Every other script's `plan.json` is
-    // pinned by its own golden test.
+    // clip, and — since M2 PR 6 — lanes whose `ParamRef` names a *track* rather than a device,
+    // on an ordinary track and on the master, in the model's own units (ADR 0015 §1, §2). The
+    // gain ramp crosses this script's tempo change on purpose, since that is the one place the
+    // engine has to split a segment. The golden is the plan those produce; every other
+    // script's `plan.json` is pinned by its own golden test.
     let first = run("render", AT);
     let second = run("render", AT);
     assert_same("the plan was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));

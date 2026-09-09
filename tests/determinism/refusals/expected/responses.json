@@ -362,6 +362,32 @@
     "valid": true
   },
   {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "`mute` is not automatable on a track; `gain_db` and `pan` are, and `mute` and `solo` are booleans a double cannot address without a threshold rule (ADR 0015 §1)",
+        "path": "/automation/01M1FPMP00000000000000000H/target/param",
+        "rule": "param_unknown"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [
+      {
+        "message": "1.5 is outside `pan`'s -1.0 hard left to 1.0 hard right",
+        "path": "/automation/01M1FPMP00000000000000000H/points/01M1FPMP00000000000000000J/value",
+        "rule": "param_out_of_range"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
     "entry_id": "01M1FPMP00000000000000000K",
     "errors": [],
     "patch": [

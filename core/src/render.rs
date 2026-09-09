@@ -368,12 +368,13 @@ impl Compiler<'_> {
 
         let clips = clips.into_iter().flat_map(|c| self.clip(c)).collect();
 
-        // ponytail: empty until M2 PR 6. A mix lane is an `Automation` whose `ParamRef` names
-        // a track, and `validate` still refuses one with `device_unknown` — so nothing can
-        // reach here to be carried, and the field crosses as the empty list the plan goldens
-        // show. PR 6 resolves the track arm and fills it, sorted, with the same tick-ordered
-        // points a device lane gets (ADR 0015 §1, §2).
-        PlanTrack { instrument, effects, mix, clips, mix_lanes: Vec::new() }
+        // A mix lane is an `Automation` whose `ParamRef` names this track rather than a device
+        // on it, and it is taken out of the same map by the same function for the same reason:
+        // ids are globally unique across every collection (§4.3), so one lookup by id serves
+        // both and a track can never collide with a device (ADR 0015 §1). Its points are the
+        // model's own units — decibels and -1..1 — which is the one place a plan's parameter
+        // values are not a plugin's normalised 0..1 (ADR 0015 §2).
+        PlanTrack { instrument, effects, mix, clips, mix_lanes: take_lanes(lanes, &track.id) }
     }
 
     /// One plan clip per loop iteration. A looping clip repeats its first `loop_length_ticks`
@@ -481,14 +482,16 @@ impl Compiler<'_> {
     }
 }
 
-/// Every automation point in the song, by the device and parameter it targets.
+/// Every automation point in the song, by the device — or track (ADR 0015 §1) — and parameter
+/// it targets.
 ///
 /// One lane per parameter: two `Automation` entities naming the same parameter are one curve
 /// as far as a sample is concerned, so their points merge — tick order, ties by automation id
 /// and then point id, which is the map order a stable sort keeps. A lane whose device sits on
 /// a track that does not sound is never taken and is dropped with the track: it could not
-/// change a sample. A `device_id` naming nothing is the validator's `device_unknown` and does
-/// not reach compile; if it did, it would be left here the same way.
+/// change a sample, and a lane on the track's own fader is dropped by the same silence. A
+/// `device_id` naming nothing is the validator's `device_unknown` and does not reach compile;
+/// if it did, it would be left here the same way.
 fn lanes(song: &Song) -> Lanes<'_> {
     let mut lanes: Lanes = BTreeMap::new();
     for automation in song.automation.values() {
