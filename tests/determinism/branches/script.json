@@ -25,6 +25,13 @@
   {"tool": "set_tempo", "args": {"bpm": 120.0, "tick": 0}},
   {"tool": "merge_branch", "args": {"name": "scratch"}, "refused": "merge_conflict"},
 
+  {"tool": "merge_branch", "args": {"name": "scratch",
+    "resolve": {"/version": "MERGE_SIDE_OURS"}}, "refused": "resolution_unknown"},
+  {"tool": "merge_branch", "args": {"name": "scratch", "dry_run": true,
+    "resolve": {"/tempo_map/events/01M1FPMP000000000000000003/bpm": "MERGE_SIDE_OURS"}}},
+  {"tool": "merge_branch", "args": {"name": "scratch",
+    "resolve": {"/tempo_map/events/01M1FPMP000000000000000003/bpm": "MERGE_SIDE_THEIRS"}}},
+
   {"tool": "delete_branch", "args": {"name": "scratch", "dry_run": true}},
   {"tool": "delete_branch", "args": {"name": "scratch"}},
 

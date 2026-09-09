@@ -363,12 +363,37 @@ message DeleteBranchRequest {
   bool dry_run = 2;
 }
 
+// Which side of a conflict wins at one path (ADR 0015 §3).
+//
+// There is no "both" and no "merged value": a person choosing a third thing is an ordinary
+// edit on this branch, made by the tool that owns that field, and not a merge outcome.
+enum MergeSide {
+  MERGE_SIDE_UNSPECIFIED = 0;
+  // This branch keeps what it has. The other side's operations at that path are dropped.
+  MERGE_SIDE_OURS = 1;
+  // The other branch's value lands, replacing this branch's at that path and below it.
+  MERGE_SIDE_THEIRS = 2;
+}
+
 // Merges `name` into the current branch, appending one entry with two parents. Disjoint
 // paths auto-resolve; the same path is a conflict returned in ToolResult.errors, never
 // resolved by a rule nobody chose (ADR 0001 §4).
 message MergeBranchRequest {
   string name = 1;
   bool dry_run = 2;
+
+  // How each conflict is settled: a path from a previous call's `merge_conflict` errors,
+  // mapped to the side that wins there (ADR 0015 §3).
+  //
+  // The conflict comes back as it always did, a person picks per path, and the **same call**
+  // is made again carrying the picks — so there is no second tool, no session that remembers
+  // a half-finished merge, and no merge that is partly committed. `dry_run` works on the
+  // second call exactly as on the first.
+  //
+  // A path here that is not one of this merge's conflicts is refused with
+  // `resolution_unknown`: dropping the other side's change at a path nothing disagreed about
+  // would be editing the merge rather than resolving it.
+  map<string, MergeSide> resolve = 3;
 }
 
 // ---------------------------------------------------------------------------

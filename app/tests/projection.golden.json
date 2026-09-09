@@ -473,5 +473,143 @@
       "set": 0,
       "rows": []
     }
-  ]
+  ],
+  "log": {
+    "head": "main",
+    "branches": [
+      {
+        "name": "main",
+        "entryId": "01M1FPMP00000000000000000H",
+        "head": true
+      },
+      {
+        "name": "try-darker-chorus",
+        "entryId": "01M1FPMP00000000000000000D",
+        "head": false
+      }
+    ],
+    "entries": [
+      {
+        "id": "01M1FPMP00000000000000000H",
+        "tool": "merge_branch",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP00000000000000000G",
+          "01M1FPMP00000000000000000F"
+        ],
+        "merge": true,
+        "onBranch": true,
+        "refs": [
+          "main"
+        ]
+      },
+      {
+        "id": "01M1FPMP00000000000000000G",
+        "tool": "set_tempo",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP00000000000000000E"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP00000000000000000F",
+        "tool": "set_tempo",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP00000000000000000E"
+        ],
+        "merge": false,
+        "onBranch": false,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP00000000000000000E",
+        "tool": "merge_branch",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 7,
+        "parents": [
+          "01M1FPMP00000000000000000A",
+          "01M1FPMP00000000000000000D"
+        ],
+        "merge": true,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP00000000000000000D",
+        "tool": "set_track_instrument",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 5,
+        "parents": [
+          "01M1FPMP00000000000000000B"
+        ],
+        "merge": false,
+        "onBranch": false,
+        "refs": [
+          "try-darker-chorus"
+        ]
+      },
+      {
+        "id": "01M1FPMP00000000000000000B",
+        "tool": "set_tempo",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "merge": false,
+        "onBranch": false,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP00000000000000000A",
+        "tool": "add_section",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP000000000000000008",
+        "tool": "add_track",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP000000000000000005"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP000000000000000005",
+        "tool": "create",
+        "author": "model",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 8,
+        "parents": [],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      }
+    ]
+  }
 }

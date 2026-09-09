@@ -24,10 +24,10 @@ use crate::tools;
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
-    RedoRequest, RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest,
-    SetTempoRequest, SetTrackInstrumentRequest, SongResponse, SwitchBranchRequest, ToolResult,
-    TransposeRequest, UndoRequest,
+    GetSongAtRequest, HistoryResponse, MergeBranchRequest, MergeSide, MoveSectionRequest,
+    QuantizeRequest, RedoRequest, RenderExportRequest, RenderResponse, SetNotesRequest,
+    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
+    SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -526,10 +526,13 @@ impl Session {
         Ok(described(summary))
     }
 
-    /// §5 `merge_branch` (ADR 0001 §4).
+    /// §5 `merge_branch` (ADR 0001 §4, ADR 0015 §3).
     ///
-    /// One entry with two parents, or a list of conflicts and nothing written. There is no
-    /// third outcome: interactive resolution is M2's, when there is a UI to resolve in.
+    /// One entry with two parents, or a list of conflicts and nothing written. Since M2 PR 8
+    /// there is a way out of the second: the conflicts come back exactly as they always did,
+    /// a person names a side per path, and **the same call** is made again carrying the picks.
+    /// No second tool, no session that remembers a half-finished merge, no merge that is
+    /// partly committed — and `dry_run` on the second call means what it means on the first.
     pub fn merge_branch(
         &mut self,
         request: &MergeBranchRequest,
@@ -572,13 +575,75 @@ impl Session {
         let ours = diff(&base_doc, &ours_doc);
         let theirs = diff(&base_doc, &theirs_doc);
 
-        let conflicts = crate::merge::conflicts(&base_doc, &ours, &theirs);
-        if !conflicts.is_empty() {
-            return Ok(refused(conflicts));
-        }
+        // Asked before the conflicts are computed, and kept that way: a branch with nothing
+        // this one lacks has nothing to conflict about either, and the two answers are not the
+        // same. "Nothing to merge" records no entry; a merge whose every conflict was resolved
+        // in this branch's favour has an empty patch and still records one, below.
         if theirs.is_empty() {
             return Ok(described(format!("`{}` has nothing this branch lacks", request.name)));
         }
+
+        let conflicts = crate::merge::conflicts(&base_doc, &ours, &theirs);
+        let picked = |path: &str| {
+            MergeSide::try_from(request.resolve.get(path).copied().unwrap_or_default())
+                .unwrap_or(MergeSide::Unspecified)
+        };
+
+        // A resolution names a path *this* merge is in conflict about. One that does not is
+        // refused rather than ignored: taken at face value it would drop the other side's
+        // change at a path nothing disagreed about — editing the merge rather than resolving
+        // it — and taken as a typo it would leave a person believing they had chosen something
+        // (ADR 0015 §3). It is also how a caller learns the conflicts moved under a held
+        // preview, which is the merge's version of ADR 0012 §4's optimistic apply.
+        let disputed: std::collections::BTreeSet<&str> =
+            conflicts.iter().map(|c| c.path.as_str()).collect();
+        let unknown: Vec<Violation> = request
+            .resolve
+            .keys()
+            .filter(|path| !disputed.contains(path.as_str()))
+            .map(|path| Violation {
+                // The path as the caller sent it, which is a pointer into the document like
+                // every other `Violation.path` — and not `/resolve/<path>`, which would need
+                // RFC 6901 to escape a pointer inside a pointer for no reader's benefit.
+                path: path.clone(),
+                rule: "resolution_unknown",
+                message: format!(
+                    "`{path}` is not one of this merge's conflicts; resolve the paths \
+                     `merge_conflict` named and nothing else"
+                ),
+            })
+            .collect();
+        if !unknown.is_empty() {
+            return Ok(refused(unknown));
+        }
+
+        // Every conflict nobody has settled is still a conflict, reported as it was before
+        // there was anything to settle it with. `MERGE_SIDE_UNSPECIFIED` is not a third choice
+        // — it is the absence of one, which is what a path left alone in the map means too.
+        let unsettled: Vec<Violation> = conflicts
+            .iter()
+            .filter(|c| picked(&c.path) == MergeSide::Unspecified)
+            .cloned()
+            .collect();
+        if !unsettled.is_empty() {
+            return Ok(refused(unsettled));
+        }
+
+        // Resolution is a **filter on the other side's operations**, and that is the whole
+        // mechanism. Theirs wins at a path by being applied, which is what an unconflicted
+        // merge already does to every op; ours wins by that op not being applied at all. So
+        // there is no third value to compute, no strategy to pick and no code path a merge
+        // without conflicts does not already take (ADR 0015 §3).
+        //
+        // `merge::conflicts` reports a conflict at the *other* side's op path, so the map's
+        // keys and the ops filtered here are the same strings; nothing has to translate.
+        //
+        // `ponytail:` choosing theirs at a path whose parent this branch removed is refused
+        // rather than grafted — the op arrives as `path_not_found` from `prepare_merge`, which
+        // is loud. Resolving at the parent path is the answer; a merge that reconstructs a
+        // subtree is the strategy framework this decision exists to avoid.
+        let theirs: Vec<Op> =
+            theirs.into_iter().filter(|op| picked(op.path()) != MergeSide::Ours).collect();
 
         // The incoming side's ops applied on top of ours. `prepare_merge` rather than
         // `prepare`: these carry entity versions, which are core's own and are what ADR 0005
@@ -601,7 +666,11 @@ impl Session {
         }
 
         // Two parents, which is the only thing that distinguishes a merge from a commit at
-        // this level (ADR 0001 §1).
+        // this level (ADR 0001 §1) — and the reason this is the one place an entry with no
+        // operations is written rather than refused as "no change". Resolving every conflict
+        // in this branch's favour changes the document not at all and still joins the two
+        // lines of history: without the entry the branches stay unmerged, `merge_base` finds
+        // the old base, and the same conflict is reported again for ever.
         let entry_id = self.append(prepared, "merge_branch", vec![ours_head, theirs_head])?;
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
     }

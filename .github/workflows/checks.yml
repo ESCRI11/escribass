@@ -259,10 +259,11 @@ jobs:
       # view would draw and never a screenshot (ADR 0012 §5, ADR 0016 §5) — so it runs here on
       # a headless runner beside `tsc` rather than needing a job of its own.
       #
-      # It reads `tests/determinism/render/expected/song.json`, which is why this job's path
-      # gate excludes `docs/`, `engine/` and the prose files and nothing else: a pull request
-      # that reblesses that determinism golden changes this one's input, and the gate has to
-      # let this job see it.
+      # It reads `tests/determinism/render/expected/song.json` and, since M2 PR 8, the log in
+      # `tests/determinism/branches/expected/` — which is why this job's path gate excludes
+      # `docs/`, `engine/` and the prose files and nothing else: a pull request that reblesses
+      # either determinism golden changes this one's input, and the gate has to let this job
+      # see it.
       - name: Projection golden
         if: env.SKIP != '1'
         working-directory: app

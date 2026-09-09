@@ -125,6 +125,48 @@ repository produces that history yet*. Refusing is the current behaviour and it 
 trigger is a real criss-cross, and M2's history view is what makes branch merging ordinary
 enough for one to appear.
 
+**Extended 2026-09-09, in M2 PR 8, where the field was built and used.** This decision named the
+shape and left four things to whoever implemented it. All four were settled against a real
+conflict raised in the window — two branches riding the same track's `gain_db` and `pan` — rather
+than against an imagined one, and the first of them is the one the decision could most easily
+have got wrong:
+
+*What a conflict actually returns matched the assumption.* `merge_branch` refuses with an
+ordinary `ToolResult` — `valid: false`, `patch` empty, nothing written — carrying one
+`merge_conflict` `Violation` per conflicting path, whose `path` is the **other** side's operation
+path and whose message names both values (`core/src/merge.rs`). So "a map from the conflicting
+RFC 6902 path" is a map keyed by a string the caller was already handed, and there was nothing to
+translate.
+
+*Resolution is a filter on the other side's operations, and nothing else.* Theirs wins at a path
+by being applied, which is what an unconflicted merge already does to every one of them; ours
+wins by that operation not being applied. There is no third value computed anywhere and no code
+path a merge without conflicts does not already take. One consequence is worth naming because it
+is a refusal rather than a result: choosing *theirs* at a path whose parent **this** branch
+removed cannot be honoured — the operation arrives at a document where its parent is gone and
+`prepare_merge` answers `path_not_found`. That is loud, and the answer is to resolve at the
+parent path. A merge that reconstructed the subtree instead would be the strategy framework this
+decision exists to avoid.
+
+*A pick for a path that is not one of that merge's conflicts is refused*, with the rule
+`resolution_unknown`. Ignoring it was the alternative and it is worse in both readings: as a typo
+it leaves a person believing they chose something, and taken at face value it would drop the
+other side's change at a path nothing disagreed about, which is editing the merge rather than
+resolving it. It is also how a caller learns the conflicts moved under a held preview — the
+merge's version of ADR 0012 §4's optimistic apply.
+
+*A merge that keeps this branch's value everywhere still records its entry*, and it is the one
+place in the tool API where a call that changes no document writes one. Everywhere else "a call
+that changes nothing records nothing" is right; here what the entry records is not a change to
+the document but the **join**, and without it the two branches stay unmerged, `merge_base` keeps
+finding the old base, and the same conflict is reported for ever. The entry has two parents and
+an empty `ops` array, which replays as the no-op it is.
+
+The recursive-merge deferral is unchanged and its trigger is now genuinely reachable: the history
+view makes branch merging ordinary, and merging two branches that have each merged a third is
+four clicks. Nothing in the repository has produced one yet, and `merge_base_ambiguous` is what
+would say so.
+
 ### 4. Dense unique `index` defers again, and M2 is held to the scope that makes that safe
 
 The row's harm is real: inserting mid-list renumbers everything, and two branches inserting at

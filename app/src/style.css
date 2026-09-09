@@ -433,3 +433,108 @@ button.pane.on {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The patch log (§5, §9; plate 5). A table, because it is one: six columns of the same shape
+   per row, and `<table>` is what lines those up without a grid definition per column. */
+.log {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.log th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  font-weight: normal;
+  color: var(--dim);
+  background: var(--panel);
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.log td {
+  padding: 2px 10px;
+  border-bottom: 1px solid var(--faint);
+  white-space: nowrap;
+}
+
+.log .eid,
+.log .when {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.log .count {
+  text-align: right;
+  width: 40px;
+}
+
+.log .who {
+  width: 64px;
+}
+
+/* An entry that is not on the current branch. Dimmed, never hidden: a discarded branch's
+   entries stay in the log (ADR 0001 §2) and an audit trail that dropped them would be a
+   different claim from the one §5 makes. */
+.log tr.elsewhere td {
+  opacity: 0.45;
+}
+
+/* The ref names pointing at an entry, which is the whole of what a branch is (ADR 0001 §2). */
+.log .at {
+  width: 100%;
+  color: var(--accent);
+}
+
+/* The two picks that settle one conflicting path (ADR 0015 §3). Both are always offered and
+   neither is preselected: a default here would be a merge strategy chosen by a stylesheet. */
+.pending .sides {
+  display: inline-flex;
+  gap: 5px;
+  margin-left: 8px;
+}
+
+.pending button.side {
+  padding: 0 7px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.pending button.side.on {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Switch, Merge, Delete and Branch. In the pane body rather than the head, so they may wrap:
+   the head is the bar that may not (ADR 0017 §3), and clipping a button is worse than moving
+   a table nobody is dragging. */
+.branchbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.branchbar select,
+.branchbar input {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font: inherit;
+}
+
+.branchbar input {
+  width: 140px;
+}
+
+/* A branch button whose target is the branch you are already on. Disabled rather than hidden,
+   so the bar keeps its shape as the choice changes. */
+.branchbar button.pane:disabled {
+  opacity: 0.4;
+}

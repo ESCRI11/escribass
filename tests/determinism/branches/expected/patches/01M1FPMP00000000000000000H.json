@@ -1,0 +1,25 @@
+{
+  "id": "01M1FPMP00000000000000000H",
+  "parents": [
+    "01M1FPMP00000000000000000G",
+    "01M1FPMP00000000000000000F"
+  ],
+  "tool": "merge_branch",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+      "value": 100.0
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 7
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

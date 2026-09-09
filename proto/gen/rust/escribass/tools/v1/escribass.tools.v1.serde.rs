@@ -1666,12 +1666,24 @@ impl serde::Serialize for MergeBranchRequest {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.MergeBranchRequest", len)?;
         if true {
             struct_ser.serialize_field("name", &self.name)?;
         }
         if true {
             struct_ser.serialize_field("dry_run", &self.dry_run)?;
+        }
+        if true {
+            let v: std::collections::HashMap<_, _> = self.resolve.iter()
+                .map(|(k, v)| {
+                    let v = MergeSide::try_from(*v)
+                        .map_err(|_| serde::ser::Error::custom(format!("Invalid variant {}", *v)))?;
+                    Ok((k, v))
+                }).collect::<std::result::Result<_,_>>()?;
+            struct_ser.serialize_field("resolve", &v)?;
         }
         struct_ser.end()
     }
@@ -1686,12 +1698,14 @@ impl<'de> serde::Deserialize<'de> for MergeBranchRequest {
             "name",
             "dry_run",
             "dryRun",
+            "resolve",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             Name,
             DryRun,
+            Resolve,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -1715,6 +1729,7 @@ impl<'de> serde::Deserialize<'de> for MergeBranchRequest {
                         match value {
                             "name" => Ok(GeneratedField::Name),
                             "dryRun" | "dry_run" => Ok(GeneratedField::DryRun),
+                            "resolve" => Ok(GeneratedField::Resolve),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -1736,6 +1751,7 @@ impl<'de> serde::Deserialize<'de> for MergeBranchRequest {
             {
                 let mut name__ = None;
                 let mut dry_run__ = None;
+                let mut resolve__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::Name => {
@@ -1750,15 +1766,99 @@ impl<'de> serde::Deserialize<'de> for MergeBranchRequest {
                             }
                             dry_run__ = Some(map_.next_value()?);
                         }
+                        GeneratedField::Resolve => {
+                            if resolve__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("resolve"));
+                            }
+                            resolve__ = Some(
+                                map_.next_value::<std::collections::BTreeMap<_, MergeSide>>()?
+                                    .into_iter().map(|(k,v)| (k, v as i32)).collect()
+                            );
+                        }
                     }
                 }
                 Ok(MergeBranchRequest {
                     name: name__.unwrap_or_default(),
                     dry_run: dry_run__.unwrap_or_default(),
+                    resolve: resolve__.unwrap_or_default(),
                 })
             }
         }
         deserializer.deserialize_struct("escribass.tools.v1.MergeBranchRequest", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for MergeSide {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let variant = match self {
+            Self::Unspecified => "MERGE_SIDE_UNSPECIFIED",
+            Self::Ours => "MERGE_SIDE_OURS",
+            Self::Theirs => "MERGE_SIDE_THEIRS",
+        };
+        serializer.serialize_str(variant)
+    }
+}
+impl<'de> serde::Deserialize<'de> for MergeSide {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "MERGE_SIDE_UNSPECIFIED",
+            "MERGE_SIDE_OURS",
+            "MERGE_SIDE_THEIRS",
+        ];
+
+        struct GeneratedVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = MergeSide;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(formatter, "expected one of: {:?}", &FIELDS)
+            }
+
+            fn visit_i64<E>(self, v: i64) -> std::result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                i32::try_from(v)
+                    .ok()
+                    .and_then(|x| x.try_into().ok())
+                    .ok_or_else(|| {
+                        serde::de::Error::invalid_value(serde::de::Unexpected::Signed(v), &self)
+                    })
+            }
+
+            fn visit_u64<E>(self, v: u64) -> std::result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                i32::try_from(v)
+                    .ok()
+                    .and_then(|x| x.try_into().ok())
+                    .ok_or_else(|| {
+                        serde::de::Error::invalid_value(serde::de::Unexpected::Unsigned(v), &self)
+                    })
+            }
+
+            fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                match value {
+                    "MERGE_SIDE_UNSPECIFIED" => Ok(MergeSide::Unspecified),
+                    "MERGE_SIDE_OURS" => Ok(MergeSide::Ours),
+                    "MERGE_SIDE_THEIRS" => Ok(MergeSide::Theirs),
+                    _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
+                }
+            }
+        }
+        deserializer.deserialize_any(GeneratedVisitor)
     }
 }
 impl serde::Serialize for MoveSectionRequest {

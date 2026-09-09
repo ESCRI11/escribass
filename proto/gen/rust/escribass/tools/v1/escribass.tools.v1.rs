@@ -419,12 +419,60 @@ pub struct DeleteBranchRequest {
 /// Merges `name` into the current branch, appending one entry with two parents. Disjoint
 /// paths auto-resolve; the same path is a conflict returned in ToolResult.errors, never
 /// resolved by a rule nobody chose (ADR 0001 §4).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MergeBranchRequest {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
     #[prost(bool, tag="2")]
     pub dry_run: bool,
+    /// How each conflict is settled: a path from a previous call's `merge_conflict` errors,
+    /// mapped to the side that wins there (ADR 0015 §3).
+    ///
+    /// The conflict comes back as it always did, a person picks per path, and the **same call**
+    /// is made again carrying the picks — so there is no second tool, no session that remembers
+    /// a half-finished merge, and no merge that is partly committed. `dry_run` works on the
+    /// second call exactly as on the first.
+    ///
+    /// A path here that is not one of this merge's conflicts is refused with
+    /// `resolution_unknown`: dropping the other side's change at a path nothing disagreed about
+    /// would be editing the merge rather than resolving it.
+    #[prost(btree_map="string, enumeration(MergeSide)", tag="3")]
+    pub resolve: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, i32>,
+}
+/// Which side of a conflict wins at one path (ADR 0015 §3).
+///
+/// There is no "both" and no "merged value": a person choosing a third thing is an ordinary
+/// edit on this branch, made by the tool that owns that field, and not a merge outcome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum MergeSide {
+    Unspecified = 0,
+    /// This branch keeps what it has. The other side's operations at that path are dropped.
+    Ours = 1,
+    /// The other branch's value lands, replacing this branch's at that path and below it.
+    Theirs = 2,
+}
+impl MergeSide {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "MERGE_SIDE_UNSPECIFIED",
+            Self::Ours => "MERGE_SIDE_OURS",
+            Self::Theirs => "MERGE_SIDE_THEIRS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "MERGE_SIDE_UNSPECIFIED" => Some(Self::Unspecified),
+            "MERGE_SIDE_OURS" => Some(Self::Ours),
+            "MERGE_SIDE_THEIRS" => Some(Self::Theirs),
+            _ => None,
+        }
+    }
 }
 include!("escribass.tools.v1.serde.rs");
 include!("escribass.tools.v1.tonic.rs");
