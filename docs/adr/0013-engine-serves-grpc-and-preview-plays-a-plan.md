@@ -257,9 +257,26 @@ not pretend to cover it.
   file read hardcoded component lists (`tests/renders.rs`'s `COMPONENTS`, and the engine job's
   `for component in …`), so the entry is inert until PR 9 adds gRPC to them and to the engine's
   reported build (ADR 0008 §5, whose list goes from seven to eight).
-- The engine binary grows a mode flag and a socket path, and `core/src/engine.rs` stops writing
-  to a pipe. The `renders` cargo feature and the four goldens are unchanged in content and
-  changed in how they are reached — which is the whole risk of PR 9 and why it is on its own.
+- **And the reported build is not only reported.** The engine's provenance is one list, and
+  `--scan` writes it into the build manifest's `engine` block, which `Project::write` copies
+  into every project's `lock.json` (ADR 0010 §1, §4). So gRPC becoming an engine submodule
+  commit reaches `tests/fixtures/manifest.json` and five determinism goldens — by exactly one
+  line each, the pin itself, with no `song.json`, patch or plan touched. That is `tests/AGENTS.md`'s
+  own rule ("moving a §17 pin moves the fixture and the goldens in one pull request") arriving,
+  and it is the right answer rather than an accident: ADR 0010 §1 says `lock.json` records the
+  engine's submodule commits, and a second, shorter list for the manifest would be the drift
+  ADR 0008 §4 refuses one layer down. **Found by CI**, in the step that exists to compare the
+  two files, which is the only place both exist at once.
+- The engine binary grows a mode flag and names its own socket, and `core/src/engine.rs` stops
+  writing to a pipe. The `renders` cargo feature and the four goldens are unchanged in content
+  and changed in how they are reached — which is the whole risk of PR 9 and why it is on its
+  own. **Done 2026-09-09, and the goldens did not move**: `audio_clip`, `dexed` and `surge_xt`
+  reproduced their committed bytes over the new transport before the old one was deleted, and
+  the three CI render legs carry `sfizz`, whose VST3 will not load on the author's machine.
+- The engine job's six shell steps needed a client, because a shell script cannot dial gRPC.
+  They drive `tests/render_once.rs`, which is `core`'s own `Engine` behind an argv — a client in
+  the engine's own C++ build would have been a second implementation of this boundary, which is
+  ADR 0006 §1's objection one boundary over.
 - Preview and export **still do not agree**, and that stays correct: sfizz uses freewheeling
   quality settings offline, Surge XT's factory patch reaches a wall-clock RNG unless
   `A Osc 1 Retrigger` is set, and the device's sample rate is the user's while the render's is

@@ -1,10 +1,12 @@
-// The render engine (docs/specs.md §8): one RenderPlan in on stdin, one WAV out at the path
-// the plan names, one RenderResult out on stdout, exit. A fresh process per render, so nothing
-// here outlives a render and nothing is reused (ADR 0008 §2).
+// The render engine (docs/specs.md §8): one `Render` call in over gRPC, one WAV out at the path
+// the plan names, one RenderResult back, exit. A fresh process per render, so nothing here
+// outlives a render and nothing is reused (ADR 0008 §2).
 //
-// stdout carries protobuf bytes and nothing else. Every line this file writes goes to stderr,
-// and JUCE's own logger does the same on Linux (juce_SystemStats_linux.cpp: outputDebugString
-// is std::cerr), which is why nothing here installs a logger (ADR 0008 §1).
+// stdout carries the socket address this process serves on and nothing else — one line, printed
+// once the server is listening, which is how a caller learns both where to dial and that it may
+// (ADR 0013 §3, amended). Every other line this file writes goes to stderr, and JUCE's own
+// logger does the same on Linux (juce_SystemStats_linux.cpp: outputDebugString is std::cerr),
+// which is why nothing here installs a logger (ADR 0008 §1).
 //
 // The plan names its plugins by the id the build manifest declares (ADR 0010 §4), and the
 // manifest's path is the engine's one argument: a render opens the exact binaries it names and
@@ -41,8 +43,6 @@
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
-#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -1462,10 +1462,10 @@ private:
     int placed = 0;
 };
 
-// **One render, and nothing about how the plan arrived.** The transport is the caller's
-// business (ADR 0013 §3): `serve` below takes a plan off a gRPC call and `run` off stdin, and
-// both land here with the same three things — the manifest this build was told to host from,
-// a scratch directory that outlives the render and dies with the process, and a plan.
+// **One render, and nothing about how the plan arrived.** Kept apart from `serve` below, which
+// takes the plan off a gRPC call, because what this does is the milestone's claim and how the
+// plan travelled is not: it is handed the manifest this build was told to host from, a scratch
+// directory that outlives the render and dies with the process, and a plan.
 //
 // Returns `kOk` having filled `result`, or the stage the render died in, having already said
 // why on stderr. Failure is a code and never a `RenderResult` carrying errors (ADR 0008 §1).
@@ -1657,7 +1657,7 @@ int render (const juce::var& manifest, const juce::File& scratch, const RenderPl
 }
 
 // ------------------------------------------------------------------------------------------
-// The two ways a plan gets here
+// How a plan gets here (ADR 0013 §3)
 // ------------------------------------------------------------------------------------------
 
 // The build manifest, or an empty `var` having already said why (ADR 0010 §4).
@@ -1670,7 +1670,7 @@ juce::var manifestIn (const juce::File& file)
     return manifest;
 }
 
-// The scratch directory both modes render in, or an empty `File` having already said why.
+// The scratch directory a render runs in, or an empty `File` having already said why.
 juce::File scratchIn (const TempDir& scratch)
 {
     if (scratch.dir == juce::File())
@@ -1679,44 +1679,6 @@ juce::File scratchIn (const TempDir& scratch)
                                        .getFullPathName()
                                        .toStdString());
     return scratch.dir;
-}
-
-// ADR 0008 §1's stdio path, in the last milestone it exists in: one plan in on stdin read to
-// end-of-stream, one RenderResult out on stdout, exit. `serve` below is what replaces it, and
-// the two are not kept side by side past this pull request (ADR 0013 §3).
-int run (const juce::File& manifestFile)
-{
-    const auto manifest = manifestIn (manifestFile);
-    if (! manifest.isObject())
-        return kBadPlan;
-
-    // One plan, read to end-of-stream (ADR 0008 §1).
-    const std::string bytes ((std::istreambuf_iterator<char> (std::cin)), std::istreambuf_iterator<char>());
-    RenderPlan plan;
-    if (! plan.ParseFromString (bytes))
-        return fail (kBadPlan, "stdin is not a RenderPlan (" + std::to_string (bytes.size()) + " bytes)");
-
-    const juce::ScopedJuceInitialiser_GUI juceInit;
-    const TempDir scratch;
-    const auto dir = scratchIn (scratch);
-    if (dir == juce::File())
-        return kRenderFailed;
-
-    RenderResult result;
-    if (const auto code = render (manifest, dir, plan, result); code != kOk)
-        return code;
-
-    // **Checked after the flush, not before it.** A 447-byte `RenderResult` fits `std::cout`'s
-    // buffer, so `SerializeToOstream` returns true having written nothing to the file
-    // descriptor and the real `write(2)` happens inside `flush()`. Redirected to `/dev/full`
-    // that used to be exit 0 with an empty stdout and nothing on stderr — the engine claiming a
-    // render whose answer never left the process (M1 PR 13).
-    if (! result.SerializeToOstream (&std::cout))
-        return fail (kBadOutput, "could not write the RenderResult to stdout");
-    std::cout.flush();
-    if (! std::cout.good())
-        return fail (kBadOutput, "the RenderResult could not be flushed to stdout");
-    return kOk;
 }
 
 // The one `Render` call this process serves, parked for the message thread.
@@ -1787,8 +1749,10 @@ private:
 // it cannot be refused a connection, and there is nothing to poll, retry or sleep on. ADR 0013
 // §3 had the path travelling the other way, on argv, and is amended in place with this.
 //
-// stdout is the address and nothing else, which is the same rule as before for the same reason
-// (ADR 0008 §1): every log line, JUCE's warnings and every plugin's chatter go to stderr.
+// stdout is the address and nothing else, which is the rule stdio lived under and for the same
+// reason (ADR 0008 §1): every log line, JUCE's warnings and every plugin's chatter go to stderr.
+// The stdio path this replaces was deleted in the same pull request rather than kept beside it —
+// two transports for one boundary is one tested transport and one that is not.
 int serve (const juce::File& manifestFile)
 {
     const auto manifest = manifestIn (manifestFile);
@@ -1824,7 +1788,7 @@ int serve (const juce::File& manifestFile)
         return fail (kBadOutput, "could not write the socket address to stdout");
 
     // **Bounded, and the bound counts iterations rather than reading a clock** (CLAUDE.md #3),
-    // exactly as the render's own dispatch loop below it is. What it decides is failure and
+    // exactly as the render's own dispatch loop is. What it decides is failure and
     // never a sample: a caller that dials is served whatever it then asks for, however long
     // this waited. Without it, a parent that died between spawning this process and calling it
     // leaves an engine pumping a dispatch loop for ever.
@@ -1878,12 +1842,10 @@ int main (int argc, char** argv)
     }
     // The mode is which service this process serves (ADR 0013 §3): `--render` registers
     // `Render` alone, so a `Preview` call on an engine spawned to export is refused by gRPC
-    // rather than by a check somebody remembered to write. `Preview` is M2 PR 10's.
+    // rather than by a check somebody remembered to write. `Preview` is M2 PR 10's, and until
+    // it exists an engine with no mode serves nothing rather than guessing at one.
     if (argc == 3 && std::string_view (argv[2]) == "--render")
         return serve (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
-    if (argc != 2)
-        return fail (kBadPlan, "usage: escribass_engine <manifest.json> --render"
-                               "\n       escribass_engine <manifest.json> < plan.binpb > result.binpb"
-                               "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
-    return run (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
+    return fail (kBadPlan, "usage: escribass_engine <manifest.json> --render"
+                           "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
 }
