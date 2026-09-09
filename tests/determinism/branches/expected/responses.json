@@ -525,6 +525,44 @@
   },
   {
     "entry_id": "",
+    "errors": [
+      {
+        "message": "`/version` is not one of this merge's conflicts; resolve the paths `merge_conflict` named and nothing else",
+        "path": "/version",
+        "rule": "resolution_unknown"
+      }
+    ],
+    "patch": null,
+    "summary": "",
+    "valid": false
+  },
+  {
+    "entry_id": "",
+    "errors": [],
+    "patch": [],
+    "summary": "merge `scratch`: no change",
+    "valid": true
+  },
+  {
+    "entry_id": "01M1FPMP00000000000000000H",
+    "errors": [],
+    "patch": [
+      {
+        "op": "replace",
+        "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+        "value": 100.0
+      },
+      {
+        "op": "replace",
+        "path": "/version",
+        "value": 7
+      }
+    ],
+    "summary": "merge `scratch`: 2 ops: /tempo_map/events/01M1FPMP000000000000000003/bpm, /version",
+    "valid": true
+  },
+  {
+    "entry_id": "",
     "errors": [],
     "patch": null,
     "summary": "delete `scratch`; its entries stay in the log",
@@ -634,7 +672,7 @@
     "tempo_map": {
       "events": {
         "01M1FPMP000000000000000003": {
-          "bpm": 120.0,
+          "bpm": 100.0,
           "id": "01M1FPMP000000000000000003",
           "tick": 0
         }
@@ -714,7 +752,7 @@
         "version": 3
       }
     },
-    "version": 6
+    "version": 7
   },
   {
     "entries": {
@@ -1076,11 +1114,36 @@
         },
         "schema_version": 1,
         "tool": "set_tempo"
+      },
+      "01M1FPMP00000000000000000H": {
+        "id": "01M1FPMP00000000000000000H",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "/tempo_map/events/01M1FPMP000000000000000003/bpm",
+            "value": 100.0
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 7
+          }
+        ],
+        "parents": [
+          "01M1FPMP00000000000000000G",
+          "01M1FPMP00000000000000000F"
+        ],
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "schema_version": 1,
+        "tool": "merge_branch"
       }
     },
     "head": "main",
     "refs": {
-      "main": "01M1FPMP00000000000000000G",
+      "main": "01M1FPMP00000000000000000H",
       "try-darker-chorus": "01M1FPMP00000000000000000D"
     }
   }

@@ -22,7 +22,7 @@
 // variable blesses whatever ran, including a deterministically wrong projection.
 
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import { create, fromJson, toJson } from "@bufbuild/protobuf";
 import { SongSchema, type Song } from "@escribass/schema/song";
@@ -31,6 +31,8 @@ import { pianoRoll } from "../src/pianoroll.js";
 import { mixer } from "../src/mixer.js";
 import { devices, editor } from "../src/params.js";
 import type { Manifest } from "../src/params.js";
+import { patchLog } from "../src/history.js";
+import type { HistoryAnswer, LogEntry } from "../src/history.js";
 import { bars, seconds } from "../src/time.js";
 
 // The fixture is a determinism golden, which means it was built **through the tool API** and
@@ -56,11 +58,40 @@ const GOLDEN = new URL("./projection.golden.json", import.meta.url);
 // nothing. It declares three of Surge XT's 2855, which is the subset the fixtures name.
 const MANIFEST = new URL("../../tests/fixtures/manifest.json", import.meta.url);
 
+// The history view needs a **log**, and the log is not in `song.json` — so it comes from a
+// second determinism golden, `branches`, which is the one script that produces a log worth
+// projecting: two branches, a merge with two parents, a conflict resolved per path, and a
+// branch deleted whose entries stay behind. Everything below is exactly what `get_history`
+// answers with (`core/src/call.rs`, `history_json`), because `entry_to_json` writes the wire
+// shape and the file shape from one function — the files *are* the answer.
+const LOG = new URL("../../tests/determinism/branches/expected/", import.meta.url);
+
 const read = (at: URL) => readFileSync(at, "utf8");
 const document: unknown = JSON.parse(read(FIXTURE));
 const song: Song = fromJson(SongSchema, document as never);
 const declared: unknown = JSON.parse(read(MANIFEST));
 const build = declared as Manifest;
+
+/** `patches/*.json` and `refs.json`, in the shape `get_history` returns them. */
+function readLog(): HistoryAnswer {
+  const at = new URL("patches/", LOG);
+  const entries = Object.fromEntries(
+    readdirSync(at)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+      .map((name) => {
+        const entry = JSON.parse(read(new URL(name, at))) as LogEntry;
+        return [entry.id, entry];
+      }),
+  );
+  const refs = JSON.parse(read(new URL("refs.json", LOG))) as {
+    head: string;
+    refs: Record<string, string>;
+  };
+  return { entries, head: refs.head, refs: refs.refs };
+}
+
+const logged: unknown = readLog();
 
 /**
  * The same document with every object's keys in the opposite order.
@@ -85,8 +116,9 @@ function reversed(value: unknown): unknown {
   );
 }
 
-/** Every view, from the one song and the one manifest, in the order the window builds them. */
-function project(from: Song, hosts: Manifest) {
+/** Every view, from the one song, the one manifest and the one log, in the order the window
+ *  builds them. */
+function project(from: Song, hosts: Manifest, history: HistoryAnswer) {
   const view = arrangement(from);
   return {
     arrangement: view,
@@ -107,13 +139,18 @@ function project(from: Song, hosts: Manifest) {
     // instrument whose `ref` this build resolves to no plugin — so `rows` is empty there, and
     // that emptiness is the projection agreeing with the validator rather than a gap.
     editors: devices(from).map((held) => editor(from, hosts, held.id)),
+    // The one view whose input is not the song. It is here rather than in a golden of its own
+    // because what §11's fifth bullet claims is about *every* view, and a second file would
+    // be a second place to forget one (ADR 0012 §5).
+    log: patchLog(history),
   };
 }
 
 test("every view is a pure function of the model", () => {
   const before = toJson(SongSchema, song);
   const manifestBefore = JSON.stringify(declared);
-  const actual = `${JSON.stringify(project(song, build), null, 2)}\n`;
+  const logBefore = JSON.stringify(logged);
+  const actual = `${JSON.stringify(project(song, build, logged as HistoryAnswer), null, 2)}\n`;
 
   if (process.env.UPDATE_FIXTURES === "1") {
     writeFileSync(GOLDEN, actual);
@@ -131,9 +168,10 @@ test("every view is a pure function of the model", () => {
   // of that guard which runs in CI.
   assert.deepStrictEqual(toJson(SongSchema, song), before, "a projection wrote to the model");
   assert.equal(JSON.stringify(declared), manifestBefore, "a projection wrote to the manifest");
+  assert.equal(JSON.stringify(logged), logBefore, "a projection wrote to the log");
   assert.deepStrictEqual(
-    project(song, build),
-    project(song, build),
+    project(song, build, logged as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer),
     "two projections of one song differ",
   );
 });
@@ -141,11 +179,27 @@ test("every view is a pure function of the model", () => {
 test("a view is a function of the document, not of how its maps iterated", () => {
   const backwards = fromJson(SongSchema, reversed(document) as never);
   assert.deepStrictEqual(
-    project(backwards, reversed(declared) as Manifest),
-    project(song, build),
+    project(backwards, reversed(declared) as Manifest, reversed(logged) as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer),
     "an order came from the map's iteration rather than from the model (ADR 0001 §3)",
   );
 });
+
+// What the reversal reaches in the **log** (M2 PR 8), which is the one map added since the
+// note below and the one that note does *not* apply to. A patch entry's key is a ULID —
+// `01M1FPMP000000000000000005` — and a ULID is not an integer-like string, so JavaScript
+// leaves the key order as `JSON.parse` found it and `Object.entries(…).reverse()` really
+// reverses it. Same for `refs`, whose keys are branch names.
+//
+// Measured by deleting each sort, which is the only way to know which test is carrying which
+// claim:
+//
+// - Deleting the entries' `sort` by id fails **both** — the golden as well, because the files
+//   list ascending and the golden is newest first.
+// - Deleting the refs' `sort` by name fails **only this one**. `refs.json` is already written
+//   in sorted order (ADR 0002 §4), so "sorted by the view" and "whatever the object iterated"
+//   are the same list until the keys are reversed. That is exactly the gap PR 4 built the
+//   reversal for, and it is real here in a way it is not for a `ParamID` map.
 
 // What the reversal above **cannot** reach, measured rather than assumed: JavaScript re-sorts
 // integer-like object keys numerically ascending, before any code here runs. A `ParamID` is a

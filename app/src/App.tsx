@@ -22,8 +22,15 @@
 // gesture that could not be expressed as repeated dry runs of one tool call would need its own
 // ADR (ADR 0017, Consequences), and none of the three PR 7 adds is one.
 //
+// **The log is a view too (M2 PR 8).** `get_history` is read beside `get_song` and held
+// decoded, and `history.ts` projects it exactly as `mixer.ts` projects the song. It is not a
+// second representation of song state: nothing here derives a document from the log, which is
+// `core`'s job and `get_song`'s answer. Branch switching goes through it, and it is where a
+// merge conflict is settled — per path, on the *same* `merge_branch` call, which is the whole
+// of ADR 0015 §3.
+//
 // Nothing below is song state. `Gesture` is a call waiting to be made, `preview` is an answer
-// the tool API gave, and `chosen` and `device` are ids the user picked.
+// the tool API gave, and `chosen`, `device` and `branch` are names the user picked.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromJson, toJson } from "@bufbuild/protobuf";
@@ -39,6 +46,8 @@ import { Params, Strips } from "./form.js";
 import type { Touch, Write } from "./form.js";
 import { HEAD, ROW, Roll, Timeline } from "./canvas.js";
 import type { Moved } from "./canvas.js";
+import { patchLog } from "./history.js";
+import type { HistoryAnswer, Log } from "./history.js";
 import { build, tool } from "./tool.js";
 
 /**
@@ -124,12 +133,15 @@ function movedNotes(song: Song, clipId: string, moved: Moved): Record<string, Js
   );
 }
 
-/** Which view the lower pane is showing. Three panes and a `<select>`-free switch, because
- *  three buttons are three buttons; a router arrives when there is something to route. */
-type Pane = "roll" | "mixer" | "params";
+/** Which view the lower pane is showing. Four panes and a `<select>`-free switch, because
+ *  four buttons are four buttons; a router arrives when there is something to route. */
+type Pane = "roll" | "mixer" | "params" | "history";
 
 export function App() {
   const [song, setSong] = useState<Song | null>(null);
+  /** The patch log, as `get_history` answered it — §5's audit trail, read beside the song and
+   *  held decoded so the view over it is a pure selector like every other (ADR 0012 §2). */
+  const [history, setHistory] = useState<HistoryAnswer | null>(null);
   /** What this build can host — the map the parameter editor is a form over (ADR 0014 §1).
    *  Read once: it describes the running process, not the project, and cannot change under it. */
   const [manifest, setManifest] = useState<Manifest | null>(null);
@@ -137,6 +149,11 @@ export function App() {
   const [pane, setPane] = useState<Pane>("roll");
   const [chosen, setChosen] = useState<string | null>(null);
   const [device, setDevice] = useState<string | null>(null);
+  /** Which branch the branch buttons act on. A choice and not an edit: nothing is written
+   *  until a button is pressed, exactly as choosing a clip writes nothing. */
+  const [branch, setBranch] = useState<string | null>(null);
+  /** What is typed in the new-branch box. Not a branch until `create_branch` says so. */
+  const [naming, setNaming] = useState("");
   /** What is typed in the editor's search box. Not a projection and not an edit: 2855 rows is
    *  a list nobody can read, and narrowing it writes nothing. */
   const [filter, setFilter] = useState("");
@@ -152,10 +169,17 @@ export function App() {
    *  (ADR 0017 §3, §5). */
   const [held, setHeld] = useState(false);
 
+  // Both reads, together. The log is re-read whenever the song is because every applied call
+  // appends to it — including `undo`, which appends an inverse entry rather than rewinding
+  // (ADR 0005 §4), so a history view refreshed only on an edit would be wrong exactly where a
+  // person is looking to check what undo did.
   const read = useCallback(
     () =>
-      tool("get_song", {})
-        .then((answer) => setSong(freeze(fromJson(SongSchema, answer as JsonValue))))
+      Promise.all([tool("get_song", {}), tool("get_history", {})])
+        .then(([held, log]) => {
+          setSong(freeze(fromJson(SongSchema, held as JsonValue)));
+          setHistory(freeze(log as HistoryAnswer));
+        })
         .catch((e: unknown) => setFailure(String(e))),
     [],
   );
@@ -169,6 +193,7 @@ export function App() {
 
   const view = useMemo(() => (song ? arrangement(song) : null), [song]);
   const strips = useMemo(() => (song ? mixer(song) : null), [song]);
+  const log = useMemo(() => (history ? patchLog(history) : null), [history]);
 
   // The clips a roll can be opened on, in the arrangement's own order — derived from the
   // projection rather than listed a second time, so the `<select>` and the timeline cannot
@@ -201,6 +226,16 @@ export function App() {
     () => (song && manifest && deviceId !== undefined ? editor(song, manifest, deviceId) : null),
     [song, manifest, deviceId],
   );
+
+  // Derived, never stored, for the reason `openId` is: a branch the log no longer has falls
+  // back rather than leaving the buttons pointed at a name that is gone. The default is the
+  // first branch that is **not** `HEAD`, since switching to or merging the branch you are on
+  // is the one thing neither button can usefully do.
+  const branches = log?.branches ?? [];
+  const picked =
+    branch !== null && branches.some((held) => held.name === branch)
+      ? branch
+      : (branches.find((held) => !held.head)?.name ?? log?.head);
 
   // One dry run in flight at a time, and the newest value wins. A drag fires pointer events
   // faster than a round trip returns, and queueing them all would leave the diff a hundred
@@ -267,17 +302,43 @@ export function App() {
     }
   }
 
-  /** ⌘Z and ⇧⌘Z, which are tool calls and nothing else (docs/plan.md, M2 trap 10).
+  /** One conflicting path, settled — ADR 0015 §3's whole mechanism, and it is one line of
+   *  state on a call that already exists.
    *
-   *  There is no stack in this file. `undo` appends an inverse entry through the same pipeline
-   *  every other tool goes through, and the session holds how far back it has walked
-   *  (ADR 0005 §4) — so a second window, an agent's edit or a branch switch cannot leave the
-   *  key disagreeing with the log, which is what a frontend stack would do the moment any of
-   *  those happened. Not previewed either: an undo reverses a change that was already
-   *  approved, and asking for approval to withdraw approval is a dialog with nothing in it. */
-  async function press(name: "undo" | "redo"): Promise<void> {
+   *  The picks ride on the **same** `merge_branch` call: choosing a side re-proposes it as
+   *  another dry run, and `Apply` is that same call once more without `dry_run`. So there is
+   *  no `resolve_conflict` tool, nothing held between the two calls, and no merge that is
+   *  half committed — the second call either records one entry with two parents or refuses,
+   *  exactly as the first one did. A path this merge is not in conflict about comes back as
+   *  `resolution_unknown` rather than quietly dropping the other side's change. */
+  function resolveAt(path: string, side: string): void {
+    if (!gesture) return;
+    const picks = { ...(gesture.args.resolve as Record<string, string> | undefined), [path]: side };
+    propose({ ...gesture, args: { ...gesture.args, resolve: picks } });
+  }
+
+  /** The calls that are applied straight away: ⌘Z, ⇧⌘Z and a branch switch.
+   *
+   *  ⌘Z is a tool call and nothing else (docs/plan.md, M2 trap 10). There is no stack in this
+   *  file: `undo` appends an inverse entry through the same pipeline every other tool goes
+   *  through, and the session holds how far back it has walked (ADR 0005 §4) — so a second
+   *  window, an agent's edit or a branch switch cannot leave the key disagreeing with the log,
+   *  which is what a frontend stack would do the moment any of those happened. Not previewed
+   *  either: an undo reverses a change that was already approved, and asking for approval to
+   *  withdraw approval is a dialog with nothing in it.
+   *
+   *  `switch_branch` joins them for the same reason one step further on. It **appends no
+   *  entry** (ADR 0001 §2) — history that recorded navigation would grow every time somebody
+   *  looked at a branch — so there is nothing for a person to approve into the audit trail,
+   *  and switching back is the whole of undoing it. It does replace the document under every
+   *  open view, and the replacement is another `get_song` and a wholesale swap: a
+   *  re-projection, never a patch applied in this file (ADR 0012 §2). A roll open on a clip
+   *  the new branch does not have, or an editor open on a device it does not have, falls back
+   *  by itself, because `openId` and `deviceId` are derived from the document rather than
+   *  stored beside it. */
+  async function direct(name: string, args: Record<string, unknown> = {}): Promise<void> {
     try {
-      const answer = (await tool(name, {})) as ToolAnswer;
+      const answer = (await tool(name, args)) as ToolAnswer;
       if (!answer.valid) {
         setNotice(`${name}: ${answer.errors.map((e) => e.message).join("; ")}`);
         return;
@@ -299,7 +360,7 @@ export function App() {
     const pressed = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "z" || !(event.metaKey || event.ctrlKey)) return;
       event.preventDefault();
-      void press(event.shiftKey ? "redo" : "undo");
+      void direct(event.shiftKey ? "redo" : "undo");
     };
     window.addEventListener("keydown", pressed);
     return () => window.removeEventListener("keydown", pressed);
@@ -365,7 +426,7 @@ export function App() {
             {/* Three buttons, not a router and not tabs from a library: what a tab strip is,
                 for three panes, is three buttons and a piece of state (ADR 0016 §3). */}
             <span className="panes">
-              {(["roll", "mixer", "params"] as const).map((name) => (
+              {(["roll", "mixer", "params", "history"] as const).map((name) => (
                 <button
                   key={name}
                   className={pane === name ? "pane on" : "pane"}
@@ -434,6 +495,12 @@ export function App() {
               </>
             ) : null}
 
+            {pane === "history" && log ? (
+              <span className="dim">
+                on {log.head} · {log.entries.length} entr{log.entries.length === 1 ? "y" : "ies"}
+              </span>
+            ) : null}
+
             {said !== null ? <span className="notice">{said}</span> : null}
           </div>
 
@@ -459,6 +526,84 @@ export function App() {
               />
             ) : (
               <p className="empty">Nothing to show here yet.</p>
+            )
+          ) : pane === "history" ? (
+            log ? (
+              <>
+                {/* The branch controls live in the pane *body*, not the head. The head may not
+                    wrap and its children may not shrink (ADR 0017 §3, as PR 7 corrected it),
+                    which is right for a bar a drag is measured against and wrong for six
+                    controls that would then be clipped instead. Nothing in this pane is
+                    dragged, so the bar is free to wrap here. */}
+                <div className="branchbar">
+                  <select
+                    value={picked ?? ""}
+                    onChange={(event) => setBranch(event.target.value)}
+                    aria-label="branch"
+                  >
+                    {log.branches.map((held) => (
+                      <option key={held.name} value={held.name}>
+                        {held.name}
+                        {held.head ? " (here)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {/* All three are disabled on `HEAD`, which is the one branch none of them
+                      can act on: switching to where you are answers "already here", merging a
+                      branch into itself the same, and deleting `HEAD` is `delete_head`
+                      (`core/src/history.rs`). Disabled rather than hidden, so the bar keeps
+                      its shape as the choice changes. */}
+                  <button
+                    className="pane"
+                    disabled={picked === undefined || picked === log.head}
+                    onClick={() => picked && void direct("switch_branch", { name: picked })}
+                  >
+                    Switch
+                  </button>
+                  <button
+                    className="pane"
+                    disabled={picked === undefined || picked === log.head}
+                    onClick={() =>
+                      picked && propose({ tool: "merge_branch", args: { name: picked } })
+                    }
+                  >
+                    Merge into {log.head}
+                  </button>
+                  <button
+                    className="pane"
+                    disabled={picked === undefined || picked === log.head}
+                    onClick={() => picked && void direct("delete_branch", { name: picked })}
+                  >
+                    Delete
+                  </button>
+                  {/* A new ref at the current entry, which copies no data (ADR 0001 §2). The
+                      name is the user's and its rules are the validator's — ASCII
+                      `[a-z0-9._/-]`, no `..` — so there is no pattern checked here, for
+                      ADR 0017 §3's reason one form over: a rule predicted in TypeScript is a
+                      second implementation of one that already exists. */}
+                  <input
+                    value={naming}
+                    onChange={(event) => setNaming(event.target.value)}
+                    placeholder="new branch"
+                    aria-label="new branch name"
+                  />
+                  <button
+                    className="pane"
+                    disabled={naming.trim() === ""}
+                    onClick={() => {
+                      const name = naming.trim();
+                      setNaming("");
+                      setBranch(name);
+                      void direct("create_branch", { name });
+                    }}
+                  >
+                    Branch
+                  </button>
+                </div>
+                <PatchLog view={log} />
+              </>
+            ) : (
+              <p className="empty">Reading the log…</p>
             )
           ) : pane === "mixer" ? (
             <Strips
@@ -487,7 +632,23 @@ export function App() {
           )}
 
           {!held && gesture && proposal ? (
-            <Pending answer={proposal} onApply={apply} onDiscard={() => propose(null)} />
+            <Pending
+              answer={proposal}
+              onApply={apply}
+              onDiscard={() => propose(null)}
+              // Only a merge can be resolved, so only a merge is handed the form. A conflict
+              // is a `Violation` like any other refusal; what makes it settleable is that the
+              // call it came from takes a `resolve` map (ADR 0015 §3).
+              resolution={
+                gesture.tool === "merge_branch"
+                  ? {
+                      theirs: String(gesture.args.name),
+                      picks: (gesture.args.resolve as Record<string, string> | undefined) ?? {},
+                      onPick: resolveAt,
+                    }
+                  : undefined
+              }
+            />
           ) : null}
         </section>
       </div>
@@ -512,7 +673,13 @@ export function App() {
         </span>
         <span className="dim">⌘Z undo · ⇧⌘Z redo</span>
         <span className="mode">
-          {pane === "roll" ? "drag a note" : pane === "mixer" ? "ride a fader" : "set a parameter"}
+          {pane === "roll"
+            ? "drag a note"
+            : pane === "mixer"
+              ? "ride a fader"
+              : pane === "params"
+                ? "set a parameter"
+                : "switch or merge a branch"}
         </span>
       </footer>
     </main>
@@ -531,15 +698,28 @@ export function App() {
  * A refused value shows its rules instead and offers no Apply. `rule` is the stable id §5
  * promises a caller can act on, and it is shown beside the sentence rather than hidden behind
  * it, because it is the half that does not change with wording.
+ *
+ * **A merge conflict is the one refusal that can be answered here** (ADR 0015 §3). It is not a
+ * different pane and not a different flow: the same list of violations, with two buttons on
+ * the rows whose `rule` is `merge_conflict`, and the answer goes back on the call that
+ * produced them. ADR 0017 has nothing to add — it is about a *gesture*, and what makes a
+ * gesture special is that the layout may not move under a pointer that is down. Nothing here
+ * is dragged: the picks are buttons, the pane is already open, and a reflow between two clicks
+ * is a reflow nobody is measuring a distance against.
  */
 function Pending({
   answer,
   onApply,
   onDiscard,
+  resolution,
 }: {
   answer: ToolAnswer;
   onApply: () => void;
   onDiscard: () => void;
+  /** Present only for a merge: the other branch's name, the picks so far, and where a new one
+   *  goes. `undefined` everywhere else, which is what keeps a fader's refusal from growing
+   *  buttons that would call a tool it is not. */
+  resolution?: { theirs: string; picks: Record<string, string>; onPick: (path: string, side: string) => void };
 }) {
   return (
     <div className={answer.valid ? "pending" : "pending refused"}>
@@ -559,11 +739,82 @@ function Pending({
             <li key={`${violation.path}/${violation.rule}`}>
               <code>{violation.rule}</code> {violation.message}{" "}
               <span className="dim">{violation.path}</span>
+              {resolution && violation.rule === "merge_conflict" ? (
+                <span className="sides">
+                  {(
+                    [
+                      ["MERGE_SIDE_OURS", "keep mine"],
+                      ["MERGE_SIDE_THEIRS", `take ${resolution.theirs}`],
+                    ] as const
+                  ).map(([side, label]) => (
+                    <button
+                      key={side}
+                      className={resolution.picks[violation.path] === side ? "side on" : "side"}
+                      aria-pressed={resolution.picks[violation.path] === side}
+                      onClick={() => resolution.onPick(violation.path, side)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * The patch log, and the provenance column §5's audit trail is made of (plate 5).
+ *
+ * Every entry in the log, not only the current branch's: a discarded branch's entries stay
+ * where they are, unreferenced and inert (ADR 0001 §2), and a trail that hid them would not be
+ * an audit trail. What says which is which is one class — the rows off the current branch are
+ * dimmed, and `history.ts` decides which those are.
+ *
+ * `undo` and `redo` appear as themselves, with no marking and no filter, because an undo is a
+ * thing that happened rather than a thing that unhappened (ADR 0005 §4). The ⌘Z *walk* skips
+ * them, in the session, for a reason that is about walking and not about reading.
+ *
+ * There is no version column, deliberately: `version` counts per branch (ADR 0005 §4's
+ * caveat), so a column of them would read as one sequence over what are several.
+ */
+function PatchLog({ view }: { view: Log }) {
+  return (
+    <table className="log">
+      <thead>
+        <tr>
+          <th>entry</th>
+          <th>tool</th>
+          <th>by</th>
+          <th>when</th>
+          <th className="count">ops</th>
+          <th>at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {view.entries.map((row) => (
+          <tr key={row.id} className={row.onBranch ? "here" : "elsewhere"}>
+            {/* The tail of the ULID, with the whole of it a hover away. A ULID's leading
+                characters are its millisecond timestamp, so in one session they are all the
+                same and the tail is the half that tells two entries apart. */}
+            <td className="eid" title={row.id}>
+              {row.id.slice(-8)}
+            </td>
+            <td>
+              {row.tool}
+              {row.merge ? <span className="dim"> ⑂ {row.parents.length}</span> : null}
+            </td>
+            <td className="who">{row.author}</td>
+            <td className="when">{row.createdAt.slice(0, 19).replace("T", " ")}</td>
+            <td className="count">{row.ops}</td>
+            <td className="at">{row.refs.join(" · ")}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

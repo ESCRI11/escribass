@@ -12,6 +12,7 @@ use escribass_core::{new_song, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
     AddClipRequest, AddSectionRequest, AddTrackRequest, CreateBranchRequest, MergeBranchRequest,
+    MergeSide,
     SetNotesRequest, SetTempoRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
 };
 use escribass_schema::song::{Author, DeviceRef, Note, NoteClip, SourceRef, TrackKind};
@@ -91,8 +92,20 @@ fn switch(session: &mut Session, name: &str) {
 }
 
 fn merge(session: &mut Session, name: &str, dry_run: bool) -> ToolResult {
+    resolving(session, name, dry_run, &[])
+}
+
+/// The same call, carrying a person's picks — which is the whole of interactive resolution
+/// (ADR 0015 §3). There is no second tool to call and no state between the two calls.
+fn resolving(session: &mut Session, name: &str, dry_run: bool, picks: &[(&str, MergeSide)])
+    -> ToolResult
+{
     session
-        .merge_branch(&MergeBranchRequest { name: name.to_string(), dry_run })
+        .merge_branch(&MergeBranchRequest {
+            name: name.to_string(),
+            dry_run,
+            resolve: picks.iter().map(|(p, side)| ((*p).to_string(), *side as i32)).collect(),
+        })
         .unwrap()
 }
 
@@ -559,4 +572,130 @@ fn a_merge_beats_a_branch_that_is_exactly_one_version_ahead() {
     let merged = merge(&mut session, "other", false);
     assert!(merged.valid, "{:?}", merged.errors);
     assert_eq!(at(&session), theirs + 1, "the merge repeated a number the other branch used");
+}
+
+// ---- resolving a conflict (ADR 0015 §3) ----
+//
+// The shape these are all about: the conflict comes back as it always did, a side is named
+// per path, and **the same call** is made again with the picks. Nothing is held between them.
+
+/// Both branches move the tempo. Every test below starts here, because it is the smallest
+/// conflict the tool API can produce and it is the one the determinism script scripts.
+fn conflicting_tempo() -> (Scratch, Session, String) {
+    let (dir, mut session) = opened();
+    branch(&mut session, "other");
+    tempo(&mut session, 132.0);
+    switch(&mut session, "other");
+    tempo(&mut session, 88.0);
+    switch(&mut session, "main");
+    let conflict = merge(&mut session, "other", false).errors[0].path.clone();
+    (dir, session, conflict)
+}
+
+fn bpm(session: &Session) -> f64 {
+    session.project().song().tempo_map.as_ref().unwrap().events.values().next().unwrap().bpm
+}
+
+#[test]
+fn naming_the_other_side_lands_its_value() {
+    let (_dir, mut session, path) = conflicting_tempo();
+
+    let merged = resolving(&mut session, "other", false, &[(&path, MergeSide::Theirs)]);
+
+    assert!(merged.valid, "{:?}", merged.errors);
+    assert_eq!(bpm(&session), 88.0, "the side that was chosen is not the one that landed");
+    // One entry with two parents, exactly as an unconflicted merge records: resolution
+    // changes which ops are applied, not what a merge is (ADR 0001 §1).
+    let entry = session.project().history().get(&merged.entry_id).unwrap();
+    assert_eq!(entry.parents.len(), 2);
+    assert_eq!(entry.tool, "merge_branch");
+}
+
+#[test]
+fn naming_this_side_keeps_its_value_and_still_joins_the_two_branches() {
+    let (_dir, mut session, path) = conflicting_tempo();
+
+    let merged = resolving(&mut session, "other", false, &[(&path, MergeSide::Ours)]);
+
+    assert!(merged.valid, "{:?}", merged.errors);
+    assert_eq!(bpm(&session), 132.0);
+    // The document did not move and the entry exists anyway. Without it the branches would
+    // stay unmerged and this same conflict would be reported for ever — which is what the
+    // next call proves: there is now nothing left to merge.
+    let entry = session.project().history().get(&merged.entry_id).unwrap();
+    assert_eq!(entry.parents.len(), 2);
+    assert_eq!(escribass_core::ops_of(entry).unwrap().len(), 0, "an empty merge is still a merge");
+    assert_eq!(merge(&mut session, "other", false).summary, "`other` has nothing this branch lacks");
+}
+
+#[test]
+fn a_conflict_nobody_settled_is_still_a_conflict() {
+    let (_dir, mut session) = opened();
+    let bass = track(&mut session, "Bass");
+    branch(&mut session, "other");
+    tempo(&mut session, 132.0);
+    rename(&mut session, &bass, "Low");
+    switch(&mut session, "other");
+    tempo(&mut session, 88.0);
+    rename(&mut session, &bass, "Bottom");
+    switch(&mut session, "main");
+
+    let both = merge(&mut session, "other", false);
+    assert_eq!(rules(&both), vec!["merge_conflict", "merge_conflict"]);
+
+    // Settling one of the two leaves the other reported exactly as it was, and writes nothing.
+    let half = resolving(&mut session, "other", false, &[(&both.errors[0].path, MergeSide::Ours)]);
+    assert_eq!(rules(&half), vec!["merge_conflict"]);
+    assert_eq!(half.errors[0], both.errors[1]);
+    assert_eq!(session.project().history().head_id().unwrap(), &head(&session));
+}
+
+#[test]
+fn a_resolution_for_a_path_nothing_disagreed_about_is_refused() {
+    let (_dir, mut session, path) = conflicting_tempo();
+
+    // `/version` moves on both sides of every merge and is never a conflict (ADR 0001 §4), so
+    // it is the sharpest case: a path that really is in both patches and really is not
+    // disputed. Honouring it would drop the other side's change with nobody told.
+    let refused = resolving(
+        &mut session,
+        "other",
+        false,
+        &[(&path, MergeSide::Theirs), ("/version", MergeSide::Ours)],
+    );
+    assert_eq!(rules(&refused), vec!["resolution_unknown"]);
+    assert_eq!(refused.errors[0].path, "/version");
+    assert_eq!(bpm(&session), 132.0, "a refused merge wrote something");
+}
+
+#[test]
+fn a_resolved_merge_previews_the_patch_it_would_record() {
+    let (dir, mut session, path) = conflicting_tempo();
+    let before = std::fs::read_to_string(dir.0.join("song.json")).unwrap();
+
+    let previewed = resolving(&mut session, "other", true, &[(&path, MergeSide::Theirs)]);
+    assert!(previewed.valid, "{:?}", previewed.errors);
+    assert!(previewed.entry_id.is_empty(), "a dry run appended an entry");
+    assert_eq!(std::fs::read_to_string(dir.0.join("song.json")).unwrap(), before);
+
+    let applied = resolving(&mut session, "other", false, &[(&path, MergeSide::Theirs)]);
+    assert_eq!(applied.patch, previewed.patch, "the applied merge is not the one shown");
+}
+
+fn head(session: &Session) -> String {
+    session.project().history().head_id().unwrap().to_string()
+}
+
+fn rename(session: &mut Session, track_id: &str, name: &str) {
+    let patch = serde_json::to_string(&serde_json::json!([
+        {"op": "replace", "path": format!("/tracks/{track_id}/name"), "value": name}
+    ]))
+    .unwrap();
+    let done = session
+        .apply_patch(&escribass_proto::tools::ApplyPatchRequest {
+            patch: patch.into_bytes(),
+            dry_run: false,
+        })
+        .unwrap();
+    assert!(done.valid, "{:?}", done.errors);
 }
