@@ -251,5 +251,227 @@
         }
       ]
     }
+  ],
+  "mixer": {
+    "strips": [
+      {
+        "id": "01M1FPMP000000000000000002",
+        "name": "Master",
+        "kind": "master",
+        "index": 0,
+        "gainDb": 0,
+        "pan": 0,
+        "mute": false,
+        "solo": false,
+        "devices": []
+      },
+      {
+        "id": "01M1FPMP000000000000000006",
+        "name": "Lead",
+        "kind": "instrument",
+        "index": 1,
+        "gainDb": -4.5,
+        "pan": 0.25,
+        "mute": false,
+        "solo": false,
+        "devices": [
+          {
+            "id": "01M1FPMP000000000000000007",
+            "kind": "instrument",
+            "label": "Surge Synth Team/Surge XT",
+            "set": 0
+          },
+          {
+            "id": "01M1FPMP00000000000000000G",
+            "kind": "effect",
+            "index": 2,
+            "label": "Surge Synth Team/Surge XT",
+            "set": 1
+          },
+          {
+            "id": "01M1FPMP00000000000000000E",
+            "kind": "effect",
+            "index": 5,
+            "label": "Surge Synth Team/Surge XT",
+            "set": 0
+          }
+        ]
+      },
+      {
+        "id": "01M1FPMP000000000000000009",
+        "name": "Pad",
+        "kind": "instrument",
+        "index": 2,
+        "gainDb": 0,
+        "pan": 0,
+        "mute": true,
+        "solo": false,
+        "devices": [
+          {
+            "id": "01M1FPMP00000000000000000A",
+            "kind": "instrument",
+            "label": "Surge Synth Team/Surge XT",
+            "set": 0
+          }
+        ]
+      },
+      {
+        "id": "01M1FPMP00000000000000000C",
+        "name": "Loop",
+        "kind": "audio",
+        "index": 3,
+        "gainDb": 0,
+        "pan": 0,
+        "mute": false,
+        "solo": false,
+        "devices": []
+      },
+      {
+        "id": "01M1FPMP00000000000000001J",
+        "name": "Keys",
+        "kind": "instrument",
+        "index": 4,
+        "gainDb": 0,
+        "pan": 0,
+        "mute": false,
+        "solo": false,
+        "devices": [
+          {
+            "id": "01M1FPMP00000000000000001K",
+            "kind": "instrument",
+            "label": "sampler 3835bcb2",
+            "set": 0
+          }
+        ]
+      }
+    ]
+  },
+  "editors": [
+    {
+      "deviceId": "01M1FPMP000000000000000007",
+      "trackId": "01M1FPMP000000000000000006",
+      "trackName": "Lead",
+      "kind": "instrument",
+      "device": "Surge Synth Team/Surge XT",
+      "declares": 3,
+      "set": 0,
+      "rows": [
+        {
+          "id": "8095466",
+          "name": "A Filter 1 Resonance",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1243907205",
+          "name": "A Waveshaper Drive",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1945359057",
+          "name": "A Filter 1 Cutoff",
+          "value": null,
+          "declared": true
+        }
+      ]
+    },
+    {
+      "deviceId": "01M1FPMP00000000000000000G",
+      "trackId": "01M1FPMP000000000000000006",
+      "trackName": "Lead",
+      "kind": "effect",
+      "device": "Surge Synth Team/Surge XT",
+      "declares": 3,
+      "set": 1,
+      "rows": [
+        {
+          "id": "8095466",
+          "name": "A Filter 1 Resonance",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1243907205",
+          "name": "A Waveshaper Drive",
+          "value": 0.4,
+          "declared": true
+        },
+        {
+          "id": "1945359057",
+          "name": "A Filter 1 Cutoff",
+          "value": null,
+          "declared": true
+        }
+      ]
+    },
+    {
+      "deviceId": "01M1FPMP00000000000000000E",
+      "trackId": "01M1FPMP000000000000000006",
+      "trackName": "Lead",
+      "kind": "effect",
+      "device": "Surge Synth Team/Surge XT",
+      "declares": 3,
+      "set": 0,
+      "rows": [
+        {
+          "id": "8095466",
+          "name": "A Filter 1 Resonance",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1243907205",
+          "name": "A Waveshaper Drive",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1945359057",
+          "name": "A Filter 1 Cutoff",
+          "value": null,
+          "declared": true
+        }
+      ]
+    },
+    {
+      "deviceId": "01M1FPMP00000000000000000A",
+      "trackId": "01M1FPMP000000000000000009",
+      "trackName": "Pad",
+      "kind": "instrument",
+      "device": "Surge Synth Team/Surge XT",
+      "declares": 3,
+      "set": 0,
+      "rows": [
+        {
+          "id": "8095466",
+          "name": "A Filter 1 Resonance",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1243907205",
+          "name": "A Waveshaper Drive",
+          "value": null,
+          "declared": true
+        },
+        {
+          "id": "1945359057",
+          "name": "A Filter 1 Cutoff",
+          "value": null,
+          "declared": true
+        }
+      ]
+    },
+    {
+      "deviceId": "01M1FPMP00000000000000001K",
+      "trackId": "01M1FPMP00000000000000001J",
+      "trackName": "Keys",
+      "kind": "instrument",
+      "device": "sampler 3835bcb2",
+      "declares": 0,
+      "set": 0,
+      "rows": []
+    }
   ]
 }

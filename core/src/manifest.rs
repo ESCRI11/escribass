@@ -14,7 +14,7 @@
 //! host; core decides what that means for a song).
 
 use crate::project::ProjectError;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -23,7 +23,12 @@ use std::path::Path;
 /// Unknown fields are ignored rather than refused: each plugin entry also carries the `path`
 /// the engine opens it at, which is the engine's business and machine-specific — ADR 0010 §1
 /// keeps it out of `lock.json` for exactly that reason, and out of here for want of a reader.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+///
+/// `Serialize` is here so the desktop host can hand this to its webview, which is what §9's
+/// seventh view is a form over (ADR 0014 §1). It serialises what `core` **read**, not the file:
+/// the ignored fields are gone, so the window is offered exactly the parameters the validator
+/// will resolve a `set_param` against and never a machine-specific path.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Manifest {
     /// The engine's submodule commits by component, which is what ADR 0008 §5 has the engine
     /// report about itself. Copied into `lock.json`'s `engine` block on every write.
@@ -48,7 +53,7 @@ pub struct Manifest {
 }
 
 /// One hostable plugin.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Plugin {
     /// The vendored submodule commit the binary was built from — the pin `lock.json` carries.
     pub commit: String,

@@ -10,10 +10,15 @@
 //! network port, because a desktop application that binds a socket to talk to itself is a
 //! listening service on a user's machine (ADR 0012 §1).
 //!
-//! What the webview can reach is [`tool`], and that is the whole surface. One command carrying
-//! a tool name and its arguments, dispatched into `escribass_core::call` — the same function
-//! the MCP server dispatches into, so §5's "used by the UI and the AI identically" is one
-//! dispatch and not two that are free to drift.
+//! What the webview can reach is [`tool`], and that is the whole of what it can reach *of the
+//! model*. One command carrying a tool name and its arguments, dispatched into
+//! `escribass_core::call` — the same function the MCP server dispatches into, so §5's "used by
+//! the UI and the AI identically" is one dispatch and not two that are free to drift.
+//!
+//! Beside it, [`manifest`], which answers a question about the running build rather than about
+//! the song: what plugins it hosts and what parameters each declares. §9's seventh view is a
+//! form over that map (ADR 0014 §1) and there is no tool that reads it, so this is the second
+//! and last command — see its own note for why it is not one.
 //!
 //! Flags:
 //!
@@ -81,6 +86,25 @@ fn tool(
     call(&mut session, &name, &args).map(|answer| answer.structured).map_err(|e| e.message)
 }
 
+/// What this build can host — the map §9's seventh view is a form over (ADR 0014 §1).
+///
+/// A **second** command, and the only other thing the webview can reach. ADR 0012 §1's rule is
+/// that the webview's one route to *the model* is [`tool`], and this is not the model: it is
+/// what the running build says about itself, it takes no arguments, it never changes while the
+/// process lives, and no tool answers it — `IMPLEMENTED` is the tool surface the AI shares
+/// (ADR 0006 §1), and putting a build fact on it would hand the AI a plugin catalogue this
+/// pull request has no business deciding it should have.
+///
+/// What crosses is the `Manifest` `core` **parsed**, re-serialised — not the file. That is the
+/// point rather than an accident: the editor's rows are then exactly the keys
+/// `param_unknown` resolves a `set_param` against (`core/src/validate.rs`), so a control the
+/// form draws is a control the validator will accept, and the plugin paths the file carries
+/// for the engine's benefit never reach a window.
+#[tauri::command]
+fn manifest(held: tauri::State<'_, Arc<Manifest>>) -> Result<Value, String> {
+    serde_json::to_value(held.inner().as_ref()).map_err(|e| e.to_string())
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => u8::try_from(code).map(ExitCode::from).unwrap_or(ExitCode::FAILURE),
@@ -97,13 +121,19 @@ fn run() -> Result<i32, String> {
     // Read before the project, because it is what decides whether the project is valid at all:
     // the validator resolves plugin ids and parameters against it, and `open` compares it with
     // what the project pinned (ADR 0010 §3, §4).
-    let manifest = Arc::new(Manifest::read(&options.manifest).map_err(|e| e.to_string())?);
+    //
+    // `hosts` and not `manifest`, which is what it wants to be called: `generate_handler!`
+    // expands to a path with the command's own name in it, resolved in *this* scope, so a local
+    // binding called `manifest` shadows the [`manifest`] command and the macro fails inside its
+    // own expansion. Renaming the binding is the fix that keeps the command's name, which is
+    // what the webview calls it by.
+    let hosts = Arc::new(Manifest::read(&options.manifest).map_err(|e| e.to_string())?);
 
     // The lock first, then the read: a project another process is committing to is exactly
     // what this refuses to open (ADR 0012 §3).
     let held: Held =
         Arc::new(Mutex::new(Some(ProjectLock::take(&options.project).map_err(|e| e.to_string())?)));
-    let project = Project::open(&options.project, manifest)
+    let project = Project::open(&options.project, Arc::clone(&hosts))
         .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?;
 
     // One session per project directory, built by the host as a library call — which is ADR
@@ -128,7 +158,8 @@ fn run() -> Result<i32, String> {
 
     let app = tauri::Builder::default()
         .manage(Mutex::new(session))
-        .invoke_handler(tauri::generate_handler![tool])
+        .manage(hosts)
+        .invoke_handler(tauri::generate_handler![tool, manifest])
         .setup(move |app| {
             use tauri::Manager;
             // The project this window is looking at, named where a person can see it. The

@@ -1,8 +1,8 @@
 # ADR 0017 — A gesture is previewed continuously and committed once
 
 - **Status:** Accepted (2026-09-09)
-- **Affects:** `app/src/App.tsx`, `app/src/canvas.tsx`; `docs/specs.md` §5, §9; every gesture M2
-  and M3 add
+- **Affects:** `app/src/App.tsx`, `app/src/canvas.tsx`, `app/src/form.tsx`, `app/src/style.css`;
+  `docs/specs.md` §5, §9; every gesture M2 and M3 add
 - **Builds on:** ADR 0006 §3 (`dry_run` is the pure first half of the apply path, never a second
   implementation of it); ADR 0012 §2 (one decoded `Song`, no local apply, no second
   implementation of core's rules in the frontend), §4 (a held preview is applied
@@ -95,6 +95,17 @@ reflow while a pointer is down** — a panel appearing beneath a canvas moves th
 gesture is measured against where the canvas is. Decision 5 records what that cost before it was
 noticed.
 
+**Corrected 2026-09-09, in M2 PR 7, by a fader drag.** "Shown in the pane head, which is always
+there" was necessary and not sufficient: the head is always there and its *height* is not fixed.
+A `param_unknown` message is three times the length of `tick_negative ticks are never negative`,
+and the first long refusal wrapped the head from one line to three mid-drag, moving every row
+beneath it down by 24 px — this decision's own 42 px defect, in the element chosen to avoid it.
+So the rule is stated one level lower: **the bar that names a refusal may not wrap, and its
+controls may not shrink.** The notice is the one child that gives way, ellipsised, and what it
+elides is repeated in full in the pane on release. Found the same way as the first one, by
+dragging and comparing pixels: the rows under a refusal are now byte-identical to the rows
+before it.
+
 ### 4. Releasing the pointer proposes; a person applies
 
 The release ends the gesture and leaves the last dry run on screen as §9's diff — the
@@ -147,6 +158,16 @@ in reading the code; it was found by dragging and comparing the pitch that lande
 that was asked for. So **nothing may reflow while a pointer is down**: the pane waits for the
 release, and the refusal it would have carried is shown in the pane head, which is always there.
 With that, 36 px of drag is exactly three semitones and 48 px is exactly four.
+
+**The same measurements, for a fader (M2 PR 7).** 60 injected pointer positions on a mixer
+`gain_db` became **32 dry runs** and **0 entries**; `Apply` appended one, ⌘Z one and ⇧⌘Z one, and
+the track's `version` went 5 → 6 → 7 → 8 across move · undo · redo. 50 positions on a plugin
+parameter became 27 dry runs and 0 entries. So decisions 1–3 transfer to a control that is a DOM
+element rather than a canvas, unchanged and with no second interaction model — and the one thing
+that did not transfer is the refusal, because a fader's *travel* is inside the validator's range
+in two of its three domains and unbounded in the third, so no position of a legal fader is
+refusable at all. The refusal above was reached the only way a form can reach one: a parameter
+the running build's manifest does not declare.
 
 **The number that decides it is not the dry run's cost; it is the applied call's slope.** One
 entry per pointer event is not merely a hundred rows in the history — it is a hundred writes

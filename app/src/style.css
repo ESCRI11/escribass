@@ -69,7 +69,8 @@ footer .mode {
   color: var(--dim);
 }
 
-/* The two views share the window and both scroll, so neither can push the other off it. */
+/* The arrangement and one of the three detail views share the window and both scroll, so
+   neither can push the other off it. */
 .views {
   flex: 1;
   display: flex;
@@ -78,8 +79,8 @@ footer .mode {
 }
 
 /* The arrangement is as tall as it needs to be and no taller — five tracks should not claim
-   half the window — but never more than half, so a forty-track project cannot push the roll
-   off the bottom. Both panes scroll. */
+   half the window — but never more than half, so a forty-track project cannot push the detail
+   pane off the bottom. Both panes scroll. */
 .arrangement {
   display: flex;
   overflow: auto;
@@ -88,15 +89,26 @@ footer .mode {
   min-height: 0;
 }
 
-.roll-pane {
+/* `flex: 1 1 0` and not `1 1 auto`, which is a one-character difference and the whole of
+   whether the window survives a real plugin. With `auto` the pane's flex basis is its content
+   height, so 2855 parameter rows are 77 000 px of basis and the flex algorithm shrinks the
+   arrangement above it to a sliver — the timeline disappears when you open Surge XT and comes
+   back when you close it. Measured in the window; nothing about it is visible in a test. */
+.detail {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   overflow: auto;
   border-top: 1px solid var(--line);
 }
 
+/* The head is where a refusal is named while the pointer is still down (ADR 0017 §3), so its
+   own height is load-bearing: **nothing in this bar may wrap.** A long `param_unknown` message
+   wrapped it from one line to three mid-drag, which moved every row under it by 24 px — the
+   diff pane's 42 px defect from PR 5, in the element that was chosen to avoid it. So the head
+   never wraps, its controls never shrink, and the notice is the one child that gives way,
+   ellipsised by the rule below. Measured in the window; ADR 0017 §3 is amended to say it. */
 .pane-head {
   display: flex;
   gap: 12px;
@@ -106,6 +118,18 @@ footer .mode {
   position: sticky;
   top: 0;
   z-index: 1;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pane-head > * {
+  flex: 0 0 auto;
+}
+
+.pane-head .notice {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .pane-head select {
@@ -167,6 +191,181 @@ footer .mode {
 .failure pre {
   white-space: pre-wrap;
   color: #e2a0a0;
+}
+
+/* The two forms (§9, ADR 0014 §1): a mixer strip and a parameter row, and they are the same
+   row twice — a name, a control, a readout. Nothing here is per-view styling of the same
+   thing under two names, which is what a form library would have arrived to solve. */
+.strips,
+.params {
+  padding: 4px 0;
+}
+
+.strip,
+.param {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--faint);
+}
+
+.strip .name {
+  flex: 0 0 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip .kind,
+.param .pid {
+  flex: 0 0 84px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.strip .devices {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.param .pname {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An unset parameter and a value this build cannot name: both are states of the *document*
+   against this manifest, not decoration. Dimmed rather than hidden, because a value no view
+   shows is the silent half of a manifest mismatch (`params.ts`). */
+.param.unset .pname,
+.param.unset input {
+  opacity: 0.55;
+}
+
+.param.undeclared .pname {
+  color: var(--refuse);
+}
+
+/* `content-visibility: auto` is the whole of what this view does about being long, and it is
+   a native property rather than a windowing library (ADR 0016 §3): the browser skips layout
+   and paint for a row that is off screen, and `contain-intrinsic-size` is what keeps the
+   scrollbar the right length while it does. `ponytail:` the ceiling is a plugin far larger
+   than Surge XT's 2855; the upgrade path after this is a virtual list, and the measurement
+   that would justify one is in the pull request rather than guessed at here. A browser that
+   does not implement it draws exactly what it drew before. */
+.param {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 27px;
+}
+
+/* One fixed width for every fader in both forms, so a mixer row and a parameter row line up
+   and the claim that they are one form is visible rather than only asserted. */
+.strip input[type="range"],
+.param input[type="range"] {
+  flex: 0 0 190px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.readout {
+  flex: 0 0 66px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.readout.pan {
+  flex-basis: 40px;
+}
+
+button.device,
+button.toggle,
+button.pane {
+  font: inherit;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 7px;
+}
+
+/* The label truncates and the count does not: the count is how many parameters this device
+   overrides, and a device with one is the device somebody has been editing. Clipping it away
+   with the vendor's name would hide the one number on the strip that is about the document. */
+button.device {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--text);
+  max-width: 210px;
+}
+
+button.device .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.device .set {
+  flex: 0 0 auto;
+}
+
+/* Wrapped rather than clipped: three effects on one track do not fit a row's width, and a
+   device the strip hides is a device its editor cannot be opened from. */
+.strip .devices {
+  flex-wrap: wrap;
+}
+
+button.device.opened {
+  border-color: var(--accent);
+}
+
+button.device .set {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+button.toggle {
+  flex: 0 0 26px;
+}
+
+button.toggle.on {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* A toggle whose change has been proposed and not yet applied — the dashed unapplied edit of
+   the roll, on a button (ADR 0017 §4). */
+button.toggle.proposed {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.panes {
+  display: flex;
+  gap: 4px;
+}
+
+button.pane.on {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.pane-head input[type="search"] {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font: inherit;
+  width: 160px;
 }
 
 /* The unapplied edit, and the diff a person approves (§9, ADR 0006 §1). Below the roll rather
