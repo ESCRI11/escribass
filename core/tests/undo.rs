@@ -226,6 +226,30 @@ fn a_second_undo_walks_further_back_rather_than_undoing_the_undo() {
 }
 
 #[test]
+fn undo_after_a_redo_keeps_going_backwards_rather_than_forwards() {
+    // The log's own `undo` and `redo` entries are not changes a person made, and walking them
+    // as though they were takes the document forward: the inverse of an inverse is the thing
+    // itself. Found by pressing the key four times, which is the sequence edit · ⌘Z · ⇧⌘Z · ⌘Z
+    // · ⌘Z — and the fifth press is where it showed.
+    let (_dir, mut session) = opened();
+    set_gain(&mut session, -7.5);
+    undo(&mut session);
+    redo(&mut session);
+    assert_eq!(gain(&session), -7.5, "the redo put it back");
+
+    undo(&mut session);
+    assert_eq!(gain(&session), -6.5, "and ⌘Z takes it away again");
+    let refused = session.undo(&UndoRequest { dry_run: false }).unwrap();
+    assert!(
+        !refused.valid,
+        "there is one edit in this history, so the second press has nothing left — walking the \
+         undo entries instead would have restored -7.5, which is forwards"
+    );
+    assert_eq!(refused.errors[0].rule, "nothing_to_undo");
+    assert_eq!(gain(&session), -6.5);
+}
+
+#[test]
 fn any_other_commit_clears_what_could_be_redone() {
     let (_dir, mut session) = opened();
     set_gain(&mut session, -7.5);

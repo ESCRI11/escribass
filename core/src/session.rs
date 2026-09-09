@@ -336,26 +336,42 @@ impl Session {
     // specifying: the session-held list of undone entries, which is what makes ⌘Z pressed
     // twice walk two changes back instead of undoing its own undo.
 
+    /// The next change to reverse, or `None` when there is none.
+    ///
+    /// Two rules, and both were found by pressing the key rather than by reading the log.
+    ///
+    /// **Start from the cursor, not from `HEAD`.** Once something has been undone, `HEAD` names
+    /// the undo entry the previous call appended, and reversing *that* is a redo — the wrong
+    /// answer to a second press of the same key.
+    ///
+    /// **Skip the log's own `undo` and `redo` entries.** ⌘Z means "the change before this one",
+    /// not "the entry before this one", and after edit · undo · redo the log ends with a redo
+    /// whose parent is an undo. Walking those two as though they were edits takes the document
+    /// *forward*, because the inverse of an inverse is the thing itself.
+    fn next_to_undo(&self) -> Option<&escribass_schema::history::PatchEntry> {
+        let history = self.project.history();
+        let mut at = match self.undone.last() {
+            Some(undone) => history.get(undone)?.parents.first()?.clone(),
+            None => history.head_id()?.to_string(),
+        };
+        loop {
+            let entry = history.get(&at)?;
+            if entry.tool != "undo" && entry.tool != "redo" {
+                return Some(entry);
+            }
+            at = entry.parents.first()?.clone();
+        }
+    }
+
     /// §5 `undo`.
     pub fn undo(&mut self, request: &UndoRequest) -> Result<ToolResult, ProjectError> {
-        // Which change to reverse. With nothing undone yet it is whatever the log ends with;
-        // otherwise it is the one *before* the last thing reversed, walking the first-parent
-        // chain back. Reading HEAD again instead would find the undo entry this call's
-        // predecessor appended, and reversing that is a redo — the wrong answer to a second
-        // press of the same key.
-        let history = self.project.history();
-        let target = match self.undone.last() {
-            Some(undone) => history.get(undone).and_then(|entry| entry.parents.first()).cloned(),
-            None => history.head_id().map(str::to_string),
-        };
-        let before = target
-            .as_deref()
-            .and_then(|id| history.get(id))
-            // The first entry in a log has nothing before it, and neither does an entry the log
-            // has lost. Both are refusals a caller reads rather than operator errors: pressing
-            // ⌘Z at the beginning of a history is an ordinary thing to do.
-            .and_then(|entry| entry.parents.first().cloned());
-        let (Some(target), Some(before)) = (target, before) else {
+        // The first entry in a log has nothing before it, and neither does a chain of undos
+        // that reaches it. Both are refusals a caller reads rather than operator errors:
+        // pressing ⌘Z at the beginning of a history is an ordinary thing to do.
+        let found = self
+            .next_to_undo()
+            .and_then(|entry| Some((entry.id.clone(), entry.parents.first()?.clone())));
+        let Some((target, before)) = found else {
             return Ok(refused(vec![Violation {
                 path: "/".to_string(),
                 rule: "nothing_to_undo",
@@ -363,7 +379,8 @@ impl Session {
             }]));
         };
 
-        let restored = history.materialise(&before).map_err(|e| history_error(&e))?;
+        let restored =
+            self.project.history().materialise(&before).map_err(|e| history_error(&e))?;
         let result = self.restore("undo", &restored, request.dry_run)?;
         if !request.dry_run && result.valid {
             self.undone.push(target);

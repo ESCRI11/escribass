@@ -139,6 +139,33 @@ The `undo` and `redo` **tools** are deferred to M2, where ⌘Z gives them a cons
 (`docs/plan.md`). This ADR is not deferred with them: decision 2 was chosen to make decision 4
 monotonic, and a later reader needs to know that the two are load-bearing on each other.
 
+**Extended 2026-09-09, when the tools landed in M2 PR 5.** "The session holds the stack of undone
+entry ids" was right and half specified, and the half it left out is what that stack is walked
+*through*. It is a cursor into the log's **first-parent chain**, and the walk must **skip the
+log's own `undo` and `redo` entries**, because ⌘Z means "the change before this one" and not "the
+entry before this one". Two failures follow from getting it wrong, and both were found by
+pressing the key rather than by reading the log:
+
+- Reading `HEAD` again instead of the cursor finds the undo entry the previous call appended,
+  and reversing that is a redo.
+- After edit · undo · redo the log ends with a redo whose parent is an undo. Walking those two
+  as though they were edits takes the document **forwards**, because the inverse of an inverse
+  is the thing itself. `core/tests/undo.rs` fails on exactly that sequence when the skip is
+  removed.
+
+The cursor is cleared by any other commit — in the one place a session appends — and by a branch
+switch, which appends nothing and still moves the document: `version` counts per branch, so a
+redo across a switch would restore a document from another line of history. It is session state,
+so a process that has just opened the project has undone nothing and its first `undo` reverses
+whatever the log ends with; the log records entries, not key presses, and there is nothing
+honest to recover.
+
+Both tools go through `Project::prepare_merge` rather than `prepare`, and they are the second
+caller that needs it: their ops are `diff(current, materialise(…))`, so the versions in them were
+read back out of a document core wrote, and decision 3's guard would otherwise refuse this API's
+own history. `max(ours, theirs) + 1` then takes every restored entity to one *past* where it is
+now, which is decision 2 doing exactly what decision 4 was written to need.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |
