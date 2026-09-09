@@ -30,9 +30,9 @@ fn every_rpc_in_the_service_becomes_a_tool() {
     // the point is that the descriptor and the service agree, so an RPC cannot be added
     // without appearing.
     let names = tool_names(DESCRIPTOR).unwrap();
-    assert_eq!(names.len(), 22);
+    assert_eq!(names.len(), 24);
     for expected in ["apply_patch", "get_song", "get_song_at", "get_history", "merge_branch",
-                     "add_asset", "render_export"] {
+                     "add_asset", "render_export", "undo", "redo"] {
         assert!(names.contains(&expected.to_string()), "{expected} missing from {names:?}");
     }
 }

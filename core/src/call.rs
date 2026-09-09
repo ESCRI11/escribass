@@ -31,9 +31,9 @@ use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
+    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest, RedoRequest,
     RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest,
+    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
 use serde_json::{json, Map, Value};
 
@@ -62,6 +62,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "set_tempo",
     "add_section",
     "move_section",
+    "undo",
+    "redo",
     "create_branch",
     "switch_branch",
     "delete_branch",
@@ -265,6 +267,14 @@ pub fn call(
         "move_section" => {
             let request: MoveSectionRequest = decode("move_section", arguments)?;
             tool_answer(&session.move_section(&request).map_err(broken)?)
+        }
+        "undo" => {
+            let request: UndoRequest = decode("undo", arguments)?;
+            tool_answer(&session.undo(&request).map_err(broken)?)
+        }
+        "redo" => {
+            let request: RedoRequest = decode("redo", arguments)?;
+            tool_answer(&session.redo(&request).map_err(broken)?)
         }
         "create_branch" => {
             let request: CreateBranchRequest = decode("create_branch", arguments)?;

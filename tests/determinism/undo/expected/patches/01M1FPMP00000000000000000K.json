@@ -1,0 +1,44 @@
+{
+  "id": "01M1FPMP00000000000000000K",
+  "parents": [
+    "01M1FPMP00000000000000000J"
+  ],
+  "tool": "undo",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/pitch",
+      "value": 60
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B/version",
+      "value": 4
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C/pitch",
+      "value": 64
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C/version",
+      "value": 4
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/version",
+      "value": 8
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 10
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

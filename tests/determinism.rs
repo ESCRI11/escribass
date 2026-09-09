@@ -493,7 +493,7 @@ fn every_project_reopens_in_a_fresh_process() {
     // ADR 0004's invariant, asserted through the binary: `Project::open` replays the log and
     // compares it with `song.json`, so a server that starts at all has agreed the two match.
     // A second process also proves the first left nothing in memory that the directory needs.
-    for name in ["every_tool", "refusals", "branches", "render"] {
+    for name in ["every_tool", "refusals", "branches", "render", "undo"] {
         reopens(name);
     }
 }
@@ -582,6 +582,33 @@ fn branching_and_merging_are_reproducible() {
     let second = run("branches", AT);
     assert_same("branching was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
     assert_matches_golden("branches", &first);
+}
+
+#[test]
+fn undoing_and_redoing_are_reproducible_and_leave_the_log_longer() {
+    // ADR 0005 §4's claim, driven through a real process. The script is what a person does with
+    // ⌘Z: four edits, a previewed undo, two real ones, two redos, a redo at the tip, and an
+    // ordinary commit in the middle of the cursor — and what the golden pins is that the log
+    // only ever **grew**, that the entry each undo reversed is still in it, and what the
+    // document looked like at each of the four `get_song` steps.
+    //
+    // The two `get_song` steps between the undos are the half a single end-state golden would
+    // miss: they are what distinguishes "⌘Z twice walks two edits back" from "⌘Z twice undoes
+    // its own undo", which produce the same tip and different middles.
+    let first = run("undo", AT);
+    let second = run("undo", AT);
+    assert_same("undo was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
+    assert_matches_golden("undo", &first);
+
+    // Read off the golden rather than asserted from memory: every entry the script appended is
+    // still there, and the two the undos reversed are among them (§5's audit trail).
+    let history = std::fs::read_dir(first.directory.0.join("patches")).expect("patches");
+    assert_eq!(
+        history.count(),
+        11,
+        "one root entry, four edits, four undo/redo entries counted below, one more undo and \
+         one `set_tempo` — a rewind would have left fewer"
+    );
 }
 
 #[test]
@@ -743,6 +770,8 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
                 "set_tempo" => set_tempo: SetTempoRequest,
                 "add_section" => add_section: AddSectionRequest,
                 "move_section" => move_section: MoveSectionRequest,
+                "undo" => undo: UndoRequest,
+                "redo" => redo: RedoRequest,
                 "create_branch" => create_branch: CreateBranchRequest,
                 "switch_branch" => switch_branch: SwitchBranchRequest,
                 "delete_branch" => delete_branch: DeleteBranchRequest,
@@ -847,7 +876,7 @@ fn the_two_transports_answer_the_same_way() {
     // transport reshapes, reclassifies or quietly drops something on the way out. That is not
     // hypothetical: MCP's `get_history` once lost `provenance`, and its hand-decoded
     // `apply_patch` once read `"dry_run": "true"` as false and applied.
-    for name in ["every_tool", "refusals", "branches", "render"] {
+    for name in ["every_tool", "refusals", "branches", "render", "undo"] {
         let over_mcp = run(name, AT);
         let over_grpc = run_over_grpc(name, AT);
         assert_same(
@@ -935,7 +964,8 @@ fn every_implemented_tool_is_scripted() {
     // The `call!` macro panics on a tool it does not know, but only if a script calls one — so
     // an RPC could be implemented, advertised, and never exercised here. This is what makes
     // `tests/AGENTS.md`'s "add it to a script" a rule rather than a suggestion.
-    let scripted: std::collections::BTreeSet<String> = ["every_tool", "refusals", "branches", "render"]
+    let scripted: std::collections::BTreeSet<String> =
+        ["every_tool", "refusals", "branches", "render", "undo"]
         .iter()
         .flat_map(|name| script(name))
         .map(|step| step.tool)

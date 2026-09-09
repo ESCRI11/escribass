@@ -1,0 +1,31 @@
+[
+  {"tool": "add_track", "args": {"name": "Bass", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"cmajor": {"source_hash": "8b31c0de4f9c00000000000000000000"}}}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}},
+  {"tool": "set_notes", "args": {"clip_id": "01M1FPMP000000000000000009",
+    "notes": {
+      "a": {"pitch": 60, "start_tick": 0, "length_ticks": 240, "velocity": 100},
+      "b": {"pitch": 64, "start_tick": 480, "length_ticks": 240, "velocity": 90}
+    }}},
+  {"tool": "transpose", "args": {"clip_id": "01M1FPMP000000000000000009", "semitones": 7}},
+
+  {"tool": "undo", "args": {"dry_run": true}},
+  {"tool": "undo", "args": {}},
+  {"tool": "get_song", "args": {}},
+
+  {"tool": "undo", "args": {}},
+  {"tool": "get_song", "args": {}},
+
+  {"tool": "redo", "args": {}},
+  {"tool": "redo", "args": {}},
+  {"tool": "get_song", "args": {}},
+
+  {"tool": "redo", "args": {}, "refused": "nothing_to_redo"},
+
+  {"tool": "undo", "args": {}},
+  {"tool": "set_tempo", "args": {"bpm": 96.0, "tick": 0}},
+  {"tool": "redo", "args": {}, "refused": "nothing_to_redo"},
+
+  {"tool": "get_song", "args": {}},
+  {"tool": "get_history", "args": {}}
+]

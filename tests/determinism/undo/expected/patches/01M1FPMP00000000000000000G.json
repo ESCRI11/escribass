@@ -1,0 +1,32 @@
+{
+  "id": "01M1FPMP00000000000000000G",
+  "parents": [
+    "01M1FPMP00000000000000000F"
+  ],
+  "tool": "undo",
+  "ops": [
+    {
+      "op": "remove",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B"
+    },
+    {
+      "op": "remove",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C"
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/version",
+      "value": 5
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 7
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

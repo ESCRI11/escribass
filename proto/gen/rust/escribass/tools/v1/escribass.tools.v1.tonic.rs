@@ -498,6 +498,50 @@ pub mod song_tools_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn undo(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UndoRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/Undo",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("escribass.tools.v1.SongTools", "Undo"));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn redo(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RedoRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/Redo",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("escribass.tools.v1.SongTools", "Redo"));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn create_branch(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateBranchRequest>,
@@ -690,6 +734,16 @@ pub mod song_tools_server {
             &self,
             request: tonic::Request<super::RenderExportRequest>,
         ) -> std::result::Result<tonic::Response<super::RenderResponse>, tonic::Status>;
+        ///
+        async fn undo(
+            &self,
+            request: tonic::Request<super::UndoRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn redo(
+            &self,
+            request: tonic::Request<super::RedoRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
         ///
         async fn create_branch(
             &self,
@@ -1583,6 +1637,92 @@ pub mod song_tools_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = RenderExportSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/Undo" => {
+                    #[allow(non_camel_case_types)]
+                    struct UndoSvc<T: SongTools>(pub Arc<T>);
+                    impl<T: SongTools> tonic::server::UnaryService<super::UndoRequest>
+                    for UndoSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::UndoRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::undo(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = UndoSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/Redo" => {
+                    #[allow(non_camel_case_types)]
+                    struct RedoSvc<T: SongTools>(pub Arc<T>);
+                    impl<T: SongTools> tonic::server::UnaryService<super::RedoRequest>
+                    for RedoSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RedoRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::redo(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RedoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

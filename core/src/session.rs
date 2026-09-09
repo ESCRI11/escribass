@@ -25,8 +25,9 @@ use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
     GetSongAtRequest, HistoryResponse, MergeBranchRequest, MoveSectionRequest, QuantizeRequest,
-    RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SongResponse, SwitchBranchRequest, ToolResult, TransposeRequest,
+    RedoRequest, RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest,
+    SetTempoRequest, SetTrackInstrumentRequest, SongResponse, SwitchBranchRequest, ToolResult,
+    TransposeRequest, UndoRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -47,6 +48,18 @@ pub struct Session {
     /// Where the engine is, when this process was told (`--engine`). `None` is not a silent
     /// skip: `render_export` says so and refuses, as an operator error (see it below).
     engine: Option<Engine>,
+    /// The entries this session has undone, oldest first (ADR 0005 §4).
+    ///
+    /// Not a stack of *documents* and not a second history — the log is the history, and every
+    /// undo appends to it. This is a **cursor into the first-parent chain**: it says how far
+    /// back the ⌘Z key has walked, so a second `undo` reverses the change before the last one
+    /// reversed rather than reversing the undo itself, and `redo` knows which entry to
+    /// restore. Any other commit clears it, which is the model every editor implements.
+    ///
+    /// It is session state, so it is empty in a process that has just opened the project. That
+    /// is the honest answer rather than a limitation worked around: the cursor is a fact about
+    /// this session's key presses and the log records none of them (ADR 0005 §4).
+    undone: Vec<String>,
 }
 
 impl Session {
@@ -56,7 +69,7 @@ impl Session {
         clock: Box<dyn Clock + Send>,
         author: Author,
     ) -> Self {
-        Self { project, ids, clock, author, engine: None }
+        Self { project, ids, clock, author, engine: None, undone: Vec::new() }
     }
 
     /// Names the engine binary this session renders with (ADR 0008 §2).
@@ -311,6 +324,143 @@ impl Session {
         Ok(RenderResponse { valid: true, errors: vec![], summary, result: Some(result) })
     }
 
+    // ---- undo and redo (ADR 0005 §4) ----
+    //
+    // The mechanism was decided a milestone ago and is not re-decided here: undo computes
+    // `diff(current, materialise(parents[0]))` and commits it through the ordinary pipeline
+    // under its own tool name. It never rewinds a ref, because a rewind *decrements* entity
+    // `version` and §4.3's optimistic concurrency needs it monotonic — a client holding
+    // version 5 of a track would later be handed a different version 5.
+    //
+    // What M2 adds is the pair of tools and the one thing ADR 0005 §4 named without
+    // specifying: the session-held list of undone entries, which is what makes ⌘Z pressed
+    // twice walk two changes back instead of undoing its own undo.
+
+    /// The next change to reverse, or `None` when there is none.
+    ///
+    /// Two rules, and both were found by pressing the key rather than by reading the log.
+    ///
+    /// **Start from the cursor, not from `HEAD`.** Once something has been undone, `HEAD` names
+    /// the undo entry the previous call appended, and reversing *that* is a redo — the wrong
+    /// answer to a second press of the same key.
+    ///
+    /// **Skip the log's own `undo` and `redo` entries.** ⌘Z means "the change before this one",
+    /// not "the entry before this one", and after edit · undo · redo the log ends with a redo
+    /// whose parent is an undo. Walking those two as though they were edits takes the document
+    /// *forward*, because the inverse of an inverse is the thing itself.
+    fn next_to_undo(&self) -> Option<&escribass_schema::history::PatchEntry> {
+        let history = self.project.history();
+        let mut at = match self.undone.last() {
+            Some(undone) => history.get(undone)?.parents.first()?.clone(),
+            None => history.head_id()?.to_string(),
+        };
+        loop {
+            let entry = history.get(&at)?;
+            if entry.tool != "undo" && entry.tool != "redo" {
+                return Some(entry);
+            }
+            at = entry.parents.first()?.clone();
+        }
+    }
+
+    /// §5 `undo`.
+    pub fn undo(&mut self, request: &UndoRequest) -> Result<ToolResult, ProjectError> {
+        // The first entry in a log has nothing before it, and neither does a chain of undos
+        // that reaches it. Both are refusals a caller reads rather than operator errors:
+        // pressing ⌘Z at the beginning of a history is an ordinary thing to do.
+        let found = self
+            .next_to_undo()
+            .and_then(|entry| Some((entry.id.clone(), entry.parents.first()?.clone())));
+        let Some((target, before)) = found else {
+            return Ok(refused(vec![Violation {
+                path: "/".to_string(),
+                rule: "nothing_to_undo",
+                message: "there is no earlier state on this branch to go back to".to_string(),
+            }]));
+        };
+
+        let restored =
+            self.project.history().materialise(&before).map_err(|e| history_error(&e))?;
+        let result = self.restore("undo", &restored, request.dry_run)?;
+        if !request.dry_run && result.valid {
+            self.undone.push(target);
+        }
+        Ok(result)
+    }
+
+    /// §5 `redo`.
+    pub fn redo(&mut self, request: &RedoRequest) -> Result<ToolResult, ProjectError> {
+        let Some(target) = self.undone.last().cloned() else {
+            return Ok(refused(vec![Violation {
+                path: "/".to_string(),
+                rule: "nothing_to_redo",
+                message: "this session has undone nothing to put back".to_string(),
+            }]));
+        };
+
+        // The entry that was undone, materialised: the document as it stood *including* that
+        // change. Redo is undo pointed the other way and shares every property with it,
+        // including appending rather than rewinding.
+        let restored =
+            self.project.history().materialise(&target).map_err(|e| history_error(&e))?;
+        let result = self.restore("redo", &restored, request.dry_run)?;
+        if !request.dry_run && result.valid {
+            self.undone.pop();
+        }
+        Ok(result)
+    }
+
+    /// Commits the patch that takes the current document to `restored`.
+    ///
+    /// Through `prepare_merge` and not `prepare`, for the reason a merge uses it: these ops
+    /// carry entity `version`s, and they are **core's own** — read back out of a document core
+    /// wrote. `prepare`'s guard would refuse the API's own history as though a caller had tried
+    /// to write a field it does not own (ADR 0005 §3). The `max(ours, theirs) + 1` rule then
+    /// takes every restored entity to *one past where it is now*, which is what keeps undo
+    /// monotonic and is the whole reason ADR 0005 chose decision 2 to make decision 4 possible.
+    fn restore(
+        &mut self,
+        tool: &'static str,
+        restored: &Value,
+        dry_run: bool,
+    ) -> Result<ToolResult, ProjectError> {
+        let current = serde_json::to_value(self.project.song()).expect("a Song serialises");
+        let ops = diff(&current, restored);
+
+        let prepared = match self.project.prepare_merge(&ops) {
+            Ok(prepared) => prepared,
+            Err(violations) => return Ok(refused(violations)),
+        };
+        // A call that changes nothing records nothing, as everywhere else. The cursor still
+        // moves: the entry was undone, it simply had no effect left to remove — something a
+        // later edit reverting it by hand can produce.
+        if prepared.ops().is_empty() {
+            return Ok(described("no change".to_string()));
+        }
+
+        let patch = ops_text(prepared.ops()).into_bytes();
+        let summary = summarise(prepared.ops());
+        if dry_run {
+            return Ok(ToolResult {
+                valid: true,
+                errors: vec![],
+                patch,
+                summary,
+                entry_id: String::new(),
+            });
+        }
+
+        let Some(head) = self.project.history().head_id().map(str::to_string) else {
+            return Err(ProjectError {
+                path: self.project.root().display().to_string(),
+                rule: "head_unset",
+                message: "HEAD names no entry".to_string(),
+            });
+        };
+        let entry_id = self.append(prepared, tool, vec![head])?;
+        Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
+    }
+
     // ---- branches (ADR 0001 §2) ----
     //
     // These three do not go through `run`: they append no entry, so there is no patch to
@@ -350,6 +500,12 @@ impl Session {
 
         if !request.dry_run {
             self.project.switch_branch(&request.name)?;
+            // The undo cursor points into the branch that was left. `version` counts per
+            // branch (ADR 0005 §4's caveat), so a `redo` after a switch would restore a
+            // document from another line of history onto this one — which is not what the key
+            // says it does. Navigation forgets the cursor; it appends nothing, so `append`
+            // cannot be the place this happens.
+            self.undone.clear();
         }
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id: String::new() })
     }
@@ -446,14 +602,7 @@ impl Session {
 
         // Two parents, which is the only thing that distinguishes a merge from a commit at
         // this level (ADR 0001 §1).
-        let entry_id = self.project.record(
-            prepared,
-            "merge_branch",
-            vec![ours_head, theirs_head],
-            self.author,
-            &mut *self.ids,
-            &*self.clock,
-        )?;
+        let entry_id = self.append(prepared, "merge_branch", vec![ours_head, theirs_head])?;
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
     }
 
@@ -537,7 +686,30 @@ impl Session {
                 message: "HEAD names no entry".to_string(),
             });
         };
-        self.project.record(prepared, tool, vec![head], self.author, &mut *self.ids, &*self.clock)
+        self.append(prepared, tool, vec![head])
+    }
+
+    /// The one place this session appends to the log, so the one place the undo cursor can be
+    /// invalidated (ADR 0005 §4).
+    ///
+    /// Every commit that is not itself an undo or a redo clears the list of undone entries.
+    /// That is "any other commit clears it" written where it cannot be forgotten by a tool
+    /// added later: a cursor into the first-parent chain stops meaning anything the moment the
+    /// chain grows a new tip for another reason, and a `redo` that then restored a document
+    /// from before that edit would silently discard it.
+    fn append(
+        &mut self,
+        prepared: Prepared,
+        tool: &str,
+        parents: Vec<String>,
+    ) -> Result<String, ProjectError> {
+        let id = self
+            .project
+            .record(prepared, tool, parents, self.author, &mut *self.ids, &*self.clock)?;
+        if tool != "undo" && tool != "redo" {
+            self.undone.clear();
+        }
+        Ok(id)
     }
 }
 

@@ -150,3 +150,20 @@ export function scale(width: number, ticks: number): (tick: number) => number {
   const perTick = width / Math.max(1, ticks);
   return (tick: number) => tick * perTick;
 }
+
+/**
+ * The pixel→tick mapping: [`scale`]'s exact inverse, beside it for that reason.
+ *
+ * PR 4 left this out on purpose — there was no gesture to convert for — and named this file as
+ * where it would go when it had a caller. It has one now: a drag reads a pointer position and
+ * has to say which tick it is over, and a second `width / ticks` written at the pointer
+ * handler is the two-rounding-rules problem this module's header describes, arriving from the
+ * other direction. A note would then be dropped a pixel from where it was drawn.
+ *
+ * It rounds nothing either. A gesture decides how to round — a drag rounds the *delta*, so a
+ * note lands where the pointer moved it rather than where the pointer happens to be.
+ */
+export function unscale(width: number, ticks: number): (x: number) => number {
+  const perTick = width / Math.max(1, ticks);
+  return (x: number) => (perTick > 0 ? x / perTick : 0);
+}

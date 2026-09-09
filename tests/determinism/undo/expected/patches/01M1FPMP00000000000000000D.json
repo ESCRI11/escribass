@@ -1,0 +1,60 @@
+{
+  "id": "01M1FPMP00000000000000000D",
+  "parents": [
+    "01M1FPMP00000000000000000A"
+  ],
+  "tool": "set_notes",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000B",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP00000000000000000B",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 60,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 0,
+        "velocity": 100,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000C",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP00000000000000000C",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 64,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "start_tick": 480,
+        "velocity": 90,
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/version",
+      "value": 2
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 4
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

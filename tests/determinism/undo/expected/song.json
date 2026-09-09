@@ -1,0 +1,146 @@
+{
+  "id": "01M1FPMP000000000000000001",
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "version": 11,
+  "schema_version": 1,
+  "tempo_map": {
+    "events": {
+      "01M1FPMP000000000000000003": {
+        "id": "01M1FPMP000000000000000003",
+        "tick": 0,
+        "bpm": 96.0
+      }
+    }
+  },
+  "time_signature_map": {
+    "events": {
+      "01M1FPMP000000000000000004": {
+        "id": "01M1FPMP000000000000000004",
+        "tick": 0,
+        "numerator": 4,
+        "denominator": 4
+      }
+    }
+  },
+  "sections": {},
+  "markers": {},
+  "tracks": {
+    "01M1FPMP000000000000000002": {
+      "id": "01M1FPMP000000000000000002",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Master",
+      "kind": "TRACK_KIND_MASTER",
+      "index": 0,
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    },
+    "01M1FPMP000000000000000006": {
+      "id": "01M1FPMP000000000000000006",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 1,
+      "name": "Bass",
+      "kind": "TRACK_KIND_INSTRUMENT",
+      "index": 1,
+      "instrument": {
+        "id": "01M1FPMP000000000000000007",
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "version": 1,
+        "ref": {
+          "cmajor": {
+            "source_hash": "8b31c0de4f9c00000000000000000000"
+          }
+        },
+        "state": "",
+        "params": {}
+      },
+      "fx_chain": {},
+      "routing": {
+        "sends": {},
+        "sidechains": {}
+      },
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "allow_overlap": false
+    }
+  },
+  "clips": {
+    "01M1FPMP000000000000000009": {
+      "id": "01M1FPMP000000000000000009",
+      "provenance": {
+        "author": "AUTHOR_MODEL",
+        "created_at": "2026-09-02T00:00:00+00:00"
+      },
+      "version": 8,
+      "track_id": "01M1FPMP000000000000000006",
+      "start_tick": 0,
+      "length_ticks": 3840,
+      "note_clip": {
+        "notes": {
+          "01M1FPMP00000000000000000B": {
+            "id": "01M1FPMP00000000000000000B",
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "version": 4,
+            "pitch": 60,
+            "microtonal_cents": 0.0,
+            "start_tick": 0,
+            "length_ticks": 240,
+            "velocity": 100,
+            "expression": {}
+          },
+          "01M1FPMP00000000000000000C": {
+            "id": "01M1FPMP00000000000000000C",
+            "provenance": {
+              "author": "AUTHOR_MODEL",
+              "created_at": "2026-09-02T00:00:00+00:00"
+            },
+            "version": 4,
+            "pitch": 64,
+            "microtonal_cents": 0.0,
+            "start_tick": 480,
+            "length_ticks": 240,
+            "velocity": 90,
+            "expression": {}
+          }
+        }
+      }
+    }
+  },
+  "automation": {},
+  "generators": {},
+  "render_target": {
+    "kind": "RENDER_KIND_MASTER",
+    "sample_rate": 48000,
+    "bit_depth": 24,
+    "dither": false
+  }
+}
