@@ -1,0 +1,255 @@
+{
+  "arrangement": {
+    "endTick": 9600,
+    "lengthTicks": 30720,
+    "seconds": 6,
+    "bars": [
+      {
+        "number": 1,
+        "startTick": 0,
+        "ticks": 3840
+      },
+      {
+        "number": 2,
+        "startTick": 3840,
+        "ticks": 3840
+      },
+      {
+        "number": 3,
+        "startTick": 7680,
+        "ticks": 3840
+      },
+      {
+        "number": 4,
+        "startTick": 11520,
+        "ticks": 3840
+      },
+      {
+        "number": 5,
+        "startTick": 15360,
+        "ticks": 3840
+      },
+      {
+        "number": 6,
+        "startTick": 19200,
+        "ticks": 3840
+      },
+      {
+        "number": 7,
+        "startTick": 23040,
+        "ticks": 3840
+      },
+      {
+        "number": 8,
+        "startTick": 26880,
+        "ticks": 3840
+      }
+    ],
+    "tempo": [
+      {
+        "tick": 0,
+        "bpm": 120
+      },
+      {
+        "tick": 3840,
+        "bpm": 90
+      }
+    ],
+    "signatures": [
+      {
+        "tick": 0,
+        "numerator": 4,
+        "denominator": 4
+      }
+    ],
+    "sections": [
+      {
+        "id": "01M1FPMP00000000000000001G",
+        "name": "Outro",
+        "startTick": 7680,
+        "endTick": 9600
+      }
+    ],
+    "tracks": [
+      {
+        "id": "01M1FPMP000000000000000002",
+        "name": "Master",
+        "kind": "master",
+        "index": 0,
+        "clips": []
+      },
+      {
+        "id": "01M1FPMP000000000000000006",
+        "name": "Lead",
+        "kind": "instrument",
+        "index": 1,
+        "clips": [
+          {
+            "id": "01M1FPMP00000000000000000Q",
+            "kind": "note",
+            "startTick": 0,
+            "lengthTicks": 3000,
+            "loopLengthTicks": 960,
+            "label": "3 notes"
+          },
+          {
+            "id": "01M1FPMP00000000000000000K",
+            "kind": "note",
+            "startTick": 3840,
+            "lengthTicks": 3840,
+            "label": "2 notes"
+          }
+        ]
+      },
+      {
+        "id": "01M1FPMP000000000000000009",
+        "name": "Pad",
+        "kind": "instrument",
+        "index": 2,
+        "clips": []
+      },
+      {
+        "id": "01M1FPMP00000000000000000C",
+        "name": "Loop",
+        "kind": "audio",
+        "index": 3,
+        "clips": [
+          {
+            "id": "01M1FPMP00000000000000000X",
+            "kind": "audio",
+            "startTick": 0,
+            "lengthTicks": 1920,
+            "loopLengthTicks": 960,
+            "label": "2286d76f"
+          }
+        ]
+      },
+      {
+        "id": "01M1FPMP00000000000000001J",
+        "name": "Keys",
+        "kind": "instrument",
+        "index": 4,
+        "clips": [
+          {
+            "id": "01M1FPMP00000000000000001N",
+            "kind": "note",
+            "startTick": 960,
+            "lengthTicks": 960,
+            "label": "1 note"
+          }
+        ]
+      }
+    ]
+  },
+  "rolls": [
+    {
+      "clipId": "01M1FPMP00000000000000000Q",
+      "trackId": "01M1FPMP000000000000000006",
+      "trackName": "Lead",
+      "startTick": 0,
+      "lengthTicks": 3000,
+      "loopLengthTicks": 960,
+      "lowPitch": 58,
+      "highPitch": 69,
+      "bars": [
+        {
+          "number": 1,
+          "startTick": 0,
+          "ticks": 3840
+        }
+      ],
+      "notes": [
+        {
+          "id": "01M1FPMP00000000000000000R",
+          "pitch": 60,
+          "name": "C4",
+          "microtonalCents": 0,
+          "startTick": 0,
+          "lengthTicks": 240,
+          "velocity": 100
+        },
+        {
+          "id": "01M1FPMP00000000000000000S",
+          "pitch": 64,
+          "name": "E4",
+          "microtonalCents": 0,
+          "startTick": 800,
+          "lengthTicks": 400,
+          "velocity": 90
+        },
+        {
+          "id": "01M1FPMP00000000000000000T",
+          "pitch": 67,
+          "name": "G4",
+          "microtonalCents": 0,
+          "startTick": 1200,
+          "lengthTicks": 240,
+          "velocity": 80
+        }
+      ]
+    },
+    {
+      "clipId": "01M1FPMP00000000000000000K",
+      "trackId": "01M1FPMP000000000000000006",
+      "trackName": "Lead",
+      "startTick": 3840,
+      "lengthTicks": 3840,
+      "lowPitch": 58,
+      "highPitch": 69,
+      "bars": [
+        {
+          "number": 2,
+          "startTick": 0,
+          "ticks": 3840
+        }
+      ],
+      "notes": [
+        {
+          "id": "01M1FPMP00000000000000000M",
+          "pitch": 60,
+          "name": "C4",
+          "microtonalCents": 0,
+          "startTick": 0,
+          "lengthTicks": 480,
+          "velocity": 100
+        },
+        {
+          "id": "01M1FPMP00000000000000000N",
+          "pitch": 67,
+          "name": "G4",
+          "microtonalCents": 0,
+          "startTick": 960,
+          "lengthTicks": 480,
+          "velocity": 90
+        }
+      ]
+    },
+    {
+      "clipId": "01M1FPMP00000000000000001N",
+      "trackId": "01M1FPMP00000000000000001J",
+      "trackName": "Keys",
+      "startTick": 960,
+      "lengthTicks": 960,
+      "lowPitch": 46,
+      "highPitch": 57,
+      "bars": [
+        {
+          "number": 1,
+          "startTick": -960,
+          "ticks": 3840
+        }
+      ],
+      "notes": [
+        {
+          "id": "01M1FPMP00000000000000001P",
+          "pitch": 48,
+          "name": "C3",
+          "microtonalCents": 0,
+          "startTick": 0,
+          "lengthTicks": 960,
+          "velocity": 70
+        }
+      ]
+    }
+  ]
+}

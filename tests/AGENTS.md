@@ -17,6 +17,8 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`, `origin.json` and `plan.json` — what `compile` says about the project, the `RenderPlan` or every reason there is none (ADR 0007 §4). | `UPDATE_FIXTURES=1 cargo test` |
 
+`determinism/render/expected/song.json` has a **second consumer** outside this package since M2 PR 4: `app/tests/projection.test.ts` reads it as the fixed `Song` for ADR 0012 §5's projection golden. It was chosen for having tracks to order, clips of both content kinds, loops, notes at four pitches and lengths, a section past the last clip and a tempo change with music after it — so reblessing this script moves `app/tests/projection.golden.json` too, and CI's `app` job runs on a change to this file for exactly that reason.
+
 ## Rules
 
 | Rule | Set by |

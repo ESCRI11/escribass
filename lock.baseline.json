@@ -134,7 +134,8 @@
       "typescript": "5.9.3",
       "bufbuild_protobuf": "2.14.1",
       "tsx": "4.23.13",
-      "note": "already pinned under `schema.typescript`; app/ is a new consumer, not a new dependency. @bufbuild/protobuf is the runtime the generated TypeScript imports; tsx runs the projection golden under node:test (ADR 0012 §5)."
+      "types_node": "24.13.3",
+      "note": "already pinned under `schema.typescript`; app/ is a new consumer, not a new dependency. @bufbuild/protobuf is the runtime the generated TypeScript imports; tsx runs the projection golden under node:test (ADR 0012 §5), and @types/node is what lets `tsc --noEmit` check the file that imports node:test, node:assert and node:fs — added 2026-09-08 in M2 PR 4 (ADR 0016 §2, amended). None of the four reaches a runtime this build ships except @bufbuild/protobuf, and none can reach a render (ADR 0016 §4)."
     }
   },
   "ai": {

@@ -62,6 +62,17 @@ therefore an ADR. The reason to take it as one list rather than nine approvals i
 frontend's dependency count is not a sequence of small decisions; it is one decision about how
 many small decisions to allow.
 
+**Amended 2026-09-08 in M2 PR 4: a fourth of those, `@types/node` 24.13.3.** The list above was
+written against a golden that had not been written yet, and it left out the one package the
+decision it serves requires. §3 below rules out a test framework because `node:test` and `tsx`
+suffice — and a file importing `node:test`, `node:assert` and `node:fs` has no types for any of
+them, so `tsc --noEmit` cannot check it. The choices were to leave the golden outside the type
+check, which is the silently-skipped check this repository keeps finding, or to add a package
+that is **already a §17 pin**, at the same version, for the same reason as the other three: it
+gains a consumer, not an entry. It is a `@types` package, so it reaches no runtime and cannot
+reach a render (§4 below). This is an amendment rather than a new sign-off because CLAUDE.md #4
+asks about dependencies not in `lock.baseline.json`, and this one has been in it since M0.1.
+
 Two entries need their own sentence.
 
 **`@tauri-apps/cli` 2.11.4 and `@tauri-apps/api` 2.11.1** are the JavaScript halves of a Tauri
@@ -83,7 +94,7 @@ usually makes without noticing:
 | Not taken | What it would have done | Why not |
 |---|---|---|
 | A state library (Redux, Zustand, Jotai, TanStack Query) | Hold the song | ADR 0012 §2 holds one decoded `Song` and re-reads it. Every one of these is a store, and a store over a document is the normalised second representation §14.2 forbids — arriving as a dependency rather than as a design decision, which is trap 1's whole shape. |
-| A test framework (Vitest, Jest) | Run the projection golden | `node:test` plus `tsx`, both already here. A golden comparison is `assert.deepEqual` against a committed file; a framework buys watch mode and mocking, and mocking is what a pure selector does not need. |
+| A test framework (Vitest, Jest) | Run the projection golden | `node:test` plus `tsx`, both already here — with `@types/node` for the same three imports, added in §2's amendment. A golden comparison is `assert.deepEqual` against a committed file; a framework buys watch mode and mocking, and mocking is what a pure selector does not need. |
 | A component or CSS framework (MUI, Tailwind, shadcn) | Look like something | A timeline on canvas, a mixer of faders and a patch log are not a form library's problem, and §15 already decided the timeline is custom rendering under any framework. Plain CSS. |
 | `@vitejs/plugin-react` | Fast Refresh | What it buys is preserving component state across an edit, and ADR 0012 §2 means the frontend *has* no state worth preserving: a reload re-reads `get_song` and rebuilds every view from it. Vite compiles `.tsx` without it; the cost is a full reload per edit, on a local page. Its dependency footprint is the smaller half of the argument and is stated precisely rather than inflated: one direct dependency (`@rolldown/pluginutils`) and four declared peers, of which three — `oxc-transform-react`, `@rolldown/plugin-babel`, `babel-plugin-react-compiler` — are marked optional, so only Vite is actually required. |
 | A charting or virtualisation library | Draw the timeline | §15 decided canvas/WebGL, and its rationale — "rendering is custom either way" — is the same one. |

@@ -1,5 +1,12 @@
 /* Plain CSS. No component or CSS framework, and ADR 0016 §3 says why: a timeline on canvas,
-   a mixer of faders and a patch log are not a form library's problem. */
+   a mixer of faders and a patch log are not a form library's problem.
+
+   The palette is here and nowhere else: both canvases read these custom properties off their
+   own element with `getComputedStyle`, so a colour is changed once rather than in a stylesheet
+   and a paint function. The two heights that have to agree between a canvas and the DOM beside
+   it — the arrangement's header and its track row — are *not* here: they come from `canvas.tsx`
+   as inline styles, because a lane that does not line up with its track name is what a number
+   duplicated across two languages buys. */
 
 :root {
   --surface: #16171a;
@@ -9,7 +16,10 @@
   --text: #d6d8dd;
   --dim: #878b95;
   --block: #4d7ea8;
+  --audio: #5c8f6b;
+  --note: #7fb2d8;
   --block-text: #f2f5f8;
+  --accent: #c9a227;
 
   color-scheme: dark;
   font: 13px/1.4 system-ui, sans-serif;
@@ -42,7 +52,6 @@ footer {
 }
 
 footer {
-  margin-top: auto;
   border-bottom: none;
   border-top: 1px solid var(--faint);
   color: var(--dim);
@@ -52,9 +61,56 @@ footer .mode {
   margin-left: auto;
 }
 
+.dim {
+  color: var(--dim);
+}
+
+/* The two views share the window and both scroll, so neither can push the other off it. */
+.views {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The arrangement is as tall as it needs to be and no taller — five tracks should not claim
+   half the window — but never more than half, so a forty-track project cannot push the roll
+   off the bottom. Both panes scroll. */
 .arrangement {
   display: flex;
   overflow: auto;
+  flex: 0 1 auto;
+  max-height: 55%;
+  min-height: 0;
+}
+
+.roll-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.pane-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 10px;
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pane-head select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
 }
 
 .gutter {
@@ -62,9 +118,8 @@ footer .mode {
   border-right: 1px solid var(--line);
 }
 
-/* Matches the canvas ruler, so the first track row lines up with the first lane. */
+/* Height comes from `canvas.tsx`; this only draws the rule under it. */
 .gutter-head {
-  height: 22px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -72,7 +127,6 @@ footer .mode {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
   padding: 0 10px;
   border-bottom: 1px solid var(--faint);
 }
@@ -89,15 +143,21 @@ footer .mode {
   font-size: 11px;
 }
 
-.timeline {
-  flex: 1;
+.timeline,
+.roll {
   display: block;
   width: 100%;
 }
 
+.timeline {
+  flex: 1;
+}
+
 .waiting,
-.failure {
+.failure,
+.empty {
   padding: 24px;
+  color: var(--dim);
 }
 
 .failure pre {
