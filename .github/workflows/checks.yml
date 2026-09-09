@@ -301,7 +301,13 @@ jobs:
       skipped: ${{ steps.gate.outputs.skip }}
     # Three plugins roughly triple what this job compiles; the cache below is what keeps it
     # from being the wall-clock cost of the whole workflow on every run.
-    timeout-minutes: 60
+    #
+    # **Ninety, not sixty, since M2 PR 9.** Sixty was chosen against "up to an hour cold", and
+    # gRPC adds a measured 11 m 16 s of it on two cores — so the old bound had a cold run
+    # finishing after the timeout by arithmetic rather than by bad luck. A warm run is still
+    # about eight minutes; what this number is for is the run after a pin moves, which busts
+    # the ccache key below and rebuilds everything.
+    timeout-minutes: 90
     env:
       # The image carries three GCCs; g++ 13.3 is the pin (docs/specs.md §17).
       CC: gcc-13
@@ -322,12 +328,16 @@ jobs:
       # schema-agnostic (CLAUDE.md #6), so no source path connects them.
       #
       # `core/` stays excluded even though the `renders` job below drives `core` into this
-      # build, and that is ADR 0007 §4's split doing its job rather than an oversight: a `core`
-      # change that would move a render moves the plan first, and the plan goldens are in the
-      # `checks` job, which every `core/` change runs. A render mismatch with those green is the
-      # engine's; a `core` change with those red never gets as far as asking. Rebuilding
-      # Tracktion for an hour to learn what a plan diff already says is the trade this exclusion
-      # is making.
+      # build — and since M2 PR 9 this job *compiles* `core`, for the `render-once` client the
+      # steps below dial the engine with. That is still ADR 0007 §4's split doing its job rather
+      # than an oversight: a `core` change that would move a render moves the plan first, and
+      # the plan goldens are in the `checks` job, which every `core/` change runs. A render
+      # mismatch with those green is the engine's; a `core` change with those red never gets as
+      # far as asking. The boundary `render-once` exercises has its own suite in the same
+      # `checks` job — `core/tests/engine.rs`, over a real socket against a real `Render`
+      # server — so a `core` change that broke the client fails there rather than here.
+      # Rebuilding Tracktion for an hour to learn what a plan diff already says is the trade
+      # this exclusion is making.
       #
       # `app/` joins it in M2 PR 2, and by the same argument one step further out: the frontend
       # is downstream of `core`, talks to the host in-process, and never touches `engine`, a
@@ -365,11 +375,19 @@ jobs:
         if: env.SKIP != '1'
         run: |
           git submodule update --init --depth 1 \
-            engine/vendor/tracktion_engine engine/vendor/protobuf \
+            engine/vendor/tracktion_engine engine/vendor/protobuf engine/vendor/grpc \
             engine/vendor/rubberband \
             engine/vendor/surge engine/vendor/sfizz-ui engine/vendor/dexed
           git -C engine/vendor/tracktion_engine config submodule.modules/juce.url https://github.com/juce-framework/JUCE.git
           git -C engine/vendor/tracktion_engine submodule update --init --depth 1 modules/juce
+          # gRPC's `module` providers: abseil, c-ares, re2, zlib and BoringSSL, each pinned by
+          # the grpc commit rather than by us (ADR 0013 §1). Named one by one rather than
+          # `--recursive`, which would also fetch its googletest, benchmark, bloaty, envoy-api,
+          # libuv, opentelemetry and xds — none of which this build configures — and its own
+          # third_party/protobuf, which `PROTOBUF_ROOT_DIR` replaces with ours.
+          git -C engine/vendor/grpc submodule update --init --depth 1 --jobs 4 \
+            third_party/abseil-cpp third_party/cares/cares third_party/re2 \
+            third_party/zlib third_party/boringssl-with-bazel
           # Each plugin vendors a dependency tree of its own — Surge and Dexed a JUCE each,
           # sfizz-ui the sfizz that lock.baseline.json pins, as its `library` submodule. Depth
           # 1 for the same reason as above: Surge's tree alone is about a gigabyte in full.
@@ -418,6 +436,21 @@ jobs:
           cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+      # The engine speaks gRPC since M2 PR 9 and a shell script cannot dial it, so the six
+      # render steps below drive it through `render-once` — which is `core`'s own `Engine`
+      # behind an argv, not a second client (`tests/render_once.rs`). This is the only cargo in
+      # this job, and what it buys is those steps testing the shipping client rather than a
+      # protocol nothing else speaks.
+      #
+      # **Not cached, and that is measured rather than assumed**: 1 m 11 s from cold on a
+      # two-core runner, crate downloads included, in a job whose next step is the better part
+      # of an hour. A cache would be half a gigabyte of `target/` competing for the same
+      # ten-gigabyte repository budget as the four-gigabyte ccache this job's build actually
+      # depends on, to save a minute.
+      - name: The client the shell steps render through
+        if: env.SKIP != '1'
+        run: cargo build -p escribass-tests --bin render-once
+
       # Generates the C++ from schema/song.proto and proto/render.proto (ADR 0008 §4), checks
       # the compile commands of the engine and of each plugin for -ffast-math and a second
       # -march (ADR 0009 §3), compiles all four, and scans the three VST3s into the manifest.
@@ -457,15 +490,20 @@ jobs:
               exit 1
             fi
           }
-          for component in tracktion_engine juce protobuf rubberband; do
+          # `grpc` since M2 PR 9: lock.baseline.json has had the entry since PR 1 and it was
+          # inert until this list and tests/renders.rs's COMPONENTS named it (ADR 0013 §1).
+          for component in tracktion_engine juce protobuf grpc rubberband; do
             check "$component" "$(jq -r ".engine.${component}.commit" lock.baseline.json)"
           done
           for component in surge_xt sfizz_ui dexed; do
             check "$component" "$(jq -r ".bundled_plugins.${component}.commit" lock.baseline.json)"
           done
-          # Failure is an exit code (ADR 0008 §1): nothing on stdin is not a plan.
-          if "$engine" engine/build/manifest.json < /dev/null > /dev/null; then
-            echo "::error::the engine accepted an empty stdin as a plan"
+          # Failure is an exit code (ADR 0008 §1). Nothing arrives on stdin any more, so what
+          # is asserted here is the argument that replaced it: the mode is which service the
+          # process serves, and an engine given no mode serves nothing rather than guessing
+          # (ADR 0013 §3).
+          if "$engine" engine/build/manifest.json < /dev/null > /dev/null 2>&1; then
+            echo "::error::the engine started without being told which service to serve"
             exit 1
           fi
 
@@ -531,7 +569,10 @@ jobs:
         if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
-          protoc=engine/build/vendor/protobuf/protoc
+          once=target/debug/render-once
+          # protoc moved under grpc's tree when grpc took over the one
+          # add_subdirectory of our protobuf (engine/CMakeLists.txt, ADR 0013 §1).
+          protoc=engine/build/vendor/grpc/third_party/protobuf/protoc
           cat > plan.txtpb <<EOF
           tracks {
             instrument { instrument { ref { plugin { plugin_id: "Digital Suburban/Dexed" } } } }
@@ -548,7 +589,7 @@ jobs:
           "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
             --encode=escribass.render.v1.RenderPlan proto/render.proto < plan.txtpb > plan.binpb
           hash_of() {
-            "$engine" engine/build/manifest.json < plan.binpb > "$1"
+            "$once" "$engine" engine/build/manifest.json < plan.binpb > "$1"
             "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
               --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
               | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
@@ -587,7 +628,10 @@ jobs:
         if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
-          protoc=engine/build/vendor/protobuf/protoc
+          once=target/debug/render-once
+          # protoc moved under grpc's tree when grpc took over the one
+          # add_subdirectory of our protobuf (engine/CMakeLists.txt, ADR 0013 §1).
+          protoc=engine/build/vendor/grpc/third_party/protobuf/protoc
           python3 - <<'PY'
           import struct, wave
           # One second of constant 0.5 at 48 kHz, mono, 24-bit — the render's own rate, so
@@ -618,7 +662,7 @@ jobs:
           "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
             --encode=escribass.render.v1.RenderPlan proto/render.proto < audio.txtpb > audio.binpb
           hash_of() {
-            "$engine" engine/build/manifest.json < audio.binpb > "$1"
+            "$once" "$engine" engine/build/manifest.json < audio.binpb > "$1"
             "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
               --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
               | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
@@ -658,7 +702,10 @@ jobs:
         if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
-          protoc=engine/build/vendor/protobuf/protoc
+          once=target/debug/render-once
+          # protoc moved under grpc's tree when grpc took over the one
+          # add_subdirectory of our protobuf (engine/CMakeLists.txt, ADR 0013 §1).
+          protoc=engine/build/vendor/grpc/third_party/protobuf/protoc
           encode() {
             "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
               --encode=escribass.render.v1.RenderPlan proto/render.proto
@@ -696,11 +743,14 @@ jobs:
           refuses() {
             what="$1"; shift
             plan refused.wav "$@" | encode > refused.binpb
-            if "$engine" engine/build/manifest.json < refused.binpb > /dev/null 2> refused.err; then
+            if "$once" "$engine" engine/build/manifest.json < refused.binpb > /dev/null 2> refused.err; then
               echo "::error::the engine accepted $what"
               exit 1
             fi
-            sed -n 's/^escribass_engine: /  refused: /p' refused.err
+            # `core` pipes the engine's stderr and reports its tail inside one line, named by
+            # the rule the failure landed on — engine_failed here, which is ADR 0006 §2's
+            # operator side. That line is what a person reads, so it is what is echoed.
+            sed -n 's/^render-once: /  refused: /p' refused.err
           }
 
           # A plan carrying a value that is not a number. `normalised()` gated every parameter
@@ -724,16 +774,25 @@ jobs:
           # a render was killed, and pid reuse then walked into it. `createOutputStream` opens
           # an existing file at its end rather than truncating, so the clip was appended after
           # the leftover and `createReaderFor` took the stale payload in front: one plan, three
-          # hashes, exit 0 and stderr empty each time. `$$` in the shell below is the pid the
-          # `exec`d engine inherits, which is what makes this the real collision and not a
-          # simulation of one.
+          # hashes, exit 0 and stderr empty each time.
+          #
+          # **The decoy is planted for a window of pids rather than one** (M2 PR 9). It used to
+          # be `$$` exactly, because the shell `exec`d the engine and the engine inherited that
+          # pid; the engine is now a child of `render-once`, so the pid the old code would have
+          # named is a few above this shell's. A window is what keeps this reproducing the real
+          # collision instead of simulating one — and a window that missed would weaken the
+          # check rather than fail it, which is why it is wide.
           plan rendered.wav | encode > guard.binpb
-          clean=$("$engine" engine/build/manifest.json < guard.binpb 2>/dev/null | hash_of)
+          clean=$("$once" "$engine" engine/build/manifest.json < guard.binpb 2>/dev/null | hash_of)
           mkdir -p crowded
           dirty=$(TMPDIR=$PWD/crowded sh -c '
-            mkdir -p "$TMPDIR/escribass_engine.$$" \
-              && cp decoy.wav "$TMPDIR/escribass_engine.$$/clip1.wav" \
-              && exec "$0" engine/build/manifest.json < guard.binpb' "$engine" 2>/dev/null | hash_of)
+            p=$$; while [ $p -le $(($$ + 32)) ]; do
+              mkdir -p "$TMPDIR/escribass_engine.$p" \
+                && cp decoy.wav "$TMPDIR/escribass_engine.$p/clip1.wav"
+              p=$((p + 1))
+            done
+            exec "$0" "$1" engine/build/manifest.json < guard.binpb' \
+            "$once" "$engine" 2>/dev/null | hash_of)
           echo "clean scratch $clean"
           echo "crowded       $dirty"
           [ -n "$clean" ] && [ "$clean" = "$dirty" ] \
@@ -745,14 +804,19 @@ jobs:
           # where the previous render had been, with the engine never reaching its own length
           # check to say so. It now renders to a sibling `.part` and renames only after every
           # check passes.
+          #
+          # **The engine is what has to die** (M2 PR 9). It is now a child of `render-once`, and
+          # killing the client alone would leave it rendering on — the check would then be
+          # comparing a file nothing had stopped writing. `pkill -f` reaches both, because both
+          # command lines name the engine, and nothing else in this job is running one.
           plan keep.wav | encode > keep.binpb
           plan keep.wav 480 0.0 2880000 | encode > keeplong.binpb
-          "$engine" engine/build/manifest.json < keep.binpb > /dev/null 2>/dev/null
+          "$once" "$engine" engine/build/manifest.json < keep.binpb > /dev/null 2>/dev/null
           before=$(sha256sum keep.wav | cut -d' ' -f1)
-          "$engine" engine/build/manifest.json < keeplong.binpb > /dev/null 2>/dev/null &
+          "$once" "$engine" engine/build/manifest.json < keeplong.binpb > /dev/null 2>/dev/null &
           victim=$!
-          sleep 2
-          kill -9 $victim || true
+          sleep 5
+          pkill -9 -f escribass_engine || true
           wait $victim 2>/dev/null || true
           after=$(sha256sum keep.wav | cut -d' ' -f1)
           echo "before the kill $before"
@@ -770,7 +834,13 @@ jobs:
           # SerializeToOstream returned true having written nothing to the descriptor and the
           # real write(2) happened inside the unchecked flush(): `> /dev/full` was exit 0 with
           # an empty stdout and nothing on stderr.
-          if "$engine" engine/build/manifest.json < guard.binpb > /dev/full 2>/dev/null; then
+          #
+          # The answer no longer leaves that way, but the socket address does, and it is the
+          # same defect one message earlier: an engine whose address never left the process
+          # leaves its caller waiting for a line that is not coming (ADR 0013 §3). So the check
+          # is kept, aimed at the engine directly, because there is no client in the world that
+          # could see this one.
+          if "$engine" engine/build/manifest.json --render > /dev/full 2>/dev/null; then
             echo "::error::the engine exited 0 after a stdout it could not write"
             exit 1
           fi
@@ -783,7 +853,10 @@ jobs:
         if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
-          protoc=engine/build/vendor/protobuf/protoc
+          once=target/debug/render-once
+          # protoc moved under grpc's tree when grpc took over the one
+          # add_subdirectory of our protobuf (engine/CMakeLists.txt, ADR 0013 §1).
+          protoc=engine/build/vendor/grpc/third_party/protobuf/protoc
           python3 - <<'PY'
           import math, struct, wave
           # 441 Hz for one second: a whole number of cycles at 48 kHz, so the pitch check is
@@ -811,7 +884,7 @@ jobs:
           "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
             --encode=escribass.render.v1.RenderPlan proto/render.proto < stretch.txtpb > stretch.binpb
           hash_of() {
-            "$engine" engine/build/manifest.json < stretch.binpb > "$1"
+            "$once" "$engine" engine/build/manifest.json < stretch.binpb > "$1"
             "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
               --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
               | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
@@ -856,7 +929,10 @@ jobs:
         if: env.SKIP != '1'
         run: |
           engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
-          protoc=engine/build/vendor/protobuf/protoc
+          once=target/debug/render-once
+          # protoc moved under grpc's tree when grpc took over the one
+          # add_subdirectory of our protobuf (engine/CMakeLists.txt, ADR 0013 §1).
+          protoc=engine/build/vendor/grpc/third_party/protobuf/protoc
           python3 - <<'PY'
           import hashlib, io, math, pathlib, struct, wave
           buf = io.BytesIO()
@@ -893,7 +969,7 @@ jobs:
           "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
             --encode=escribass.render.v1.RenderPlan proto/render.proto < sampler.txtpb > sampler.binpb
           hash_of() {
-            "$engine" engine/build/manifest.json < sampler.binpb > "$1"
+            "$once" "$engine" engine/build/manifest.json < sampler.binpb > "$1"
             "$protoc" -I schema -I proto -I engine/vendor/protobuf/src \
               --decode=escribass.render.v1.RenderResult proto/render.proto < "$1" \
               | sed -n 's/^pcm_sha256: "\(.*\)"$/\1/p'
