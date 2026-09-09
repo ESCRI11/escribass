@@ -66,16 +66,25 @@ plugins are `ExternalProject_Add`, separate CMake projects by `engine/cmake/plug
 first line, so sfizz-ui's vendored abseil (`c2435f8`, the same LTS release) has never been in
 the engine's tree and does not become so now.
 
-**Two things are not verified and PR 0 settles them before PR 9 depends on either.** The spike
-built gRPC in a tree of its own; `engine/CMakeLists.txt` already does
-`add_subdirectory(vendor/protobuf)`, so gRPC's `module` provider would add protobuf a *second*
-time and collide on every target — the integration must hand gRPC the protobuf targets that
-exist rather than let it bring its own, and which of `gRPC_PROTOBUF_PROVIDER=package` or a
-pre-populated target set does that cleanly is a build question, not a design one. And 52
-CPU-minutes on 20 cores is not 52 CPU-minutes on a two-core runner in a job that is already up
-to an hour cold; what it costs there, warm and cold, is the second measurement. Both are the
-kind of thing that arrives as a red CI job rather than a wrong answer, which is why the
-decision does not wait on them and the code does.
+**Two things were not verified here, and PR 9 settled both by building them.**
+
+*The coexistence.* `engine/CMakeLists.txt` already did `add_subdirectory(vendor/protobuf)`, and
+gRPC's `module` provider adds protobuf again — `cmake/protobuf.cmake` calls
+`add_subdirectory(${PROTOBUF_ROOT_DIR})` unconditionally, with no `if(TARGET libprotobuf)` guard,
+so the two collide on every target protobuf defines. The answer is neither of the two this
+paragraph guessed at: **gRPC owns the one add, and `PROTOBUF_ROOT_DIR` aims it at our submodule.**
+Our own `add_subdirectory` goes. The one visible consequence is a path — protobuf's binary
+directory is `third_party/protobuf` under grpc's, so `protoc` moved and the engine job names it
+there.
+
+*The cost on two cores.* Measured 2026-09-09, on two pinned cores of an AMD Ryzen AI 9 HX 370 at
+g++ 13.3, building `grpc++` and `grpc_cpp_plugin`: **13 m 24 s wall cold** over 1741 targets, of
+which 2 m 08 s is the protobuf this job already built — so gRPC's own addition is **11 m 16 s**
+(gRPC 9 m 38 s, abseil 53 s, BoringSSL 31 s, re2 12 s, c-ares and zlib under 5 s each). **Warm,
+with a populated ccache and the build tree thrown away, the same 1741 targets take 6.1 s**: 1547
+direct hits, and 1.8 CPU-seconds of archiving and linking in total. The engine job's ccache key
+names `lock.baseline.json`, which this pull request changes, so the run that merges it pays the
+cold price once and every run after it pays the warm one.
 
 ### 2. Preview is a compiled `RenderPlan` played from a tick, over one bidirectional stream
 
@@ -136,9 +145,42 @@ Render and Preview services", in the plural, since PR 1.
 
 ### 3. Two lifetimes in one binary, one transport: a live process for preview, a fresh one per export
 
-The engine is launched with a socket path on argv and `app` dials it. In **preview** mode the
-process lives as long as its `Preview` stream. In **render** mode a fresh process is spawned per
-offline render, serves exactly one `Render` call, and exits.
+The engine is launched in one of two modes and the caller dials the socket it serves on. In
+**preview** mode the process lives as long as its `Preview` stream. In **render** mode a fresh
+process is spawned per offline render, serves exactly one `Render` call, and exits.
+
+**Amended 2026-09-09, in PR 9, which had to write the launch.** The sentence above said the
+socket path travels *to* the engine, on argv. It travels the other way: the engine creates a
+`mkdtemp` directory of its own, binds a socket inside it, and prints `unix:<path>` on stdout as
+its **first and only line**; the caller reads that line and dials it. Three things decide it, and
+none of them was visible before there was a caller.
+
+*Readiness.* A path on argv says where to dial and says nothing about when. The caller would
+then have to poll, retry or sleep — and a retry loop tuned to a machine is the class of flake
+this repository has spent two milestones refusing. Printed *after* `BuildAndStart` has returned a
+listening server, one line is the address and the readiness at once: a caller holding it cannot
+be refused a connection, and a blocking read of that line returns either when the engine is ready
+or when the engine is gone, both of which are answers.
+
+*Whose entropy.* A parent-chosen path has to be unique, and the two ways to make one unique are a
+random name and the process id. CLAUDE.md #3 keeps unseeded randomness out of `core`, and the pid
+is the exact defect M1 PR 13 found in this binary's own scratch directory — `escribass_engine.<pid>`
+leaked on every killed render and pid reuse walked into it, which is why that directory became a
+`mkdtemp` in the first place. The engine already owns one. Naming the socket inside it costs
+nothing, is 0700 by construction, and dies with the process that made it.
+
+*Which stdout.* ADR 0008 §1's rule — stdout carries the protocol and nothing else, every log line
+goes to stderr — is unchanged and is what makes a single line readable at all. What crosses it is
+one address instead of one `RenderResult`, and it is checked after the flush for the reason M1 PR
+13 added that check: an answer that never left the process used to be exit 0 and a caller waiting.
+
+`core` therefore spawns `escribass_engine <manifest.json> --render`, reads one line, dials, calls
+once, and takes the **child's exit status** as the verdict — never the transport's. A refused
+connection, a stream that ends mid-call and a `Status` in place of a message all mean the engine
+is not going to answer, and the report a person can act on is the one the engine already wrote:
+its exit code and the tail of its stderr. A non-zero exit is `engine_failed`; an exit of 0 with no
+answer is `engine_unreadable`, which is M1 PR 13's defect — a render that never happened, reported
+as a success — kept caught on the new transport.
 
 This keeps ADR 0008 §2 whole rather than reasoning around it. Its argument was never about
 transport: a plugin's parameter smoothers ramp from their previous value, so an export sharing a
