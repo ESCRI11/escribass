@@ -7,17 +7,23 @@
 // introduce one out of `package.json`, and ADR 0012 §5's projection golden is what would catch
 // a hand-written one.
 //
-// **The edit path (M2 PR 5), in one paragraph.** A drag proposes a position; every position it
-// passes through is sent as a `set_notes` **dry run**, which validates and writes nothing; the
-// answer is the RFC 6902 patch a commit would record, and it is drawn as a diff a person
-// approves (§9). Applying is the same call without `dry_run`, and then `get_song` again. So a
-// gesture is one entry in the log however many pointer events it fired, and every position it
-// passed through has been past the validator rather than around it. That is ADR 0017, and it is
-// written out here because without it the two `set_notes` calls below look like one call made
-// twice.
+// **The edit path (M2 PR 5), in one paragraph.** A gesture proposes a value; every value it
+// passes through is sent as a **dry run**, which validates and writes nothing; the answer is
+// the RFC 6902 patch a commit would record, and it is drawn as a diff a person approves (§9).
+// Applying is the same call without `dry_run`, and then `get_song` again. So a gesture is one
+// entry in the log however many pointer events it fired, and every value it passed through has
+// been past the validator rather than around it. That is ADR 0017, and it is written out here
+// because without it the two calls below look like one call made twice.
 //
-// Nothing below is song state. `moved` is three numbers describing a gesture, `preview` is an
-// answer the tool API gave, and `chosen` is a clip id the user picked.
+// **The gesture is the call (M2 PR 7).** PR 5 had one gesture and could name it; PR 7 has four
+// — a note drag, a fader ride, a pan, a mute — over two tools, so what is held is the *call*
+// rather than the note: `Gesture` is a tool name, its arguments, and what the view should draw
+// while the pointer is down. Nothing else changed about the flow, which is the point. A
+// gesture that could not be expressed as repeated dry runs of one tool call would need its own
+// ADR (ADR 0017, Consequences), and none of the three PR 7 adds is one.
+//
+// Nothing below is song state. `Gesture` is a call waiting to be made, `preview` is an answer
+// the tool API gave, and `chosen` and `device` are ids the user picked.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromJson, toJson } from "@bufbuild/protobuf";
@@ -26,9 +32,14 @@ import { NoteSchema, SongSchema, type Song } from "@escribass/schema/song";
 import { arrangement } from "./arrangement.js";
 import type { Arrangement } from "./arrangement.js";
 import { pianoRoll } from "./pianoroll.js";
+import { mixer } from "./mixer.js";
+import { devices, editor } from "./params.js";
+import type { Manifest } from "./params.js";
+import { Params, Strips } from "./form.js";
+import type { Touch, Write } from "./form.js";
 import { HEAD, ROW, Roll, Timeline } from "./canvas.js";
 import type { Moved } from "./canvas.js";
-import { tool } from "./tool.js";
+import { build, tool } from "./tool.js";
 
 /**
  * Freezes the decoded song, so a view that writes to the model throws where it wrote.
@@ -68,6 +79,22 @@ interface ToolAnswer {
   readonly entry_id: string;
 }
 
+/**
+ * A gesture in progress, or the proposal it left behind for approval — as the tool call it is.
+ *
+ * `tool` and `args` are one call made twice: `dry_run: true` while it is being proposed and
+ * `dry_run: false` when a person applies it (ADR 0017 §2, §4). The two payloads beside them
+ * are what a view draws while the gesture is live, and neither is song state — `moved` is
+ * three numbers describing a drag (`canvas.tsx`) and `touched` is a control and the number
+ * under the pointer (`form.tsx`). The document does not change until it changes.
+ */
+interface Gesture {
+  readonly tool: string;
+  readonly args: Record<string, JsonValue>;
+  readonly moved?: Moved;
+  readonly touched?: Touch;
+}
+
 /** The arguments a `set_notes` needs to move one note, built from the model rather than from
  *  the projection.
  *
@@ -97,19 +124,32 @@ function movedNotes(song: Song, clipId: string, moved: Moved): Record<string, Js
   );
 }
 
+/** Which view the lower pane is showing. Three panes and a `<select>`-free switch, because
+ *  three buttons are three buttons; a router arrives when there is something to route. */
+type Pane = "roll" | "mixer" | "params";
+
 export function App() {
   const [song, setSong] = useState<Song | null>(null);
+  /** What this build can host — the map the parameter editor is a form over (ADR 0014 §1).
+   *  Read once: it describes the running process, not the project, and cannot change under it. */
+  const [manifest, setManifest] = useState<Manifest | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [pane, setPane] = useState<Pane>("roll");
   const [chosen, setChosen] = useState<string | null>(null);
-  /** The gesture in flight, or the position it left behind for approval. */
-  const [moved, setMoved] = useState<Moved | null>(null);
-  /** The tool API's answer about that position: the patch to approve, or why it is refused. */
+  const [device, setDevice] = useState<string | null>(null);
+  /** What is typed in the editor's search box. Not a projection and not an edit: 2855 rows is
+   *  a list nobody can read, and narrowing it writes nothing. */
+  const [filter, setFilter] = useState("");
+  /** The gesture in flight, or the one waiting for approval. */
+  const [gesture, setGesture] = useState<Gesture | null>(null);
+  /** The tool API's answer about it: the patch to approve, or why it is refused. */
   const [preview, setPreview] = useState<ToolAnswer | null>(null);
   /** The last thing a tool refused outright — `nothing_to_undo`, and its neighbours. */
   const [notice, setNotice] = useState<string | null>(null);
   /** Whether the pointer is still down. It gates the diff pane, and the reason is layout, not
-   *  taste: the pane takes space, taking space moves the roll, and moving the roll moves the
-   *  note out from under the cursor mid-drag (`canvas.tsx`, `onReleased`). */
+   *  taste: the pane takes space, taking space moves what is under the pointer — the roll's
+   *  note, or a fader's thumb — and a gesture is measured against where the control is
+   *  (ADR 0017 §3, §5). */
   const [held, setHeld] = useState(false);
 
   const read = useCallback(
@@ -122,9 +162,13 @@ export function App() {
 
   useEffect(() => {
     void read();
+    void build()
+      .then((answer) => setManifest(freeze(answer as Manifest)))
+      .catch((e: unknown) => setFailure(String(e)));
   }, [read]);
 
   const view = useMemo(() => (song ? arrangement(song) : null), [song]);
+  const strips = useMemo(() => (song ? mixer(song) : null), [song]);
 
   // The clips a roll can be opened on, in the arrangement's own order — derived from the
   // projection rather than listed a second time, so the `<select>` and the timeline cannot
@@ -139,6 +183,9 @@ export function App() {
     [view],
   );
 
+  // Every device an editor can be opened on, in the mixer's own order and for the same reason.
+  const editable = useMemo(() => (song ? devices(song) : []), [song]);
+
   // Derived, never stored: a chosen id that the song no longer has falls back to the first
   // clip rather than leaving the roll pointed at something that is gone. Holding the fallback
   // in state instead would be a second copy of a fact the document already carries.
@@ -148,43 +195,45 @@ export function App() {
     [song, openId],
   );
 
-  // One dry run in flight at a time, and the newest position wins. A drag fires pointer events
+  const deviceId =
+    device !== null && editable.some((d) => d.id === device) ? device : editable[0]?.id;
+  const editing = useMemo(
+    () => (song && manifest && deviceId !== undefined ? editor(song, manifest, deviceId) : null),
+    [song, manifest, deviceId],
+  );
+
+  // One dry run in flight at a time, and the newest value wins. A drag fires pointer events
   // faster than a round trip returns, and queueing them all would leave the diff a hundred
   // answers behind the pointer; dropping the ones overtaken costs nothing, because a preview
-  // describes a position and only the newest position is on screen (ADR 0017 §2).
-  const flight = useRef<{ busy: boolean; queued: Moved | null }>({ busy: false, queued: null });
-  const clipId = roll?.clipId;
+  // describes a value and only the newest value is on screen (ADR 0017 §2).
+  const flight = useRef<{ busy: boolean; queued: Gesture | null }>({ busy: false, queued: null });
 
-  async function previewAt(at: Moved, clip: string, from: Song): Promise<void> {
+  async function previewAt(next: Gesture): Promise<void> {
     flight.current.busy = true;
     try {
-      setPreview(
-        (await tool("set_notes", {
-          clip_id: clip,
-          notes: movedNotes(from, clip, at),
-          dry_run: true,
-        })) as ToolAnswer,
-      );
+      setPreview((await tool(next.tool, { ...next.args, dry_run: true })) as ToolAnswer);
     } catch (e: unknown) {
       setFailure(String(e));
     } finally {
       flight.current.busy = false;
-      const next = flight.current.queued;
+      const queued = flight.current.queued;
       flight.current.queued = null;
-      if (next) void previewAt(next, clip, from);
+      if (queued) void previewAt(queued);
     }
   }
 
-  /** Every position the gesture passes through, asked of the tool API and of nothing else.
+  /** Every value the gesture passes through, asked of the tool API and of nothing else.
    *
-   *  There is no `pitch < 0 || pitch > 127` in this file, and there is not going to be one:
-   *  §4.4 is the validator's, and a copy of it in TypeScript is the second implementation
-   *  ADR 0012 §2 refuses for RFC 6902 apply, arriving as a convenience (ADR 0017 §3). */
-  function propose(next: Moved | null): void {
-    setMoved(next);
+   *  There is no `pitch < 0 || pitch > 127` in this file, no `0 <= value <= 1`, and there is
+   *  not going to be one: §4.4 is the validator's, and a copy of it in TypeScript is the
+   *  second implementation ADR 0012 §2 refuses for RFC 6902 apply, arriving as a convenience
+   *  (ADR 0017 §3). A fader whose travel the model does not share — `gain_db` is unbounded —
+   *  makes that concrete: the control's ends are a drawing decision and the refusal, when
+   *  there is one, still comes from `core`. */
+  function propose(next: Gesture | null): void {
+    setGesture(next);
     setNotice(null);
-    if (next !== null) setHeld(true);
-    if (next === null || !song || clipId === undefined) {
+    if (next === null) {
       setPreview(null);
       return;
     }
@@ -192,26 +241,25 @@ export function App() {
       flight.current.queued = next;
       return;
     }
-    void previewAt(next, clipId, song);
+    void previewAt(next);
   }
 
   /** §9's second half: the same call without `dry_run`, then a fresh `get_song`.
    *
    *  Applied optimistically rather than re-previewed first — the model can have moved under a
    *  held preview, and §4.3's `version` check is what refuses if it did (ADR 0012 §4). */
-  async function applyMove(): Promise<void> {
-    if (!moved || !song || clipId === undefined) return;
+  async function apply(): Promise<void> {
+    if (!gesture) return;
     try {
-      const answer = (await tool("set_notes", {
-        clip_id: clipId,
-        notes: movedNotes(song, clipId, moved),
+      const answer = (await tool(gesture.tool, {
+        ...gesture.args,
         dry_run: false,
       })) as ToolAnswer;
       if (!answer.valid) {
         setPreview(answer);
         return;
       }
-      setMoved(null);
+      setGesture(null);
       setPreview(null);
       await read();
     } catch (e: unknown) {
@@ -235,7 +283,7 @@ export function App() {
         return;
       }
       setNotice(null);
-      setMoved(null);
+      setGesture(null);
       setPreview(null);
       await read();
     } catch (e: unknown) {
@@ -257,7 +305,7 @@ export function App() {
     return () => window.removeEventListener("keydown", pressed);
   });
 
-  // A gesture that has not moved the note yet has nothing to approve: the dry run comes back
+  // A gesture that has not moved anything yet has nothing to approve: the dry run comes back
   // valid with no operations, because a call that changes nothing records nothing
   // (`core/src/session.rs`). A pane offering to apply that would be offering to apply nothing.
   const proposal = preview && (!preview.valid || (preview.patch?.length ?? 0) > 0) ? preview : null;
@@ -278,11 +326,13 @@ export function App() {
       </main>
     );
   }
-  if (!song || !view) return <main className="waiting">Reading the project…</main>;
+  if (!song || !view || !strips) return <main className="waiting">Reading the project…</main>;
 
   const clips = view.tracks.reduce((total, track) => total + track.clips.length, 0);
   const opening = view.tempo[0];
   const signature = view.signatures[0];
+  const written = (write: Write) =>
+    propose({ tool: write.tool, args: write.args, touched: write.touched });
 
   return (
     <main>
@@ -310,12 +360,24 @@ export function App() {
           <Timeline view={view} selected={roll?.clipId ?? null} />
         </section>
 
-        <section className="roll-pane">
+        <section className="detail">
           <div className="pane-head">
-            <span className="dim">piano roll</span>
-            {rollable.length === 0 ? (
-              <span className="dim">no note clips</span>
-            ) : (
+            {/* Three buttons, not a router and not tabs from a library: what a tab strip is,
+                for three panes, is three buttons and a piece of state (ADR 0016 §3). */}
+            <span className="panes">
+              {(["roll", "mixer", "params"] as const).map((name) => (
+                <button
+                  key={name}
+                  className={pane === name ? "pane on" : "pane"}
+                  onClick={() => setPane(name)}
+                  aria-pressed={pane === name}
+                >
+                  {name === "params" ? "parameters" : name === "roll" ? "piano roll" : name}
+                </button>
+              ))}
+            </span>
+
+            {pane === "roll" && rollable.length > 0 ? (
               // A native `<select>`, which is the whole of "choose a clip" and needs no
               // library (ADR 0016 §3). Choosing one is not an edit: nothing is written, and
               // the roll it opens is `pianoRoll(song, id)` recomputed from the same song.
@@ -330,28 +392,102 @@ export function App() {
                   </option>
                 ))}
               </select>
-            )}
-            {roll ? (
+            ) : null}
+            {pane === "roll" && roll ? (
               <span className="dim">
                 bar {barOf(view, roll.startTick)} · {roll.notes.length} note
                 {roll.notes.length === 1 ? "" : "s"}
               </span>
             ) : null}
+            {pane === "roll" && rollable.length === 0 ? (
+              <span className="dim">no note clips</span>
+            ) : null}
+
+            {pane === "params" && editable.length > 0 ? (
+              <select
+                value={deviceId ?? ""}
+                onChange={(event) => setDevice(event.target.value)}
+                aria-label="device"
+              >
+                {editable.map((held) => (
+                  <option key={held.id} value={held.id}>
+                    {held.track} · {held.label}
+                    {held.index === undefined ? "" : ` #${held.index}`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {pane === "params" && editing ? (
+              <>
+                <input
+                  type="search"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="name or id"
+                  aria-label="filter parameters"
+                />
+                {/* Two counts because they are two maps: what the plugin declares, and what
+                    this document overrides. Opening the editor changed neither. */}
+                <span className="dim">
+                  {editing.declares} declared · {editing.set} set
+                </span>
+              </>
+            ) : null}
+
             {said !== null ? <span className="notice">{said}</span> : null}
           </div>
-          {roll ? (
-            <Roll
-              view={roll}
-              moved={moved}
-              refused={preview?.valid === false}
-              onMoved={propose}
-              onReleased={() => setHeld(false)}
+
+          {pane === "roll" ? (
+            roll ? (
+              <Roll
+                view={roll}
+                moved={gesture?.moved ?? null}
+                refused={preview?.valid === false}
+                onMoved={(next) => {
+                  if (next) setHeld(true);
+                  propose(
+                    next && openId !== undefined
+                      ? {
+                          tool: "set_notes",
+                          args: { clip_id: openId, notes: movedNotes(song, openId, next) },
+                          moved: next,
+                        }
+                      : null,
+                  );
+                }}
+                onReleased={() => setHeld(false)}
+              />
+            ) : (
+              <p className="empty">Nothing to show here yet.</p>
+            )
+          ) : pane === "mixer" ? (
+            <Strips
+              view={strips}
+              touched={gesture?.touched}
+              onWrite={written}
+              onHeld={setHeld}
+              onOpen={(id) => {
+                setDevice(id);
+                setPane("params");
+              }}
+              opened={deviceId}
+            />
+          ) : editing ? (
+            <Params
+              view={editing}
+              touched={gesture?.touched}
+              filter={filter}
+              onWrite={written}
+              onHeld={setHeld}
             />
           ) : (
-            <p className="empty">Nothing to show here yet.</p>
+            <p className="empty">
+              {manifest === null ? "Reading the build manifest…" : "This song has no devices."}
+            </p>
           )}
-          {!held && moved && proposal ? (
-            <Pending answer={proposal} onApply={applyMove} onDiscard={() => propose(null)} />
+
+          {!held && gesture && proposal ? (
+            <Pending answer={proposal} onApply={apply} onDiscard={() => propose(null)} />
           ) : null}
         </section>
       </div>
@@ -375,14 +511,16 @@ export function App() {
           {view.sections.length} section{view.sections.length === 1 ? "" : "s"}
         </span>
         <span className="dim">⌘Z undo · ⇧⌘Z redo</span>
-        <span className="mode">drag a note</span>
+        <span className="mode">
+          {pane === "roll" ? "drag a note" : pane === "mixer" ? "ride a fader" : "set a parameter"}
+        </span>
       </footer>
     </main>
   );
 }
 
 /**
- * The diff, before it is applied — §9's "always shows the diff before applying", for the one
+ * The diff, before it is applied — §9's "always shows the diff before applying", for every
  * control that is a tool call.
  *
  * What it shows is `ToolResult.patch`: the **re-derived** RFC 6902 operations a commit would
@@ -390,7 +528,7 @@ export function App() {
  * file computed — the patch a person approves here is byte for byte the patch that lands,
  * which is what makes approving it mean anything (ADR 0006 §3).
  *
- * A refused position shows its rules instead and offers no Apply. `rule` is the stable id §5
+ * A refused value shows its rules instead and offers no Apply. `rule` is the stable id §5
  * promises a caller can act on, and it is shown beside the sentence rather than hidden behind
  * it, because it is the half that does not change with wording.
  */

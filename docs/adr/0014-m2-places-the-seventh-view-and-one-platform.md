@@ -57,6 +57,33 @@ live instance can, which is the engine — a round trip per pixel. Deferred with
 own: when a preview session is already holding an engine process (ADR 0013 §3), asking it to
 format a value costs a message rather than a process.
 
+**Extended 2026-09-09, in M2 PR 7, where the editor was built.** This decision said the editor is
+a form over the build manifest and did not say how the manifest gets to the form, which turned
+out to be the only thing in it that was not already there. `core` reads the manifest and the host
+holds it; the webview could reach neither, because ADR 0012 §1's one command dispatches into
+`escribass_core::call` and no *tool* answers a question about the running build.
+
+The manifest crosses as a **second Tauri command**, `manifest`, taking no arguments and returning
+the `Manifest` `core` parsed — not the file, so the machine-specific plugin paths the engine
+writes for its own use never reach a window, and the editor's rows are exactly the keys
+`param_unknown` will resolve a `set_param` against. ADR 0012 §1's rule is unchanged and is not
+being read loosely: it makes `tool` the webview's one route to *the model*, and this is not the
+model. Adding a `get_manifest` **tool** instead was rejected for the opposite reason to the usual
+one — it is not that it costs a proto change, but that it would hand the AI a plugin catalogue as
+a side effect of drawing a form, which is a decision about §6's surface and not this pull
+request's to take.
+
+Two things the editor needed that this decision assumed and did not state. The **`Instrument`
+overrides a build cannot name are shown, not dropped**: `Project::open` does not run the
+validator, so a project written against a fuller manifest opens against a smaller one — which is
+the repository's own default, since `make run` passes the three-parameter fixture — and a value
+in the document that no view can see is the silent half of that mismatch. And the rows are
+ordered by **`ParamID`, numerically**, not by the manifest's key order: that order is the
+plugin's own declaration order and JavaScript does not keep it, because an integer-like object
+key is re-sorted numerically ascending by the language before any of our code runs. So the order
+a plugin's own window would show is not available to this view at all, which is worth knowing
+before anyone tries to restore it.
+
 ### 2. M2 targets Linux x86-64, exactly as M1 does
 
 Same platform, same image, same compiler. macOS and Windows are **unclaimed, not contradicted**

@@ -28,6 +28,9 @@ import { create, fromJson, toJson } from "@bufbuild/protobuf";
 import { SongSchema, type Song } from "@escribass/schema/song";
 import { arrangement } from "../src/arrangement.js";
 import { pianoRoll } from "../src/pianoroll.js";
+import { mixer } from "../src/mixer.js";
+import { devices, editor } from "../src/params.js";
+import type { Manifest } from "../src/params.js";
 import { bars, seconds } from "../src/time.js";
 
 // The fixture is a determinism golden, which means it was built **through the tool API** and
@@ -45,9 +48,19 @@ import { bars, seconds } from "../src/time.js";
 const FIXTURE = new URL("../../tests/determinism/render/expected/song.json", import.meta.url);
 const GOLDEN = new URL("./projection.golden.json", import.meta.url);
 
+// The seventh view is a form over the **build manifest** as well as over the song (ADR 0014
+// §1), so the suite needs one — and it is the committed subset every other suite validates
+// against (`tests/AGENTS.md`), never a manifest written here. Its three Surge XT parameter ids
+// came out of a real `--scan`, which is what makes a golden row of this editor a row a real
+// plugin would produce; a hand-typed id would golden just as deterministically and mean
+// nothing. It declares three of Surge XT's 2855, which is the subset the fixtures name.
+const MANIFEST = new URL("../../tests/fixtures/manifest.json", import.meta.url);
+
 const read = (at: URL) => readFileSync(at, "utf8");
 const document: unknown = JSON.parse(read(FIXTURE));
 const song: Song = fromJson(SongSchema, document as never);
+const declared: unknown = JSON.parse(read(MANIFEST));
+const build = declared as Manifest;
 
 /**
  * The same document with every object's keys in the opposite order.
@@ -72,8 +85,8 @@ function reversed(value: unknown): unknown {
   );
 }
 
-/** Every view, from the one song, in the order the window builds them. */
-function project(from: Song) {
+/** Every view, from the one song and the one manifest, in the order the window builds them. */
+function project(from: Song, hosts: Manifest) {
   const view = arrangement(from);
   return {
     arrangement: view,
@@ -84,12 +97,23 @@ function project(from: Song) {
       .flatMap((track) => track.clips)
       .filter((clip) => clip.kind === "note")
       .map((clip) => pianoRoll(from, clip.id)),
+    mixer: mixer(from),
+    // One editor per device, in the mixer's own order, for the same reason the rolls follow
+    // the arrangement's: the window's `<select>` is filled from that list, so a device the
+    // mixer does not place is a device no editor can be opened on.
+    //
+    // The fixture covers what this view has to get right: two Surge XT instruments with no
+    // overrides at all, two Surge XT effects one of which holds exactly one, and a sampler
+    // instrument whose `ref` this build resolves to no plugin — so `rows` is empty there, and
+    // that emptiness is the projection agreeing with the validator rather than a gap.
+    editors: devices(from).map((held) => editor(from, hosts, held.id)),
   };
 }
 
 test("every view is a pure function of the model", () => {
   const before = toJson(SongSchema, song);
-  const actual = `${JSON.stringify(project(song), null, 2)}\n`;
+  const manifestBefore = JSON.stringify(declared);
+  const actual = `${JSON.stringify(project(song, build), null, 2)}\n`;
 
   if (process.env.UPDATE_FIXTURES === "1") {
     writeFileSync(GOLDEN, actual);
@@ -106,16 +130,129 @@ test("every view is a pure function of the model", () => {
   // decoded song in development builds for the same reason (`App.tsx`), and this is the half
   // of that guard which runs in CI.
   assert.deepStrictEqual(toJson(SongSchema, song), before, "a projection wrote to the model");
-  assert.deepStrictEqual(project(song), project(song), "two projections of one song differ");
+  assert.equal(JSON.stringify(declared), manifestBefore, "a projection wrote to the manifest");
+  assert.deepStrictEqual(
+    project(song, build),
+    project(song, build),
+    "two projections of one song differ",
+  );
 });
 
 test("a view is a function of the document, not of how its maps iterated", () => {
   const backwards = fromJson(SongSchema, reversed(document) as never);
   assert.deepStrictEqual(
-    project(backwards),
-    project(song),
+    project(backwards, reversed(declared) as Manifest),
+    project(song, build),
     "an order came from the map's iteration rather than from the model (ADR 0001 §3)",
   );
+});
+
+// What the reversal above **cannot** reach, measured rather than assumed: JavaScript re-sorts
+// integer-like object keys numerically ascending, before any code here runs. A `ParamID` is a
+// `uint32` written out as a string, so `Instrument.params` and the manifest's `params` come
+// back from `JSON.parse` in ascending numeric order whatever order the file had, and
+// `Object.entries(…).reverse()` on one is a no-op — the reversal cannot separate "sorted by
+// the model" from "whatever the map iterated" for a parameter map, in the way it can for every
+// other map here. Checked by deleting the editor's `sort`: the golden and the reversal both
+// stayed green, which is PR 4's finding one map over.
+//
+// The reversal is still run over the manifest, because the maps that are *not* integer-keyed —
+// tracks, effects, plugins — are what the strip and device order come from. The parameter
+// form's own order is asserted directly instead, which is `tests/AGENTS.md`'s constructed-value
+// distinction and the same shape the bar grid below uses for the case no fixture contains.
+test("a parameter form is keyed by ParamID, ordered by it, and never by the name", () => {
+  const twoOfOneName = create(SongSchema, {
+    tracks: {
+      t: {
+        id: "t",
+        name: "T",
+        instrument: { id: "d", ref: { kind: { case: "plugin", value: { pluginId: "p" } } } },
+      },
+    },
+  });
+  const hosts: Manifest = {
+    engine: {},
+    sampler: "s",
+    // Two parameters with the **same display name**, which is not a contrivance: Surge XT's
+    // 2855 carry 2679 distinct names, 176 fewer than there are parameters, in groups of twelve
+    // — one per unassigned effect slot. A form keyed by name would show one row here.
+    //
+    // `b` and `a` are not VST3 ids and are here on purpose: an id JavaScript does *not* treat
+    // as an array index is the only kind whose order the language leaves alone, so they are
+    // what makes this assertion sensitive to the sort at all. They also exercise the string
+    // comparison behind it, which is what a device whose parameters are named rather than
+    // numbered would need.
+    plugins: {
+      p: { commit: "c", version: "1", params: { "40": "Drive", "9": "Drive", b: "B", a: "A" } },
+    },
+  };
+  const form = editor(twoOfOneName, hosts, "d");
+  assert.deepStrictEqual(
+    form?.rows.map((row) => [row.id, row.name, row.value, row.declared]),
+    [
+      ["9", "Drive", null, true],
+      ["40", "Drive", null, true],
+      ["a", "A", null, true],
+      ["b", "B", null, true],
+    ],
+    "two ids sharing a name collapsed, or an order that was the map's rather than the ids'",
+  );
+
+  // Opening an editor writes nothing, and an unset parameter is `null` rather than zero: the
+  // manifest carries no defaults, so this view does not know where an untouched control sits
+  // and does not claim to (ADR 0014 §1).
+  assert.equal(form?.declares, 4);
+  assert.equal(form?.set, 0);
+});
+
+test("a value this build cannot name is shown rather than dropped", () => {
+  // A project written against a fuller manifest, opened against a smaller one — which is the
+  // repository's own default (`make run` passes `tests/fixtures/manifest.json`). The validator
+  // refuses such a document with `param_unknown`, and `Project::open` does not run the
+  // validator, so it reaches a window. A row that vanished would be a value in the document
+  // that nothing on screen can see.
+  const stale = create(SongSchema, {
+    tracks: {
+      t: {
+        id: "t",
+        instrument: {
+          id: "d",
+          ref: { kind: { case: "plugin", value: { pluginId: "p" } } },
+          params: { "7": 0.25, "12": 0.5 },
+        },
+      },
+    },
+  });
+  const hosts: Manifest = {
+    engine: {},
+    sampler: "s",
+    plugins: { p: { commit: "c", version: "1", params: { "12": "Known" } } },
+  };
+  assert.deepStrictEqual(
+    editor(stale, hosts, "d")?.rows.map((row) => [row.id, row.declared, row.value]),
+    [
+      ["7", false, 0.25],
+      ["12", true, 0.5],
+    ],
+  );
+
+  // A device this build resolves to no plugin has no rows and no overrides to show either —
+  // `core/src/validate.rs` does not resolve a `SamplerRef` against the manifest, so neither
+  // does this, and offering sfizz's controls here would offer writes nothing refuses.
+  const sampler = create(SongSchema, {
+    tracks: {
+      t: {
+        id: "t",
+        instrument: { id: "d", ref: { kind: { case: "sampler", value: { sfzHash: "abcdef01" } } } },
+      },
+    },
+  });
+  const form = editor(sampler, hosts, "d");
+  assert.deepStrictEqual([form?.device, form?.declares, form?.rows.length], [
+    "sampler abcdef01",
+    0,
+    0,
+  ]);
 });
 
 // The two conversions in `time.ts`, checked directly rather than only through a golden. Both
