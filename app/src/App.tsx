@@ -107,6 +107,10 @@ export function App() {
   const [preview, setPreview] = useState<ToolAnswer | null>(null);
   /** The last thing a tool refused outright — `nothing_to_undo`, and its neighbours. */
   const [notice, setNotice] = useState<string | null>(null);
+  /** Whether the pointer is still down. It gates the diff pane, and the reason is layout, not
+   *  taste: the pane takes space, taking space moves the roll, and moving the roll moves the
+   *  note out from under the cursor mid-drag (`canvas.tsx`, `onReleased`). */
+  const [held, setHeld] = useState(false);
 
   const read = useCallback(
     () =>
@@ -179,6 +183,7 @@ export function App() {
   function propose(next: Moved | null): void {
     setMoved(next);
     setNotice(null);
+    if (next !== null) setHeld(true);
     if (next === null || !song || clipId === undefined) {
       setPreview(null);
       return;
@@ -257,6 +262,14 @@ export function App() {
   // (`core/src/session.rs`). A pane offering to apply that would be offering to apply nothing.
   const proposal = preview && (!preview.valid || (preview.patch?.length ?? 0) > 0) ? preview : null;
 
+  // What the pane head says: a refusal while the gesture is still running, so the boundary is
+  // named where it is crossed without the diff pane opening under the pointer (ADR 0017 §3),
+  // and otherwise whatever a tool last refused outright.
+  const said =
+    preview && !preview.valid
+      ? preview.errors.map((violation) => `${violation.rule}: ${violation.message}`).join("; ")
+      : notice;
+
   if (failure !== null) {
     return (
       <main className="failure">
@@ -324,14 +337,20 @@ export function App() {
                 {roll.notes.length === 1 ? "" : "s"}
               </span>
             ) : null}
-            {notice !== null ? <span className="notice">{notice}</span> : null}
+            {said !== null ? <span className="notice">{said}</span> : null}
           </div>
           {roll ? (
-            <Roll view={roll} moved={moved} refused={preview?.valid === false} onMoved={propose} />
+            <Roll
+              view={roll}
+              moved={moved}
+              refused={preview?.valid === false}
+              onMoved={propose}
+              onReleased={() => setHeld(false)}
+            />
           ) : (
             <p className="empty">Nothing to show here yet.</p>
           )}
-          {moved && proposal ? (
+          {!held && moved && proposal ? (
             <Pending answer={proposal} onApply={applyMove} onDiscard={() => propose(null)} />
           ) : null}
         </section>

@@ -265,6 +265,7 @@ export function Roll({
   moved,
   refused,
   onMoved,
+  onReleased,
 }: {
   view: PianoRoll;
   /** The position the gesture is proposing, drawn dashed over the model's own note. */
@@ -275,6 +276,13 @@ export function Roll({
   /** `null` ends the gesture. A release is not "apply": what to do with the proposal is
    *  `App.tsx`'s, because it is the diff-approval flow of §9 and not a drawing decision. */
   onMoved: (next: Moved | null) => void;
+  /** The pointer was let go. Separate from `onMoved` because the proposal outlives the
+   *  gesture — it is waiting to be approved — and because **nothing may reflow while a
+   *  pointer is down**: this canvas is positioned by the layout around it, and a panel
+   *  appearing beneath it mid-drag moves the note out from under the cursor. Measured, not
+   *  reasoned: the diff pane opening during a drag moved the roll up 42 px, and a 48 px drag
+   *  then landed two semitones from where it was aimed instead of four. */
+  onReleased: () => void;
 }) {
   // The drawn band is the projection's, widened to hold whatever the gesture is proposing —
   // otherwise dragging a note two semitones above the top note takes it off the canvas, and a
@@ -340,6 +348,7 @@ export function Roll({
     if (!grabbed.current) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
     grabbed.current = null;
+    onReleased();
   };
 
   const canvas = useCanvas(height, (context, width) => {

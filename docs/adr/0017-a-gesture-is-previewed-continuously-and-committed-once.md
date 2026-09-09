@@ -90,6 +90,11 @@ The one thing the frontend does decide is how tall to draw the roll: the drawn p
 to hold the proposal, clamped to MIDI 0–127. A legal drag is therefore always visible, and an
 illegal one is drawn against the edge in the refusal colour rather than followed off the canvas.
 
+The refusal is shown in the roll's pane head rather than in the diff pane, because **nothing may
+reflow while a pointer is down** — a panel appearing beneath a canvas moves that canvas, and a
+gesture is measured against where the canvas is. Decision 5 records what that cost before it was
+noticed.
+
 ### 4. Releasing the pointer proposes; a person applies
 
 The release ends the gesture and leaves the last dry run on screen as §9's diff — the
@@ -133,6 +138,16 @@ the trap's scenario exactly. At the boundary the note drew refused and the pane 
 `tick_negative ticks are never negative`; on release the pane showed a five-operation patch and
 the document had not moved.
 
+**One defect only the real window could have shown.** The first build put the diff pane in the
+layout as soon as the first dry run answered — that is, *during* the drag. The pane takes space,
+taking space moves the roll, and moving the roll moves the note out from under the cursor: the
+canvas shifted up 42 px mid-gesture and a 48 px drag landed two semitones from where it was
+aimed instead of four. Nothing about it is visible in a unit test, in the projection golden, or
+in reading the code; it was found by dragging and comparing the pitch that landed with the pitch
+that was asked for. So **nothing may reflow while a pointer is down**: the pane waits for the
+release, and the refusal it would have carried is shown in the pane head, which is always there.
+With that, 36 px of drag is exactly three semitones and 48 px is exactly four.
+
 **The number that decides it is not the dry run's cost; it is the applied call's slope.** One
 entry per pointer event is not merely a hundred rows in the history — it is a hundred writes
 that each rewrite the whole log, so the *hundredth* costs more than the first, and a session
@@ -170,6 +185,9 @@ had nothing to do with the audit trail.
 - **Trap 8 is now measured rather than predicted.** `Project::write`'s O(history) cost is 30 ms
   at 300 entries against 17 ms at 21, on a small project. Decision 1 keeps a drag from
   multiplying it, and does not fix it; the known gap stays open with a number attached.
+- **A gesture's frame of reference is the layout, so the layout is frozen for its duration.**
+  The diff pane is rendered only once the pointer is up. Any later gesture that wants live
+  feedback puts it somewhere that already occupies space.
 - **No golden moves for any of this.** The projection golden is unaffected because no projection
   changed — the drag is drawn from the projection plus a pointer offset, and `pianoroll.ts` and
   `arrangement.ts` are untouched.

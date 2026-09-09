@@ -751,6 +751,9 @@ did). Mixing them gets the silent half reviewed as plumbing.
 
    Measured, not argued. A real drag in the window: **100 pointer positions, 30 of them reaching
    the tool API as dry runs, 0 entries in the log**; `Apply` appended one; ⌘Z appended one more.
+   Driving it also found the one defect nothing else could have: the diff pane opening *during*
+   the drag moved the roll 42 px, so a 48 px drag landed two semitones from where it was aimed
+   instead of four. Nothing may reflow while a pointer is down (ADR 0017 §3, §5).
    And the number that actually decided it is not the dry run's cost (1–3 ms, writes nothing)
    but the applied call's slope: **30.6 ms at 300 entries against 17 ms at 21**, because
    `Project::write` rewrites every entry file. One call per pointer event is a hundred writes

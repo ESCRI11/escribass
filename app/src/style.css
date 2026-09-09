@@ -230,4 +230,7 @@ footer .mode {
    the key that caused it was pressed. */
 .notice {
   color: var(--refuse);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
