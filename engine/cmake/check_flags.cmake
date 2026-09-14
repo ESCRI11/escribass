@@ -36,17 +36,22 @@ set(isa_flags
     "sse" "sse2" "sse3" "sse4" "sse4.1" "sse4.2" "ssse3"
     "aes" "fma" "fma4" "f16c" "bmi" "bmi2" "popcnt" "pclmul" "abm" "xop" "sha" "vaes" "gfni")
 
-# The documented exceptions, each with the reason it is allowed. Every one is sfizz's, is on a
-# translation unit, and is answered in §8's sfizz row: the library dispatches at run time, so a
-# wide path is compiled and then chosen — or not — by `cpuid`. ADR 0009 §6's experiment is the
-# claim that rests on this, and it is why the exception is written down beside the check rather
-# than assumed from the absence of a failure.
+# The documented exceptions, each with the reason it is allowed. Every one is on a translation
+# unit that dispatches at run time, so a wide path is compiled and then chosen — or not — by
+# `cpuid`. ADR 0009 §6's experiment is the claim that rests on this, and it is why the exception
+# is written down beside the check rather than assumed from the absence of a failure.
 #
 #   -mavx     ResonantArrayAVX / ResonantStringAVX / HelpersAVX — the wide implementations
-#             `SIMDHelpers.cpp` and `effects/Strings.cpp` select between at run time.
+#             sfizz's `SIMDHelpers.cpp` and `effects/Strings.cpp` select between at run time.
 #   -msse4.1  abseil's randen_detect.cc and randen_hwaes.cc, its hardware-AES PRNG, which is
 #   -maes     dispatched the same way and is not on a render path at all.
 #   -msse2    the x86-64 baseline `-march=x86-64` already implies; a restatement, not a widening.
+#
+# **The randen pair now reaches this check twice, and needed no new entry** (M2 PR 9). It was
+# sfizz's vendored abseil, in a plugin's own compile database; grpc brings abseil of the same LTS
+# release into the *engine's* tree, and those two files are the only thing in 2281 gRPC, abseil,
+# BoringSSL, re2, c-ares and zlib translation units that carries an ISA flag at all — measured,
+# not predicted, and the reason ADR 0013 §1 could say the guard would not fire.
 set(allowed "-mavx" "-msse2" "-msse4.1" "-maes")
 
 set(found "")

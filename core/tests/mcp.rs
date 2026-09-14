@@ -413,9 +413,10 @@ fn a_real_render_answer_carries_the_engine_s_own_result() {
         .into_iter()
         .collect(),
     };
-    let canned = work.0.join("answer.binpb");
-    std::fs::write(&canned, prost::Message::encode_to_vec(&answer)).expect("the canned answer");
-    let engine = common::fake_engine(&work.0, &format!("cat '{}'", canned.display()));
+    // A `Render` server in this process and a script that names its socket, which is what a
+    // fake engine is now that the transport is gRPC (`common::fake_engine`).
+    let engine_server = common::fake_server(&work.0, Ok(answer.clone()));
+    let engine = common::fake_engine(&work.0, &engine_server.address());
 
     let wav = work.0.join("out.wav");
     let lines = served(

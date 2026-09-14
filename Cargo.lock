@@ -885,6 +885,7 @@ dependencies = [
  "escribass-core",
  "escribass-proto",
  "escribass-schema",
+ "prost",
  "serde",
  "serde_json",
  "tokio",

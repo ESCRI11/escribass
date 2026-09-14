@@ -19,6 +19,7 @@ inline constexpr Commit engineCommits[] = {
     { "tracktion_engine", "@COMMIT_TRACKTION_ENGINE@" },
     { "juce",             "@COMMIT_JUCE@" },
     { "protobuf",         "@COMMIT_PROTOBUF@" },
+    { "grpc",             "@COMMIT_GRPC@" },
     { "rubberband",       "@COMMIT_RUBBERBAND@" },
 };
 

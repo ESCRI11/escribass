@@ -47,7 +47,8 @@ stale.
 | M2.5 | The first control that is a tool call, its diff, `undo`/`redo`, and ADR 0017 | done | PR #59 |
 | M2.6 | `ParamRef` reaching a fader: the validator's two domains, `mix_lanes` compiled, the engine driving Tracktion's fader with our formula | done | PR #60 |
 | M2.7 | The mixer and §9's seventh view, the generic parameter editor over the build manifest | done | PR #61 |
-| M2.8 | The patch log with its provenance column, branch switching, and `merge_branch`'s per-path resolution | done | this PR |
+| M2.8 | The patch log with its provenance column, branch switching, and `merge_branch`'s per-path resolution | done | PR #62 |
+| M2.9 | `Render` over gRPC, the stdio path deleted, and the four goldens unmoved | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -379,7 +380,10 @@ question.
 `engine/` is a CMake project linking Tracktion Engine, JUCE and protobuf C++, building one
 binary. In M1 it is driven as **a fresh subprocess per render** reading one `RenderPlan` on
 stdin and writing a `RenderResult` on stdout — no plugin instance reuse, no warm smoothers, no
-state between renders, which is the cheapest determinism guarantee available.
+state between renders, which is the cheapest determinism guarantee available. (M2 PR 9 kept the
+process shape and replaced the pipe: the same fresh subprocess now serves one `Render` call over
+a Unix socket it names on its own stdout, and grpc++ joined the list of things this project
+links. The stdio path was deleted in the same pull request rather than kept beside it.)
 
 The `Render` gRPC service is **defined** in `render.proto` in M1 so `buf breaking` guards it,
 and **implemented** at M2 when `app` exists to hold a live connection. That is ADR 0006 §7's
@@ -714,7 +718,7 @@ wrong answer, which is why the decision does not wait on them and the code does.
 | 6 | `m2.6-mix-automation` | `ParamRef` reaching a fader: the validator arm, `param_out_of_range`'s two domains, `compile` emitting `mix_lanes`, and the engine driving Tracktion's track volume and pan with **our** curve formulas (ADR 0015 §1, §2). No `song.proto` change, so no M0.4 goldens move; the render goldens must not move either, and any byte that does needs a named cause |
 | 7 | `m2.7-mixer-and-editors` | The mixer over the automation PR 6 laid down, and §9's seventh view: the generic parameter editor over the build manifest (ADR 0014 §1). Two forms over two maps, in one PR because they are the same form. **Done**, and being the same form is what kept the two *numbers* apart: one `<input type="range">`, two builders, and a domain carried as a value — the mixer writes `Mix`'s own units by `apply_patch`, the editor writes a plugin's normalised `0..1` by `set_param`, and `set_param` answers a track id with `device_unknown`, which is the same boundary `mute` and `solo` meet as `ParamRef` targets (ADR 0015 §1). ADR 0017 transferred whole: 60 pointer positions on a fader became 32 dry runs and 0 entries, `Apply` one, ⌘Z one. What it did **not** transfer is the refusal — a fader's travel is inside the validator's range in two of the three domains and unbounded in the third, so no legal fader can be refused, and the only refusal a form can reach is a parameter this build's manifest does not declare. Two defects only the window could show: the detail pane's `flex-basis: auto` made 2855 rows shrink the arrangement to a sliver, and a long refusal wrapped the pane head mid-drag and moved every row under it by 24 px — ADR 0017 §3's own defect in the element chosen to avoid it |
 | 8 | `m2.8-history` | The patch-log view with its provenance column, branch switching, and `merge_branch`'s per-path resolution (ADR 0015 §3). **Done.** The row named three things and the fourth was the one worth finding: what `merge_branch` *returns* for a conflict, which ADR 0015 §3 had assumed rather than checked. It matched — one `merge_conflict` `Violation` per path, keyed by the other side's operation path — so the map is keyed by a string the caller was already handed and nothing translates. Resolution is then a **filter on the other side's ops**: theirs wins by being applied, ours by not being, and there is no code path an unconflicted merge does not already take. Two things fell out that the ADR did not name and now does: a pick for a path that merge is not in conflict about is refused (`resolution_unknown`), because ignoring it either lets a typo pass for a choice or edits the merge; and a merge resolved entirely to this branch still records its two-parent entry with **empty `ops`** — the one place a call that changes no document writes one, since what it records is the join and without it the same conflict returns for ever. Driven in the window against a real conflict: two branches riding one track's `gain_db` and `pan`, resolved one each way, and the merge landed with `gain_db` mine and `pan` theirs. ADR 0017 does **not** extend to the form — nothing is dragged, so nothing is measuring a distance against the layout — but the pane head's no-wrap rule still earns its keep, because a conflict message is the longest refusal in the application |
-| 9 | `m2.9-engine-grpc` | `Render` over gRPC, the stdio path deleted, `core/src/engine.rs` and the render suite moved onto the new transport, and gRPC added to `tests/renders.rs`'s `COMPONENTS` and the engine job's list. **The silent PR**: the four goldens must not move, and any byte that does needs a named cause (trap 5) |
+| 9 | `m2.9-engine-grpc` | `Render` over gRPC, the stdio path deleted, `core/src/engine.rs` and the render suite moved onto the new transport, and gRPC added to `tests/renders.rs`'s `COMPONENTS` and the engine job's list. **The silent PR**: the four goldens must not move, and any byte that does needs a named cause (trap 5). **Done, and no byte moved.** The build questions ADR 0013 §1 left open were answered by building: gRPC owns the one `add_subdirectory` of our protobuf, aimed at our submodule, and costs 11 m 16 s cold on two cores and 6.1 s warm. The design question the row did not anticipate is how `core` learns where to dial — the engine names its own socket and prints it once the server is listening, so the address and the readiness are one line and nothing polls or sleeps (ADR 0013 §3, amended). One flake was found and fixed rather than lived with: this suite writes the program it then executes, and under load `exec` refused it with `ETXTBSY` twice in forty runs. And one consequence nothing predicted: the engine's provenance is *one* list, so `grpc` joining it reaches the build manifest's `engine` block and therefore every project's `lock.json` — five determinism goldens gained one line each, which is `tests/AGENTS.md`'s pin rule arriving rather than a surprise, and it was CI's fixture-subset step that said so |
 | 10 | `m2.10-preview` | Preview playback: the live process, the audio device, the `Preview` stream, and `render_preview` — one of §5's tools, and the milestone it has been between since M0.3 |
 | 11 | `m2.11-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen per milestone and M1 returned eighteen; budgeting a PR for it is cheaper than discovering it |
 | 12 | `m2.12-close` | Docs walked against the code, the deferred ledger walked again, `CLAUDE.md` to M3 |
@@ -774,10 +778,17 @@ did). Mixing them gets the silent half reviewed as plumbing.
    that computes it a second way is a second implementation of the thing the suite exists to
    check. They come from the same code or they drift, and the drift is invisible until a demo.
    PR 2 is on record as showing none of them for exactly this reason.
-5. **Deleting stdio deletes the only tested path.** `core/src/engine.rs`, `render_export` and
-   the four goldens in `tests/renders.rs` all reach the engine over stdio today. ADR 0008 §1 is
-   explicit that both are not kept, so the order matters: implement, move the suite, delete —
-   never a window in which the goldens are compared through a transport nothing has exercised.
+5. ~~**Deleting stdio deletes the only tested path.**~~ — **held, in PR 9, and the order is in
+   the history rather than only in this line.** Three commits: the engine gained its gRPC server
+   with stdio still there; `core`, `core/tests/engine.rs`, `core/tests/mcp.rs`, the engine job's
+   six shell steps and `tests/renders.rs`'s `COMPONENTS` moved onto it; then stdio went. The
+   goldens did not move — `audio_clip`, `dexed` and `surge_xt` reproduced their committed bytes
+   over the new transport *before* the old one was deleted, and one plan hashed identically down
+   a pipe and down a socket. What the trap did not predict is where the cost landed: not in the
+   engine, which gained a service class and a wait loop, but in the six CI steps that drove the
+   engine by writing to its stdin and cannot dial gRPC from a shell. They drive `render-once`, a
+   cargo binary that is `core`'s own `Engine` behind an argv, which makes the engine job build
+   Rust for the first time and those steps exercise the client that ships.
 6. **A live engine is a resident plugin instance, which is the thing ADR 0008 §2 refused.**
    **Answered:** ADR 0013 §3 keeps preview and export in different processes, so an export never
    inherits a smoother. The trap survives as the thing that must not be optimised away — one

@@ -218,6 +218,12 @@ dependency drifts" made mechanical.
   which is trap 8's guard.
 - **`schema/AGENTS.md`** loses its `buf.gen.yaml` line for C++ in this commit.
 - **M2** implements `Render` over gRPC and deletes the stdio path. Preview playback's process
-  lifetime is decided there, against a UI, and is not implied by decision 2.
+  lifetime is decided there, against a UI, and is not implied by decision 2. **Done 2026-09-09
+  in M2 PR 9**: the framing this decision describes — one message each way, delimited by end of
+  stream — is gone with the code that used it, and what §1 says about it is history rather than
+  the protocol. What survives unchanged is everything §1 decided that was never about stdio:
+  stdout carries the protocol and nothing else (now one line, the socket address the engine
+  binds and prints once it is listening), failure is an exit code and never a `RenderResult`
+  carrying errors, and the plan names the output path (ADR 0013 §3, amended).
 - The `docs/plan.md` deferred row for a project lock file is unchanged: one engine process
   per render touches no `.escri` file, so it adds no second writer.

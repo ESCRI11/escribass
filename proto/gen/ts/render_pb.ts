@@ -47,10 +47,10 @@ export const file_render: GenFile = /*@__PURE__*/
   fileDesc("CgxyZW5kZXIucHJvdG8SE2VzY3JpYmFzcy5yZW5kZXIudjEi9gEKClJlbmRlclBsYW4SLgoGdHJhY2tzGAEgAygLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLgoGbWFzdGVyGAIgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLAoFdGVtcG8YAyADKAsyHS5lc2NyaWJhc3Muc29uZy52MS5UZW1wb0V2ZW50Ei8KBnRhcmdldBgEIAEoCzIfLmVzY3JpYmFzcy5zb25nLnYxLlJlbmRlclRhcmdldBIUCgxsZW5ndGhfdGlja3MYBSABKAUSEwoLb3V0cHV0X3BhdGgYBiABKAki+wEKCVBsYW5UcmFjaxI3CgppbnN0cnVtZW50GAEgASgLMiMuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuSW5zdHJ1bWVudBIwCgdlZmZlY3RzGAIgAygLMh8uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuRWZmZWN0EiMKA21peBgDIAEoCzIWLmVzY3JpYmFzcy5zb25nLnYxLk1peBIsCgVjbGlwcxgEIAMoCzIdLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkNsaXASMAoJbWl4X2xhbmVzGAUgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSKDAQoOUGxhbkluc3RydW1lbnQSMQoKaW5zdHJ1bWVudBgBIAEoCzIdLmVzY3JpYmFzcy5zb25nLnYxLkluc3RydW1lbnQSLAoFbGFuZXMYAiADKAsyHS5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5MYW5lEhAKCHNmel9wYXRoGAMgASgJImUKClBsYW5FZmZlY3QSKQoGZWZmZWN0GAEgASgLMhkuZXNjcmliYXNzLnNvbmcudjEuRWZmZWN0EiwKBWxhbmVzGAIgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSJNCghQbGFuTGFuZRINCgVwYXJhbRgBIAEoCRIyCgZwb2ludHMYAiADKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQioQEKCFBsYW5DbGlwEhIKCnN0YXJ0X3RpY2sYASABKAUSFAoMbGVuZ3RoX3RpY2tzGAIgASgFEi8KBW5vdGVzGAMgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTm90ZXNIABIvCgVhdWRpbxgEIAEoCzIeLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkF1ZGlvSABCCQoHY29udGVudCIzCglQbGFuTm90ZXMSJgoFbm90ZXMYASADKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlIkUKCVBsYW5BdWRpbxIqCgRjbGlwGAEgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuQXVkaW9DbGlwEgwKBHBhdGgYAiABKAkikwEKDFJlbmRlclJlc3VsdBISCgpwY21fc2hhMjU2GAEgASgJEj8KB2NvbW1pdHMYAiADKAsyLi5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdC5Db21taXRzRW50cnkaLgoMQ29tbWl0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUAoLUHJldmlld1BsYXkSLQoEcGxhbhgBIAEoCzIfLmVzY3JpYmFzcy5yZW5kZXIudjEuUmVuZGVyUGxhbhISCgpzdGFydF90aWNrGAIgASgFIhsKC1ByZXZpZXdTZWVrEgwKBHRpY2sYASABKAUiMwoLUHJldmlld0xvb3ASEgoKc3RhcnRfdGljaxgBIAEoBRIQCghlbmRfdGljaxgCIAEoBSINCgtQcmV2aWV3U3RvcCLjAQoOUHJldmlld0NvbW1hbmQSMAoEcGxheRgBIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1BsYXlIABIwCgRzZWVrGAIgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U2Vla0gAEjAKBGxvb3AYAyABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdMb29wSAASMAoEc3RvcBgEIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1N0b3BIAEIJCgdjb21tYW5kIk4KDFByZXZpZXdFdmVudBIMCgR0aWNrGAEgASgFEjAKBXN0YXRlGAIgASgOMiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U3RhdGUqYwoMUHJldmlld1N0YXRlEh0KGVBSRVZJRVdfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVQUkVWSUVXX1NUQVRFX1BMQVlJTkcQARIZChVQUkVWSUVXX1NUQVRFX1NUT1BQRUQQAjJWCgZSZW5kZXISTAoGUmVuZGVyEh8uZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJQbGFuGiEuZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJSZXN1bHQyYAoHUHJldmlldxJVCgdQcmV2aWV3EiMuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3Q29tbWFuZBohLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld0V2ZW50KAEwAWIGcHJvdG8z", [file_song]);
 
 /**
- * One offline render. Exactly one of these arrives on the engine's stdin, read to
- * end-of-stream, and exactly one RenderResult leaves on stdout; the process then exits
- * (ADR 0008 §1). At M2 the same message is the argument of Render.Render — and, inside a
- * PreviewPlay, of a preview, which is this played from a tick rather than written to a file.
+ * One offline render. Exactly one of these crosses on one Render.Render call, to a process
+ * spawned for it that answers with one RenderResult and exits (ADR 0008 §1, §2; ADR 0013 §3).
+ * The same message is also, inside a PreviewPlay, the argument of a preview — which is this
+ * played from a tick rather than written to a file.
  *
  * @generated from message escribass.render.v1.RenderPlan
  */
@@ -341,7 +341,7 @@ export const PlanNotesSchema: GenMessage<PlanNotes> = /*@__PURE__*/
 
 /**
  * An audio clip beside the file it plays. The bytes are not embedded: every sample of every
- * asset through stdin and into the plan golden is the alternative ADR 0007 §2 rejects. The
+ * asset across the wire and into the plan golden is the alternative ADR 0007 §2 rejects. The
  * engine learns nothing about the .escri from a path it opens.
  *
  * ponytail: a looped, stretched clip whose length is not a multiple of its loop is not yet
@@ -607,9 +607,12 @@ export const PreviewStateSchema: GenEnum<PreviewState> = /*@__PURE__*/
   enumDesc(file_render, 0);
 
 /**
- * Defined in M1 so buf breaking guards the shape M2 implements; implemented by nobody in
- * M1, where the engine is a fresh subprocess per render speaking the same two messages over
- * stdio. At M2 the stdio path is deleted, not kept beside this (ADR 0008 §1).
+ * Defined in M1 so buf breaking guards the shape M2 implements, and implemented at M2 (PR 9).
+ * M1's engine spoke these same two messages over stdio, one each way, delimited by end of
+ * stream; that path was deleted in the pull request that served this one rather than kept
+ * beside it, because two transports for one boundary is one tested transport and one that is
+ * not (ADR 0008 §1). The engine names its own socket and prints it, so what a caller is told
+ * is where to dial and that it may (ADR 0013 §3, amended).
  *
  * @generated from service escribass.render.v1.Render
  */

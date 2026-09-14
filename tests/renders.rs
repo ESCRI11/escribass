@@ -73,10 +73,14 @@ const NAMES: [&str; 4] = ["audio_clip", "dexed", "sfizz", "surge_xt"];
 ///
 /// Named here rather than taken from whatever the engine happened to report, so an engine that
 /// stops reporting one fails instead of passing with less to compare (ADR 0008 §5, trap 8).
-const COMPONENTS: [&str; 7] = [
+const COMPONENTS: [&str; 8] = [
     "tracktion_engine",
     "juce",
     "protobuf",
+    // The transport, since M2 PR 9. `lock.baseline.json` has had an `engine.grpc` entry since
+    // M2 PR 1 and it was inert until this list and the engine job's named it (ADR 0013 §1) —
+    // a vendored dependency nothing compares is one that drifts in silence (trap 8).
+    "grpc",
     "rubberband",
     "surge_xt",
     "sfizz_ui",

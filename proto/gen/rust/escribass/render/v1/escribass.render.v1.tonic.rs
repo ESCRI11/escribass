@@ -10,9 +10,12 @@ pub mod render_client {
     )]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
-    /** Defined in M1 so buf breaking guards the shape M2 implements; implemented by nobody in
- M1, where the engine is a fresh subprocess per render speaking the same two messages over
- stdio. At M2 the stdio path is deleted, not kept beside this (ADR 0008 §1).
+    /** Defined in M1 so buf breaking guards the shape M2 implements, and implemented at M2 (PR 9).
+ M1's engine spoke these same two messages over stdio, one each way, delimited by end of
+ stream; that path was deleted in the pull request that served this one rather than kept
+ beside it, because two transports for one boundary is one tested transport and one that is
+ not (ADR 0008 §1). The engine names its own socket and prints it, so what a caller is told
+ is where to dial and that it may (ADR 0013 §3, amended).
 */
     #[derive(Debug, Clone)]
     pub struct RenderClient<T> {
@@ -139,9 +142,12 @@ pub mod render_server {
             request: tonic::Request<super::RenderPlan>,
         ) -> std::result::Result<tonic::Response<super::RenderResult>, tonic::Status>;
     }
-    /** Defined in M1 so buf breaking guards the shape M2 implements; implemented by nobody in
- M1, where the engine is a fresh subprocess per render speaking the same two messages over
- stdio. At M2 the stdio path is deleted, not kept beside this (ADR 0008 §1).
+    /** Defined in M1 so buf breaking guards the shape M2 implements, and implemented at M2 (PR 9).
+ M1's engine spoke these same two messages over stdio, one each way, delimited by end of
+ stream; that path was deleted in the pull request that served this one rather than kept
+ beside it, because two transports for one boundary is one tested transport and one that is
+ not (ADR 0008 §1). The engine names its own socket and prints it, so what a caller is told
+ is where to dial and that it may (ADR 0013 §3, amended).
 */
     #[derive(Debug)]
     pub struct RenderServer<T> {

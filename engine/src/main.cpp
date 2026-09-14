@@ -1,10 +1,12 @@
-// The render engine (docs/specs.md §8): one RenderPlan in on stdin, one WAV out at the path
-// the plan names, one RenderResult out on stdout, exit. A fresh process per render, so nothing
-// here outlives a render and nothing is reused (ADR 0008 §2).
+// The render engine (docs/specs.md §8): one `Render` call in over gRPC, one WAV out at the path
+// the plan names, one RenderResult back, exit. A fresh process per render, so nothing here
+// outlives a render and nothing is reused (ADR 0008 §2).
 //
-// stdout carries protobuf bytes and nothing else. Every line this file writes goes to stderr,
-// and JUCE's own logger does the same on Linux (juce_SystemStats_linux.cpp: outputDebugString
-// is std::cerr), which is why nothing here installs a logger (ADR 0008 §1).
+// stdout carries the socket address this process serves on and nothing else — one line, printed
+// once the server is listening, which is how a caller learns both where to dial and that it may
+// (ADR 0013 §3, amended). Every other line this file writes goes to stderr, and JUCE's own
+// logger does the same on Linux (juce_SystemStats_linux.cpp: outputDebugString is std::cerr),
+// which is why nothing here installs a logger (ADR 0008 §1).
 //
 // The plan names its plugins by the id the build manifest declares (ADR 0010 §4), and the
 // manifest's path is the engine's one argument: a render opens the exact binaries it names and
@@ -27,7 +29,10 @@
 #include <rubberband/RubberBandStretcher.h>
 
 #include "provenance.h"
+#include "render.grpc.pb.h"
 #include "render.pb.h"
+
+#include <grpcpp/grpcpp.h>
 
 #include <pmmintrin.h>
 #include <xmmintrin.h>
@@ -35,13 +40,13 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
-#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -1457,34 +1462,16 @@ private:
     int placed = 0;
 };
 
-int run (const juce::File& manifestFile)
+// **One render, and nothing about how the plan arrived.** Kept apart from `serve` below, which
+// takes the plan off a gRPC call, because what this does is the milestone's claim and how the
+// plan travelled is not: it is handed the manifest this build was told to host from, a scratch
+// directory that outlives the render and dies with the process, and a plan.
+//
+// Returns `kOk` having filled `result`, or the stage the render died in, having already said
+// why on stderr. Failure is a code and never a `RenderResult` carrying errors (ADR 0008 §1).
+int render (const juce::var& manifest, const juce::File& scratch, const RenderPlan& plan, RenderResult& result)
 {
-    // ADR 0009 §3: FTZ and DAZ, set before any thread exists so the render thread inherits
-    // them (Linux copies the FP environment on clone). Tracktion sets them again on that
-    // thread in RenderTask::runJob (disableDenormalisedNumberSupport); this is the process's
-    // own statement of the same thing, and it covers any thread JUCE starts first.
-    _MM_SET_FLUSH_ZERO_MODE (_MM_FLUSH_ZERO_ON);
-    _MM_SET_DENORMALS_ZERO_MODE (_MM_DENORMALS_ZERO_ON);
-
-    const auto manifest = juce::JSON::parse (manifestFile);
-    if (! manifest.isObject())
-        return fail (kBadPlan, "no build manifest at " + manifestFile.getFullPathName().toStdString()
-                                   + "; it is written by `cmake --build engine/build --target manifest` (ADR 0010 §4)");
-
-    // One plan, read to end-of-stream (ADR 0008 §1).
-    const std::string bytes ((std::istreambuf_iterator<char> (std::cin)), std::istreambuf_iterator<char>());
-    RenderPlan plan;
-    if (! plan.ParseFromString (bytes))
-        return fail (kBadPlan, "stdin is not a RenderPlan (" + std::to_string (bytes.size()) + " bytes)");
-
-    const juce::ScopedJuceInitialiser_GUI juceInit;
-    const TempDir scratch;
-    if (scratch.dir == juce::File())
-        return fail (kRenderFailed, "could not create a scratch directory under "
-                                        + juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                              .getFullPathName()
-                                              .toStdString());
-    te::Engine engine (std::make_unique<Storage> (scratch.dir), std::make_unique<te::UIBehaviour>(), std::make_unique<Behaviour>());
+    te::Engine engine (std::make_unique<Storage> (scratch), std::make_unique<te::UIBehaviour>(), std::make_unique<Behaviour>());
     auto* wav = engine.getAudioFileFormatManager().getWavFormat();
 
     // A pin, not a default: the pan law is a process-wide static in Tracktion
@@ -1651,7 +1638,6 @@ int run (const juce::File& manifestFile)
                                      + std::to_string (expectedFrames) + " frames of " + std::to_string (target.bit_depth())
                                      + "-bit stereo are " + std::to_string (expectedBytes));
 
-    RenderResult result;
     result.set_pcm_sha256 (juce::SHA256 (in, *dataSize).toHexString().toStdString());
     for (const auto& commit : escribass::provenance::engineCommits)
         (*result.mutable_commits())[commit.component] = commit.sha;
@@ -1667,23 +1653,176 @@ int run (const juce::File& manifestFile)
         return fail (kBadOutput, "rendered " + params.destFile.getFullPathName().toStdString()
                                      + " and could not move it to " + plan.output_path());
 
-    // **Checked after the flush, not before it.** A 447-byte `RenderResult` fits `std::cout`'s
-    // buffer, so `SerializeToOstream` returns true having written nothing to the file
-    // descriptor and the real `write(2)` happens inside `flush()`. Redirected to `/dev/full`
-    // that used to be exit 0 with an empty stdout and nothing on stderr — the engine claiming a
-    // render whose answer never left the process (M1 PR 13).
-    if (! result.SerializeToOstream (&std::cout))
-        return fail (kBadOutput, "could not write the RenderResult to stdout");
-    std::cout.flush();
-    if (! std::cout.good())
-        return fail (kBadOutput, "the RenderResult could not be flushed to stdout");
     return kOk;
+}
+
+// ------------------------------------------------------------------------------------------
+// How a plan gets here (ADR 0013 §3)
+// ------------------------------------------------------------------------------------------
+
+// The build manifest, or an empty `var` having already said why (ADR 0010 §4).
+juce::var manifestIn (const juce::File& file)
+{
+    const auto manifest = juce::JSON::parse (file);
+    if (! manifest.isObject())
+        fail (kBadPlan, "no build manifest at " + file.getFullPathName().toStdString()
+                            + "; it is written by `cmake --build engine/build --target manifest` (ADR 0010 §4)");
+    return manifest;
+}
+
+// The scratch directory a render runs in, or an empty `File` having already said why.
+juce::File scratchIn (const TempDir& scratch)
+{
+    if (scratch.dir == juce::File())
+        fail (kRenderFailed, "could not create a scratch directory under "
+                                 + juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                       .getFullPathName()
+                                       .toStdString());
+    return scratch.dir;
+}
+
+// The one `Render` call this process serves, parked for the message thread.
+//
+// **Nothing touches Tracktion off the message thread** (ADR 0013 §4), and a gRPC handler runs
+// on a thread of gRPC's own. So the handler's whole job is to hand the plan over, wait, and
+// answer with what the message thread rendered — which is `main`, because `EditRenderer::render`
+// is asynchronous and only a pumped dispatch loop ever calls it back (ADR 0008 §3).
+class RenderService final : public escribass::render::v1::Render::Service {
+public:
+    ::grpc::Status Render (::grpc::ServerContext*, const RenderPlan* request, RenderResult* response) override
+    {
+        std::unique_lock<std::mutex> lock (mutex);
+        // ADR 0008 §2's guarantee is the operating system's, not a rule someone follows: a
+        // second render in this process would inherit the first one's plugin instances and
+        // their parameter smoothers, so its first block would depend on what was rendered
+        // before it. One call, then the process dies with its answer.
+        if (plan != nullptr)
+            return { ::grpc::StatusCode::RESOURCE_EXHAUSTED,
+                     "this engine process serves one render and is already serving it (ADR 0008 §2)" };
+        plan = request;
+        answered.wait (lock, [this] { return done; });
+        if (code != kOk)
+            return { ::grpc::StatusCode::INTERNAL,
+                     "the render failed and this process is exiting " + std::to_string (code)
+                         + "; the reason is on its stderr (ADR 0008 §1)" };
+        *response = std::move (result);
+        return ::grpc::Status::OK;
+    }
+
+    // What the handler is waiting on, or nullptr. **Polled**, because the message thread cannot
+    // block on a condition variable — it has a dispatch loop to pump.
+    const RenderPlan* waiting()
+    {
+        const std::lock_guard<std::mutex> lock (mutex);
+        return plan;
+    }
+
+    // The message thread's answer, which is what lets the handler return.
+    void answer (int rendered, RenderResult&& what)
+    {
+        {
+            const std::lock_guard<std::mutex> lock (mutex);
+            code = rendered;
+            result = std::move (what);
+            done = true;
+        }
+        answered.notify_all();
+    }
+
+private:
+    std::mutex mutex;
+    std::condition_variable answered;
+    const RenderPlan* plan = nullptr;
+    RenderResult result;
+    int code = kOk;
+    bool done = false;
+};
+
+// `Render` over a Unix socket: the transport docs/specs.md §3 always described, and the one M2
+// makes true (ADR 0013 §1). One process, one call, then exit (ADR 0013 §3).
+//
+// **How the caller learns where to dial, and that it may.** The engine picks the socket rather
+// than being told one: `TempDir` is a `mkdtemp`, so the directory is 0700, unique and this
+// process's own, and the path needs no entropy in `core` — which is where CLAUDE.md #3 does not
+// want any. The address is printed on stdout only *after* `BuildAndStart` has returned a
+// listening server, so that one line is the address and the readiness at once: a caller holding
+// it cannot be refused a connection, and there is nothing to poll, retry or sleep on. ADR 0013
+// §3 had the path travelling the other way, on argv, and is amended in place with this.
+//
+// stdout is the address and nothing else, which is the rule stdio lived under and for the same
+// reason (ADR 0008 §1): every log line, JUCE's warnings and every plugin's chatter go to stderr.
+// The stdio path this replaces was deleted in the same pull request rather than kept beside it —
+// two transports for one boundary is one tested transport and one that is not.
+int serve (const juce::File& manifestFile)
+{
+    const auto manifest = manifestIn (manifestFile);
+    if (! manifest.isObject())
+        return kBadPlan;
+
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+    const TempDir scratch;
+    const auto dir = scratchIn (scratch);
+    if (dir == juce::File())
+        return kRenderFailed;
+
+    const auto socket = dir.getChildFile ("render.sock").getFullPathName().toStdString();
+    RenderService service;
+    ::grpc::ServerBuilder builder;
+    // Insecure because the socket *is* the security: a 0700 directory nobody else can enter. A
+    // TCP port would be reachable by every process on the machine, and a render is a write to a
+    // path its caller names.
+    builder.AddListeningPort ("unix:" + socket, ::grpc::InsecureServerCredentials());
+    // **No four-megabyte ceiling.** That is gRPC's default maximum received message, and stdio
+    // had no limit at all — so a project large enough to pass it would meet a refusal the
+    // transport invented, rather than one the validator or `compile` states (ADR 0007 §6).
+    builder.SetMaxReceiveMessageSize (-1);
+    builder.RegisterService (&service);
+    const auto server = builder.BuildAndStart();
+    if (server == nullptr)
+        return fail (kRenderFailed, "could not serve Render on unix:" + socket);
+
+    // Checked, the way the RenderResult on stdout is: an address that never left the process
+    // leaves a caller waiting for a line that is not coming (M1 PR 13).
+    std::printf ("unix:%s\n", socket.c_str());
+    if (std::fflush (stdout) != 0)
+        return fail (kBadOutput, "could not write the socket address to stdout");
+
+    // **Bounded, and the bound counts iterations rather than reading a clock** (CLAUDE.md #3),
+    // exactly as the render's own dispatch loop is. What it decides is failure and
+    // never a sample: a caller that dials is served whatever it then asks for, however long
+    // this waited. Without it, a parent that died between spawning this process and calling it
+    // leaves an engine pumping a dispatch loop for ever.
+    constexpr int kIdleIterations = 60'000;  // each waits up to 10 ms, so ten minutes
+    const RenderPlan* plan = nullptr;
+    for (int idle = 0; (plan = service.waiting()) == nullptr; ++idle)
+    {
+        if (idle >= kIdleIterations)
+            return fail (kRenderFailed, "no Render call arrived on unix:" + socket);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+    }
+
+    RenderResult result;
+    const auto code = render (manifest, dir, *plan, result);
+    service.answer (code, std::move (result));
+    // Blocks until the handler above has returned and its answer is on the wire, which is what
+    // makes exiting here safe.
+    server->Shutdown();
+    server->Wait();
+    return code;
 }
 
 }  // namespace
 
 int main (int argc, char** argv)
 {
+    // ADR 0009 §3: FTZ and DAZ, set before any thread exists so every thread cloned from this
+    // one inherits them (Linux copies the FP environment on clone) — the render thread, and now
+    // gRPC's own as well, which is why this is here rather than inside a render. Tracktion sets
+    // them again on the render thread in RenderTask::runJob (disableDenormalisedNumberSupport);
+    // this is the process's own statement of the same thing.
+    _MM_SET_FLUSH_ZERO_MODE (_MM_FLUSH_ZERO_ON);
+    _MM_SET_DENORMALS_ZERO_MODE (_MM_DENORMALS_ZERO_ON);
+
     if (argc == 2 && std::string_view (argv[1]) == "--version")
     {
         for (const auto& commit : escribass::provenance::engineCommits)
@@ -1701,8 +1840,12 @@ int main (int argc, char** argv)
             args.add (juce::String::fromUTF8 (argv[i]));
         return scan (args);
     }
-    if (argc != 2)
-        return fail (kBadPlan, "usage: escribass_engine <manifest.json> < plan.binpb > result.binpb"
-                               "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
-    return run (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
+    // The mode is which service this process serves (ADR 0013 §3): `--render` registers
+    // `Render` alone, so a `Preview` call on an engine spawned to export is refused by gRPC
+    // rather than by a check somebody remembered to write. `Preview` is M2 PR 10's, and until
+    // it exists an engine with no mode serves nothing rather than guessing at one.
+    if (argc == 3 && std::string_view (argv[2]) == "--render")
+        return serve (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
+    return fail (kBadPlan, "usage: escribass_engine <manifest.json> --render"
+                           "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
 }

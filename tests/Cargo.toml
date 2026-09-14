@@ -24,10 +24,19 @@ name = "renders"
 path = "renders.rs"
 required-features = ["renders"]
 
+# The gRPC client the engine job's shell steps drive the engine with (M2 PR 9). It is `core`'s
+# own `Engine` behind an argv, not a second implementation of the boundary — see the file.
+[[bin]]
+name = "render-once"
+path = "render_once.rs"
+
 [features]
 renders = []
 
-[dev-dependencies]
+# `escribass-core`, `escribass-proto` and `prost` are dependencies rather than dev-dependencies
+# because `render-once` above links them, and a `[[bin]]` sees only the first list. Nothing
+# else changes: a dev-dependency and a dependency are the same thing to `cargo test`.
+[dependencies]
 # `diff` builds the failure report, so a mismatch names paths rather than printing two
 # documents. Nothing here reaches into `core` to mutate a song — that goes through the
 # server binary, as CLAUDE.md #2 requires.
@@ -35,6 +44,11 @@ escribass-core = { path = "../core" }
 # The generated client, so the same scripts can be driven over the other transport. Already
 # pinned in lock.baseline.json under `tool_api`; this is a new consumer, not a new dependency.
 escribass-proto = { path = "../proto" }
+# Encoding the plan `render-once` is handed and the result it answers with. Already pinned
+# under `schema.rust.prost`; a new consumer, not a new dependency.
+prost = "0.14"
+
+[dev-dependencies]
 escribass-schema = { path = "../schema" }
 tonic = "0.14.6"
 tokio = { version = "1", features = ["rt", "net", "time"] }

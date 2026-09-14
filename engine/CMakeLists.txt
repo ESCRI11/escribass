@@ -39,7 +39,17 @@ add_compile_options(-march=x86-64 -mtune=generic -ffp-contract=off)
 
 set(VENDOR ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 foreach(sub tracktion_engine/CMakeLists.txt tracktion_engine/modules/juce/CMakeLists.txt
-            protobuf/CMakeLists.txt surge/CMakeLists.txt sfizz-ui/CMakeLists.txt
+            protobuf/CMakeLists.txt grpc/CMakeLists.txt
+            # gRPC's own submodules: abseil, c-ares, re2, zlib and BoringSSL are what its
+            # `module` providers add, and each is pinned by the grpc commit rather than by us
+            # (ADR 0013 §1). Named one by one because a half-checked-out grpc fails deep inside
+            # its CMake with a message about none of them.
+            grpc/third_party/abseil-cpp/CMakeLists.txt
+            grpc/third_party/cares/cares/CMakeLists.txt
+            grpc/third_party/re2/CMakeLists.txt
+            grpc/third_party/zlib/CMakeLists.txt
+            grpc/third_party/boringssl-with-bazel/CMakeLists.txt
+            surge/CMakeLists.txt sfizz-ui/CMakeLists.txt
             dexed/CMakeLists.txt
             # Rubber Band ships no CMakeLists at all; it is checked by the one file this build
             # compiles, which is the whole of it (see the target below).
@@ -68,6 +78,7 @@ endfunction()
 engine_commit_of(${VENDOR}/tracktion_engine              COMMIT_TRACKTION_ENGINE)
 engine_commit_of(${VENDOR}/tracktion_engine/modules/juce COMMIT_JUCE)
 engine_commit_of(${VENDOR}/protobuf                      COMMIT_PROTOBUF)
+engine_commit_of(${VENDOR}/grpc                          COMMIT_GRPC)
 engine_commit_of(${VENDOR}/surge                         COMMIT_SURGE_XT)
 engine_commit_of(${VENDOR}/sfizz-ui                      COMMIT_SFIZZ_UI)
 engine_commit_of(${VENDOR}/dexed                         COMMIT_DEXED)
@@ -83,7 +94,24 @@ set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(protobuf_INSTALL OFF CACHE BOOL "" FORCE)
 set(protobuf_WITH_ZLIB OFF CACHE BOOL "" FORCE)
 set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-add_subdirectory(${VENDOR}/protobuf EXCLUDE_FROM_ALL)
+
+# **gRPC owns the one `add_subdirectory` of our protobuf, and it has to.** grpc's
+# `cmake/protobuf.cmake` calls `add_subdirectory(${PROTOBUF_ROOT_DIR})` unconditionally in
+# `module` mode, with no `if(TARGET libprotobuf)` guard, so adding protobuf ourselves first
+# collides on every target protobuf defines. Pointing `PROTOBUF_ROOT_DIR` at our submodule aims
+# that one add at *our* checkout, which is the whole reason v1.54.3 was the version chosen:
+# grpc's protobuf and ours are one pin rather than two that must agree (ADR 0013 §1). Verified
+# by building, 2026-09-09, which is what PR 0 left to PR 9.
+#
+# The one visible consequence is a path: protobuf's binary directory is `third_party/protobuf`
+# under grpc's, so `protoc` is at `vendor/grpc/third_party/protobuf/protoc` in the build tree
+# and no longer at `vendor/protobuf/protoc`. The engine job names it.
+#
+# Everything else is grpc's own default and is not restated here: `gRPC_INSTALL` and
+# `gRPC_BUILD_TESTS` are already OFF for a subproject, and `EXCLUDE_FROM_ALL` means the six
+# codegen plugins for languages nothing here speaks are configured and never compiled.
+set(PROTOBUF_ROOT_DIR ${VENDOR}/protobuf CACHE PATH "" FORCE)
+add_subdirectory(${VENDOR}/grpc EXCLUDE_FROM_ALL)
 
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(GEN ${CMAKE_BINARY_DIR}/gen)
@@ -95,6 +123,16 @@ add_custom_command(
     COMMAND protoc -I ${REPO}/schema -I ${REPO}/proto -I ${VENDOR}/protobuf/src --cpp_out=${GEN} ${PROTOS}
     DEPENDS protoc ${PROTOS}
     COMMENT "protoc: song.proto and render.proto to C++")
+
+# The service stubs, from the same `render.proto` and the same protoc, through the plugin grpc
+# builds beside its runtime (ADR 0013 §1). `song.proto` declares no service and gets none.
+add_custom_command(
+    OUTPUT ${GEN}/render.grpc.pb.cc ${GEN}/render.grpc.pb.h
+    COMMAND protoc -I ${REPO}/schema -I ${REPO}/proto -I ${VENDOR}/protobuf/src
+            --grpc_out=${GEN} --plugin=protoc-gen-grpc=$<TARGET_FILE:grpc_cpp_plugin>
+            ${REPO}/proto/render.proto
+    DEPENDS protoc grpc_cpp_plugin ${REPO}/proto/render.proto
+    COMMENT "protoc: render.proto to gRPC C++")
 
 # ------------------------------------------------------------------------------------------
 # Rubber Band, for the time-stretch of ADR 0011 §3
@@ -135,7 +173,8 @@ juce_add_console_app(escribass_engine
 target_sources(escribass_engine PRIVATE
     src/main.cpp
     ${GEN}/song.pb.cc
-    ${GEN}/render.pb.cc)
+    ${GEN}/render.pb.cc
+    ${GEN}/render.grpc.pb.cc)
 target_include_directories(escribass_engine PRIVATE ${GEN})
 
 target_compile_definitions(escribass_engine PRIVATE
@@ -159,6 +198,10 @@ target_link_libraries(escribass_engine PRIVATE
     # Time-stretch for an audio clip that asks for it (ADR 0011 §3).
     rubberband
     libprotobuf
+    # The engine serves `Render` over a Unix socket it names on stdout (ADR 0013 §3). grpc++
+    # brings libprotobuf's siblings — abseil, c-ares, re2, zlib and BoringSSL — as its own
+    # pinned submodules, and they arrive as link dependencies of this one name.
+    grpc++
     # Spike, 2026-09-04: tracktion_engine_playback references __atomic_store for 16-byte
     # atomics GCC does not lower inline.
     atomic)

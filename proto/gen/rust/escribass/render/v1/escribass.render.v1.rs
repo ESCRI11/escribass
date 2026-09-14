@@ -4,10 +4,10 @@
 // The plan (ADR 0007)
 // ---------------------------------------------------------------------------
 
-/// One offline render. Exactly one of these arrives on the engine's stdin, read to
-/// end-of-stream, and exactly one RenderResult leaves on stdout; the process then exits
-/// (ADR 0008 §1). At M2 the same message is the argument of Render.Render — and, inside a
-/// PreviewPlay, of a preview, which is this played from a tick rather than written to a file.
+/// One offline render. Exactly one of these crosses on one Render.Render call, to a process
+/// spawned for it that answers with one RenderResult and exits (ADR 0008 §1, §2; ADR 0013 §3).
+/// The same message is also, inside a PreviewPlay, the argument of a preview — which is this
+/// played from a tick rather than written to a file.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RenderPlan {
     /// Every track that sounds, in mixer order. Tracks that solo and mute silence are already
@@ -149,7 +149,7 @@ pub struct PlanNotes {
     pub notes: ::prost::alloc::vec::Vec<::escribass_schema::song::Note>,
 }
 /// An audio clip beside the file it plays. The bytes are not embedded: every sample of every
-/// asset through stdin and into the plan golden is the alternative ADR 0007 §2 rejects. The
+/// asset across the wire and into the plan golden is the alternative ADR 0007 §2 rejects. The
 /// engine learns nothing about the .escri from a path it opens.
 ///
 /// ponytail: a looped, stretched clip whose length is not a multiple of its loop is not yet
