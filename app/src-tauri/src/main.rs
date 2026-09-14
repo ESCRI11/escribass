@@ -1,14 +1,16 @@
 //! The desktop host (docs/specs.md §3 tier 1, §9; ADR 0012).
 //!
 //! ```text
-//! escribass-app --manifest <manifest.json> <project.escri>
+//! escribass-app --manifest <manifest.json> [--engine <escribass_engine>] <project.escri>
 //! ```
 //!
 //! One operating-system process: this host, `core` linked into it as a library, and a webview.
-//! It is **not** a client of anything — §3's gRPC is `app` ↔ `ai` and `app` ↔ `engine`, both of
-//! them processes `app` supervises at a later step, and the webview is neither. `app` opens no
+//! §3's gRPC is `app` ↔ `ai` and `app` ↔ `engine`, and the webview is neither. `app` opens no
 //! network port, because a desktop application that binds a socket to talk to itself is a
-//! listening service on a user's machine (ADR 0012 §1).
+//! listening service on a user's machine (ADR 0012 §1). What it does dial, from M2 PR 10, is the
+//! engine: `core`'s session spawns one per export and one live one for a preview, each naming a
+//! Unix socket of its own (ADR 0013 §3) — so the supervision §3 gives `app` is the session's, and
+//! a preview ends when this process does, because its stream does.
 //!
 //! What the webview can reach is [`tool`], and that is the whole of what it can reach *of the
 //! model*. One command carrying a tool name and its arguments, dispatched into
@@ -26,6 +28,11 @@
 //! --manifest <path>        **required**, and no default: what this build can host
 //!                          (ADR 0010 §4). Without it `plugin_unknown` and `param_unknown`
 //!                          would have a silent skip arm, so this process refuses to start
+//! --engine <path>          the engine binary `render_preview` and `render_export` start, told
+//!                          and never searched for, as the two servers are (ADR 0008 §2). Absent,
+//!                          the window still edits, and pressing play says `engine_unset`. An
+//!                          engine plays the plugins at the paths this manifest names, so it
+//!                          wants the manifest a build wrote, not the test fixture
 //! ```
 //!
 //! No `--create`, and no File · Open yet. The project is a launch argument, as it is for both
@@ -39,7 +46,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use escribass_core::call::call;
-use escribass_core::{Manifest, Project, ProjectLock, Session, SystemClock, UlidSource};
+use escribass_core::{Engine, Manifest, Project, ProjectLock, Session, SystemClock, UlidSource};
 use escribass_schema::song::Author;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -140,12 +147,15 @@ fn run() -> Result<i32, String> {
     // 0012 §3's amendment to ADR 0006 §5: the rule that was protecting the *tool surface* is
     // unchanged, and the constructor was never a tool. A window's edits are a person's,
     // whatever else is also editing this project.
-    let session = Session::new(
+    let mut session = Session::new(
         project,
         Box::new(UlidSource::new(SystemClock)),
         Box::new(SystemClock),
         Author::Human,
     );
+    if let Some(engine) = &options.engine {
+        session.set_engine(Engine::new(engine, &options.manifest));
+    }
 
     let title = format!(
         "{} — escribass",
@@ -195,12 +205,14 @@ fn take(held: &Held) {
 struct Options {
     project: PathBuf,
     manifest: PathBuf,
+    engine: Option<PathBuf>,
 }
 
 impl Options {
     fn parse(arguments: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut project = None;
         let mut manifest = None;
+        let mut engine = None;
         let mut arguments = arguments.peekable();
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
@@ -208,6 +220,10 @@ impl Options {
                     manifest = Some(PathBuf::from(
                         arguments.next().ok_or("--manifest needs a value")?,
                     ))
+                }
+                "--engine" => {
+                    engine =
+                        Some(PathBuf::from(arguments.next().ok_or("--engine needs a value")?))
                 }
                 "--help" | "-h" => return Err(USAGE.to_string()),
                 flag if flag.starts_with('-') => return Err(format!("unknown flag `{flag}`")),
@@ -227,11 +243,13 @@ impl Options {
                      manifest`\n{USAGE}"
                 )
             })?,
+            engine,
         })
     }
 }
 
-const USAGE: &str = "usage: escribass-app --manifest <manifest.json> <project.escri>";
+const USAGE: &str =
+    "usage: escribass-app --manifest <manifest.json> [--engine <escribass_engine>] <project.escri>";
 
 #[cfg(test)]
 mod tests {
@@ -245,6 +263,12 @@ mod tests {
         assert!(parse(&["--manifest", "m.json", "p.escri"]).is_ok());
         assert!(parse(&["p.escri"]).is_err(), "a manifest is not optional");
         assert!(parse(&["--manifest", "m.json"]).is_err(), "a project is not optional");
-        assert!(parse(&["--engine", "e", "p.escri"]).is_err(), "an unknown flag is refused");
+        assert!(parse(&["--listen", "e", "p.escri"]).is_err(), "an unknown flag is refused");
+        // The engine is optional and told, never searched for (ADR 0008 §2): a window with none
+        // still edits, and play says so.
+        let told = parse(&["--manifest", "m.json", "--engine", "e", "p.escri"]).unwrap();
+        assert_eq!(told.engine.as_deref(), Some(std::path::Path::new("e")));
+        assert!(parse(&["--manifest", "m.json", "p.escri"]).unwrap().engine.is_none());
+        assert!(parse(&["--manifest", "m.json", "p.escri", "--engine"]).is_err());
     }
 }

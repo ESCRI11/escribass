@@ -131,6 +131,17 @@ macro_rules! service {
                 Ok(Response::new(response))
             }
 
+            // Its own method for `render_export`'s reason: a preview answers with where the
+            // transport is (song_tools.proto, `PreviewResponse`).
+            async fn render_preview(
+                &self,
+                request: Request<RenderPreviewRequest>,
+            ) -> Result<Response<PreviewResponse>, Status> {
+                let response =
+                    self.locked().render_preview(&request.into_inner()).map_err(status)?;
+                Ok(Response::new(response))
+            }
+
             $(
                 async fn $tool(
                     &self,

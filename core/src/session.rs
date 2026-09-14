@@ -14,7 +14,7 @@
 //! dry run returns is produced by the same `ops_text` that fills the entry a commit writes.
 
 use crate::clock::Clock;
-use crate::engine::Engine;
+use crate::engine::{Engine, Preview};
 use crate::history::{ops_text, HistoryError};
 use crate::id::IdSource;
 use crate::patch::{diff, Op};
@@ -25,9 +25,9 @@ use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
     GetSongAtRequest, HistoryResponse, MergeBranchRequest, MergeSide, MoveSectionRequest,
-    QuantizeRequest, RedoRequest, RenderExportRequest, RenderResponse, SetNotesRequest,
-    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
-    SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
+    PreviewResponse, QuantizeRequest, RedoRequest, RenderExportRequest, RenderPreviewRequest,
+    RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest,
+    SongResponse, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::Value;
@@ -48,6 +48,13 @@ pub struct Session {
     /// Where the engine is, when this process was told (`--engine`). `None` is not a silent
     /// skip: `render_export` says so and refuses, as an operator error (see it below).
     engine: Option<Engine>,
+    /// The preview playing, if one is (ADR 0013 §3).
+    ///
+    /// Session state for the reason `undone` is: it is a fact about this session's calls and
+    /// not about the song, and the log records none of it. One at most, because the stream is
+    /// the session's identifier for a transport and there is one transport. It is **never**
+    /// what `render_export` uses — an export spawns its own process, whatever is playing.
+    preview: Option<Preview>,
     /// The entries this session has undone, oldest first (ADR 0005 §4).
     ///
     /// Not a stack of *documents* and not a second history — the log is the history, and every
@@ -69,7 +76,7 @@ impl Session {
         clock: Box<dyn Clock + Send>,
         author: Author,
     ) -> Self {
-        Self { project, ids, clock, author, engine: None, undone: Vec::new() }
+        Self { project, ids, clock, author, engine: None, preview: None, undone: Vec::new() }
     }
 
     /// Names the engine binary this session renders with (ADR 0008 §2).
@@ -322,6 +329,167 @@ impl Session {
         })?;
         let result = engine.render(&plan)?;
         Ok(RenderResponse { valid: true, errors: vec![], summary, result: Some(result) })
+    }
+
+    /// §5 `render_preview`: play the song as it stands through a live engine, or move or stop
+    /// what is playing (ADR 0013 §2, §3).
+    ///
+    /// ADR 0006 §2's line is drawn where `render_export` draws it. What the caller can fix is a
+    /// refusal — compile's own, a negative tick, and a command for a transport that is not there
+    /// (`preview_idle`, since the first command carries the plan). What only an operator can
+    /// fix is `Err`: no engine told, an engine that will not start or finds no audio device, and
+    /// a preview that ends instead of answering — after which there is no preview, and the next
+    /// `play` starts another.
+    ///
+    /// Nothing in the song changes and nothing is recorded, so the answer is not a `ToolResult`
+    /// (`proto/song_tools.proto`, `PreviewResponse`). Its summary is derived from the command
+    /// and, for a play, from the plan — never from where the transport is, which is the one
+    /// thing here that is not a function of the document (§11).
+    pub fn render_preview(
+        &mut self,
+        request: &RenderPreviewRequest,
+    ) -> Result<PreviewResponse, ProjectError> {
+        use escribass_proto::render::{
+            preview_command, PreviewCommand, PreviewLoop, PreviewPlay, PreviewSeek, PreviewStop,
+        };
+        use escribass_proto::tools::render_preview_request::Command;
+
+        let mut refused = Vec::new();
+        let negative = |refused: &mut Vec<Violation>, path: &str, tick: i32| {
+            if tick < 0 {
+                refused.push(Violation {
+                    path: path.to_string(),
+                    rule: "tick_negative",
+                    message: format!("tick {tick} is before the start of the song"),
+                });
+            }
+        };
+        // Seek, loop and stop are commands to a transport, and the first command on a stream
+        // carries the plan (ADR 0013 §2). With nothing playing there is no transport to move,
+        // and the caller fixes that by calling `play` first.
+        let idle = |refused: &mut Vec<Violation>, live: bool, path: &str| {
+            if !live {
+                refused.push(Violation {
+                    path: path.to_string(),
+                    rule: "preview_idle",
+                    message: "nothing is playing: a preview starts with `play`".to_string(),
+                });
+            }
+        };
+        let live = self.preview.is_some();
+
+        let (command, summary) = match &request.command {
+            None => {
+                refused.push(Violation {
+                    path: "/command".to_string(),
+                    rule: "oneof_unset",
+                    message: "one of `play`, `seek`, `loop` or `stop` is required".to_string(),
+                });
+                (None, String::new())
+            }
+            Some(Command::Play(from)) => {
+                if let Some(tick) = from.start_tick {
+                    negative(&mut refused, "/play/start_tick", tick);
+                }
+                match crate::compile(self.project.song(), &self.project.assets()?) {
+                    Ok(plan) => {
+                        // Absent is "from where it has reached" (ADR 0013 §2), which only the
+                        // transport knows — so on a dry run with nothing playing, and in every
+                        // determinism script, it is the start.
+                        let reached = match self.preview.as_mut().map(Preview::latest) {
+                            Some(Ok(event)) => event.map_or(0, |event| event.tick),
+                            Some(Err(ended)) => {
+                                self.preview = None;
+                                return Err(ended);
+                            }
+                            None => 0,
+                        };
+                        let summary = match from.start_tick {
+                            Some(tick) => format!("play from tick {tick}: {}", describe(&plan)),
+                            None => format!("play from where it is: {}", describe(&plan)),
+                        };
+                        let start_tick = from.start_tick.unwrap_or(reached);
+                        let play = preview_command::Command::Play(PreviewPlay {
+                            plan: Some(plan),
+                            start_tick,
+                        });
+                        (Some(play), summary)
+                    }
+                    Err(violations) => {
+                        refused.extend(violations);
+                        (None, String::new())
+                    }
+                }
+            }
+            Some(Command::Seek(seek)) => {
+                idle(&mut refused, live, "/seek");
+                negative(&mut refused, "/seek/tick", seek.tick);
+                let summary = format!("seek to tick {}", seek.tick);
+                (Some(preview_command::Command::Seek(PreviewSeek { tick: seek.tick })), summary)
+            }
+            Some(Command::Loop(range)) => {
+                idle(&mut refused, live, "/loop");
+                negative(&mut refused, "/loop/start_tick", range.start_tick);
+                negative(&mut refused, "/loop/end_tick", range.end_tick);
+                let summary = if range.end_tick > range.start_tick {
+                    format!("loop ticks {} to {}", range.start_tick, range.end_tick)
+                } else {
+                    "no loop".to_string()
+                };
+                let command = PreviewLoop { start_tick: range.start_tick, end_tick: range.end_tick };
+                (Some(preview_command::Command::Loop(command)), summary)
+            }
+            Some(Command::Stop(_)) => {
+                idle(&mut refused, live, "/stop");
+                (Some(preview_command::Command::Stop(PreviewStop {})), "stop".to_string())
+            }
+        };
+
+        let Some(command) = command.filter(|_| refused.is_empty()) else {
+            refused.sort();
+            return Ok(PreviewResponse {
+                valid: false,
+                errors: refused.into_iter().map(wire).collect(),
+                summary: String::new(),
+                event: None,
+            });
+        };
+
+        // The first half of the real path, as ever (ADR 0006 §3): compiled and checked, and no
+        // process started and nothing sent. Its event is the transport's latest word, which a
+        // dry run cannot have changed.
+        if request.dry_run {
+            let event = match self.preview.as_mut().map(Preview::latest) {
+                Some(Ok(event)) => event,
+                Some(Err(ended)) => {
+                    self.preview = None;
+                    return Err(ended);
+                }
+                None => None,
+            };
+            return Ok(PreviewResponse { valid: true, errors: vec![], summary, event });
+        }
+
+        if self.preview.is_none() {
+            let engine = self.engine.as_ref().ok_or_else(|| ProjectError {
+                path: "--engine".to_string(),
+                rule: "engine_unset",
+                message: "this process was not told where the engine is, and does not look for one: \
+                          pass `--engine <path to escribass_engine>` (ADR 0008 §2)"
+                    .to_string(),
+            })?;
+            self.preview = Some(engine.preview()?);
+        }
+        let preview = self.preview.as_mut().expect("started above");
+        match preview.send(PreviewCommand { command: Some(command) }) {
+            Ok(event) => {
+                Ok(PreviewResponse { valid: true, errors: vec![], summary, event: Some(event) })
+            }
+            Err(ended) => {
+                self.preview = None;
+                Err(ended)
+            }
+        }
     }
 
     // ---- undo and redo (ADR 0005 §4) ----

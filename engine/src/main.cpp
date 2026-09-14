@@ -32,6 +32,7 @@
 #include "render.grpc.pb.h"
 #include "render.pb.h"
 
+#include <google/protobuf/util/message_differencer.h>
 #include <grpcpp/grpcpp.h>
 
 #include <pmmintrin.h>
@@ -43,12 +44,15 @@
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -86,23 +90,41 @@ enum Exit : int {
     kRenderFailed = 3,  // Tracktion reported an error, or produced no file
     kBadOutput = 4,     // the file is not the WAV the plan asked for
     kScanFailed = 5,    // --scan: a bundled plugin did not open, or said nothing about itself
+    kNoDevice = 6,      // --preview: no audio output device opened, so there is nothing to play on
 };
 
+// Every line under this binary's name is one of these, and only these: the reason a run did not
+// happen. The window shows that line first and the rest of stderr on hover (app/src/App.tsx).
 int fail (Exit code, const std::string& why)
 {
     std::fprintf (stderr, "escribass_engine: %s\n", why.c_str());
     return code;
 }
 
-// Headless (spike, 2026-09-04): no device manager, no system audio devices, no input.
+// **Headless for an export, and a device for a preview — by mode, and nothing else differs**
+// (ADR 0013 §3). An export is what M1's spike measured (2026-09-04): no device manager, no
+// system audio devices, no input, and it stays exactly that, because a render that opened a
+// device would be a render whose process state depends on the machine's sound server. A
+// preview is the one process that wants the device, so it alone asks Tracktion to open the
+// system's default output when the engine is constructed. Input is never opened in either:
+// §1 puts recording out of v1, and an input device is a second clock nothing here reads.
+//
 // getNumberOfCPUsToUseForAudio is the single-thread pin of ADR 0009 §3: Tracktion hands the
 // render's node player this minus one worker threads (tracktion_NodeRenderContext.cpp), and
-// zero workers means every block is processed on the render thread in graph order.
+// zero workers means every block is processed on the render thread in graph order. A preview
+// keeps it, which is not a determinism claim — nothing about a preview is bit-exact — but the
+// same graph order for both is one fewer difference to explain between them (trap 3).
 class Behaviour : public te::EngineBehaviour {
-    bool autoInitialiseDeviceManager() override { return false; }
-    bool addSystemAudioIODeviceTypes() override { return false; }
+public:
+    explicit Behaviour (bool live_) : live (live_) {}
+
+private:
+    bool autoInitialiseDeviceManager() override { return live; }
+    bool addSystemAudioIODeviceTypes() override { return live; }
     bool shouldOpenAudioInputByDefault() override { return false; }
     int getNumberOfCPUsToUseForAudio() override { return 1; }
+
+    const bool live;
 };
 
 // Tracktion keeps a settings file and a temp directory under the user's application data
@@ -218,6 +240,11 @@ std::string nonFinite (const google::protobuf::Message& message, const std::stri
 
 // Refuses what no valid song compiles to. The validator and compile already refused every
 // caller-fixable shape (ADR 0008 §1); this is the trust boundary, not a second validator.
+//
+// Shared by both modes, since a preview plays the same plan an export writes (ADR 0013 §2).
+// What only a file needs — somewhere absolute to write it, and something to write — is
+// `render`'s own, below: a preview has no `output_path`, and a plan of no length is a
+// transport that reaches its end at once rather than a file with nothing in it.
 std::string check (const RenderPlan& plan, juce::AudioFormat& wav)
 {
     if (auto why = nonFinite (plan, "plan"); ! why.empty())
@@ -233,8 +260,8 @@ std::string check (const RenderPlan& plan, juce::AudioFormat& wav)
         return "bit depth " + std::to_string (target.bit_depth()) + " is not one the WAV format writes";
     if (target.dither())
         return "dither is a noise source without a seed; compile refuses it (ADR 0007 §6)";
-    if (plan.length_ticks() <= 0)
-        return "length_ticks is " + std::to_string (plan.length_ticks()) + "; nothing to render";
+    if (plan.length_ticks() < 0)
+        return "length_ticks is " + std::to_string (plan.length_ticks()) + ", which is not a length";
     if (plan.tempo_size() == 0 || plan.tempo (0).tick() != 0)
         return "the tempo map has no event at tick 0 (§4.4)";
     for (const auto& event : plan.tempo())
@@ -256,8 +283,6 @@ std::string check (const RenderPlan& plan, juce::AudioFormat& wav)
         return "length_ticks is " + std::to_string (plan.length_ticks()) + ", which at "
                + std::to_string (slowest) + " bpm is up to " + std::to_string ((juce::int64) atMostFrames)
                + " sample frames; this engine renders what fits an int";
-    if (! juce::File::isAbsolutePath (plan.output_path()))
-        return "output_path is not absolute: '" + plan.output_path() + "'";
     return {};
 }
 
@@ -885,6 +910,23 @@ void shape (juce::AudioBuffer<float>& buffer, double gainDb, int fadeIn, int fad
     }
 }
 
+// Where a model tick falls on an edit's timeline. The tempo map is on the edit's own sequence,
+// so one owner converts tick to time and there is one rounding site rather than two
+// (ADR 0007 §3). Widened to 64 bits because an absolute tick is summed before it is converted
+// (ADR 0002 §1).
+te::TimePosition timeOf (te::Edit& edit, juce::int64 tick)
+{
+    return edit.tempoSequence.toTime (te::BeatPosition::fromBeats (tick / (double) kPpq));
+}
+
+// The other way, for a preview's transport: the model tick a position is in, floored, and held
+// inside an `int32` because that is what a tick is on the wire (ADR 0002 §1).
+int tickOf (te::Edit& edit, te::TimePosition time)
+{
+    const auto ticks = std::floor (edit.tempoSequence.toBeats (time).inBeats() * kPpq);
+    return (int) juce::jlimit (0.0, (double) std::numeric_limits<int>::max(), ticks);
+}
+
 // Builds the edit the plan describes.
 //
 // Everything it reads is already resolved (ADR 0007 §1): mixer order, chain order, loop
@@ -1118,13 +1160,10 @@ private:
         return plugin;
     }
 
-    // Where a model tick falls on the timeline. The tempo map was put on the edit's own
-    // sequence before this builder ran, so one owner converts tick to time and there is one
-    // rounding site rather than two (ADR 0007 §3). Widened to 64 bits because an absolute tick
-    // is summed before it is converted (ADR 0002 §1).
+    // The tempo map was put on the edit's sequence before this builder ran (`editFor`).
     te::TimePosition at (juce::int64 tick)
     {
-        return edit.tempoSequence.toTime (te::BeatPosition::fromBeats (tick / (double) kPpq));
+        return timeOf (edit, tick);
     }
 
     // ADR 0002 §8's two curves, and they are **ours** rather than Tracktion's. `curve` on a
@@ -1462,37 +1501,36 @@ private:
     int placed = 0;
 };
 
-// **One render, and nothing about how the plan arrived.** Kept apart from `serve` below, which
-// takes the plan off a gRPC call, because what this does is the milestone's claim and how the
-// plan travelled is not: it is handed the manifest this build was told to host from, a scratch
-// directory that outlives the render and dies with the process, and a plan.
-//
-// Returns `kOk` having filled `result`, or the stage the render died in, having already said
-// why on stderr. Failure is a code and never a `RenderResult` carrying errors (ADR 0008 §1).
-int render (const juce::var& manifest, const juce::File& scratch, const RenderPlan& plan, RenderResult& result)
+// A pin, not a default: the pan law is a process-wide static in Tracktion
+// (tracktion_AudioUtilities.cpp) that any module could set, and it decides the two gains a
+// `Mix.pan` becomes. Linear is what Tracktion itself starts at, and it is the only one of the
+// five that leaves a centred track at exactly its `gain_db`; the cost is that a hard pan is
+// +6 dB on the surviving side. Nothing in the model names a law, so this is the engine stating
+// which one it renders, not a choice the document makes. Set by both modes, before either
+// builds an edit, because a preview that panned by another law would be a fourth reason
+// preview and export disagree, and one nobody chose (trap 3).
+void pinPanLaw()
 {
-    te::Engine engine (std::make_unique<Storage> (scratch), std::make_unique<te::UIBehaviour>(), std::make_unique<Behaviour>());
-    auto* wav = engine.getAudioFileFormatManager().getWavFormat();
-
-    // A pin, not a default: the pan law is a process-wide static in Tracktion
-    // (tracktion_AudioUtilities.cpp) that any module could set, and it decides the two gains a
-    // `Mix.pan` becomes. Linear is what Tracktion itself starts at, and it is the only one of
-    // the five that leaves a centred track at exactly its `gain_db`; the cost is that a hard
-    // pan is +6 dB on the surviving side. Nothing in the model names a law, so this is the
-    // engine stating which one it renders, not a choice the document makes.
     te::setDefaultPanLaw (te::PanLawLinear);
+}
 
-    if (const auto why = check (plan, *wav); ! why.empty())
-        return fail (kBadPlan, why);
-    const auto& target = plan.target();
-
+// The edit a plan describes, for either mode: an export renders it, a preview plays it
+// (ADR 0013 §2). **One builder**, which is the point — a preview edit assembled by a second
+// function would be a second reading of the plan in C++, and "the preview plays the same plan"
+// would stop being true the first time the two disagreed. What differs is the role, and the
+// role is Tracktion's own: `forRendering` refuses a playback context, `forEditing` wants one.
+//
+// Returns the edit and where the plan ends, or why it cannot be built.
+tl::expected<std::pair<std::unique_ptr<te::Edit>, te::TimePosition>, std::string>
+    editFor (te::Engine& engine, Plugins& plugins, const RenderPlan& plan, te::Edit::EditRole role)
+{
     // One audio track per plan track, and the master. Master volume at 0 dB so the level is the
     // plan's Mix, not Tracktion's -3 dB default. At least one track even for a plan with none,
     // because an edit's own default is one and a silent extra track sums exactly zero.
     auto edit = te::Edit::createEdit ({ engine,
                                         te::createEmptyEdit (engine),
                                         te::ProjectItemID (1, {}),
-                                        te::Edit::forRendering,
+                                        role,
                                         nullptr,
                                         te::Edit::getDefaultNumUndoLevels(),
                                         [&engine] { return engine.getPropertyStorage().getAppCacheFolder().getChildFile ("plan.tracktionedit"); },
@@ -1520,9 +1558,48 @@ int render (const juce::var& manifest, const juce::File& scratch, const RenderPl
 
     // The tempo map is on the sequence before this, because every tick the builder converts —
     // a note's beat, an automation point's time — is converted through it.
-    Plugins plugins (engine, manifest);
     if (const auto why = Builder (*edit, plugins, plan, end).build(); ! why.empty())
+        return tl::unexpected (why);
+    return std::make_pair (std::move (edit), end);
+}
+
+// **One render, and nothing about how the plan arrived.** Kept apart from `serve` below, which
+// takes the plan off a gRPC call, because what this does is the milestone's claim and how the
+// plan travelled is not: it is handed the manifest this build was told to host from, a scratch
+// directory that outlives the render and dies with the process, and a plan.
+//
+// Returns `kOk` having filled `result`, or the stage the render died in, having already said
+// why on stderr. Failure is a code and never a `RenderResult` carrying errors (ADR 0008 §1).
+int render (const juce::var& manifest, const juce::File& scratch, const RenderPlan& plan, RenderResult& result)
+{
+    te::Engine engine (std::make_unique<Storage> (scratch), std::make_unique<te::UIBehaviour>(), std::make_unique<Behaviour> (false));
+    auto* wav = engine.getAudioFileFormatManager().getWavFormat();
+    pinPanLaw();
+
+    // **Headless, checked rather than trusted** (ADR 0013 §3). Since M2 PR 10 this binary also
+    // opens a device, and the difference is one boolean passed to `Behaviour`. With it false
+    // Tracktion registers no device type at all, which holds on a runner with no sound card
+    // exactly as on a machine with one — so every render in CI is the check that an export
+    // process was never offered the machine's sound server, rather than a golden that would
+    // only have moved on a desk with a speaker on it.
+    if (! engine.getDeviceManager().deviceManager.getAvailableDeviceTypes().isEmpty())
+        return fail (kRenderFailed, "an export process was offered audio devices, and an export is"
+                                    " headless (ADR 0013 §3)");
+
+    if (const auto why = check (plan, *wav); ! why.empty())
         return fail (kBadPlan, why);
+    if (plan.length_ticks() == 0)
+        return fail (kBadPlan, "length_ticks is 0; nothing to render");
+    if (! juce::File::isAbsolutePath (plan.output_path()))
+        return fail (kBadPlan, "output_path is not absolute: '" + plan.output_path() + "'");
+    const auto& target = plan.target();
+
+    Plugins plugins (engine, manifest);
+    auto built = editFor (engine, plugins, plan, te::Edit::forRendering);
+    if (! built)
+        return fail (kBadPlan, built.error());
+    auto& edit = built->first;
+    const auto end = built->second;
 
     te::Renderer::Parameters params (*edit);
     // **The render writes a sibling `.part` and renames it, and the destination is untouched
@@ -1738,8 +1815,8 @@ private:
     bool done = false;
 };
 
-// `Render` over a Unix socket: the transport docs/specs.md §3 always described, and the one M2
-// makes true (ADR 0013 §1). One process, one call, then exit (ADR 0013 §3).
+// The server a mode registers its one service on, listening, with its address on stdout — or
+// nullptr, having already said why.
 //
 // **How the caller learns where to dial, and that it may.** The engine picks the socket rather
 // than being told one: `TempDir` is a `mkdtemp`, so the directory is 0700, unique and this
@@ -1751,8 +1828,52 @@ private:
 //
 // stdout is the address and nothing else, which is the rule stdio lived under and for the same
 // reason (ADR 0008 §1): every log line, JUCE's warnings and every plugin's chatter go to stderr.
-// The stdio path this replaces was deleted in the same pull request rather than kept beside it —
-// two transports for one boundary is one tested transport and one that is not.
+//
+// **One service per server, and that is the mode** (ADR 0013 §3). Whatever is passed here is
+// all this process serves, so a `Preview` call on an export process is answered UNIMPLEMENTED
+// by gRPC's own dispatch — not refused by a check this file would have to remember to make.
+std::unique_ptr<::grpc::Server> announce (::grpc::Service& service, const juce::File& dir, int& code)
+{
+    const auto socket = dir.getChildFile ("engine.sock").getFullPathName().toStdString();
+    ::grpc::ServerBuilder builder;
+    // Insecure because the socket *is* the security: a 0700 directory nobody else can enter. A
+    // TCP port would be reachable by every process on the machine, and a render is a write to a
+    // path its caller names.
+    builder.AddListeningPort ("unix:" + socket, ::grpc::InsecureServerCredentials());
+    // **No four-megabyte ceiling.** That is gRPC's default maximum received message, and stdio
+    // had no limit at all — so a project large enough to pass it would meet a refusal the
+    // transport invented, rather than one the validator or `compile` states (ADR 0007 §6).
+    builder.SetMaxReceiveMessageSize (-1);
+    builder.RegisterService (&service);
+    auto server = builder.BuildAndStart();
+    if (server == nullptr)
+    {
+        code = fail (kRenderFailed, "could not serve on unix:" + socket);
+        return nullptr;
+    }
+
+    // Checked, the way the RenderResult on stdout is: an address that never left the process
+    // leaves a caller waiting for a line that is not coming (M1 PR 13).
+    std::printf ("unix:%s\n", socket.c_str());
+    if (std::fflush (stdout) != 0)
+    {
+        code = fail (kBadOutput, "could not write the socket address to stdout");
+        return nullptr;
+    }
+    return server;
+}
+
+// **Bounded, and the bound counts iterations rather than reading a clock** (CLAUDE.md #3),
+// exactly as the render's own dispatch loop is. What it decides is failure and never a sample: a
+// caller that dials is served whatever it then asks for, however long this waited. Without it,
+// a parent that died between spawning this process and calling it leaves an engine pumping a
+// dispatch loop for ever.
+constexpr int kIdleIterations = 60'000;  // each waits up to 10 ms, so ten minutes
+
+// `Render` over a Unix socket: the transport docs/specs.md §3 always described, and the one M2
+// makes true (ADR 0013 §1). One process, one call, then exit (ADR 0013 §3). The stdio path this
+// replaced was deleted in the same pull request rather than kept beside it — two transports for
+// one boundary is one tested transport and one that is not.
 int serve (const juce::File& manifestFile)
 {
     const auto manifest = manifestIn (manifestFile);
@@ -1765,39 +1886,17 @@ int serve (const juce::File& manifestFile)
     if (dir == juce::File())
         return kRenderFailed;
 
-    const auto socket = dir.getChildFile ("render.sock").getFullPathName().toStdString();
     RenderService service;
-    ::grpc::ServerBuilder builder;
-    // Insecure because the socket *is* the security: a 0700 directory nobody else can enter. A
-    // TCP port would be reachable by every process on the machine, and a render is a write to a
-    // path its caller names.
-    builder.AddListeningPort ("unix:" + socket, ::grpc::InsecureServerCredentials());
-    // **No four-megabyte ceiling.** That is gRPC's default maximum received message, and stdio
-    // had no limit at all — so a project large enough to pass it would meet a refusal the
-    // transport invented, rather than one the validator or `compile` states (ADR 0007 §6).
-    builder.SetMaxReceiveMessageSize (-1);
-    builder.RegisterService (&service);
-    const auto server = builder.BuildAndStart();
+    int failed = kOk;
+    const auto server = announce (service, dir, failed);
     if (server == nullptr)
-        return fail (kRenderFailed, "could not serve Render on unix:" + socket);
+        return failed;
 
-    // Checked, the way the RenderResult on stdout is: an address that never left the process
-    // leaves a caller waiting for a line that is not coming (M1 PR 13).
-    std::printf ("unix:%s\n", socket.c_str());
-    if (std::fflush (stdout) != 0)
-        return fail (kBadOutput, "could not write the socket address to stdout");
-
-    // **Bounded, and the bound counts iterations rather than reading a clock** (CLAUDE.md #3),
-    // exactly as the render's own dispatch loop is. What it decides is failure and
-    // never a sample: a caller that dials is served whatever it then asks for, however long
-    // this waited. Without it, a parent that died between spawning this process and calling it
-    // leaves an engine pumping a dispatch loop for ever.
-    constexpr int kIdleIterations = 60'000;  // each waits up to 10 ms, so ten minutes
     const RenderPlan* plan = nullptr;
     for (int idle = 0; (plan = service.waiting()) == nullptr; ++idle)
     {
         if (idle >= kIdleIterations)
-            return fail (kRenderFailed, "no Render call arrived on unix:" + socket);
+            return fail (kRenderFailed, "no Render call arrived");
         juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
     }
 
@@ -1806,6 +1905,415 @@ int serve (const juce::File& manifestFile)
     service.answer (code, std::move (result));
     // Blocks until the handler above has returned and its answer is on the wire, which is what
     // makes exiting here safe.
+    server->Shutdown();
+    server->Wait();
+    return code;
+}
+
+// ------------------------------------------------------------------------------------------
+// Preview: the plan played from a tick, on the device (ADR 0013 §2, §3, §4)
+// ------------------------------------------------------------------------------------------
+//
+// **What is a clock here, and what is not** (CLAUDE.md #3). A preview is real time, and nothing
+// about it is claimed bit-exact (docs/plan.md, "What M2 will not claim"). The line #3 draws is
+// around the engine's *decisions*: nothing below chooses a sample, a note, a parameter value or
+// a plan by reading the time. What moves the transport is the audio device pulling blocks —
+// the device's clock is the input, the way a plan is the input to an export, and Tracktion
+// advances the position by the frames it rendered. Every event this file writes reports that
+// position; the one decision it takes from it is to stop at the end of the plan, which is where
+// an export stops too. What *does* read a clock is failure's alone: the idle bound above, and
+// the dispatch loop's ten-millisecond wait, which decides how soon a command is picked up and
+// never what it does. None of it is in `render`, which this mode does not call: an export stays
+// exactly as headless, exactly as single-process, as it was (ADR 0013 §3).
+
+using escribass::render::v1::PreviewCommand;
+using escribass::render::v1::PreviewEvent;
+using escribass::render::v1::PreviewPlay;
+
+// The one `Preview` stream this process plays, between gRPC's threads and the message thread.
+//
+// **Nothing touches Tracktion off the message thread** (ADR 0013 §4). The handler runs on a
+// thread of gRPC's, reads commands on a second thread of its own, and writes events on the one
+// it was called on; the message thread — `main` — takes the commands, applies them, and hands
+// back what to write. Both directions are a queue under one mutex, **polled** by the message
+// thread for the reason `RenderService` is polled: it has a dispatch loop to pump and cannot
+// block on a condition variable. Nothing is posted with `callAsync`, so no message can outlive
+// the objects it would touch, which is the whole of the lifetime reasoning.
+class PreviewService final : public escribass::render::v1::Preview::Service {
+public:
+    ::grpc::Status Preview (::grpc::ServerContext* context,
+                            ::grpc::ServerReaderWriter<PreviewEvent, PreviewCommand>* stream) override
+    {
+        {
+            const std::lock_guard<std::mutex> lock (mutex);
+            // The process lives as long as its stream (ADR 0013 §3), so there is never a second:
+            // two callers on one transport would each be moving the other's playhead.
+            if (opened)
+                return { ::grpc::StatusCode::RESOURCE_EXHAUSTED,
+                         "this engine process plays one preview and is already playing it (ADR 0013 §3)" };
+            opened = true;
+        }
+
+        // Read and Write may run concurrently on one stream, one of each (grpcpp's
+        // sync_stream.h), which is what lets a command arrive while an event is being written.
+        std::thread reader ([&]
+        {
+            PreviewCommand command;
+            while (stream->Read (&command))
+            {
+                const std::lock_guard<std::mutex> lock (mutex);
+                inbox.push_back (command);
+            }
+            {
+                const std::lock_guard<std::mutex> lock (mutex);
+                closed = true;
+            }
+            changed.notify_all();
+        });
+
+        auto status = ::grpc::Status::OK;
+        for (;;)
+        {
+            std::unique_lock<std::mutex> lock (mutex);
+            changed.wait (lock, [this] { return ! outbox.empty() || refusal.has_value() || closed; });
+            if (refusal.has_value())
+            {
+                status = *refusal;
+                break;
+            }
+            if (outbox.empty())
+                break;  // closed, and nothing left to say
+            const auto event = outbox.front();
+            outbox.pop_front();
+            lock.unlock();
+            if (! stream->Write (event))
+            {
+                status = { ::grpc::StatusCode::CANCELLED, "the caller stopped reading" };
+                break;
+            }
+        }
+
+        // A reader still blocked in `Read` is released by cancelling the call, which a refusal
+        // and a caller that stopped reading both need; a closed stream has released it already.
+        if (! status.ok())
+            context->TryCancel();
+        reader.join();
+
+        const std::lock_guard<std::mutex> lock (mutex);
+        done = true;
+        return status;
+    }
+
+    bool isOpen()
+    {
+        const std::lock_guard<std::mutex> lock (mutex);
+        return opened;
+    }
+
+    bool isDone()
+    {
+        const std::lock_guard<std::mutex> lock (mutex);
+        return done;
+    }
+
+    // The commands that have arrived, for the message thread, and whether the caller has closed.
+    std::pair<std::vector<PreviewCommand>, bool> take()
+    {
+        const std::lock_guard<std::mutex> lock (mutex);
+        std::vector<PreviewCommand> taken (inbox.begin(), inbox.end());
+        inbox.clear();
+        return { std::move (taken), closed };
+    }
+
+    void say (PreviewEvent event)
+    {
+        {
+            const std::lock_guard<std::mutex> lock (mutex);
+            outbox.push_back (std::move (event));
+        }
+        changed.notify_all();
+    }
+
+    // Ends the stream with a status. Failure is a status and never an event, as it is an exit
+    // code and never a RenderResult (ADR 0013 §2, ADR 0008 §1).
+    void refuse (::grpc::Status why)
+    {
+        {
+            const std::lock_guard<std::mutex> lock (mutex);
+            refusal = std::move (why);
+        }
+        changed.notify_all();
+    }
+
+private:
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::deque<PreviewCommand> inbox;
+    std::deque<PreviewEvent> outbox;
+    std::optional<::grpc::Status> refusal;
+    bool opened = false;
+    bool closed = false;
+    bool done = false;
+};
+
+// The transport a plan plays on, and the one place a preview touches Tracktion. Every member is
+// called on the message thread.
+class Player {
+public:
+    Player (te::Engine& e, const juce::var& manifest) : engine (e), plugins (e, manifest) {}
+    ~Player() { release(); }
+
+    // One command, applied — or the status that ends the stream instead. What arrives here was
+    // already refused upstream if a caller could fix it (`core`'s `preview_idle` and
+    // `tick_negative`), so this is the trust boundary and not a second validator.
+    ::grpc::Status apply (const PreviewCommand& command)
+    {
+        if (command.command_case() == PreviewCommand::kPlay)
+            return play (command.play());
+        if (command.command_case() == PreviewCommand::COMMAND_NOT_SET)
+            return invalid ("a command with no arm set");
+        if (edit == nullptr)
+            // ADR 0013 §2: the first command carries the plan. A seek into nothing is not a
+            // position, and answering it with one would be inventing a transport.
+            return { ::grpc::StatusCode::FAILED_PRECONDITION, "nothing is loaded: the first command is a play (ADR 0013 §2)" };
+
+        auto& transport = edit->getTransport();
+        switch (command.command_case())
+        {
+            case PreviewCommand::kSeek:
+                if (command.seek().tick() < 0)
+                    return invalid ("a seek to tick " + std::to_string (command.seek().tick()));
+                transport.setPosition (timeOf (*edit, command.seek().tick()));
+                break;
+            case PreviewCommand::kLoop:
+                if (command.loop().start_tick() < 0 || command.loop().end_tick() < 0)
+                    return invalid ("a loop from " + std::to_string (command.loop().start_tick()) + " to "
+                                    + std::to_string (command.loop().end_tick()));
+                loop = command.loop();
+                applyLoop();
+                break;
+            case PreviewCommand::kStop:
+                transport.stop (false, false);
+                break;
+            default:
+                break;
+        }
+        ++applied;
+        return ::grpc::Status::OK;
+    }
+
+    // Where the transport is, as the answer to the command just applied.
+    PreviewEvent event()
+    {
+        PreviewEvent now;
+        now.set_applied (applied);
+        now.set_state (escribass::render::v1::PREVIEW_STATE_STOPPED);
+        if (edit != nullptr)
+        {
+            auto& transport = edit->getTransport();
+            now.set_tick (tickOf (*edit, transport.getPosition()));
+            if (transport.isPlaying())
+                now.set_state (escribass::render::v1::PREVIEW_STATE_PLAYING);
+        }
+        last = now;
+        return now;
+    }
+
+    // An event the transport has earned on its own since the last one — the tick moved, or it
+    // reached the end of the plan and stopped there — or nothing.
+    //
+    // Once per turn of the dispatch loop rather than on a timer of its own: the rate is then
+    // whatever the loop already runs at, and there is no interval here for anybody to choose.
+    std::optional<PreviewEvent> moved()
+    {
+        if (edit == nullptr)
+            return std::nullopt;
+        auto& transport = edit->getTransport();
+        // The end of the plan is where an export stops, so it is where a preview stops. Not
+        // while looping: a loop past the end is one somebody set.
+        if (transport.isPlaying() && ! transport.looping
+            && tickOf (*edit, transport.getPosition()) >= loaded.length_ticks())
+            transport.stop (false, false);
+        const auto before = last;
+        const auto now = event();
+        if (now.tick() == before.tick() && now.state() == before.state())
+            return std::nullopt;
+        return now;
+    }
+
+    // Stops the transport and frees the edit, here on the message thread, before the engine it
+    // belongs to is destroyed.
+    void release()
+    {
+        if (edit == nullptr)
+            return;
+        edit->getTransport().stop (false, true);
+        edit.reset();
+    }
+
+private:
+    ::grpc::Status play (const PreviewPlay& request)
+    {
+        if (request.start_tick() < 0)
+            return invalid ("a play from tick " + std::to_string (request.start_tick()));
+
+        // **Replaced, never diffed** (ADR 0013 §2) — and not replaced when it is the same plan.
+        // A play after a stop sends the plan it stopped, and building that again would throw
+        // away the plugin instances `PreviewStop` exists to keep.
+        if (edit == nullptr || ! google::protobuf::util::MessageDifferencer::Equals (request.plan(), loaded))
+        {
+            if (const auto why = check (request.plan(), *engine.getAudioFileFormatManager().getWavFormat()); ! why.empty())
+                return invalid (why);
+            release();
+            auto built = editFor (engine, plugins, request.plan(), te::Edit::forEditing);
+            if (! built)
+                return invalid (built.error());
+            edit = std::move (built->first);
+            loaded = request.plan();
+            edit->getTransport().ensureContextAllocated();
+            // The loop is the transport's and the transport is new, so it is carried over: a
+            // person looping a bar while editing it keeps looping it through every edit.
+            applyLoop();
+        }
+
+        auto& transport = edit->getTransport();
+        transport.setPosition (timeOf (*edit, request.start_tick()));
+        transport.play (false);
+        ++applied;
+        return ::grpc::Status::OK;
+    }
+
+    // ADR 0013 §2: an empty range — `end_tick` at or before `start_tick` — clears the loop.
+    void applyLoop()
+    {
+        auto& transport = edit->getTransport();
+        if (loop.end_tick() > loop.start_tick())
+        {
+            transport.setLoopRange ({ timeOf (*edit, loop.start_tick()), timeOf (*edit, loop.end_tick()) });
+            transport.looping = true;
+        }
+        else
+        {
+            transport.looping = false;
+        }
+    }
+
+    static ::grpc::Status invalid (const std::string& why)
+    {
+        return { ::grpc::StatusCode::INVALID_ARGUMENT, why };
+    }
+
+    te::Engine& engine;
+    Plugins plugins;
+    std::unique_ptr<te::Edit> edit;
+    RenderPlan loaded;
+    escribass::render::v1::PreviewLoop loop;
+    PreviewEvent last;
+    int applied = 0;
+};
+
+// Why there is no device, as specifically as the machine can say it.
+std::string noDevice (juce::AudioDeviceManager& devices)
+{
+    std::string listed;
+    for (auto* type : devices.getAvailableDeviceTypes())
+    {
+        type->scanForDevices();
+        listed += " " + type->getTypeName().toStdString() + " lists "
+                  + std::to_string (type->getDeviceNames (false).size()) + " output devices.";
+    }
+    if (listed.empty())
+        listed = " JUCE offers no device type at all.";
+    return "no audio output device opened, so there is nothing to play a preview on." + listed
+           + " This build speaks ALSA, not PulseAudio or PipeWire, so a machine whose sound goes"
+             " through a sound server needs ALSA's default PCM pointed at it (ADR 0013 §4)";
+}
+
+// `Preview` over a Unix socket, for as long as its one stream is open (ADR 0013 §3).
+//
+// **The device first, then the address.** An engine that cannot play has nothing to serve, so a
+// machine with no output device is an exit code and a sentence on stderr before any socket
+// exists — which is what reaches a caller as `engine_failed` with the reason in it, and what a
+// runner with no sound card can check (docs/plan.md, M2 trap 13).
+//
+// **What pumps the message loop is this function, and only this function**: the same
+// `runDispatchLoopUntil (10)` an export turns (ADR 0008 §3), here for as long as the stream is
+// open. The device pulls blocks on a thread of its own (ALSA's, in JUCE), gRPC reads and writes
+// on threads of its own, and everything between them that touches Tracktion — building the edit,
+// moving the transport, reading where it is — happens here, between turns (ADR 0013 §4, as
+// measured in M2 PR 10).
+int preview (const juce::File& manifestFile)
+{
+    const auto manifest = manifestIn (manifestFile);
+    if (! manifest.isObject())
+        return kBadPlan;
+
+    const juce::ScopedJuceInitialiser_GUI juceInit;
+    const TempDir scratch;
+    const auto dir = scratchIn (scratch);
+    if (dir == juce::File())
+        return kRenderFailed;
+
+    pinPanLaw();
+    auto owned = std::make_unique<te::Engine> (std::make_unique<Storage> (dir), std::make_unique<te::UIBehaviour>(),
+                                               std::make_unique<Behaviour> (true));
+    auto& engine = *owned;
+    auto& devices = engine.getDeviceManager().deviceManager;
+    auto* device = devices.getCurrentAudioDevice();
+    if (device == nullptr || device->getActiveOutputChannels().countNumberOfSetBits() == 0)
+    {
+        // Said after the engine is gone, because its destructor logs a line of its own and the
+        // caller reports the *last* lines of stderr: the reason belongs at the end, where it is
+        // read, and not behind "Cleaning up temp files..".
+        const auto why = noDevice (devices);
+        owned.reset();
+        return fail (kNoDevice, why);
+    }
+    // What the device is, for the person reading stderr: trap 3's third reason is that this rate
+    // is the machine's and an export's is the plan's. Not under this binary's own name, which
+    // `fail` keeps for the lines that say why something did not happen — the ones a caller
+    // shows first.
+    std::fprintf (stderr, "preview: playing on %s '%s' at %.0f Hz, %d frames a block\n",
+                  device->getTypeName().toRawUTF8(), device->getName().toRawUTF8(),
+                  device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+
+    PreviewService service;
+    int failed = kOk;
+    const auto server = announce (service, dir, failed);
+    if (server == nullptr)
+        return failed;
+
+    for (int idle = 0; ! service.isOpen(); ++idle)
+    {
+        if (idle >= kIdleIterations)
+            return fail (kRenderFailed, "no Preview stream opened");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+    }
+
+    Player player (engine, manifest);
+    int code = kOk;
+    while (! service.isDone())
+    {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        if (code != kOk)
+            continue;  // refused; the handler is on its way out
+        auto [commands, closed] = service.take();
+        for (const auto& command : commands)
+        {
+            if (auto refused = player.apply (command); ! refused.ok())
+            {
+                code = fail (kBadPlan, refused.error_message());
+                service.refuse (std::move (refused));
+                break;
+            }
+            service.say (player.event());
+        }
+        if (code == kOk && ! closed)
+            if (const auto moved = player.moved())
+                service.say (*moved);
+    }
+
+    player.release();
     server->Shutdown();
     server->Wait();
     return code;
@@ -1841,11 +2349,18 @@ int main (int argc, char** argv)
         return scan (args);
     }
     // The mode is which service this process serves (ADR 0013 §3): `--render` registers
-    // `Render` alone, so a `Preview` call on an engine spawned to export is refused by gRPC
-    // rather than by a check somebody remembered to write. `Preview` is M2 PR 10's, and until
-    // it exists an engine with no mode serves nothing rather than guessing at one.
-    if (argc == 3 && std::string_view (argv[2]) == "--render")
-        return serve (juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1])));
-    return fail (kBadPlan, "usage: escribass_engine <manifest.json> --render"
+    // `Render` alone and `--preview` registers `Preview` alone, so a preview asked of an engine
+    // spawned to export is refused by gRPC rather than by a check somebody remembered to write,
+    // and an export can never be served by the process that is playing. An engine with no mode
+    // serves nothing rather than guessing at one.
+    if (argc == 3)
+    {
+        const auto manifest = juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[1]));
+        if (std::string_view (argv[2]) == "--render")
+            return serve (manifest);
+        if (std::string_view (argv[2]) == "--preview")
+            return preview (manifest);
+    }
+    return fail (kBadPlan, "usage: escribass_engine <manifest.json> (--render | --preview)"
                            "\n       escribass_engine [--version | --scan <manifest.json> <component> <plugin.vst3> ...]");
 }

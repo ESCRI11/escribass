@@ -205,8 +205,10 @@ jobs:
       # What this job reads is app/ and everything app/ is built from: `core` and `schema` are
       # path dependencies of the host, `schema`'s generated TypeScript is what the frontend
       # decodes with, and the pins are in the two lockfiles. What it does not read is docs/,
-      # engine/, .githooks/ and the root prose files — the engine is a subprocess `app` does
-      # not yet launch, and no source path connects them (CLAUDE.md #6).
+      # engine/, .githooks/ and the root prose files. Since M2 PR 10 `app` does launch the
+      # engine — `core`'s session spawns it for a preview or an export — but only at run time
+      # and by a path it is told, so nothing here builds, links or tests against it, and no
+      # source path connects them (CLAUDE.md #6).
       - name: Does this pull request touch anything this job reads?
         if: github.event_name == 'pull_request'
         run: |
@@ -996,6 +998,36 @@ jobs:
           echo "run 2 $two"
           [ -n "$one" ] && [ "$one" = "$two" ] \
             || { echo "::error::two sampler renders disagree: $one vs $two"; exit 1; }
+
+      # M2 PR 10, and docs/plan.md's M2 trap 13 turned into something this job can see. A
+      # runner has no sound card, so a preview here has nothing to play on — and the one thing
+      # that must never happen is a process that opens no device, serves a stream anyway, and
+      # answers every command as though it were playing. What a preview *does* on a device is
+      # untested in CI and says so: `tests/renders.rs`'s ignored test, which the `renders` job
+      # below prints as ignored, with its reason, on every run.
+      #
+      # So this asserts the loud half: exit 6, nothing on stdout — no socket was ever announced,
+      # so no caller can be served — and the sentence on stderr that names what is missing. The
+      # `timeout` is for a runner that turned out to have a device after all: the engine would
+      # then name a socket and wait for a stream, and that is reported as what it is rather
+      # than as a hang or a failure of this check.
+      - name: A preview with no audio device says so instead of playing nothing
+        if: env.SKIP != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          set +e
+          timeout 60 "$engine" engine/build/manifest.json --preview > preview.out 2> preview.err
+          code=$?
+          set -e
+          tail -3 preview.err
+          if [ "$code" = 124 ] && [ -s preview.out ]; then
+            echo "::warning::this runner opened an audio device and served a preview on $(cat preview.out); the no-device check did not run"
+            exit 0
+          fi
+          [ "$code" = 6 ] || { echo "::error::a preview with no device exited $code rather than 6"; exit 1; }
+          [ ! -s preview.out ] || { echo "::error::a preview with no device announced a socket: $(cat preview.out)"; exit 1; }
+          grep -q "no audio output device opened" preview.err \
+            || { echo "::error::a preview with no device did not say that was why"; exit 1; }
 
       # What the two jobs below render with: this engine binary, these plugin binaries, this
       # manifest. Uploaded rather than rebuilt, because ADR 0009 §6's question is whether *the

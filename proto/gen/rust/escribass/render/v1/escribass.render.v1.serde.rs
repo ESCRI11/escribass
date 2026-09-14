@@ -998,6 +998,9 @@ impl serde::Serialize for PreviewEvent {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.render.v1.PreviewEvent", len)?;
         if true {
             struct_ser.serialize_field("tick", &self.tick)?;
@@ -1006,6 +1009,9 @@ impl serde::Serialize for PreviewEvent {
             let v = PreviewState::try_from(self.state)
                 .map_err(|_| serde::ser::Error::custom(format!("Invalid variant {}", self.state)))?;
             struct_ser.serialize_field("state", &v)?;
+        }
+        if true {
+            struct_ser.serialize_field("applied", &self.applied)?;
         }
         struct_ser.end()
     }
@@ -1019,12 +1025,14 @@ impl<'de> serde::Deserialize<'de> for PreviewEvent {
         const FIELDS: &[&str] = &[
             "tick",
             "state",
+            "applied",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             Tick,
             State,
+            Applied,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -1048,6 +1056,7 @@ impl<'de> serde::Deserialize<'de> for PreviewEvent {
                         match value {
                             "tick" => Ok(GeneratedField::Tick),
                             "state" => Ok(GeneratedField::State),
+                            "applied" => Ok(GeneratedField::Applied),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -1069,6 +1078,7 @@ impl<'de> serde::Deserialize<'de> for PreviewEvent {
             {
                 let mut tick__ = None;
                 let mut state__ = None;
+                let mut applied__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::Tick => {
@@ -1085,11 +1095,20 @@ impl<'de> serde::Deserialize<'de> for PreviewEvent {
                             }
                             state__ = Some(map_.next_value::<PreviewState>()? as i32);
                         }
+                        GeneratedField::Applied => {
+                            if applied__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("applied"));
+                            }
+                            applied__ = 
+                                Some(map_.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
                     }
                 }
                 Ok(PreviewEvent {
                     tick: tick__.unwrap_or_default(),
                     state: state__.unwrap_or_default(),
+                    applied: applied__.unwrap_or_default(),
                 })
             }
         }

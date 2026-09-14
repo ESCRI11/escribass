@@ -755,6 +755,15 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
                                 .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
                             render_shaped(&answered(client.render_export(request)).await)
                         }
+                        // Its own arm, like `render_export`: a preview answers with where
+                        // the transport is (song_tools.proto, `PreviewResponse`). No scripted
+                        // step starts one — a dry run, or a refusal for a transport that is
+                        // not there — so `event` is null on both transports.
+                        "render_preview" => {
+                            let request: RenderPreviewRequest = serde_json::from_value(args)
+                                .unwrap_or_else(|e| panic!("step {id} (`{}`): {e}", step.tool));
+                            preview_shaped(&answered(client.render_preview(request)).await)
+                        }
                         unknown => panic!("step {id}: the suite does not know `{unknown}`"),
                     }
                 };
@@ -848,6 +857,19 @@ fn render_shaped(response: &escribass_proto::tools::RenderResponse) -> Value {
         })).collect::<Vec<_>>(),
         "summary": response.summary,
         "result": response.result,
+    })
+}
+
+/// A `PreviewResponse` in the shape MCP puts on the wire, `event` through the generated
+/// serializer for `render_shaped`'s reason.
+fn preview_shaped(response: &escribass_proto::tools::PreviewResponse) -> Value {
+    json!({
+        "valid": response.valid,
+        "errors": response.errors.iter().map(|e| json!({
+            "path": e.path, "rule": e.rule, "message": e.message,
+        })).collect::<Vec<_>>(),
+        "summary": response.summary,
+        "event": response.event,
     })
 }
 
@@ -962,20 +984,94 @@ fn a_real_render_needs_an_engine_and_says_so_rather_than_pretending() {
     assert!(!wav.exists());
 }
 
+/// What this suite covers of `render_preview`, and what it cannot.
+///
+/// A preview's real effect is sound, which no script can observe and no runner here can
+/// produce: CI has no sound card (docs/plan.md, M2 trap 13). So the scripts carry what is a
+/// function of the document — a dry-run play whose summary is compiled from the plan, and two
+/// refusals that are real calls, one of them for a transport that is not there — and the engine
+/// half is `core/tests/preview.rs` against a model of the stream, and `tests/renders.rs`'s
+/// ignored test on a machine with a device.
+///
+/// **The seam is what this asserts**, as the test above does for a render: asked to play for
+/// real, a server told no engine answers as an operator error, and one told a missing engine
+/// says that — never a `valid: true` that played nothing, which a caller could not tell from a
+/// preview that did.
+#[test]
+fn a_real_preview_needs_an_engine_and_says_so_rather_than_pretending() {
+    let directory = Scratch::new("determinism", "no_engine_preview");
+    let handshake = [
+        json!({
+            "jsonrpc": "2.0", "id": 0, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": {"name": "escribass-tests", "version": "1"}
+            }
+        }),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "render_preview", "arguments": {"play": {"start_tick": 0}}}
+        }),
+    ];
+
+    let frames = speak(&["--create", "--manifest", MANIFEST], &directory.0, &handshake);
+    let refused = frames.iter().find(|f| f["id"] == json!(1)).expect("an answer");
+    let message = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("engine_unset"), "expected an operator error, got {refused}");
+    assert_eq!(refused["error"]["code"], json!(-32603), "an operator error, not a refusal");
+
+    let absent = directory.0.join("no-such-engine");
+    let frames = speak(
+        &["--manifest", MANIFEST, "--engine", &absent.display().to_string()],
+        &directory.0,
+        &handshake,
+    );
+    let refused = frames.iter().find(|f| f["id"] == json!(1)).expect("an answer");
+    let message = refused["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("engine_missing"), "expected an operator error, got {refused}");
+}
+
+/// The tools whose real effect leaves the document — a file written, sound played — beside the
+/// test in this file that asserts their seam instead, because no script can observe the effect.
+///
+/// A tool scripted **only as dry runs** tests nothing its real call does, and until M2 PR 10 the
+/// guard below would have been satisfied by exactly that. So a dry-run-only tool must be one of
+/// these, and every one of these must name a test that is here.
+const BEYOND_THE_DOCUMENT: [(&str, &str); 2] = [
+    ("render_export", "a_real_render_needs_an_engine_and_says_so_rather_than_pretending"),
+    ("render_preview", "a_real_preview_needs_an_engine_and_says_so_rather_than_pretending"),
+];
+
 #[test]
 fn every_implemented_tool_is_scripted() {
     // The `call!` macro panics on a tool it does not know, but only if a script calls one — so
     // an RPC could be implemented, advertised, and never exercised here. This is what makes
     // `tests/AGENTS.md`'s "add it to a script" a rule rather than a suggestion.
-    let scripted: std::collections::BTreeSet<String> =
-        ["every_tool", "refusals", "branches", "render", "undo"]
+    let steps: Vec<Step> = ["every_tool", "refusals", "branches", "render", "undo"]
         .iter()
         .flat_map(|name| script(name))
-        .map(|step| step.tool)
         .collect();
+    let this_file = include_str!("determinism.rs");
 
     for tool in escribass_core::call::IMPLEMENTED {
-        assert!(scripted.contains(*tool), "`{tool}` is implemented and no script calls it");
+        let calls: Vec<&Step> = steps.iter().filter(|step| step.tool == *tool).collect();
+        assert!(!calls.is_empty(), "`{tool}` is implemented and no script calls it");
+
+        let seam = BEYOND_THE_DOCUMENT.iter().find(|(beyond, _)| beyond == tool);
+        let only_dry = calls.iter().all(|step| step.args.get("dry_run") == Some(&json!(true)));
+        assert!(
+            !only_dry || seam.is_some(),
+            "`{tool}` is scripted only as dry runs, which exercise nothing its real call does. \
+             Script a real call, or add it to BEYOND_THE_DOCUMENT with the test that asserts \
+             its seam"
+        );
+        if let Some((_, test)) = seam {
+            assert!(
+                this_file.contains(&format!("fn {test}()")),
+                "`{tool}` names `{test}` as the test of its seam, and there is no such test"
+            );
+        }
     }
 }
 

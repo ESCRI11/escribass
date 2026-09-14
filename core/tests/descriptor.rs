@@ -30,20 +30,22 @@ fn every_rpc_in_the_service_becomes_a_tool() {
     // the point is that the descriptor and the service agree, so an RPC cannot be added
     // without appearing.
     let names = tool_names(DESCRIPTOR).unwrap();
-    assert_eq!(names.len(), 24);
+    assert_eq!(names.len(), 25);
     for expected in ["apply_patch", "get_song", "get_song_at", "get_history", "merge_branch",
-                     "add_asset", "render_export", "undo", "redo"] {
+                     "add_asset", "render_export", "render_preview", "undo", "redo"] {
         assert!(names.contains(&expected.to_string()), "{expected} missing from {names:?}");
     }
 }
 
 #[test]
 fn the_engine_service_is_not_a_tool() {
-    // `Render` (proto/render.proto) shares the descriptor with `SongTools` and is the engine's
-    // boundary, not a model's. Advertised, it would hand a model a `RenderPlan` to fill in —
-    // the one message ADR 0007 §1 keeps out of every process but core.
+    // `Render` and `Preview` (proto/render.proto) share the descriptor with `SongTools` and are
+    // the engine's boundary, not a model's. Advertised, either would hand a model a `RenderPlan`
+    // to fill in — the one message ADR 0007 §1 keeps out of every process but core. A model
+    // previews through `render_preview`, which compiles the plan itself.
     let names = tool_names(DESCRIPTOR).unwrap();
     assert!(!names.contains(&"render".to_string()), "{names:?}");
+    assert!(!names.contains(&"preview".to_string()), "{names:?}");
 }
 
 #[test]

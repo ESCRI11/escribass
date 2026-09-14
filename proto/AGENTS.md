@@ -10,7 +10,7 @@ project file directly (§5), so what is not here cannot be done to a song.
 | Path | Role | Written by |
 |---|---|---|
 | `song_tools.proto` | The `SongTools` service, its request messages, `ToolResult` and `Violation`. | hand |
-| `render.proto` | The engine's boundary: `RenderPlan`, `RenderResult`, the `Preview` command and event messages, and two services nobody implements before M2 (ADR 0007, ADR 0008, ADR 0013). | hand |
+| `render.proto` | The engine's boundary: `RenderPlan`, `RenderResult`, the `Preview` command and event messages, and the engine's two services — `Render`, served since M2 PR 9, and `Preview`, since PR 10 (ADR 0007, ADR 0008, ADR 0013). | hand |
 | `buf.gen.yaml` | Four plugins: `protoc-gen-prost`, `protoc-gen-prost-serde`, `protoc-gen-tonic`, `protoc-gen-es`. | hand |
 | `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
@@ -44,6 +44,8 @@ schema/node_modules/.bin/tsc --noEmit --project proto   # the generated TypeScri
 | `dry_run` on every request, defaulting to false | §5's name and polarity. Inverting it would make the wire disagree with the spec that names it. | ADR 0006 §3 |
 | Rust and TypeScript, not Python | TypeScript's consumer arrived in M2 PR 2 and the codegen followed in PR 3; Python's is M3's orchestrator and does not exist, so generating it now pulls `grpclib` into `schema/` to satisfy nothing. | ADR 0006 §7 |
 | The TypeScript reaches the model by package name, not by generating it | `rewrite_imports` in `buf.gen.yaml` is the TypeScript spelling of the Rust `extern_path` lines beside it. Left alone the generated code imports `./song_pb.js`, a file this module must not generate: a second `Song` in the tree compiles perfectly well and is wrong. `@escribass/schema`'s `"./*_pb.js"` export exists to answer that rewrite. | CLAUDE.md #1, ADR 0006 §4 |
+| `RenderPreview` answers with `PreviewResponse`, and takes `PreviewFrom` rather than `PreviewPlay` | A preview records nothing, and where the transport is has nowhere to go in `ToolResult`. Its `play` cannot carry `PreviewPlay`, whose plan is `core`'s to compile from the document and never a caller's; the other three commands reuse the engine's messages whole. | ADR 0006 §1, extended; ADR 0013 §2, amended |
+| `PreviewEvent.applied` | The one field the preview shape took after PR 3 settled it. The transport writes events of its own while it plays, and an answer can only be told from them by the count of commands it answers. Additive, so `buf breaking` had nothing to say. | ADR 0013 §2, amended |
 | `Preview` is a service of its own | ADR 0013 §3 makes the engine's mode *which service the process serves*: an export process registers `Render` alone, so gRPC refuses a preview on it rather than a check written in C++. | ADR 0013 §2, amended; §3 |
 | A `tonic` server *and* client | `core` implements the server. The client's first consumer is `core`'s own end-to-end test, which needs something to call with; M2's app is the next. Hand-rolling one would be more code than generating it. | ADR 0006 §7 |
 | Three `buf lint` rules relaxed | `SERVICE_SUFFIX`, `RPC_RESPONSE_STANDARD_NAME` and `RPC_REQUEST_RESPONSE_UNIQUE` all contradict the shape §5 specifies. Scoped to this module in the root `buf.yaml`; `schema/` keeps the full rule set. | ADR 0006 §8 |

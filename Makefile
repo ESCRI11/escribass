@@ -25,6 +25,18 @@ export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(PATH)
 PROJECT  ?= $(HOME)/demo.escri
 MANIFEST ?= tests/fixtures/manifest.json
 
+# The engine the window's play button starts, told and never searched for (ADR 0008 §2). Empty by
+# default, and pressing play then says `engine_unset` while everything else works. An engine
+# plays the plugins at the paths a manifest names, which the committed fixture has dropped, so a
+# window that should make a sound wants both from a build:
+#
+#   make run ENGINE=engine/build/escribass_engine_artefacts/Release/escribass_engine \
+#            MANIFEST=engine/build/manifest.json
+#
+# On Linux it also wants ALSA's default output to reach a speaker; ADR 0013 §4 says what that
+# takes on a machine whose sound goes through PulseAudio.
+ENGINE ?=
+
 # A prefix for the launch itself, empty by default. It exists because the webview a Tauri app
 # renders in belongs to the operating system (ADR 0016 §5), and a machine whose WebKitGTK is
 # not where the loader expects needs the binary wrapped rather than the recipe changed. The
@@ -68,6 +80,7 @@ help:
 	@echo
 	@echo 'PROJECT  = $(PROJECT)'
 	@echo 'MANIFEST = $(MANIFEST)'
+	@echo 'ENGINE   = $(ENGINE)'
 	@echo 'LAUNCH   = $(LAUNCH)'
 
 # `--features custom-protocol` is not optional and not a detail: without it the host builds in
@@ -75,7 +88,7 @@ help:
 # the binary serves the `app/dist` it embedded, which is why the frontend is built first.
 run: webkit project app/dist
 	cargo build --release -p escribass-app --features custom-protocol
-	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(PROJECT)
+	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(PROJECT)
 
 # The iteration loop: Vite serves the frontend, the debug host loads it from there, and an edit
 # to `app/src` reloads the window. No `--features custom-protocol` here — dev mode is exactly
@@ -103,7 +116,7 @@ dev: webkit project app/node_modules
 	vite=$$!; \
 	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
 	until curl -sf http://localhost:5173/ >/dev/null 2>&1; do sleep 0.3; done; \
-	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(PROJECT)
+	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(PROJECT)
 
 # A project to look at. `escribass-mcp --create` makes one and serves it, which is the whole
 # of it — `app` has no File · New yet, and creating a project is not a tool (ADR 0006 §5).

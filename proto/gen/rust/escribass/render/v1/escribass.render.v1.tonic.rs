@@ -322,7 +322,8 @@ pub mod preview_client {
     /** Defined in M2 PR 3 and implemented in PR 10, for the reason Render was defined a milestone
  before anything served it: buf breaking runs on pull requests only, so a service that grows
  across two of them is compared against a main that has already moved (docs/plan.md, M2
- trap 12).
+ trap 12). PR 10 added one field, `PreviewEvent.applied`, which is additive and is the one
+ thing the shape could not have been settled without a caller to wait on an answer.
 */
     #[derive(Debug, Clone)]
     pub struct PreviewClient<T> {
@@ -463,7 +464,8 @@ pub mod preview_server {
     /** Defined in M2 PR 3 and implemented in PR 10, for the reason Render was defined a milestone
  before anything served it: buf breaking runs on pull requests only, so a service that grows
  across two of them is compared against a main that has already moved (docs/plan.md, M2
- trap 12).
+ trap 12). PR 10 added one field, `PreviewEvent.applied`, which is additive and is the one
+ thing the shape could not have been settled without a caller to wait on an answer.
 */
     #[derive(Debug)]
     pub struct PreviewServer<T> {

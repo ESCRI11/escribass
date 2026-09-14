@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-09. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-15. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -48,7 +48,8 @@ stale.
 | M2.6 | `ParamRef` reaching a fader: the validator's two domains, `mix_lanes` compiled, the engine driving Tracktion's fader with our formula | done | PR #60 |
 | M2.7 | The mixer and §9's seventh view, the generic parameter editor over the build manifest | done | PR #61 |
 | M2.8 | The patch log with its provenance column, branch switching, and `merge_branch`'s per-path resolution | done | PR #62 |
-| M2.9 | `Render` over gRPC, the stdio path deleted, and the four goldens unmoved | done | this PR |
+| M2.9 | `Render` over gRPC, the stdio path deleted, and the four goldens unmoved | done | PR #63 |
+| M2.10 | Preview: the live process, the device, the `Preview` stream, `render_preview`, and the window's transport — ADR 0013 §4's thread shape measured first | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -719,7 +720,7 @@ wrong answer, which is why the decision does not wait on them and the code does.
 | 7 | `m2.7-mixer-and-editors` | The mixer over the automation PR 6 laid down, and §9's seventh view: the generic parameter editor over the build manifest (ADR 0014 §1). Two forms over two maps, in one PR because they are the same form. **Done**, and being the same form is what kept the two *numbers* apart: one `<input type="range">`, two builders, and a domain carried as a value — the mixer writes `Mix`'s own units by `apply_patch`, the editor writes a plugin's normalised `0..1` by `set_param`, and `set_param` answers a track id with `device_unknown`, which is the same boundary `mute` and `solo` meet as `ParamRef` targets (ADR 0015 §1). ADR 0017 transferred whole: 60 pointer positions on a fader became 32 dry runs and 0 entries, `Apply` one, ⌘Z one. What it did **not** transfer is the refusal — a fader's travel is inside the validator's range in two of the three domains and unbounded in the third, so no legal fader can be refused, and the only refusal a form can reach is a parameter this build's manifest does not declare. Two defects only the window could show: the detail pane's `flex-basis: auto` made 2855 rows shrink the arrangement to a sliver, and a long refusal wrapped the pane head mid-drag and moved every row under it by 24 px — ADR 0017 §3's own defect in the element chosen to avoid it |
 | 8 | `m2.8-history` | The patch-log view with its provenance column, branch switching, and `merge_branch`'s per-path resolution (ADR 0015 §3). **Done.** The row named three things and the fourth was the one worth finding: what `merge_branch` *returns* for a conflict, which ADR 0015 §3 had assumed rather than checked. It matched — one `merge_conflict` `Violation` per path, keyed by the other side's operation path — so the map is keyed by a string the caller was already handed and nothing translates. Resolution is then a **filter on the other side's ops**: theirs wins by being applied, ours by not being, and there is no code path an unconflicted merge does not already take. Two things fell out that the ADR did not name and now does: a pick for a path that merge is not in conflict about is refused (`resolution_unknown`), because ignoring it either lets a typo pass for a choice or edits the merge; and a merge resolved entirely to this branch still records its two-parent entry with **empty `ops`** — the one place a call that changes no document writes one, since what it records is the join and without it the same conflict returns for ever. Driven in the window against a real conflict: two branches riding one track's `gain_db` and `pan`, resolved one each way, and the merge landed with `gain_db` mine and `pan` theirs. ADR 0017 does **not** extend to the form — nothing is dragged, so nothing is measuring a distance against the layout — but the pane head's no-wrap rule still earns its keep, because a conflict message is the longest refusal in the application |
 | 9 | `m2.9-engine-grpc` | `Render` over gRPC, the stdio path deleted, `core/src/engine.rs` and the render suite moved onto the new transport, and gRPC added to `tests/renders.rs`'s `COMPONENTS` and the engine job's list. **The silent PR**: the four goldens must not move, and any byte that does needs a named cause (trap 5). **Done, and no byte moved.** The build questions ADR 0013 §1 left open were answered by building: gRPC owns the one `add_subdirectory` of our protobuf, aimed at our submodule, and costs 11 m 16 s cold on two cores and 6.1 s warm. The design question the row did not anticipate is how `core` learns where to dial — the engine names its own socket and prints it once the server is listening, so the address and the readiness are one line and nothing polls or sleeps (ADR 0013 §3, amended). One flake was found and fixed rather than lived with: this suite writes the program it then executes, and under load `exec` refused it with `ETXTBSY` twice in forty runs. And one consequence nothing predicted: the engine's provenance is *one* list, so `grpc` joining it reaches the build manifest's `engine` block and therefore every project's `lock.json` — five determinism goldens gained one line each, which is `tests/AGENTS.md`'s pin rule arriving rather than a surprise, and it was CI's fixture-subset step that said so |
-| 10 | `m2.10-preview` | Preview playback: the live process, the audio device, the `Preview` stream, and `render_preview` — one of §5's tools, and the milestone it has been between since M0.3 |
+| 10 | `m2.10-preview` | Preview playback: the live process, the audio device, the `Preview` stream, and `render_preview` — one of §5's tools, and the milestone it has been between since M0.3. **Done, and the measurement came first**, because PR 0 never took it: ADR 0013 §4's shape **held** — `main` pumps the JUCE loop and drains the stream's commands between turns, gRPC reads and writes on its own threads, the device calls back on ALSA's — measured against a real JUCE ALSA device on ALSA's `null` PCM, since this machine has **no ALSA device at all** and JUCE speaks no PulseAudio. Every later command answers in one 10 ms turn; a first play, cold, in about 190 ms. The package a person installs to hear it here is named in ADR 0013 §4 (`libasound2-plugins`, and a default PCM of `type pulse`). The design question the row did not name was **which event answers which command**: the transport writes events of its own while it plays, order cannot tell them from an answer, and `PreviewEvent.applied` is the one field `render.proto`'s preview shape took after PR 3. Three things became checks rather than sentences: a machine with no device is exit 6 before any socket exists (the engine job runs it), an export refuses to render if it was offered a device type (every render in CI runs that), and an export process answers a `Preview` stream `UNIMPLEMENTED` (asserted against the real binary, and a mutant that served one failed it). The scripting guard grew a tooth it lacked: a tool scripted only as dry runs now fails it unless it names the test that asserts its seam. The window plays, stops and returns to the start, draws the engine's own tick, and says *live preview · not the render* beside the button. **Found on the way and not fixed here:** a real export of `tests/determinism/render` crashes the engine on `main` too — heap corruption after Rubber Band warns about a 0.0853 stretch ratio — which is M1's and PR 11's (Known gaps) |
 | 11 | `m2.11-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen per milestone and M1 returned eighteen; budgeting a PR for it is cheaper than discovering it |
 | 12 | `m2.12-close` | Docs walked against the code, the deferred ledger walked again, `CLAUDE.md` to M3 |
 
@@ -772,6 +773,11 @@ did). Mixing them gets the silent half reviewed as plumbing.
    is set; and the audio device's sample rate is the user's while the render's is
    `RenderTarget`'s, which puts a resampler in one path and not the other. A UI that publishes a
    hash and plays a different sound will be reported as a bug by the first person who checks.
+   **Answered in PR 10 where a person presses play**: the button sits beside *live preview · not
+   the render*, with those three reasons on hover; `PreviewResponse` carries no hash; and the
+   window shows no render hash anywhere (trap 4). PR 10 found a fourth, smaller difference and
+   wrote it down: Tracktion's reported transport position is its UI's, refreshed by a timer and
+   held for 200 ms after a seek, so a playhead can trail the audio by a timer period.
 4. **The status bar is a `[MUST]` rendered as a widget.** Plate 1 shows the `song.json` hash,
    the patch count, the last render hash and `lock.json 14/14 verified`; Plate 6 shows "0
    differing samples outside the edited range". Every one of those is a §11 claim, and a widget
@@ -792,7 +798,13 @@ did). Mixing them gets the silent half reviewed as plumbing.
 6. **A live engine is a resident plugin instance, which is the thing ADR 0008 §2 refused.**
    **Answered:** ADR 0013 §3 keeps preview and export in different processes, so an export never
    inherits a smoother. The trap survives as the thing that must not be optimised away — one
-   process serving both is the obvious saving, and it is the one that cannot be taken.
+   process serving both is the obvious saving, and it is the one that cannot be taken. **Held in
+   PR 10, by test rather than by care:** an export while a preview plays is a second process in
+   `--render` mode (`core/tests/preview.rs` counts them), and a `Preview` stream opened on an
+   export process is answered `UNIMPLEMENTED` by gRPC (`tests/renders.rs`, against the real
+   binary; a mutant engine that also served `Preview` failed it). What a preview *does* keep
+   resident is deliberate and inside its own process: a play of the plan already loaded builds
+   nothing, so a stop and a play reuse the instances.
 7. **The webview cannot be pinned.** §17 pins by commit or exact version; the engine the
    frontend renders in ships with the operating system, moves under the user, and paints a
    canvas differently across versions. **Recorded rather than solved:** §17's Tauri row says so,
@@ -827,6 +839,17 @@ did). Mixing them gets the silent half reviewed as plumbing.
     *instantiating* a VST3. Opening an audio device is a different question, and preview
     playback would be the first thing in this repository that cannot be tested where everything
     else is tested. PR 0 measures it; ADR 0012 §5's golden does not pretend to cover it.
+    **Measured in PR 10, and true.** What is tested without a device is everything that is not
+    sound: `core`'s whole half of the stream against a model of the engine (the process and its
+    mode, one process across commands, the plan a play carries, answers told from chatter, the
+    refusals, a machine with no device, a stream the engine ends, the process leaving when its
+    stream closes); the tool through both transports in the determinism suite; and, in the
+    engine job, the real binary on a runner with no sound card exiting 6 before it announces a
+    socket. What is not tested in CI is the engine's half on a device — a live edit, a moving
+    transport, a loop, a seek, a resume — and it is **untested loudly**: `tests/renders.rs`
+    carries it as an ignored test whose reason prints on every run of the render suite, which
+    passes against ALSA's `null` PCM and fails on a machine with no device saying so. Sound
+    reaching a speaker, real-time pacing and underruns are measured nowhere, and say so.
 
 ### What M2 will not claim
 
@@ -890,9 +913,19 @@ milestone cannot be checked at that milestone's close; it can only be argued abo
 | ~~Undo/redo **tools**~~ | **Closed 2026-09-09 in M2 PR 5.** `undo` and `redo` are RPCs with `dry_run` and the shared `ToolResult`, and the one thing ADR 0005 §4 named without specifying — the session-held stack — is a cursor into the log's first-parent chain that **skips the log's own undo and redo entries**, cleared by any other commit and by a branch switch. Both halves were found by pressing the key: reading `HEAD` again undoes the undo, and walking the mechanism's own entries takes the document forwards (ADR 0005 §4, extended) | closed — M2 PR 5 | ADR 0005 §4 |
 | Committing a direct-manipulation gesture on release, without a separate approval | ADR 0017 §4 gives the first control §9's flow whole — release proposes, a person applies — because it is the first control that has a diff to show and the flow should be reviewed where it can be seen. Whether *every* gesture should keep asking is a different question: undo is what would make committing on release safe, and it exists now | The first time per-gesture approval is measured as friction rather than argued about — a session where the Apply click is counted | ADR 0017 §4 |
 | `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
+| Loop and seek controls in the window | `render_preview` takes a loop and a seek, and the window offers play, stop and back-to-start: one control per thing a person has asked for, and a loop needs a range gesture on the timeline, which is a second hit region ADR 0017 would have to be applied to | The first time someone wants to hear a bar loop while editing it — the tool already does it, and a loop survives the replacement plan an edit sends | M2 PR 10 |
+| Choosing the audio device, its rate and its buffer | A preview plays on ALSA's default output at whatever the device offers, and nothing in the window or on the command line chooses another. A device list is a view over the machine, and the one this repository has measured on had none | A machine whose default ALSA output is not the one wanted, or a buffer the default underruns on | M2 PR 10 |
 | Refusing a plugin parameter that reaches an RNG nothing can seed | §8 forbids Surge XT's `rand_pm1`, Dexed's LFO waveform 5 and sfizz's `*_random` **in a fixture**, and nothing refuses them in a user's song. §11's first bullet is about our own code and holds; §2.2's promise — "every source of randomness carries an explicit seed stored in the project" — is wider, and neither of those two RNGs can be seeded at all (Surge's is the wall clock with `seed_rand` commented out; Dexed's `randstate_` is indeterminate memory). Closing it is a validator rule and therefore an ADR — and the rule has no producer: something must say which parameter values reach an unseedable RNG, and today that is prose in §8 for three plugins vetted by hand. Deferred rather than opened as an M2 question because M2 adds no plugin and no randomness: the gap is M1's, unchanged, and an ADR now would design a denylist against a build manifest that carries none, which is ADR 0002 §7's reason ~~The first milestone that lets a user *choose* a patch or supply a plugin~~ — **retriggered 2026-09-07** (ADR 0014 §3). That trigger has now fired: M2 places a parameter editor and choosing a patch is exactly how a user reaches those RNGs. It fired and the work still cannot be done, and the blocker is the second fact, not the first: closing it needs a **denylist of `ParamID`s per plugin in the build manifest**, and §8's prose names the paths in English — "oscillator random start phase, unison detune, the sample-and-hold LFO shape, and the effects that call `rand_pm1`" — which becomes `ParamID`s only by auditing Surge XT's 2855 parameters against its source. That is a source audit, and no user interface produces one. Half a denylist is worse than none, because it looks complete | A build manifest that can say which parameters reach an unseedable RNG | §8's per-plugin notes; M2 planning, 2026-09-07; retriggered by ADR 0014 §3 |
 
 ## Known gaps
+
+- **A real export of `tests/determinism/render` crashes the engine** — `corrupted double-linked
+  list`, killed by a signal — after Rubber Band warns that a stretch ratio of 0.0853 "yields ideal
+  inhop < minimum". Found in M2 PR 10 by previewing that fixture, and reproduced with `main`'s own
+  engine by exporting it, so it is M1's audio-clip path and not preview's. It is loud rather than
+  silent — `engine_failed`, never a WAV — which is why it waits for PR 11's review rather than
+  riding in a preview PR. No render golden stretches that far, which is how four goldens stayed
+  green over it.
 
 - **`Project::write` rewrites every entry file on every commit** — O(history) I/O per call.
   ~~Invisible while histories are short; the tool API is what will make it visible.~~ That
