@@ -125,11 +125,18 @@ pub fn refuse_if_older_than_source(what: &str, built: &Path, roots: &[PathBuf], 
 ///
 /// Named here, beside the walker, so a test can assert these roots actually reach
 /// `engine/src/main.cpp` — the claim that was false before M1 PR 13 and that nothing checked.
+///
+/// The two `.proto` files are here because the engine's CMake generates its C++ from them
+/// (ADR 0008 §4), so an engine built before a change to either speaks the old wire. They were
+/// missing until M2 PR 11, and M2 PR 10 changed `render.proto` under the hole; the test that
+/// walks these roots now reads the CMake for the protos it must reach.
 pub fn engine_sources() -> Vec<PathBuf> {
     vec![
         workspace().join("engine").join("src"),
         workspace().join("engine").join("cmake"),
         workspace().join("engine").join("CMakeLists.txt"),
+        workspace().join("proto").join("render.proto"),
+        workspace().join("schema").join("song.proto"),
     ]
 }
 
@@ -163,6 +170,11 @@ fn refuse_if_stale(name: &str, path: &Path) {
 /// The whole script goes in before anything is read, which is simple and bounded: a script
 /// larger than the stdin pipe buffer would deadlock, so the size is asserted rather than left
 /// to be discovered as a hang.
+///
+/// Closing stdin straight after is safe because the server makes it so, not because the scripts
+/// are quick: until M2 PR 11 rmcp dropped every answer still unwritten five seconds after EOF,
+/// and this suite was exposed the moment a scripted call was slow. `escribass-mcp` now reads EOF
+/// only once every call it read has been answered, in the order sent (`core::InArrivalOrder`).
 pub fn speak(flags: &[&str], project: &Path, requests: &[Value]) -> Vec<Value> {
     let mut conversation = String::new();
     for request in requests {

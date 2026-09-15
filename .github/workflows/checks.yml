@@ -331,15 +331,19 @@ jobs:
       #
       # `core/` stays excluded even though the `renders` job below drives `core` into this
       # build — and since M2 PR 9 this job *compiles* `core`, for the `render-once` client the
-      # steps below dial the engine with. That is still ADR 0007 §4's split doing its job rather
-      # than an oversight: a `core` change that would move a render moves the plan first, and
-      # the plan goldens are in the `checks` job, which every `core/` change runs. A render
-      # mismatch with those green is the engine's; a `core` change with those red never gets as
-      # far as asking. The boundary `render-once` exercises has its own suite in the same
-      # `checks` job — `core/tests/engine.rs`, over a real socket against a real `Render`
-      # server — so a `core` change that broke the client fails there rather than here.
-      # Rebuilding Tracktion for an hour to learn what a plan diff already says is the trade
-      # this exclusion is making.
+      # steps below dial the engine with. That is ADR 0007 §4's split doing its job for most of
+      # `core`: a change to the validator, the log or a tool reaches a render only through the
+      # document, and the determinism goldens in the `checks` job pin the document.
+      #
+      # **Except the two files that stand between the document and a WAV** (M2 PR 11):
+      # `core/src/render.rs`, which compiles the plan, and `core/src/engine.rs`, the client that
+      # hands it over. The plan golden in `checks` pins the plan of *one* script, not the plans
+      # of the fixtures `tests/renders/` renders, so a `compile` change could move a golden WAV
+      # with every plan golden green — and `renders` and `cross-cpu` inherit this gate, so until
+      # this exception no golden was rendered for either file in CI at all. A pull request
+      # touching one of them pays the engine build; one that touches the rest of `core/` still
+      # does not. `tests/determinism.rs` runs this step against both, so an exclusion widened
+      # back over them fails there rather than going quiet here.
       #
       # `app/` joins it in M2 PR 2, and by the same argument one step further out: the frontend
       # is downstream of `core`, talks to the host in-process, and never touches `engine`, a
@@ -364,7 +368,8 @@ jobs:
           changed=$(git diff --name-only "$base" HEAD) || exit 0
           echo "$changed"
           [ -n "$changed" ] || exit 0
-          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|app/|\.githooks/|[^/]+\.md$)'; then
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|app/|\.githooks/|[^/]+\.md$)' &&
+             ! printf '%s\n' "$changed" | grep -qE '^core/src/(render|engine)\.rs$'; then
             echo "SKIP=1" >> "$GITHUB_ENV"
             echo "skip=1" >> "$GITHUB_OUTPUT"
             echo "::notice::nothing the engine is built from has changed"

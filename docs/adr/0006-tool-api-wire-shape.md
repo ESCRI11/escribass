@@ -202,6 +202,29 @@ Schema. A hand-written schema is a hand-maintained description of the model — 
 first time a field is added, and the only symptom is that the model never learns the field
 exists. A test asserts every RPC has a tool and every request field has a schema property.
 
+**Extended 2026-09-15, in M2 PR 11: the server reads one request at a time, and reads end of
+input only once every request it read has been answered.** Choosing an SDK chose its serve loop,
+and two properties of that loop were never written down because nothing had tested them. On EOF
+it gives the handlers still running five seconds and then closes the transport, dropping every
+answer not yet written — a `tracing` warning nothing prints, and exit 0. A client that pipelines
+and half-closes, which is every scripted client and the determinism suite's own, lost answers
+whenever the work queued behind EOF outlasted that: forty cheap calls and one six-second render
+answered between 1 and 11 of 42, eight runs in eight, while the log showed every call applied.
+And it spawns a task per request, so the order calls are *applied* in was tokio's: arrival order
+held in `escribass-mcp` only because it runs a current-thread runtime whose handler never
+awaits, and `SongTools` served from a multi-threaded runtime applied two hundred calls out of
+order three runs in three. A client that sends `add_section` then `undo` depends on that order.
+
+Both are fixed where the messages enter and nowhere else: `core::mcp::InArrivalOrder` wraps the
+transport, withholds the next message while a request is unanswered, and counts a request
+answered once its response is **written**. So no second handler can start before the first has
+finished, whatever the runtime, and the EOF the loop reads finds nothing in flight for its drain
+to drop. rmcp is a pinned dependency and is not patched; and fixing only the determinism suite's
+client would have left every other client that half-closes exactly as broken. Strictly one at a
+time costs nothing today, since the session is one `Mutex` and every call is synchronous; its
+ceiling is a handler that awaits a request *to the client*, whose answer would queue behind it,
+and nothing here makes one.
+
 ### 7. `proto/` generates Rust only, until there is a consumer for anything else
 
 `schema/` generates Rust, TypeScript and Python because §14.1 requires the *model* be

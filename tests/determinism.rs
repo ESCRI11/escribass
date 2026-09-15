@@ -1076,6 +1076,102 @@ fn every_implemented_tool_is_scripted() {
 }
 
 #[test]
+fn make_run_opens_against_the_build_manifest_when_there_is_one() {
+    // M2 PR 11. `make run` defaulted to the committed manifest fixture, a subset with no Dexed,
+    // so a project written against a real build refused to open with `lock_mismatch` on a
+    // person's first launch. The default is now the build's manifest where one exists, and the
+    // fixture otherwise with a line saying what that costs. Run against the real Makefile from
+    // a directory that does or does not hold a build, with no MANIFEST in the environment.
+    let default = |with_build: bool| {
+        let dir = Scratch::new("determinism", "make");
+        std::fs::create_dir_all(dir.0.join("engine/build")).expect("a scratch directory");
+        if with_build {
+            std::fs::write(dir.0.join("engine/build/manifest.json"), "{}").expect("a manifest");
+        }
+        let ran = Command::new("make")
+            .arg("-s")
+            .arg("-C")
+            .arg(&dir.0)
+            .arg("-f")
+            .arg(common::workspace().join("Makefile"))
+            .arg("help")
+            .env_remove("MANIFEST")
+            .output()
+            .expect("make runs");
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+        let said = String::from_utf8(ran.stdout).expect("utf-8");
+        let chosen = said
+            .lines()
+            .find_map(|line| line.strip_prefix("MANIFEST = "))
+            .expect("`make help` names the manifest")
+            .to_string();
+        (chosen, said)
+    };
+
+    assert_eq!(default(true).0, "engine/build/manifest.json", "a build's manifest, when there is one");
+    let (chosen, said) = default(false);
+    assert_eq!(chosen, "tests/fixtures/manifest.json", "and the fixture when there is not");
+    assert!(said.contains("lock_mismatch"), "saying what the fixture cannot open: {said}");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_engine_job_renders_a_change_to_compile_or_to_the_client() {
+    // M2 PR 11. The engine job's path gate skipped every `core/`-only pull request, and
+    // `renders` and `cross-cpu` inherit its decision — so a change to `compile` or to the
+    // engine client, the two files between the document and a WAV, rendered no golden in CI.
+    // Written into no test, and so into no pull request, until a review found it.
+    //
+    // The step is run as `checks.yml` has it, not retyped: its `run:` block is read out of the
+    // workflow and executed against a `git` that reports one changed file.
+    use std::os::unix::fs::PermissionsExt;
+
+    let workflow = std::fs::read_to_string(common::workspace().join(".github/workflows/checks.yml"))
+        .expect("the workflow");
+    let step = workflow
+        .split_once("- name: Does this pull request touch anything the engine is built from?")
+        .and_then(|(_, rest)| rest.split_once("run: |\n"))
+        .map(|(_, rest)| rest)
+        .expect("the engine job's gate step, by its name");
+    let script: String = step
+        .lines()
+        .take_while(|line| line.is_empty() || line.starts_with("          "))
+        .map(|line| format!("{}\n", line.get(10..).unwrap_or("")))
+        .collect();
+
+    let dir = Scratch::new("determinism", "engine-gate");
+    std::fs::create_dir_all(&dir.0).expect("a scratch directory");
+    let git = dir.0.join("git");
+    std::fs::write(&git, "#!/bin/sh\ncase \"$1\" in rev-parse) echo base ;; diff) echo \"$CHANGED\" ;; esac\n")
+        .expect("a git that reports one change");
+    std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let gate = dir.0.join("gate.sh");
+    std::fs::write(&gate, script).expect("the step, as a file");
+
+    let skips = |changed: &str| {
+        let env = dir.0.join("env");
+        let _ = std::fs::remove_file(&env);
+        let ran = Command::new("bash")
+            .arg(&gate)
+            .env("PATH", format!("{}:{}", dir.0.display(), std::env::var("PATH").unwrap_or_default()))
+            .env("CHANGED", changed)
+            .env("GITHUB_ENV", &env)
+            .env("GITHUB_OUTPUT", dir.0.join("output"))
+            .output()
+            .expect("bash runs the step");
+        assert!(ran.status.success(), "the gate step failed: {}", String::from_utf8_lossy(&ran.stderr));
+        std::fs::read_to_string(&env).unwrap_or_default().contains("SKIP=1")
+    };
+
+    // A gate that never skips would pass the two assertions after these, so it is shown able to.
+    assert!(skips("core/src/session.rs"), "the rest of `core/` still skips the engine build");
+    assert!(skips("docs/plan.md"), "and so does prose");
+    for file in ["core/src/render.rs", "core/src/engine.rs"] {
+        assert!(!skips(file), "a pull request touching only `{file}` skipped the engine, so no golden renders");
+    }
+}
+
+#[test]
 fn the_staleness_guard_walks_the_engine_sources_too() {
     // M1 PR 13, B2. `renders.rs` compared the seven commits the engine embeds and called that
     // its provenance check; those are *submodule* HEADs, so editing `engine/src/main.cpp`
@@ -1104,8 +1200,39 @@ fn the_staleness_guard_walks_the_engine_sources_too() {
         .downcast_ref::<String>()
         .cloned()
         .unwrap_or_else(|| refused.downcast_ref::<&str>().map(|s| s.to_string()).unwrap_or_default());
+    // Named, and one of the roots: which one is whichever file was touched last, and since M2
+    // PR 11 that can be a `.proto` rather than something under `engine/`.
+    let named = message
+        .split_once("is older than ")
+        .and_then(|(_, rest)| rest.split_once(".\n"))
+        .map(|(path, _)| common::workspace().join(path));
     assert!(
-        message.contains("engine/"),
+        named.is_some_and(|path| engine_sources().iter().any(|root| path.starts_with(root))),
         "the guard must name the engine source it is older than, and said: {message}"
     );
+
+    // M2 PR 11. A binary dated 1970 is older than *any* root, so the check above passes whatever
+    // the roots are — and they did not reach the two `.proto` files the engine's CMake generates
+    // C++ from. Touching both left the render suite green; touching `main.cpp` did not. So the
+    // roots are asserted against what the CMake actually reads, not against a list typed here
+    // twice: every `${REPO}/….proto` in `engine/CMakeLists.txt` must lie under one of them.
+    let cmake = std::fs::read_to_string(common::workspace().join("engine/CMakeLists.txt")).expect("CMakeLists");
+    let protos: std::collections::BTreeSet<&str> = cmake
+        .split(|c: char| c.is_whitespace() || c == ')')
+        .filter_map(|word| word.strip_prefix("${REPO}/"))
+        .filter(|path| path.ends_with(".proto"))
+        .collect();
+    assert!(
+        protos.contains("proto/render.proto") && protos.contains("schema/song.proto"),
+        "the engine generates C++ from both protos, and this read found {protos:?}"
+    );
+    let roots = engine_sources();
+    for proto in protos {
+        let file = common::workspace().join(proto);
+        assert!(
+            roots.iter().any(|root| file.starts_with(root)),
+            "the engine's CMake generates C++ from `{proto}`, and no staleness root reaches it: a \
+             change to it would leave the render suite green against an engine built before it"
+        );
+    }
 }

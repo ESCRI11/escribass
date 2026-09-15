@@ -153,12 +153,49 @@ pressing the key rather than by reading the log:
   is the thing itself. `core/tests/undo.rs` fails on exactly that sequence when the skip is
   removed.
 
-The cursor is cleared by any other commit — in the one place a session appends — and by a branch
+The cursor was cleared by any other commit — in the one place a session appends — and by a branch
 switch, which appends nothing and still moves the document: `version` counts per branch, so a
-redo across a switch would restore a document from another line of history. It is session state,
-so a process that has just opened the project has undone nothing and its first `undo` reverses
-whatever the log ends with; the log records entries, not key presses, and there is nothing
-honest to recover.
+redo across a switch would restore a document from another line of history. ~~It is session
+state, so a process that has just opened the project has undone nothing and its first `undo`
+reverses whatever the log ends with; the log records entries, not key presses, and there is
+nothing honest to recover.~~
+
+**Amended 2026-09-15, in M2 PR 11: the cursor is read off the log, and no session holds one.**
+The struck sentence was wrong twice over. Its premise was false — every undo and every redo *is*
+an entry, so the log records exactly the key presses that changed anything, and how far back ⌘Z
+has walked is recoverable from it. And its promise did not hold: with the cursor empty, the walk
+started at `HEAD`, skipped the undo entries a previous process had appended, and landed on an
+edit they had already reversed. A review reproduced it with real binaries — two edits, two undos,
+a relaunch, one undo — and that undo **re-applied the first edit**, recorded under the tool name
+`undo`; with one prior undo instead of two, the fresh press was a silent "no change". A cursor
+that has to stay alive to be right is state the log should carry, which is ADR 0004's point about
+`song.json` one level up.
+
+So the first-parent chain from `HEAD` is replayed as an editor's undo stack, on every press: an
+`undo` entry steps back one change, a `redo` entry steps forward one, and any other entry is a
+new change that discards whatever had been undone and not redone. ⌘Z reverses the last change
+still in effect — `diff(current, materialise(parents[0]))`, unchanged — and ⇧⌘Z restores the
+change undone most recently — `materialise` of that entry, unchanged. What the 2026-09-09
+extension got right survives as a consequence rather than a rule: the log's own undo and redo
+entries are never changes to reverse, and a commit discards what could be redone by being in the
+log. Three things follow that the session-held list got wrong or had to be told:
+
+- **An edit made after an undo supersedes what was undone.** After edit A · edit B · ⌘Z · edit C,
+  ⌘Z twice is C then A. The list's walk skipped B's undo entry and landed on B, so the second
+  press was "no change" — and it pushed B, so ⇧⌘Z later restored a document with B and without C,
+  which the history never held after B was undone. This was wrong in a single session too.
+- **An entry that changed nothing is not a change.** A merge that keeps this branch's value at
+  every conflict records its join with empty `ops` (ADR 0015 §3, extended); reversing it restores
+  the document already there, so nothing written could ever step past it. It is skipped, and
+  still discards what was undone, as any commit does.
+- **A branch switch needs no rule.** Another branch is another chain, so a redo cannot restore a
+  document from another line of history, and switching back finds that branch's history where it
+  was left, where the list forgot it on the way across.
+
+The cost is O(history) per press, the order `materialise` already costs beside it. A log written
+before this amendment that already carries an undo which went forwards is read as what it says —
+an undo — and is not repaired: the log is the record, and rewriting it is what ADR 0001 refuses.
+`core/tests/undo.rs` closes and reopens the project between presses, which no undo test did.
 
 Both tools go through `Project::prepare_merge` rather than `prepare`, and they are the second
 caller that needs it: their ops are `diff(current, materialise(…))`, so the versions in them were

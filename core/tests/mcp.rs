@@ -443,3 +443,145 @@ fn a_real_render_answer_carries_the_engine_s_own_result() {
         "and the names are the proto's, not serde's defaults"
     );
 }
+
+// ---- pipelining: every call answered, in the order it arrived (M2 PR 11) ----
+
+/// The names of the sections added along the first-parent chain a `get_history` answer
+/// describes, oldest first — the order the log says the calls were applied in.
+fn sections_in_log_order(history: &Value) -> Vec<String> {
+    let entries = history["entries"].as_object().expect("entries");
+    let mut at = history["refs"][history["head"].as_str().expect("head")].as_str().map(str::to_string);
+    let mut chain = Vec::new();
+    while let Some(id) = at {
+        let entry = &entries[&id];
+        chain.push(entry.clone());
+        at = entry["parents"].get(0).and_then(Value::as_str).map(str::to_string);
+    }
+    chain
+        .iter()
+        .rev()
+        .flat_map(|entry| entry["ops"].as_array().cloned().unwrap_or_default())
+        .filter(|op| op["op"] == json!("add") && op["path"].as_str().is_some_and(|p| p.starts_with("/sections/")))
+        .map(|op| op["value"]["name"].as_str().expect("a section has a name").to_string())
+        .collect()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_client_that_pipelines_and_closes_stdin_is_answered_every_call_in_order() {
+    // rmcp gives the handlers still running when stdin closes five seconds, then closes the
+    // transport and drops whatever is unwritten, exiting 0. This is `speak`'s shape and every
+    // scripted client's: the whole conversation written, then EOF. Before `InArrivalOrder`,
+    // forty cheap calls and one slow one answered between 1 and 11 of 42, while the log showed
+    // every call applied — edits in the log that the client was never told about.
+    //
+    // The slow call is a render whose engine takes six seconds to fail, which is past the
+    // drain and needs no build. The forty in front of it are what put it behind the EOF: the
+    // serve loop reads the end of input while the queue is still being worked through.
+    let dir = Scratch::new();
+    let work = Scratch::new();
+    std::fs::create_dir_all(&work.0).expect("a scratch directory");
+    let engine = common::fake_engine(&work.0, "sleep 6\nexit 3");
+
+    let section = |id, name: &str| {
+        call(id, "add_section", json!({"name": name, "start_tick": 0, "end_tick": 480}))
+    };
+    let mut requests: Vec<Value> = (1..=40).map(|i| section(i, &format!("s{i:02}"))).collect();
+    let wav = work.0.join("out.wav");
+    requests.push(call(41, "render_export", json!({"output_path": wav, "dry_run": false})));
+    requests.push(section(42, "after"));
+    requests.push(call(43, "undo", json!({})));
+    requests.push(call(44, "get_history", json!({})));
+
+    let lines = served(&dir.0, &["--engine", engine.to_str().expect("a utf-8 path")], &requests);
+
+    let answered: std::collections::BTreeSet<u64> = lines
+        .iter()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok()?["id"].as_u64())
+        .collect();
+    let missing: Vec<u64> = (1..=44).filter(|id| !answered.contains(id)).collect();
+    assert!(missing.is_empty(), "stdin closed and these calls were never answered: {missing:?}");
+
+    assert!(
+        response(&lines, 41)["error"]["message"].as_str().is_some_and(|m| m.contains("engine_failed")),
+        "the slow call is answered too, with what went wrong: {}",
+        response(&lines, 41)
+    );
+    let undone = &response(&lines, 43)["result"]["structuredContent"];
+    assert_eq!(undone["valid"], json!(true), "{undone}");
+    let mut expected: Vec<String> = (1..=40).map(|i| format!("s{i:02}")).collect();
+    expected.push("after".to_string());
+    assert_eq!(
+        sections_in_log_order(&response(&lines, 44)["result"]["structuredContent"]),
+        expected,
+        "applied in the order sent, the render between them included"
+    );
+    assert!(
+        undone["patch"].as_array().expect("a patch").iter().any(|op| op["op"] == json!("remove")),
+        "and the undo sent after `after` is the one that removed it: {undone}"
+    );
+}
+
+#[test]
+fn calls_are_applied_in_arrival_order_whatever_runtime_serves_them() {
+    // `escribass-mcp` runs a current-thread runtime and its handler never awaits, so the calls
+    // it spawns happen to run in the order they arrived. That is tokio's scheduling, not a
+    // promise: `SongTools` is a library type, and served from a multi-threaded runtime rmcp's
+    // task per request races for the session's lock. Measured before `InArrivalOrder`: two
+    // hundred `add_section`s applied out of order three runs in three.
+    use escribass_core::{new_song, FixedClock, InArrivalOrder, Project, SeededIds, Session, SongTools};
+    use escribass_schema::song::Author;
+    use rmcp::transport::async_rw::AsyncRwTransport;
+    use rmcp::ServiceExt;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let dir = Scratch::new();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .expect("a multi-threaded runtime");
+    let names: Vec<String> = (1..=200).map(|i| format!("s{i:03}")).collect();
+    let lines = runtime.block_on(async {
+        let mut ids = SeededIds::default();
+        let clock = FixedClock(1_788_307_200_000);
+        let song = new_song(&mut ids, &clock, Author::Model);
+        let project =
+            Project::create(&dir.0, &song, &mut ids, &clock, Author::Model, common::manifest())
+                .expect("a project");
+        let server = SongTools::new(Session::new(project, Box::new(ids), Box::new(clock), Author::Model))
+            .expect("the tool list builds");
+
+        let (client, served) = tokio::io::duplex(1 << 20);
+        let (read, write) = tokio::io::split(served);
+        let transport = InArrivalOrder::new(AsyncRwTransport::new_server(read, write));
+        let serving = tokio::spawn(async move {
+            server.serve(transport).await.expect("the handshake").waiting().await.expect("served")
+        });
+
+        let mut script = line(&json!({
+            "jsonrpc": "2.0", "id": 0, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                       "clientInfo": {"name": "test", "version": "1"}}
+        }));
+        script.push_str(&line(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"})));
+        for (id, name) in (1..).zip(&names) {
+            script.push_str(&line(&call(id, "add_section", json!({"name": name, "start_tick": 0, "end_tick": 480}))));
+        }
+        script.push_str(&line(&call(201, "get_history", json!({}))));
+        let (answers, mut asking) = tokio::io::split(client);
+        asking.write_all(script.as_bytes()).await.expect("the script is sent");
+        asking.shutdown().await.expect("and the input closed");
+
+        let mut lines = Vec::new();
+        let mut reading = BufReader::new(answers).lines();
+        while let Some(read) = reading.next_line().await.expect("answers are lines") {
+            lines.push(read);
+        }
+        serving.await.expect("the server task ends");
+        lines
+    });
+
+    assert_eq!(lines.len(), 202, "every call and the handshake answered");
+    assert_eq!(sections_in_log_order(&response(&lines, 201)["result"]["structuredContent"]), names);
+}

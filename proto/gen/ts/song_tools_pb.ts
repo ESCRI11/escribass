@@ -852,7 +852,10 @@ export const RenderResponseSchema: GenMessage<RenderResponse> = /*@__PURE__*/
  *
  * dry_run compiles and checks, starts no process and sends nothing. Because it moves nothing,
  * its `event` is where a live transport last said it was — which is how a caller asks where
- * playback has reached without changing it (ADR 0006 §3).
+ * playback has reached without changing it (ADR 0006 §3). The one thing a dry run can change is
+ * a transport that has already ended: it is reported as the operator error it is and the dead
+ * preview is forgotten, as the next real call would — session state, never the document or the
+ * log, and the next `play` starts afresh.
  *
  * @generated from message escribass.tools.v1.RenderPreviewRequest
  */
@@ -971,10 +974,14 @@ export const PreviewResponseSchema: GenMessage<PreviewResponse> = /*@__PURE__*/
  * (ADR 0005 §4). So an undo is a thing that happened rather than a thing that unhappened,
  * and it appears in the audit trail §5 asks for like any other entry.
  *
- * The session holds the entries it has undone. A second call therefore walks one further
- * back rather than undoing the undo, and any other commit clears that list — which is the
- * model every editor already implements. It is per session and per process: a session that
- * has just opened has undone nothing, so its first call reverses whatever the log ends with.
+ * Which change that is, is read off the log and held by no session: the branch's first-parent
+ * chain is replayed as an editor's undo stack, where an `undo` entry steps back, a `redo` entry
+ * steps forward and any other change discards what had been undone. So a second call walks one
+ * further back rather than undoing the undo, and a process that has just opened the project
+ * carries on exactly where the last one stopped — until M2 PR 11 the list lived in the session,
+ * and a fresh one's first call re-applied an edit an earlier undo had reversed (ADR 0005 §4,
+ * amended). An entry that changed nothing, such as a merge that kept this branch's value
+ * everywhere, is not a change to undo. Refused with `nothing_to_undo` at the start of a branch.
  *
  * @generated from message escribass.tools.v1.UndoRequest
  */
@@ -994,7 +1001,8 @@ export const UndoRequestSchema: GenMessage<UndoRequest> = /*@__PURE__*/
 
 /**
  * Re-applies the change the last `undo` reversed, by the same mechanism and with the same
- * guarantee. Refused with `nothing_to_redo` when this session has undone nothing.
+ * guarantee. Refused with `nothing_to_redo` when nothing on this branch has been undone since
+ * its last change.
  *
  * @generated from message escribass.tools.v1.RedoRequest
  */

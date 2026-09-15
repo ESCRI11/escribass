@@ -161,6 +161,29 @@ a phase vocoder over two FFTs is two different signals.
 | `OptionThreadingNever` | Trap 15 and ADR 0009 §3's single-thread requirement. `OptionThreadingAuto` is the default and lets Rubber Band decide, which makes the output a function of the machine's core count. **Measured 2026-09-07, in PR 8:** it is inert twice over, and passed anyway. The flag is read only by the R2 engine — `src/faster/R2Stretcher.cpp` is the only file in the library that mentions it — and the single-file build compiles threading out with `NO_THREADING`. A configuration that would change meaning if the engine choice moved is not a configuration. |
 | `OptionTransientsCrisp`, `OptionDetectorCompound`, `OptionPhaseLaminar`, `OptionWindowStandard`, `OptionPitchHighSpeed`, `OptionStretchElastic`, `OptionSmoothingOff`, `OptionFormantShifted`, `OptionChannelsApart` | Each of these is the current default (numerically zero), so the word comes to `OptionEngineFiner` \| `OptionThreadingNever` and nothing else. They are written explicitly so that an upstream change to any of them shows up as a diff in our source rather than as a golden that moved for no reason anyone can find. `OptionStretchElastic` is marked obsolete in the pinned header and named for completeness, not effect. |
 
+**Extended 2026-09-15, in M2 PR 11: a stretch Rubber Band objects to is refused, and never
+rendered.** The flag leaves the ratio to the engine, and nothing bounded it. `tests/determinism/render`
+stretches a four-sample asset over a 960-tick loop — a ratio of 6000 — and every real export of it
+died in glibc's allocator with "corrupted double-linked list". Measured under AddressSanitizer
+against the pinned library alone: R3 aims for an output hop of at most 512 samples at 48 kHz, so
+past a ratio of 512 its ideal input hop falls below one sample and is clamped to one, the output
+hop becomes the ratio itself, and past 4096 `R3Stretcher::synthesiseChannel` reads and writes
+beyond a 4096-sample accumulator. Between 512 and 4096 it does not overflow and says its results
+"may be suspect". The library warns before it corrupts anything, through its logger, which was
+writing to a stderr nobody read.
+
+So the engine gives the stretcher a logger of its own and refuses the clip on anything it says —
+before the first `process`, which is where the overflow happens, and again after the last
+`retrieve`. At the library's default debug level every message that reaches a logger in 4.0.0 is
+a warning that its output cannot be trusted, and a stretch it accepts logs nothing (ADR 0009 §4,
+measured), so no golden can move. The refusal is the library's own verdict rather than a copy of
+its hop arithmetic, which a pin bump could silently leave describing a limit that has moved. It
+is the engine's refusal and not compile's for the SFZ's reason — deciding it means reading the
+asset (ADR 0007 §6, extended) — and it reaches a caller as `engine_failed` carrying the sentence.
+Found in M2 PR 10 and deferred as a Known gap; a review then failed to reproduce it in twenty
+runs because its driver omitted `--seed-ids`, so the fixture's literal ids named nothing and the
+stretched clip was never added.
+
 An asset whose sample rate differs from the render target is **converted, not stretched** —
 that is resampling, and it happens whether or not `time_stretch` is set. ADR 0009 §4 lists the
 converter as a DSP surface of its own for exactly that reason. **Chosen 2026-09-07, in PR 8:**

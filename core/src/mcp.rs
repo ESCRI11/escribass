@@ -19,11 +19,15 @@ use rmcp::model::{
     ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities, ServerInfo,
     Tool,
 };
-use rmcp::service::RequestContext;
+use rmcp::model::{JsonRpcMessage, RequestId};
+use rmcp::service::{RequestContext, RxJsonRpcMessage, TxJsonRpcMessage};
+use rmcp::transport::Transport;
 use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
+use tokio::sync::watch;
 
 /// One open project, served over MCP.
 ///
@@ -149,8 +153,104 @@ impl ServerHandler for SongTools {
         // only after the write succeeded — so the guard is recovered rather than propagated.
         let mut session = self.session.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let arguments = request.arguments.clone().unwrap_or_default();
-        let answer =
-            call(&mut session, request.name.as_ref(), &arguments).map_err(unanswered)?;
+        // And the panic is answered, not only survived, since M2 PR 11: `InArrivalOrder` reads
+        // nothing more until this request has an answer, so a handler that unwound without one
+        // would hang every call after it rather than failing one.
+        let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            call(&mut session, request.name.as_ref(), &arguments)
+        }))
+        .map_err(|_| McpError::internal_error("the call panicked, and the server's stderr says where", None))?
+        .map_err(unanswered)?;
         Ok(CallToolResponse::Complete(answered(answer)))
+    }
+}
+
+/// A transport that lets the server see one request at a time, and sees the end of its input
+/// only once every request it read has been answered.
+///
+/// **Why it exists** (M2 PR 11). rmcp's serve loop, on reading EOF, gives the handlers still
+/// running **five seconds** to finish and then closes the transport, dropping every answer not
+/// yet written — with a `tracing` warning nothing prints, and exit 0 (`rmcp-3.2.0`,
+/// `service.rs`, `QuitReason::Closed`). A client that pipelines its calls and half-closes stdin,
+/// which is every scripted client and the determinism suite's `speak` among them, lost answers
+/// whenever the work queued behind EOF outlasted that: measured against forty cheap calls and one
+/// six-second render, 8 runs in 8 answered between 1 and 11 of 42. The calls themselves had all
+/// been applied, so the client was told nothing about edits that were in the log.
+///
+/// And the order the calls were **applied** in was the tokio scheduler's, not ours: rmcp spawns a
+/// task per request, so arrival order held only because `escribass-mcp` runs a current-thread
+/// runtime, its handler has no await point and the local run queue is FIFO. A client that sends
+/// `add_section` then `undo` depends on that order, and nothing here promised it.
+///
+/// Both are fixed where the messages enter, without touching rmcp (a pinned dependency):
+/// `receive` does not read the next message while a request is unanswered, and a request is
+/// answered once its response or error has been **written**. So the serve loop cannot spawn a
+/// second handler before the first has finished, whatever the runtime, and the EOF it reads —
+/// which it can only read after that — finds nothing in flight for its drain to drop.
+///
+/// `ponytail:` strictly one request at a time, which costs nothing today — the session is one
+/// `Mutex` and every tool call is synchronous, so two calls never ran at once anyway. Its
+/// ceiling is a handler that awaits a request *to the client* (sampling, roots): the client's
+/// answer would wait behind the request waiting for it. Nothing here makes one; when something
+/// does, let responses through while a request is outstanding.
+pub struct InArrivalOrder<T> {
+    inner: T,
+    /// The id of the request read and not yet answered, if there is one.
+    answering: watch::Sender<Option<RequestId>>,
+}
+
+impl<T> InArrivalOrder<T> {
+    pub fn new(inner: T) -> Self {
+        Self { inner, answering: watch::Sender::new(None) }
+    }
+}
+
+impl<T: Transport<RoleServer>> Transport<RoleServer> for InArrivalOrder<T> {
+    type Error = T::Error;
+
+    fn send(
+        &mut self,
+        item: TxJsonRpcMessage<RoleServer>,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'static {
+        let answers = match &item {
+            JsonRpcMessage::Response(response) => Some(response.id.clone()),
+            JsonRpcMessage::Error(error) => error.id.clone(),
+            JsonRpcMessage::Request(_) | JsonRpcMessage::Notification(_) => None,
+        };
+        let answering = self.answering.clone();
+        let written = self.inner.send(item);
+        async move {
+            let result = written.await;
+            // Released whether or not the write succeeded: a transport that cannot write will
+            // read EOF or an error next, and a request held open for ever would hang the server
+            // on a client that is already gone.
+            if let Some(id) = answers {
+                answering.send_if_modified(|outstanding| {
+                    let this = outstanding.as_ref() == Some(&id);
+                    if this {
+                        *outstanding = None;
+                    }
+                    this
+                });
+            }
+            result
+        }
+    }
+
+    fn receive(&mut self) -> impl Future<Output = Option<RxJsonRpcMessage<RoleServer>>> + Send {
+        async move {
+            // Cancellation-safe, as the serve loop's `select!` needs: waiting takes nothing, and
+            // rmcp's own `receive` keeps a partly read line across a dropped future.
+            let _ = self.answering.subscribe().wait_for(Option::is_none).await;
+            let message = self.inner.receive().await?;
+            if let JsonRpcMessage::Request(request) = &message {
+                self.answering.send_replace(Some(request.id.clone()));
+            }
+            Some(message)
+        }
+    }
+
+    fn close(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        self.inner.close()
     }
 }
