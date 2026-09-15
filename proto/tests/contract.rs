@@ -81,7 +81,7 @@ fn the_generated_serde_impl_base64_encodes_patch() {
 /// caught by nothing until a reviewer noticed.
 #[test]
 fn every_mutating_rpc_returns_the_shared_result() {
-    const OWN_SHAPE: [(&str, &str); 5] = [
+    const OWN_SHAPE: [(&str, &str); 6] = [
         ("GetSong", "SongResponse"),
         ("GetSongAt", "SongResponse"),
         ("GetHistory", "HistoryResponse"),
@@ -90,6 +90,9 @@ fn every_mutating_rpc_returns_the_shared_result() {
         // `entry_id` would be permanently empty — and the hash it reports has nowhere to go
         // in `ToolResult` (song_tools.proto, `RenderResponse`; ADR 0006 §1, amended).
         ("RenderExport", "RenderResponse"),
+        // M2 PR 10, for the same reason: a preview records nothing, and where the transport is
+        // has nowhere to go in `ToolResult` (song_tools.proto, `PreviewResponse`).
+        ("RenderPreview", "PreviewResponse"),
     ];
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/song_tools.proto"))
         .expect("song_tools.proto");
@@ -106,7 +109,7 @@ fn every_mutating_rpc_returns_the_shared_result() {
         }
         seen += 1;
     }
-    assert_eq!(seen, 24, "every rpc in the service is checked");
+    assert_eq!(seen, 25, "every rpc in the service is checked");
 }
 
 // ---- render.proto (ADR 0007 §2) ----

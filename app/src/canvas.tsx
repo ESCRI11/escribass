@@ -102,7 +102,17 @@ function clipped(
   context.restore();
 }
 
-export function Timeline({ view, selected }: { view: Arrangement; selected: string | null }) {
+export function Timeline({
+  view,
+  selected,
+  playhead,
+}: {
+  view: Arrangement;
+  selected: string | null;
+  /** The tick the engine's transport last reported, or null with no preview. Not a
+   *  projection of the song — it is the engine's answer, drawn over one (`App.tsx`). */
+  playhead: number | null;
+}) {
   const height = HEAD + view.tracks.length * ROW;
 
   const canvas = useCanvas(height, (context, width) => {
@@ -240,6 +250,14 @@ export function Timeline({ view, selected }: { view: Arrangement; selected: stri
         clipped(context, clip.label, left + 6, top + ROW / 2, box);
       }
     });
+
+    if (playhead !== null) {
+      context.strokeStyle = text;
+      context.beginPath();
+      context.moveTo(hairline(x(playhead)), TEMPO_ROW);
+      context.lineTo(hairline(x(playhead)), height);
+      context.stroke();
+    }
   });
 
   return <canvas ref={canvas} className="timeline" />;

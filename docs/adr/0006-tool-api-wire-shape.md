@@ -77,6 +77,12 @@ scoped to that one rule and that one file, and **PR 11 deleted it** once `main` 
 carried the old type; the `breaking` block has carried no `except` since (this paragraph and
 `proto/AGENTS.md` were still in the present tense until PR 13 read them).
 
+**Applied a third time 2026-09-15, in M2 PR 10**, with no change to the rule: `RenderPreview`
+returns `PreviewResponse` — `valid`, `errors` and `summary` beside the engine's own `PreviewEvent`,
+by value, for `RenderResponse`'s reasons. A preview records nothing, and where the transport is has
+nowhere to go in a `ToolResult`. It was added rather than changed, so `buf breaking` had nothing to
+report (ADR 0013 §2, amended).
+
 `patch` is `bytes` holding the canonical JSON text produced by the same function that fills
 `PatchEntry.ops`. This is ADR 0002 §11 applied at a second boundary: the wire carries the same
 canonical *document* the disk does. It is the re-derived diff, so it includes ADR 0005's

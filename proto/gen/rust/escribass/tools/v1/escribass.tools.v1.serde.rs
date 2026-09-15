@@ -2011,6 +2011,242 @@ impl<'de> serde::Deserialize<'de> for MoveSectionRequest {
         deserializer.deserialize_struct("escribass.tools.v1.MoveSectionRequest", FIELDS, GeneratedVisitor)
     }
 }
+impl serde::Serialize for PreviewFrom {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if true {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.PreviewFrom", len)?;
+        if let Some(v) = self.start_tick.as_ref() {
+            struct_ser.serialize_field("start_tick", v)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for PreviewFrom {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "start_tick",
+            "startTick",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            StartTick,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "startTick" | "start_tick" => Ok(GeneratedField::StartTick),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = PreviewFrom;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct escribass.tools.v1.PreviewFrom")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<PreviewFrom, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut start_tick__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::StartTick => {
+                            if start_tick__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("startTick"));
+                            }
+                            start_tick__ = 
+                                map_.next_value::<::std::option::Option<::pbjson::private::NumberDeserialize<_>>>()?.map(|x| x.0)
+                            ;
+                        }
+                    }
+                }
+                Ok(PreviewFrom {
+                    start_tick: start_tick__,
+                })
+            }
+        }
+        deserializer.deserialize_struct("escribass.tools.v1.PreviewFrom", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for PreviewResponse {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.PreviewResponse", len)?;
+        if true {
+            struct_ser.serialize_field("valid", &self.valid)?;
+        }
+        if true {
+            struct_ser.serialize_field("errors", &self.errors)?;
+        }
+        if true {
+            struct_ser.serialize_field("summary", &self.summary)?;
+        }
+        if let Some(v) = self.event.as_ref() {
+            struct_ser.serialize_field("event", v)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for PreviewResponse {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "valid",
+            "errors",
+            "summary",
+            "event",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            Valid,
+            Errors,
+            Summary,
+            Event,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "valid" => Ok(GeneratedField::Valid),
+                            "errors" => Ok(GeneratedField::Errors),
+                            "summary" => Ok(GeneratedField::Summary),
+                            "event" => Ok(GeneratedField::Event),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = PreviewResponse;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct escribass.tools.v1.PreviewResponse")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<PreviewResponse, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut valid__ = None;
+                let mut errors__ = None;
+                let mut summary__ = None;
+                let mut event__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::Valid => {
+                            if valid__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("valid"));
+                            }
+                            valid__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::Errors => {
+                            if errors__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("errors"));
+                            }
+                            errors__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::Summary => {
+                            if summary__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("summary"));
+                            }
+                            summary__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::Event => {
+                            if event__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("event"));
+                            }
+                            event__ = map_.next_value()?;
+                        }
+                    }
+                }
+                Ok(PreviewResponse {
+                    valid: valid__.unwrap_or_default(),
+                    errors: errors__.unwrap_or_default(),
+                    summary: summary__.unwrap_or_default(),
+                    event: event__,
+                })
+            }
+        }
+        deserializer.deserialize_struct("escribass.tools.v1.PreviewResponse", FIELDS, GeneratedVisitor)
+    }
+}
 impl serde::Serialize for QuantizeRequest {
     #[allow(deprecated)]
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -2359,6 +2595,159 @@ impl<'de> serde::Deserialize<'de> for RenderExportRequest {
             }
         }
         deserializer.deserialize_struct("escribass.tools.v1.RenderExportRequest", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for RenderPreviewRequest {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if true {
+            len += 1;
+        }
+        if self.command.is_some() {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.RenderPreviewRequest", len)?;
+        if true {
+            struct_ser.serialize_field("dry_run", &self.dry_run)?;
+        }
+        if let Some(v) = self.command.as_ref() {
+            match v {
+                render_preview_request::Command::Play(v) => {
+                    struct_ser.serialize_field("play", v)?;
+                }
+                render_preview_request::Command::Seek(v) => {
+                    struct_ser.serialize_field("seek", v)?;
+                }
+                render_preview_request::Command::Loop(v) => {
+                    struct_ser.serialize_field("loop", v)?;
+                }
+                render_preview_request::Command::Stop(v) => {
+                    struct_ser.serialize_field("stop", v)?;
+                }
+            }
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for RenderPreviewRequest {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "dry_run",
+            "dryRun",
+            "play",
+            "seek",
+            "loop",
+            "stop",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            DryRun,
+            Play,
+            Seek,
+            Loop,
+            Stop,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "dryRun" | "dry_run" => Ok(GeneratedField::DryRun),
+                            "play" => Ok(GeneratedField::Play),
+                            "seek" => Ok(GeneratedField::Seek),
+                            "loop" => Ok(GeneratedField::Loop),
+                            "stop" => Ok(GeneratedField::Stop),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = RenderPreviewRequest;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct escribass.tools.v1.RenderPreviewRequest")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<RenderPreviewRequest, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut dry_run__ = None;
+                let mut command__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::DryRun => {
+                            if dry_run__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("dryRun"));
+                            }
+                            dry_run__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::Play => {
+                            if command__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("play"));
+                            }
+                            command__ = map_.next_value::<::std::option::Option<_>>()?.map(render_preview_request::Command::Play)
+;
+                        }
+                        GeneratedField::Seek => {
+                            if command__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("seek"));
+                            }
+                            command__ = map_.next_value::<::std::option::Option<_>>()?.map(render_preview_request::Command::Seek)
+;
+                        }
+                        GeneratedField::Loop => {
+                            if command__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("loop"));
+                            }
+                            command__ = map_.next_value::<::std::option::Option<_>>()?.map(render_preview_request::Command::Loop)
+;
+                        }
+                        GeneratedField::Stop => {
+                            if command__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("stop"));
+                            }
+                            command__ = map_.next_value::<::std::option::Option<_>>()?.map(render_preview_request::Command::Stop)
+;
+                        }
+                    }
+                }
+                Ok(RenderPreviewRequest {
+                    dry_run: dry_run__.unwrap_or_default(),
+                    command: command__,
+                })
+            }
+        }
+        deserializer.deserialize_struct("escribass.tools.v1.RenderPreviewRequest", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for RenderResponse {

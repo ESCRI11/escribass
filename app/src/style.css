@@ -65,6 +65,21 @@ footer .mode {
   margin-left: auto;
 }
 
+/* The preview's controls, at the far end of the header. */
+.transport {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* Always on screen beside the play button, and in the accent rather than dimmed: what plays
+   is not the render, and the place to say so is where a person presses play (M2 trap 3). */
+.caveat {
+  color: var(--accent);
+  cursor: help;
+}
+
 .dim {
   color: var(--dim);
 }

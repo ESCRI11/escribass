@@ -2,13 +2,14 @@
 
 - **Status:** Accepted (2026-09-07)
 - **Affects:** `engine/` (its CMake, `main.cpp`, a new server); `proto/render.proto`;
-  `core/src/engine.rs`; `tests/renders.rs`; `docs/specs.md` §3, §8 and §17
+  `core/src/engine.rs`; `tests/renders.rs`; `docs/specs.md` §3, §8 and §17 — and, from M2 PR 10,
+  `proto/song_tools.proto`, `core/src/session.rs`, `app/`, and §5 and §9
 - **Builds on:** ADR 0008 §1 (`Render` defined in M1, implemented over gRPC at M2, and the
   stdio path deleted rather than kept), §2 (one render, one process), §3 (`main()` runs a
   message loop), §4 (the engine's C++ protobuf, pinned at v21.12), §5 (the engine reports what
   it was built from); ADR 0007 (what crosses is a `RenderPlan`); ADR 0009 §1 (what
   bit-exactness is claimed over)
-- **Recorded in:** `docs/specs.md` §3, §8, §15 and §17.
+- **Recorded in:** `docs/specs.md` §3, §5, §8, §9, §15 and §17.
 
 ## Context
 
@@ -143,6 +144,46 @@ rather than by a check someone wrote in C++ — the difference between ADR 0008 
 and being maintained by discipline. `lock.baseline.json`'s gRPC entry has said "the engine's
 Render and Preview services", in the plural, since PR 1.
 
+**Amended 2026-09-15, in PR 10, which was the first caller that had to wait on an answer.**
+The shape above held, and three things it did not say had to be decided before anything could
+use it.
+
+*Which event answers which command.* `PreviewEvent` carried a tick and a state, and both kinds of
+event the stream needs share it: the answer to a command, and what the transport reports of its
+own accord while it plays — the tick moving, and the stop at the end of the plan. With nothing to
+tell them apart, order is the only correlation, and order cannot do it: an event the transport
+writes while a command is still on the wire arrives after that command was sent and before it was
+applied, so a caller that took the next event as its answer would answer a seek with where the
+transport was a moment before the seek. Two ways out were refused — events only in answer to
+commands, which leaves an edit made while playing no way to learn where playback has reached; and
+a tick-and-state heuristic, which is a guess — and one taken: **`PreviewEvent.applied`, the number
+of commands the stream has applied when the event was written.** A caller waiting on its *n*-th
+command waits for `applied == n` and lets every earlier event update where it last heard the
+transport was. It is field 3, additive, and it is the one change `render.proto`'s preview shape
+took after PR 3 settled it; `buf breaking` has nothing to say about it.
+
+*What a replacement replaces.* A `PreviewPlay` whose plan is equal to the one loaded — compared
+field by field, as protobuf defines equality — builds nothing: the transport moves to `start_tick`
+and plays, and the plugin instances stay. That is the only way `PreviewStop`'s promise to keep
+them means anything, since a play after a stop sends the plan it stopped. A different plan builds
+a new edit, and **the loop is carried across**, because a loop is the transport's and the
+transport is new — a person looping a bar while editing it keeps looping it. Not diffed, still:
+the comparison decides whether to rebuild, never what to change.
+
+*How a preview is a tool.* §5 lists `render_preview`, and the four commands become its one
+request — `play`, `seek`, `loop`, `stop` — with `play` the one arm that cannot reuse the engine's
+own message, because `PreviewPlay` carries a plan and the plan is `core`'s to compile from the
+document, never a caller's to hand over (ADR 0007 §1). So it is `PreviewFrom { optional int32
+start_tick }`, and **absent means where the transport has reached** — which is how an edit made
+while playing is heard: the host applies the edit, then plays again with no tick, and `core`, which
+has been reading the events, fills it in. The answer is `PreviewResponse`, carrying the engine's
+event beside `valid`, `errors` and `summary` (ADR 0006 §1, extended). A **dry run** compiles and
+checks, starts nothing and sends nothing — and because it moves nothing its event is the
+transport's latest word, which is how a window asks where playback is without changing it. The
+session holds the one live preview; a seek, loop or stop with none is refused, `preview_idle`, for
+the caller to fix by playing first, and a preview that ends instead of answering is reported as an
+operator error and forgotten, so the next play starts another.
+
 ### 3. Two lifetimes in one binary, one transport: a live process for preview, a fresh one per export
 
 The engine is launched in one of two modes and the caller dials the socket it serves on. In
@@ -203,6 +244,29 @@ Determinism is unchanged and unwidened. An export is still a process born with i
 with its answer; ADR 0009 §1's claim covers exactly what it covered, and the four goldens must
 not move when the transport does. Any byte that does needs a named cause.
 
+**Amended 2026-09-15, in PR 10, which built the other lifetime.** Three things are now enforced
+rather than described.
+
+*The device before the address.* A preview process opens the machine's default output while its
+Tracktion engine is constructed, and **only then** serves: with no device it exits 6 having said
+which device types it found and what they listed, before any socket exists. A caller therefore
+meets a machine with no sound card as `engine_failed` carrying that sentence — never as a stream
+that answers every command and plays nothing — and a runner with no sound card is where that is
+checked (the engine job).
+
+*An export is headless, checked.* The whole difference between the modes is one boolean passed to
+the engine's `EngineBehaviour`, and with it false Tracktion registers no audio device type at all.
+So `render` refuses to proceed if it was offered one, and because that holds on a runner exactly as
+on a desk with a speaker, every render in CI is the check — not a golden that would only have moved
+where there is a device to move it.
+
+*gRPC's refusal, observed.* An engine started with `--render` registers `Render` alone, and a
+`Preview` stream opened on it is answered `UNIMPLEMENTED` by gRPC's dispatch. `tests/renders.rs`
+asserts that against the real binary — and a mutant engine that also registered a preview service
+failed it — so "an export never shares a process with playback" is a test and not a sentence. The
+live preview is held by `core`'s session, and an export while it plays is a second process in
+`--render` mode, which `core/tests/preview.rs` counts.
+
 ### 4. The message thread stays the main thread; the server runs beside it
 
 ADR 0008 §3 already has `main()` run a JUCE message loop, because `EditRenderer::render` is
@@ -215,13 +279,64 @@ message thread **is** `main`, the gRPC server runs on its own threads, and every
 handler does to the edit or the device is posted to the message thread. Nothing touches
 Tracktion off it.
 
-That shape is unverified. M1 measured that headless works and needs no display for
-*instantiating* a VST3; opening an audio device is a different question, and CI has no sound
-card (trap 13). PR 0's second measurement is whether a JUCE audio device opens and plays while
-the same process serves a socket, and what pumps the loop while it does. If it does not open
-headlessly, preview is the first thing in this repository that cannot be tested where everything
-else is tested — which is a fact about M2 either way, and ADR 0012 §5's projection golden does
-not pretend to cover it.
+**Measured 2026-09-15, in PR 10 — and the shape held.** This paragraph said the shape was
+unverified and gave the measurement to PR 0, which never took it. PR 10 took it before building on
+it, on an AMD Ryzen AI 9 HX PRO 370 under WSL2 (Ubuntu 24.04, g++ 13.3), with the engine this PR
+builds and a real `Preview` stream from `core`.
+
+*What pumps the loop:* the preview mode's own `runDispatchLoopUntil (10)`, turned by `main` for as
+long as the stream is open — the same call an export turns while it waits for its render (ADR 0008
+§3). Between turns, on `main`, the engine takes the commands that have arrived, applies them to the
+edit and the transport, and hands back the events to write. The device pulls blocks on a thread of
+its own (JUCE's ALSA thread), gRPC reads on one thread and writes on another, and Tracktion is
+touched on `main` alone. **One refinement of the sentence above:** "posted to the message thread"
+is a queue under a mutex that the loop drains on each turn, not `MessageManager::callAsync` — for
+the reason `Render`'s handler already polls: a message posted from gRPC's thread can outlive the
+edit it names, and a queue drained by the one thread that owns the edit cannot.
+
+*Whether a device opens here: no, and that is this machine's, not the design's.* JUCE on Linux is
+built with ALSA and without JACK (`JUCE_ALSA=1`, `JUCE_JACK=0`), and speaks neither PulseAudio nor
+PipeWire. This machine has no ALSA sound card (`/dev/snd` holds only `timer`) and no ALSA plugin
+directory, so ALSA lists **0 output devices** and the preview exits 6 saying so. The sound it has
+is WSLg's PulseAudio server, which ALSA reaches only through the `pulse` PCM plugin: **a person
+here installs `libasound2-plugins`** (Ubuntu 24.04 universe, 1.2.7.1-1ubuntu5) **and points ALSA's
+default at it** — the package ships the file as `/etc/alsa/conf.d/99-pulseaudio-default.conf.example`,
+so `sudo cp` it to the same name without `.example`, or put its two stanzas, `pcm.!default { type
+pulse }` and `ctl.!default { type pulse }`, in `~/.asoundrc`. A machine on PipeWire needs
+`pipewire-alsa` instead. None of that was installed here.
+
+*What was measured instead, and what it is worth.* ALSA ships a `null` PCM that needs no card and
+no plugin, and a process-local `~/.asoundrc` naming it the default gave JUCE a real
+`ALSAAudioIODevice` — `ALSA 'default'` at 44 100 Hz in blocks of 512 — whose thread called the
+engine's callback while the same process served the stream. Against it, from `core`'s side of the
+socket: the first play answered in **187–197 ms**, three runs, which is process start, JUCE and
+Tracktion, the device and a Surge XT edit together; every command after it in **9–11 ms**, which is
+the dispatch loop's ten-millisecond turn and nothing else; a play of the same plan in that same
+turn, building nothing, where a plan changed by an edit rebuilt in 48 ms. A loop of one beat was
+seen to wrap while playing, a seek sent while playing landed on its tick, a stop answered
+`STOPPED`, the transport stopped itself at the end of the plan, and closing the stream stopped it
+and the process **exited 0** without being killed. That establishes the thread shape and the loop,
+and nothing about sound or time: the null PCM does not block, so the transport ran several times faster than
+real time, and no speaker was involved. **Not measured on any machine, and said so:** audio
+reaching a speaker, real-time pacing, underruns under load, and a device rate other than 44.1 kHz.
+`tests/renders.rs` carries all of it as an ignored test that runs on a machine with a device, and
+passes against the null PCM.
+
+Two things the measurement showed that no document had. **Tracktion's reported position is its
+own UI's**: `TransportControl::getPosition()` is refreshed from the playhead by a timer on the
+message thread, and ignored for 200 ms after a `setPosition` (`lastUserDragTime`, a
+`Time::getMillisecondCounter` debounce), so what a `PreviewEvent` reports can trail the audio by a
+timer period and stands still for a moment after a seek. It moves no sample and decides only what
+is reported. And **a real export of `tests/determinism/render` crashes the engine** — `corrupted
+double-linked list`, killed by a signal, after Rubber Band warns that a stretch ratio of 0.0853
+"yields ideal inhop < minimum" — on `main`'s engine as on this one. It is M1's audio-clip path, not
+preview's, and is recorded for the review in `docs/plan.md` rather than fixed here.
+
+So preview **is** the first thing in this repository that cannot be tested where everything else is
+tested, as trap 13 predicted, and ADR 0012 §5's projection golden does not pretend to cover it. What
+is tested without a device is everything that is not sound (`core/tests/preview.rs`, the
+determinism suite, the engine job); what needs one is an ignored test that says why every time the
+render suite runs.
 
 ## Alternatives considered
 
@@ -281,5 +396,8 @@ not pretend to cover it.
   quality settings offline, Surge XT's factory patch reaches a wall-clock RNG unless
   `A Osc 1 Retrigger` is set, and the device's sample rate is the user's while the render's is
   `RenderTarget`'s. §8 already says the first; a UI that publishes a hash and plays a different
-  sound is a support ticket unless it says so where the user can see it.
+  sound is a support ticket unless it says so where the user can see it. **Said so, from PR 10:**
+  the window's play button sits beside the words *live preview · not the render*, with the three
+  reasons on hover; nothing a preview reports carries a hash; and the window shows no render hash
+  at all (M2 trap 4).
 - Nothing here widens ADR 0009 §1. Linux x86-64, one image, one compiler.

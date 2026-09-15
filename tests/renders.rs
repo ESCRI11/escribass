@@ -1164,3 +1164,153 @@ fn a_fader_ride_renders_the_curve_the_formula_draws() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Preview on a device (M2 PR 10)
+// ---------------------------------------------------------------------------
+
+/// **An export process cannot be asked to preview, and it is gRPC that refuses** (ADR 0013 §3).
+///
+/// The mode is which service the process serves: `--render` registers `Render` alone, so a
+/// `Preview` stream opened on it is answered `UNIMPLEMENTED` by gRPC's dispatch before a line of
+/// the engine runs. That is what keeps an export from ever sharing a process — and a plugin's
+/// smoothers — with something that was played (docs/plan.md, M2 trap 6), and it is asserted
+/// against the real binary because the claim is about the binary. It needs no device: the
+/// process asked is one that never looks for one.
+#[test]
+fn an_export_process_refuses_a_preview_by_grpcs_own_dispatch() {
+    use escribass_proto::render::preview_client::PreviewClient;
+    use escribass_proto::render::{PreviewCommand, PreviewStop};
+    use std::io::BufRead;
+
+    let engine = told("ESCRIBASS_ENGINE", ENGINE);
+    let manifest = told("ESCRIBASS_MANIFEST", "engine/build/manifest.json");
+    let mut child = std::process::Command::new(&engine)
+        .arg(&manifest)
+        .arg("--render")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the engine starts");
+    let mut address = String::new();
+    std::io::BufReader::new(child.stdout.take().expect("a stdout"))
+        .read_line(&mut address)
+        .expect("the engine names its socket");
+
+    let refused = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime")
+        .block_on(async {
+            let channel = tonic::transport::Endpoint::from_shared(address.trim().to_string())
+                .expect("an address")
+                .connect()
+                .await
+                .expect("the export process is listening");
+            let command = PreviewCommand {
+                command: Some(escribass_proto::render::preview_command::Command::Stop(PreviewStop {})),
+            };
+            PreviewClient::new(channel)
+                .preview(tonic::codegen::tokio_stream::iter(vec![command]))
+                .await
+                .map(|_| ())
+        });
+    let _ = child.kill();
+    let _ = child.wait();
+
+    let status = refused.expect_err("an export process served a preview");
+    assert_eq!(status.code(), tonic::Code::Unimplemented, "{status}");
+}
+
+/// **A preview playing through this machine's audio device — untested wherever this suite runs
+/// in CI, and ignored so that it says so every time.**
+///
+/// Everything a preview does that is not sound is tested without a device: `core`'s half
+/// against a model of the stream (`core/tests/preview.rs`), the tool through both transports
+/// (`determinism.rs`), and the engine refusing loudly on a runner with no sound card (the engine
+/// job). What is left needs a device, and no CI runner has one (docs/plan.md, M2 trap 13): the
+/// engine building a live edit from a real plan, its transport moving on the device's clock, a
+/// loop wrapping, a seek landing while it plays, and a stopped transport starting again from
+/// where it stopped without its plan being built twice.
+///
+/// It asserts what a transport reports and never what it sounds like — a person with a speaker
+/// is the only check on that, and nothing here pretends otherwise. On a machine with a device:
+///
+/// ```text
+/// cargo test -p escribass-tests --features renders -- --ignored a_preview_plays
+/// ```
+///
+/// On Linux the device is ALSA's default PCM, because that is what this JUCE build speaks. A
+/// machine whose sound goes through PulseAudio (WSLg included) needs `libasound2-plugins` and a
+/// default PCM of `type pulse` (ADR 0013 §4).
+#[test]
+#[ignore = "needs an audio output device, and CI has none (docs/plan.md, M2 trap 13)"]
+fn a_preview_plays_on_this_machines_audio_device() {
+    use escribass_proto::render::{PreviewLoop, PreviewSeek, PreviewState, PreviewStop};
+    use escribass_proto::tools::render_preview_request::Command;
+    use escribass_proto::tools::{PreviewFrom, RenderPreviewRequest};
+
+    let engine = told("ESCRIBASS_ENGINE", ENGINE);
+    let manifest = told("ESCRIBASS_MANIFEST", "engine/build/manifest.json");
+
+    // Built through the tool API over a real server, as every fixture is (CLAUDE.md #2), and
+    // then opened as the host opens one: a session built as a library (ADR 0012 §3).
+    let directory = Scratch::new("renders", "preview");
+    let path = PathBuf::from(FIXTURES).join("surge_xt").join("script.json");
+    let steps: Vec<Step> = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let calls: Vec<Value> = steps.iter().map(|step| call(&step.tool, step.args.clone())).collect();
+    drive("`preview`", &directory.0, &calls);
+
+    let hosts = std::sync::Arc::new(escribass_core::Manifest::read(&manifest).expect("the manifest"));
+    let project = escribass_core::Project::open(&directory.0, hosts).expect("the fixture opens");
+    let mut session = escribass_core::Session::new(
+        project,
+        Box::new(escribass_core::SeededIds::default()),
+        Box::new(escribass_core::FixedClock(0)),
+        escribass_schema::song::Author::Human,
+    );
+    session.set_engine(escribass_core::Engine::new(&engine, &manifest));
+
+    let mut send = |command: Command, dry_run: bool| {
+        let answer = session
+            .render_preview(&RenderPreviewRequest { command: Some(command), dry_run })
+            .unwrap_or_else(|e| panic!("the preview failed: [{}] {}", e.rule, e.message));
+        assert!(answer.valid, "{:?}", answer.errors);
+        answer.event.expect("a live transport reports where it is")
+    };
+    let playing = send(Command::Play(PreviewFrom { start_tick: Some(0) }), false);
+    assert_eq!(playing.state(), PreviewState::Playing);
+    // A beat long, inside the fixture's one-beat clip, so a wrap is seen within a second.
+    send(Command::Loop(PreviewLoop { start_tick: 0, end_tick: 960 }), false);
+
+    // Polled with dry runs, which send nothing (song_tools.proto, `RenderPreviewRequest`). The
+    // wait is this test's and bounds only how long it looks: three seconds at the fixture's
+    // tempo is six beats, and a loop of one wraps five times in it.
+    let (mut furthest, mut wrapped) = (0, false);
+    for _ in 0..300 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let now = send(Command::Stop(PreviewStop {}), true);
+        assert_eq!(now.state(), PreviewState::Playing, "a looping transport stopped by itself");
+        assert!(now.tick < 960, "the transport left its loop at tick {}", now.tick);
+        wrapped |= now.tick < furthest;
+        furthest = furthest.max(now.tick);
+        if wrapped {
+            break;
+        }
+    }
+    assert!(furthest > 0, "the transport never moved: the device is not pulling blocks");
+    assert!(wrapped, "the transport reached tick {furthest} and never wrapped round its loop");
+
+    let sought = send(Command::Seek(PreviewSeek { tick: 480 }), false);
+    assert!((480..960).contains(&sought.tick), "a seek to 480 answered {}", sought.tick);
+    let stopped = send(Command::Stop(PreviewStop {}), false);
+    assert_eq!(stopped.state(), PreviewState::Stopped);
+    let resumed = send(Command::Play(PreviewFrom { start_tick: None }), false);
+    assert_eq!(resumed.state(), PreviewState::Playing);
+    eprintln!(
+        "preview: furthest tick {furthest} before wrapping, seek answered {}, stopped at {}, \
+         resumed at {}",
+        sought.tick, stopped.tick, resumed.tick
+    );
+    drop(session);
+}

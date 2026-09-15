@@ -957,6 +957,18 @@
     "valid": true
   },
   {
+    "errors": [],
+    "event": null,
+    "summary": "play from tick 960: 9600 ticks, 3 tracks, 8 clips",
+    "valid": true
+  },
+  {
+    "errors": [],
+    "event": null,
+    "summary": "play from where it is: 9600 ticks, 3 tracks, 8 clips",
+    "valid": true
+  },
+  {
     "automation": {
       "01M1FPMP000000000000000010": {
         "id": "01M1FPMP000000000000000010",

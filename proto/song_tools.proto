@@ -314,6 +314,63 @@ message RenderResponse {
   escribass.render.v1.RenderResult result = 4;
 }
 
+// Plays the song as it stands through a live engine process, or moves or stops what is playing
+// (§5 `render_preview`, ADR 0013 §2, §3).
+//
+// One tool for the four commands of the `Preview` stream, because the stream is one session
+// and a tool per command would be four ways to ask about one transport. Core holds that
+// session: the first `play` starts an engine in preview mode and every later call is a command
+// on the same stream, until the process serving this tool ends. An export never uses it — it
+// gets a fresh process of its own, as ever (ADR 0013 §3).
+//
+// What a preview plays is **not** what an export writes, and that is correct: sfizz renders
+// offline at its freewheeling quality, Surge XT's factory patch reaches a wall-clock RNG, and
+// the device's sample rate is the machine's while an export's is RenderTarget's. So nothing
+// here carries a hash, and nothing a preview reports is a claim about a render (docs/plan.md,
+// M2 trap 3).
+//
+// `valid` and `errors` are the caller's half: what compile refuses, a negative tick, and a seek,
+// loop or stop with nothing playing (`preview_idle`). An engine that will not start, finds no
+// audio device, or ends the stream is an operator error (ADR 0006 §2).
+//
+// dry_run compiles and checks, starts no process and sends nothing. Because it moves nothing,
+// its `event` is where a live transport last said it was — which is how a caller asks where
+// playback has reached without changing it (ADR 0006 §3).
+message RenderPreviewRequest {
+  oneof command {
+    PreviewFrom play = 1;
+    escribass.render.v1.PreviewSeek seek = 2;
+    escribass.render.v1.PreviewLoop loop = 3;
+    escribass.render.v1.PreviewStop stop = 4;
+  }
+  bool dry_run = 5;
+}
+
+// Play the song as it stands. `PreviewPlay` without its plan, because the plan is core's to
+// compile from the document and never a caller's to hand over (ADR 0007 §1) — so it is the one
+// arm that cannot reuse the engine's own message, while the other three do.
+message PreviewFrom {
+  // Where to start. Absent means where the transport has reached, which is how an edit made
+  // while playing is heard: the plan is compiled again and replaces the one playing, from where
+  // it was (ADR 0013 §2). Absent with nothing playing is the start of the song.
+  optional int32 start_tick = 1;
+}
+
+// What render_preview returns. Not ToolResult, for RenderResponse's reason: a preview records
+// nothing, and what it has to report — where the transport is — has nowhere to go in one
+// (ADR 0006 §1, extended).
+message PreviewResponse {
+  bool valid = 1;
+  repeated Violation errors = 2;
+
+  // One deterministic line describing the command, from the plan for a play. No path, no clock.
+  string summary = 3;
+
+  // The engine's answer to this command, or on a dry run its latest word. Absent when nothing
+  // is playing and on a refusal.
+  escribass.render.v1.PreviewEvent event = 4;
+}
+
 // ---------------------------------------------------------------------------
 // Undo and redo (ADR 0005 §4)
 // ---------------------------------------------------------------------------
@@ -428,6 +485,7 @@ service SongTools {
   rpc MoveSection(MoveSectionRequest) returns (ToolResult);
 
   rpc RenderExport(RenderExportRequest) returns (RenderResponse);
+  rpc RenderPreview(RenderPreviewRequest) returns (PreviewResponse);
 
   rpc Undo(UndoRequest) returns (ToolResult);
   rpc Redo(RedoRequest) returns (ToolResult);
@@ -439,6 +497,5 @@ service SongTools {
 
   // set_form (§5) waits for FormRule (M4, ADR 0002 §7); define_generator,
   // compile_generator, define_instrument_source and compile_instrument wait for the
-  // compilers (M4); render_preview waits for M2's live engine process (ADR 0008 §2).
-  // ADR 0003.
+  // compilers (M4). ADR 0003.
 }

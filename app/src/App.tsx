@@ -29,8 +29,17 @@
 // merge conflict is settled — per path, on the *same* `merge_branch` call, which is the whole
 // of ADR 0015 §3.
 //
-// Nothing below is song state. `Gesture` is a call waiting to be made, `preview` is an answer
-// the tool API gave, and `chosen`, `device` and `branch` are names the user picked.
+// **The transport is a tool too (M2 PR 10).** Play, stop and back-to-start are `render_preview`
+// calls, and what the header shows — playing or stopped, which bar — is the engine's own answer,
+// polled with dry runs while it plays. Nothing here keeps a clock of its own or guesses where a
+// playhead has got to: a position this file extrapolated would be a second transport, and the
+// first time it disagreed with the one the device drives the window would be showing a bar the
+// speaker is not playing. And what is heard is **labelled as a preview**, where the play button
+// is, because it is not what an export writes and not what a published hash describes
+// (docs/plan.md, M2 trap 3).
+//
+// Nothing below is song state. `Gesture` is a call waiting to be made, `preview` and `transport`
+// are answers the tool API gave, and `chosen`, `device` and `branch` are names the user picked.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromJson, toJson } from "@bufbuild/protobuf";
@@ -133,6 +142,50 @@ function movedNotes(song: Song, clipId: string, moved: Moved): Record<string, Js
   );
 }
 
+/**
+ * What `render_preview` answers with (`proto/song_tools.proto`, `PreviewResponse`), as it crosses
+ * a JSON carrier. Hand-written for `ToolAnswer`'s reason: it is the tool API's result, not song
+ * state. `event` is the engine's `PreviewEvent` through the generated serializer, so its `state`
+ * is the enum's name.
+ */
+interface PreviewAnswer {
+  readonly valid: boolean;
+  readonly errors: readonly { readonly rule: string; readonly message: string }[];
+  readonly event: Transport | null;
+}
+
+/** Where the engine's transport said it was, and what it was doing. */
+interface Transport {
+  readonly tick?: number;
+  readonly state?: string;
+}
+
+/** The label beside the play button, and the reason for it in full on hover (trap 3). */
+const NOT_THE_RENDER =
+  "What plays here is a live preview through this machine's audio device, and it is not what " +
+  "an export writes or what a render hash describes: sfizz plays at its real-time quality " +
+  "rather than its offline one, a Surge XT patch that randomises its oscillators' start phase " +
+  "does so differently every time, and the device runs at this machine's sample rate rather " +
+  "than the song's render target. Export to hear the render.";
+
+/**
+ * An operator error as a person reads it first: its rule and its reason, which is the shape a
+ * refusal is shown in, with the whole of it a hover away.
+ *
+ * It crosses as `path [rule]: message` (`core/src/call.rs`, `broken`), and for an engine the
+ * path is the binary's and the message ends with the last of the engine's stderr — Tracktion's
+ * chatter as well as the engine's own line. The engine writes its reason under its own name and
+ * writes nothing else that way (`fail`, `engine/src/main.cpp`), so that line is the one shown:
+ * on a machine with no audio device it is the sentence saying so, which otherwise sits past
+ * where the pane head's ellipsis begins.
+ */
+function stated(error: string): string {
+  const parts = /\[([a-z_]+)\]: ([\s\S]*)$/.exec(error);
+  if (!parts) return error;
+  const own = parts[2].lastIndexOf("escribass_engine: ");
+  return `${parts[1]}: ${own < 0 ? parts[2] : parts[2].slice(own + "escribass_engine: ".length)}`;
+}
+
 /** Which view the lower pane is showing. Four panes and a `<select>`-free switch, because
  *  four buttons are four buttons; a router arrives when there is something to route. */
 type Pane = "roll" | "mixer" | "params" | "history";
@@ -168,6 +221,10 @@ export function App() {
    *  note, or a fader's thumb — and a gesture is measured against where the control is
    *  (ADR 0017 §3, §5). */
   const [held, setHeld] = useState(false);
+  /** The engine's last word about the preview, or null when none is playing. An answer, never
+   *  an estimate: see the header of this file. */
+  const [transport, setTransport] = useState<Transport | null>(null);
+  const playing = transport?.state === "PREVIEW_STATE_PLAYING";
 
   // Both reads, together. The log is re-read whenever the song is because every applied call
   // appends to it — including `undo`, which appends an inverse entry rather than rewinding
@@ -279,6 +336,61 @@ export function App() {
     void previewAt(next);
   }
 
+  /** One `render_preview` call, and its answer on the transport.
+   *
+   *  An engine that will not start, or a machine with no audio device, is an operator error
+   *  (ADR 0006 §2) — and it is shown where a refusal is, in the pane head, rather than as the
+   *  page that says the project could not be read, because nothing about the project is wrong. */
+  async function drive(args: Record<string, unknown>): Promise<void> {
+    try {
+      const answer = (await tool("render_preview", args)) as PreviewAnswer;
+      if (!answer.valid) {
+        setNotice(`render_preview: ${answer.errors.map((e) => e.message).join("; ")}`);
+        return;
+      }
+      setNotice(null);
+      setTransport(answer.event);
+    } catch (e: unknown) {
+      setTransport(null);
+      setNotice(stated(String(e)));
+    }
+  }
+
+  /** An edit heard while it plays: the plan is compiled again from the document that now is,
+   *  and replaces the one playing from where the transport has reached (ADR 0013 §2). A play
+   *  with no tick is exactly that, and `core` is what knows the tick. */
+  function replay(): void {
+    if (playing) void drive({ play: {} });
+  }
+
+  // Where the transport is, asked while it plays and never while it does not. A dry run sends
+  // the engine nothing and answers with its latest word (song_tools.proto); `stop` is the arm
+  // that needs no argument, and a dry run of it stops nothing. One call at a time, the next
+  // asked for when the last has landed, for ADR 0017 §2's reason — and the interval is how
+  // often the window asks, not a clock anything is measured against.
+  useEffect(() => {
+    if (!playing) return;
+    let over = false;
+    const ask = async () => {
+      try {
+        const answer = (await tool("render_preview", { stop: {}, dry_run: true })) as PreviewAnswer;
+        if (over) return;
+        setTransport(answer.valid ? answer.event : null);
+      } catch (e: unknown) {
+        if (over) return;
+        setTransport(null);
+        setNotice(stated(String(e)));
+        return;
+      }
+      if (!over) timer = setTimeout(ask, 100);
+    };
+    let timer = setTimeout(ask, 100);
+    return () => {
+      over = true;
+      clearTimeout(timer);
+    };
+  }, [playing]);
+
   /** §9's second half: the same call without `dry_run`, then a fresh `get_song`.
    *
    *  Applied optimistically rather than re-previewed first — the model can have moved under a
@@ -297,6 +409,7 @@ export function App() {
       setGesture(null);
       setPreview(null);
       await read();
+      replay();
     } catch (e: unknown) {
       setFailure(String(e));
     }
@@ -347,6 +460,7 @@ export function App() {
       setGesture(null);
       setPreview(null);
       await read();
+      replay();
     } catch (e: unknown) {
       setFailure(String(e));
     }
@@ -405,6 +519,39 @@ export function App() {
         <span className="dim">
           {view.bars.length} bar{view.bars.length === 1 ? "" : "s"} · {clock(view.seconds)}
         </span>
+        <span className="transport">
+          {/* A stopped transport at or past the end would stop again the moment it started, so
+              play starts that one from the top; anywhere else it carries on from where it is. */}
+          <button
+            className="pane"
+            disabled={playing}
+            onClick={() =>
+              void drive({
+                play: (transport?.tick ?? 0) >= view.lengthTicks ? { start_tick: 0 } : {},
+              })
+            }
+          >
+            ▶ play
+          </button>
+          <button className="pane" disabled={!playing} onClick={() => void drive({ stop: {} })}>
+            ■ stop
+          </button>
+          <button
+            className="pane"
+            disabled={transport === null}
+            onClick={() => void drive({ seek: { tick: 0 } })}
+          >
+            ⏮ start
+          </button>
+          <span className="dim">
+            {transport === null
+              ? "not playing"
+              : `${playing ? "playing" : "stopped"} · bar ${barOf(view, transport.tick ?? 0)}`}
+          </span>
+          <span className="caveat" title={NOT_THE_RENDER}>
+            live preview · not the render
+          </span>
+        </span>
       </header>
 
       <div className="views">
@@ -418,7 +565,11 @@ export function App() {
               </div>
             ))}
           </div>
-          <Timeline view={view} selected={roll?.clipId ?? null} />
+          <Timeline
+            view={view}
+            selected={roll?.clipId ?? null}
+            playhead={transport === null ? null : (transport.tick ?? 0)}
+          />
         </section>
 
         <section className="detail">
@@ -501,7 +652,13 @@ export function App() {
               </span>
             ) : null}
 
-            {said !== null ? <span className="notice">{said}</span> : null}
+            {/* Ellipsised so the head never wraps (ADR 0017 §3), so the whole of it is on
+                hover — an engine's reason for not playing is the longest thing that lands here. */}
+            {said !== null ? (
+              <span className="notice" title={said}>
+                {said}
+              </span>
+            ) : null}
           </div>
 
           {pane === "roll" ? (

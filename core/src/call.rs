@@ -31,9 +31,10 @@ use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
     AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, QuantizeRequest, RedoRequest,
-    RenderExportRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
+    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, PreviewResponse, QuantizeRequest,
+    RedoRequest, RenderExportRequest, RenderPreviewRequest, RenderResponse, SetNotesRequest,
+    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult,
+    TransposeRequest, UndoRequest,
 };
 use serde_json::{json, Map, Value};
 
@@ -59,6 +60,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "add_automation",
     "add_asset",
     "render_export",
+    "render_preview",
     "set_tempo",
     "add_section",
     "move_section",
@@ -256,6 +258,13 @@ pub fn call(
             let response = session.render_export(&request).map_err(broken)?;
             render_answer(&response)
         }
+        "render_preview" => {
+            // Its own arm, for `render_export`'s reason: what comes back is where the transport
+            // is, not a `ToolResult`. An engine that will not play leaves through `broken`.
+            let request: RenderPreviewRequest = decode("render_preview", arguments)?;
+            let response = session.render_preview(&request).map_err(broken)?;
+            preview_answer(&response)
+        }
         "set_tempo" => {
             let request: SetTempoRequest = decode("set_tempo", arguments)?;
             tool_answer(&session.set_tempo(&request).map_err(broken)?)
@@ -347,6 +356,24 @@ fn render_answer(response: &RenderResponse) -> Answer {
             })).collect::<Vec<_>>(),
             "summary": response.summary,
             "result": response.result,
+        }),
+        !response.valid,
+    )
+}
+
+/// A [`PreviewResponse`] as a carrier carries it, built as [`render_answer`] is and for the
+/// same reason: the three fields of the answer are shaped here, and the engine's `event` goes
+/// through the generated serializer, so a field added to `PreviewEvent` reaches a caller
+/// without touching this file. `event` is null when nothing is playing and on a refusal.
+fn preview_answer(response: &PreviewResponse) -> Answer {
+    Answer::of(
+        json!({
+            "valid": response.valid,
+            "errors": response.errors.iter().map(|e| json!({
+                "path": e.path, "rule": e.rule, "message": e.message,
+            })).collect::<Vec<_>>(),
+            "summary": response.summary,
+            "event": response.event,
         }),
         !response.valid,
     )

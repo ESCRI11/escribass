@@ -35,6 +35,8 @@ pub struct RenderPlan {
     pub length_ticks: i32,
     /// Where the WAV goes, absolute. A path the engine is handed is output, not a project file;
     /// §8's "never reads project files" is about the .escri, not the filesystem (ADR 0008 §1).
+    /// Empty in a PreviewPlay, which writes no file — the check that it is absolute is the
+    /// export's alone (M2 PR 10).
     #[prost(string, tag="6")]
     pub output_path: ::prost::alloc::string::String,
 }
@@ -201,6 +203,10 @@ pub struct RenderResult {
 /// the whole plan and sends it again with the tick playback has reached. A plan diff would be a
 /// second RFC 6902 for a document that is not the model, applied in C++ where the validator
 /// does not run — which is the shape ADR 0007 §5's coverage test exists to keep out.
+///
+/// A plan equal to the one already playing is not built again: the transport moves to
+/// `start_tick` and plays, and the plugin instances stay where they are, which is what
+/// `PreviewStop` keeps them for (M2 PR 10).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreviewPlay {
     #[prost(message, optional, tag="1")]
@@ -264,12 +270,26 @@ pub mod preview_command {
 /// reaches the engine every caller-fixable failure has been refused upstream, and what is left
 /// ends the stream with a gRPC status rather than travelling as a value someone may forget to
 /// read (ADR 0008 §1).
+///
+/// Two kinds of event share this message: the one answering each command, written once the
+/// engine has applied it, and the ones the transport writes of its own accord while it plays —
+/// the tick moving, and the stop at the end of the plan (ADR 0013 §2, amended 2026-09-15).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreviewEvent {
+    /// The model tick the transport is at, floored, on the plan's own tempo map.
     #[prost(int32, tag="1")]
     pub tick: i32,
     #[prost(enumeration="PreviewState", tag="2")]
     pub state: i32,
+    /// How many commands this stream had applied when the event was written.
+    ///
+    /// What lets a caller tell the answer to its n-th command from an event the transport wrote
+    /// on its own: wait for `applied == n`. Order alone cannot say it, because an event the
+    /// transport writes while a command is still on the wire arrives after that command was sent
+    /// and before it was applied. Added in M2 PR 10, where the first caller had to wait on one
+    /// (ADR 0013 §2, amended 2026-09-15).
+    #[prost(int32, tag="3")]
+    pub applied: i32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

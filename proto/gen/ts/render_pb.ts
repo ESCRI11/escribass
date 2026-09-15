@@ -44,7 +44,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file render.proto.
  */
 export const file_render: GenFile = /*@__PURE__*/
-  fileDesc("CgxyZW5kZXIucHJvdG8SE2VzY3JpYmFzcy5yZW5kZXIudjEi9gEKClJlbmRlclBsYW4SLgoGdHJhY2tzGAEgAygLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLgoGbWFzdGVyGAIgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLAoFdGVtcG8YAyADKAsyHS5lc2NyaWJhc3Muc29uZy52MS5UZW1wb0V2ZW50Ei8KBnRhcmdldBgEIAEoCzIfLmVzY3JpYmFzcy5zb25nLnYxLlJlbmRlclRhcmdldBIUCgxsZW5ndGhfdGlja3MYBSABKAUSEwoLb3V0cHV0X3BhdGgYBiABKAki+wEKCVBsYW5UcmFjaxI3CgppbnN0cnVtZW50GAEgASgLMiMuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuSW5zdHJ1bWVudBIwCgdlZmZlY3RzGAIgAygLMh8uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuRWZmZWN0EiMKA21peBgDIAEoCzIWLmVzY3JpYmFzcy5zb25nLnYxLk1peBIsCgVjbGlwcxgEIAMoCzIdLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkNsaXASMAoJbWl4X2xhbmVzGAUgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSKDAQoOUGxhbkluc3RydW1lbnQSMQoKaW5zdHJ1bWVudBgBIAEoCzIdLmVzY3JpYmFzcy5zb25nLnYxLkluc3RydW1lbnQSLAoFbGFuZXMYAiADKAsyHS5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5MYW5lEhAKCHNmel9wYXRoGAMgASgJImUKClBsYW5FZmZlY3QSKQoGZWZmZWN0GAEgASgLMhkuZXNjcmliYXNzLnNvbmcudjEuRWZmZWN0EiwKBWxhbmVzGAIgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSJNCghQbGFuTGFuZRINCgVwYXJhbRgBIAEoCRIyCgZwb2ludHMYAiADKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQioQEKCFBsYW5DbGlwEhIKCnN0YXJ0X3RpY2sYASABKAUSFAoMbGVuZ3RoX3RpY2tzGAIgASgFEi8KBW5vdGVzGAMgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTm90ZXNIABIvCgVhdWRpbxgEIAEoCzIeLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkF1ZGlvSABCCQoHY29udGVudCIzCglQbGFuTm90ZXMSJgoFbm90ZXMYASADKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlIkUKCVBsYW5BdWRpbxIqCgRjbGlwGAEgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuQXVkaW9DbGlwEgwKBHBhdGgYAiABKAkikwEKDFJlbmRlclJlc3VsdBISCgpwY21fc2hhMjU2GAEgASgJEj8KB2NvbW1pdHMYAiADKAsyLi5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdC5Db21taXRzRW50cnkaLgoMQ29tbWl0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUAoLUHJldmlld1BsYXkSLQoEcGxhbhgBIAEoCzIfLmVzY3JpYmFzcy5yZW5kZXIudjEuUmVuZGVyUGxhbhISCgpzdGFydF90aWNrGAIgASgFIhsKC1ByZXZpZXdTZWVrEgwKBHRpY2sYASABKAUiMwoLUHJldmlld0xvb3ASEgoKc3RhcnRfdGljaxgBIAEoBRIQCghlbmRfdGljaxgCIAEoBSINCgtQcmV2aWV3U3RvcCLjAQoOUHJldmlld0NvbW1hbmQSMAoEcGxheRgBIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1BsYXlIABIwCgRzZWVrGAIgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U2Vla0gAEjAKBGxvb3AYAyABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdMb29wSAASMAoEc3RvcBgEIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1N0b3BIAEIJCgdjb21tYW5kIk4KDFByZXZpZXdFdmVudBIMCgR0aWNrGAEgASgFEjAKBXN0YXRlGAIgASgOMiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U3RhdGUqYwoMUHJldmlld1N0YXRlEh0KGVBSRVZJRVdfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVQUkVWSUVXX1NUQVRFX1BMQVlJTkcQARIZChVQUkVWSUVXX1NUQVRFX1NUT1BQRUQQAjJWCgZSZW5kZXISTAoGUmVuZGVyEh8uZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJQbGFuGiEuZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJSZXN1bHQyYAoHUHJldmlldxJVCgdQcmV2aWV3EiMuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3Q29tbWFuZBohLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld0V2ZW50KAEwAWIGcHJvdG8z", [file_song]);
+  fileDesc("CgxyZW5kZXIucHJvdG8SE2VzY3JpYmFzcy5yZW5kZXIudjEi9gEKClJlbmRlclBsYW4SLgoGdHJhY2tzGAEgAygLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLgoGbWFzdGVyGAIgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLAoFdGVtcG8YAyADKAsyHS5lc2NyaWJhc3Muc29uZy52MS5UZW1wb0V2ZW50Ei8KBnRhcmdldBgEIAEoCzIfLmVzY3JpYmFzcy5zb25nLnYxLlJlbmRlclRhcmdldBIUCgxsZW5ndGhfdGlja3MYBSABKAUSEwoLb3V0cHV0X3BhdGgYBiABKAki+wEKCVBsYW5UcmFjaxI3CgppbnN0cnVtZW50GAEgASgLMiMuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuSW5zdHJ1bWVudBIwCgdlZmZlY3RzGAIgAygLMh8uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuRWZmZWN0EiMKA21peBgDIAEoCzIWLmVzY3JpYmFzcy5zb25nLnYxLk1peBIsCgVjbGlwcxgEIAMoCzIdLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkNsaXASMAoJbWl4X2xhbmVzGAUgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSKDAQoOUGxhbkluc3RydW1lbnQSMQoKaW5zdHJ1bWVudBgBIAEoCzIdLmVzY3JpYmFzcy5zb25nLnYxLkluc3RydW1lbnQSLAoFbGFuZXMYAiADKAsyHS5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5MYW5lEhAKCHNmel9wYXRoGAMgASgJImUKClBsYW5FZmZlY3QSKQoGZWZmZWN0GAEgASgLMhkuZXNjcmliYXNzLnNvbmcudjEuRWZmZWN0EiwKBWxhbmVzGAIgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSJNCghQbGFuTGFuZRINCgVwYXJhbRgBIAEoCRIyCgZwb2ludHMYAiADKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQioQEKCFBsYW5DbGlwEhIKCnN0YXJ0X3RpY2sYASABKAUSFAoMbGVuZ3RoX3RpY2tzGAIgASgFEi8KBW5vdGVzGAMgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTm90ZXNIABIvCgVhdWRpbxgEIAEoCzIeLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkF1ZGlvSABCCQoHY29udGVudCIzCglQbGFuTm90ZXMSJgoFbm90ZXMYASADKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlIkUKCVBsYW5BdWRpbxIqCgRjbGlwGAEgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuQXVkaW9DbGlwEgwKBHBhdGgYAiABKAkikwEKDFJlbmRlclJlc3VsdBISCgpwY21fc2hhMjU2GAEgASgJEj8KB2NvbW1pdHMYAiADKAsyLi5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdC5Db21taXRzRW50cnkaLgoMQ29tbWl0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUAoLUHJldmlld1BsYXkSLQoEcGxhbhgBIAEoCzIfLmVzY3JpYmFzcy5yZW5kZXIudjEuUmVuZGVyUGxhbhISCgpzdGFydF90aWNrGAIgASgFIhsKC1ByZXZpZXdTZWVrEgwKBHRpY2sYASABKAUiMwoLUHJldmlld0xvb3ASEgoKc3RhcnRfdGljaxgBIAEoBRIQCghlbmRfdGljaxgCIAEoBSINCgtQcmV2aWV3U3RvcCLjAQoOUHJldmlld0NvbW1hbmQSMAoEcGxheRgBIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1BsYXlIABIwCgRzZWVrGAIgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U2Vla0gAEjAKBGxvb3AYAyABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdMb29wSAASMAoEc3RvcBgEIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1N0b3BIAEIJCgdjb21tYW5kIl8KDFByZXZpZXdFdmVudBIMCgR0aWNrGAEgASgFEjAKBXN0YXRlGAIgASgOMiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U3RhdGUSDwoHYXBwbGllZBgDIAEoBSpjCgxQcmV2aWV3U3RhdGUSHQoZUFJFVklFV19TVEFURV9VTlNQRUNJRklFRBAAEhkKFVBSRVZJRVdfU1RBVEVfUExBWUlORxABEhkKFVBSRVZJRVdfU1RBVEVfU1RPUFBFRBACMlYKBlJlbmRlchJMCgZSZW5kZXISHy5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclBsYW4aIS5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdDJgCgdQcmV2aWV3ElUKB1ByZXZpZXcSIy5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdDb21tYW5kGiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3RXZlbnQoATABYgZwcm90bzM", [file_song]);
 
 /**
  * One offline render. Exactly one of these crosses on one Render.Render call, to a process
@@ -100,6 +100,8 @@ export type RenderPlan = Message<"escribass.render.v1.RenderPlan"> & {
   /**
    * Where the WAV goes, absolute. A path the engine is handed is output, not a project file;
    * §8's "never reads project files" is about the .escri, not the filesystem (ADR 0008 §1).
+   * Empty in a PreviewPlay, which writes no file — the check that it is absolute is the
+   * export's alone (M2 PR 10).
    *
    * @generated from field: string output_path = 6;
    */
@@ -417,6 +419,10 @@ export const RenderResultSchema: GenMessage<RenderResult> = /*@__PURE__*/
  * second RFC 6902 for a document that is not the model, applied in C++ where the validator
  * does not run — which is the shape ADR 0007 §5's coverage test exists to keep out.
  *
+ * A plan equal to the one already playing is not built again: the transport moves to
+ * `start_tick` and plays, and the plugin instances stay where they are, which is what
+ * `PreviewStop` keeps them for (M2 PR 10).
+ *
  * @generated from message escribass.render.v1.PreviewPlay
  */
 export type PreviewPlay = Message<"escribass.render.v1.PreviewPlay"> & {
@@ -559,10 +565,16 @@ export const PreviewCommandSchema: GenMessage<PreviewCommand> = /*@__PURE__*/
  * ends the stream with a gRPC status rather than travelling as a value someone may forget to
  * read (ADR 0008 §1).
  *
+ * Two kinds of event share this message: the one answering each command, written once the
+ * engine has applied it, and the ones the transport writes of its own accord while it plays —
+ * the tick moving, and the stop at the end of the plan (ADR 0013 §2, amended 2026-09-15).
+ *
  * @generated from message escribass.render.v1.PreviewEvent
  */
 export type PreviewEvent = Message<"escribass.render.v1.PreviewEvent"> & {
   /**
+   * The model tick the transport is at, floored, on the plan's own tempo map.
+   *
    * @generated from field: int32 tick = 1;
    */
   tick: number;
@@ -571,6 +583,19 @@ export type PreviewEvent = Message<"escribass.render.v1.PreviewEvent"> & {
    * @generated from field: escribass.render.v1.PreviewState state = 2;
    */
   state: PreviewState;
+
+  /**
+   * How many commands this stream had applied when the event was written.
+   *
+   * What lets a caller tell the answer to its n-th command from an event the transport wrote
+   * on its own: wait for `applied == n`. Order alone cannot say it, because an event the
+   * transport writes while a command is still on the wire arrives after that command was sent
+   * and before it was applied. Added in M2 PR 10, where the first caller had to wait on one
+   * (ADR 0013 §2, amended 2026-09-15).
+   *
+   * @generated from field: int32 applied = 3;
+   */
+  applied: number;
 };
 
 /**
@@ -634,7 +659,8 @@ export const Render: GenService<{
  * Defined in M2 PR 3 and implemented in PR 10, for the reason Render was defined a milestone
  * before anything served it: buf breaking runs on pull requests only, so a service that grows
  * across two of them is compared against a main that has already moved (docs/plan.md, M2
- * trap 12).
+ * trap 12). PR 10 added one field, `PreviewEvent.applied`, which is additive and is the one
+ * thing the shape could not have been settled without a caller to wait on an answer.
  *
  * @generated from service escribass.render.v1.Preview
  */

@@ -75,6 +75,9 @@
   {"tool": "add_track", "args": {"name": "Drums", "kind": "TRACK_KIND_INSTRUMENT",
     "ref": {"sampler": {"sfz_hash": "aa31c0de4f9c00000000000000000000"}}}},
 
+  {"tool": "render_preview", "args": {"seek": {"tick": 480}}, "refused": "preview_idle"},
+  {"tool": "render_preview", "args": {"play": {"start_tick": -960}, "dry_run": true}, "refused": "tick_negative"},
+
   {"tool": "get_song", "args": {}},
   {"tool": "get_history", "args": {}}
 ]

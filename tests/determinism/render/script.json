@@ -79,6 +79,8 @@
                "q": {"tick": 9600, "value": -6.0, "curve": "CURVE_LINEAR"}}}},
 
   {"tool": "render_export", "args": {"output_path": "/escri/out.wav", "dry_run": true}},
+  {"tool": "render_preview", "args": {"play": {"start_tick": 960}, "dry_run": true}},
+  {"tool": "render_preview", "args": {"play": {}, "dry_run": true}},
 
   {"tool": "get_song", "args": {}}
 ]

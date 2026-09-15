@@ -189,3 +189,134 @@ impl escribass_proto::render::render_server::Render for Answering {
         }
     }
 }
+
+/// How a [`fake_preview`] behaves, beyond answering each command the way the engine does.
+#[cfg(unix)]
+#[derive(Clone, Copy, Default)]
+pub struct Playing {
+    /// Before each answer, write an event of the transport's own at this tick — carrying the
+    /// count of the *previous* command, as a real one written while a command was on the wire
+    /// would. What `core` must not mistake for the answer (`PreviewEvent.applied`).
+    pub chatter: Option<i32>,
+    /// After each answer, report the transport having moved on to this tick, as a playing one
+    /// does between commands.
+    pub moves_to: Option<i32>,
+    /// End the stream with a status instead of applying the command with this count, which is
+    /// how a real engine refuses a plan it cannot build (ADR 0013 §2).
+    pub refuses: Option<i32>,
+}
+
+/// A `Preview` server on a Unix socket in `dir`, speaking the engine's protocol: one event per
+/// command, carrying its count, and an empty file called `closed` once the stream has ended —
+/// which is what a script standing in for the engine waits on before it leaves, so "the
+/// process lives as long as its stream" is something a test can see (ADR 0013 §3).
+///
+/// A **model** of the engine's side, not the engine, for [`fake_engine`]'s reason: what is
+/// tested with it is `core`'s half of the boundary. The engine's half needs an audio device,
+/// which is `tests/renders.rs`'s ignored test and the engine job's no-device step.
+#[cfg(unix)]
+pub fn fake_preview(dir: &Path, behaviour: Playing) -> Heard {
+    use escribass_proto::render::preview_command::Command;
+    use escribass_proto::render::preview_server::PreviewServer;
+    use escribass_proto::render::{PreviewCommand, PreviewEvent, PreviewState};
+
+    let socket = dir.join("preview.sock");
+    let closed = dir.join("closed");
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let service = Model { behaviour, heard: heard.clone(), closed };
+    let bound = socket.clone();
+    let (listening, ready) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime for the fake preview");
+        runtime.block_on(async move {
+            let socket = tokio::net::UnixListener::bind(&bound).expect("a socket to serve on");
+            listening.send(()).expect("the test is still waiting");
+            tonic::transport::Server::builder()
+                .add_service(PreviewServer::new(service))
+                .serve_with_incoming(
+                    tonic::codegen::tokio_stream::wrappers::UnixListenerStream::new(socket),
+                )
+                .await
+                .expect("the fake preview serves");
+        });
+    });
+    ready.recv().expect("the fake preview binds its socket");
+    return Heard { socket, heard };
+
+    struct Model {
+        behaviour: Playing,
+        heard: Arc<Mutex<Vec<PreviewCommand>>>,
+        closed: PathBuf,
+    }
+
+    #[tonic::async_trait]
+    impl escribass_proto::render::preview_server::Preview for Model {
+        type PreviewStream = std::pin::Pin<
+            Box<
+                dyn tonic::codegen::tokio_stream::Stream<Item = Result<PreviewEvent, tonic::Status>>
+                    + Send,
+            >,
+        >;
+
+        async fn preview(
+            &self,
+            request: tonic::Request<tonic::Streaming<PreviewCommand>>,
+        ) -> Result<tonic::Response<Self::PreviewStream>, tonic::Status> {
+            let mut inbound = request.into_inner();
+            let (events, outgoing) = tokio::sync::mpsc::unbounded_channel();
+            let (behaviour, heard, closed) = (self.behaviour, self.heard.clone(), self.closed.clone());
+            tokio::spawn(async move {
+                let (mut applied, mut tick, mut state) = (0, 0, PreviewState::Stopped);
+                while let Ok(Some(command)) = inbound.message().await {
+                    heard.lock().expect("nothing else panicked").push(command.clone());
+                    let event = |tick, state: PreviewState, applied| PreviewEvent {
+                        tick,
+                        state: state as i32,
+                        applied,
+                    };
+                    if let Some(noise) = behaviour.chatter {
+                        let _ = events.send(Ok(event(noise, state, applied)));
+                    }
+                    if behaviour.refuses == Some(applied + 1) {
+                        let _ = events.send(Err(tonic::Status::invalid_argument("a plan it cannot build")));
+                        break;
+                    }
+                    match command.command {
+                        Some(Command::Play(play)) => (tick, state) = (play.start_tick, PreviewState::Playing),
+                        Some(Command::Seek(seek)) => tick = seek.tick,
+                        Some(Command::Stop(_)) => state = PreviewState::Stopped,
+                        Some(Command::Loop(_)) | None => {}
+                    }
+                    applied += 1;
+                    let _ = events.send(Ok(event(tick, state, applied)));
+                    if let Some(moved) = behaviour.moves_to {
+                        tick = moved;
+                        let _ = events.send(Ok(event(tick, state, applied)));
+                    }
+                }
+                drop(events);
+                std::fs::write(&closed, b"").expect("the scratch directory is writable");
+            });
+            Ok(tonic::Response::new(Box::pin(
+                tonic::codegen::tokio_stream::wrappers::UnboundedReceiverStream::new(outgoing),
+            )))
+        }
+    }
+}
+
+/// A running [`fake_preview`]: where it listens, and every command it was sent, in order.
+#[cfg(unix)]
+pub struct Heard {
+    pub socket: PathBuf,
+    heard: Arc<Mutex<Vec<escribass_proto::render::PreviewCommand>>>,
+}
+
+#[cfg(unix)]
+impl Heard {
+    pub fn commands(&self) -> Vec<escribass_proto::render::PreviewCommand> {
+        self.heard.lock().expect("the fake preview has not panicked").clone()
+    }
+}
