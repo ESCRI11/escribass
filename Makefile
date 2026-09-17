@@ -23,15 +23,28 @@
 export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(PATH)
 
 PROJECT  ?= $(HOME)/demo.escri
-MANIFEST ?= tests/fixtures/manifest.json
+
+# What this build can host (ADR 0010 §4): the manifest a local engine build wrote when there is
+# one, and the committed fixture otherwise — said out loud, because the fixture is a *subset*
+# with no Dexed in it, so a project that uses one refuses to open against it with
+# `lock_mismatch`. Defaulting to the fixture unconditionally is how a person met exactly that on
+# first use (M2 PR 11). Setting MANIFEST on the command line still wins.
+BUILT_MANIFEST := engine/build/manifest.json
+ifeq ($(origin MANIFEST),undefined)
+  ifneq ($(wildcard $(BUILT_MANIFEST)),)
+    MANIFEST := $(BUILT_MANIFEST)
+  else
+    MANIFEST := tests/fixtures/manifest.json
+    $(info MANIFEST: no $(BUILT_MANIFEST), so the committed fixture, which names no Dexed: a project using one will not open against it (lock_mismatch))
+  endif
+endif
 
 # The engine the window's play button starts, told and never searched for (ADR 0008 §2). Empty by
 # default, and pressing play then says `engine_unset` while everything else works. An engine
 # plays the plugins at the paths a manifest names, which the committed fixture has dropped, so a
-# window that should make a sound wants both from a build:
+# window that should make a sound wants a build's manifest — the default above, once there is one:
 #
-#   make run ENGINE=engine/build/escribass_engine_artefacts/Release/escribass_engine \
-#            MANIFEST=engine/build/manifest.json
+#   make run ENGINE=engine/build/escribass_engine_artefacts/Release/escribass_engine
 #
 # On Linux it also wants ALSA's default output to reach a speaker; ADR 0013 §4 says what that
 # takes on a machine whose sound goes through PulseAudio.

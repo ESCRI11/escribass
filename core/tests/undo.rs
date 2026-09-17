@@ -15,8 +15,8 @@ use common::manifest;
 
 use escribass_core::{ops_of, FixedClock, Project, SeededIds, Session};
 use escribass_proto::tools::{
-    ApplyPatchRequest, CreateBranchRequest, RedoRequest, SwitchBranchRequest, ToolResult,
-    UndoRequest,
+    ApplyPatchRequest, CreateBranchRequest, MergeBranchRequest, MergeSide, RedoRequest,
+    SwitchBranchRequest, ToolResult, UndoRequest,
 };
 use escribass_schema::song::{Author, Song};
 use serde_json::{json, Value};
@@ -263,28 +263,201 @@ fn any_other_commit_clears_what_could_be_redone() {
 }
 
 #[test]
-fn switching_branch_clears_it_too() {
+fn a_redo_never_reaches_into_another_line_of_history() {
+    // `version` counts per branch (ADR 0005 §4's caveat), so a redo that restored a document
+    // from another line would put that line's numbers on this one. What prevents it is not a
+    // cursor cleared on the way across — there is none to clear — but that what can be redone
+    // is read off *this* branch's first-parent chain, which the other line's undo is not on.
     let (_dir, mut session) = opened();
+    let root = session.get_history().refs.unwrap().refs["main"].clone();
     set_gain(&mut session, -7.5);
     undo(&mut session);
     session
         .create_branch(&CreateBranchRequest {
             name: "elsewhere".to_string(),
+            at_entry_id: root,
+            dry_run: false,
+        })
+        .unwrap();
+    let switch = |session: &mut Session, name: &str| {
+        let switched = session
+            .switch_branch(&SwitchBranchRequest { name: name.to_string(), dry_run: false })
+            .unwrap();
+        assert!(switched.valid, "{:?}", switched.errors);
+    };
+
+    switch(&mut session, "elsewhere");
+    assert_eq!(
+        session.redo(&RedoRequest { dry_run: false }).unwrap().errors[0].rule,
+        "nothing_to_redo",
+        "`elsewhere` branched before the edit, so nothing on it was ever undone"
+    );
+
+    // And going back is not a loss: main's log still says its edit was undone, so ⇧⌘Z there
+    // still puts it back. A session-held cursor forgot this on the way across.
+    switch(&mut session, "main");
+    let redone = redo(&mut session);
+    assert!(redone.valid, "{:?}", redone.errors);
+    assert_eq!(gain(&session), -7.5);
+}
+
+// ---- across sessions: the log is the cursor (ADR 0005 §4, amended 2026-09-15) ----
+//
+// Every test above runs in one `Session`, and so did every undo test before M2 PR 11 — which is
+// why a cursor that lived in the session, empty in every fresh one, passed all of them while ⌘Z
+// in a reopened window re-applied an edit it had already reversed. Each test here closes the
+// project and opens it again, as quitting and relaunching the app does.
+
+/// The same project in a new session, as a relaunched process would open it: the first session
+/// is gone and nothing of it survives but what it wrote.
+fn reopened(dir: &Scratch, session: Session) -> Session {
+    drop(session);
+    let project = Project::open(&dir.0, manifest()).expect("the project reopens");
+    // A counter far past anything an earlier session minted: ids are never reused (§4.3), and a
+    // fresh `SeededIds::default()` would mint the first session's entry ids again.
+    static RELAUNCHES: AtomicUsize = AtomicUsize::new(1);
+    let ids = SeededIds::new(AT, 1_000_000 * RELAUNCHES.fetch_add(1, Ordering::Relaxed) as u64);
+    Session::new(project, Box::new(ids), Box::new(FixedClock(AT)), Author::Model)
+}
+
+#[test]
+fn a_fresh_session_does_not_undo_forwards_past_undos_it_did_not_make() {
+    // The review's reproduction, as a person meets it: edit, edit, ⌘Z, ⌘Z, close the window,
+    // reopen, ⌘Z. Both edits are already reversed, so there is nothing left to undo. With the
+    // cursor empty the walk started at `HEAD`, skipped both undo entries, landed on the second
+    // edit — already undone — and restored the document *before* it: the first edit came back,
+    // recorded under the tool name `undo`.
+    let (dir, mut session) = opened();
+    set_gain(&mut session, -7.5);
+    set_gain(&mut session, -3.0);
+    undo(&mut session);
+    undo(&mut session);
+    assert_eq!(gain(&session), -6.5);
+
+    let mut session = reopened(&dir, session);
+    let before = entries(&session);
+    let refused = session.undo(&UndoRequest { dry_run: false }).unwrap();
+    assert_eq!(gain(&session), -6.5, "an undo may never bring back an edit");
+    assert!(!refused.valid, "both edits are undone: {}", refused.summary);
+    assert_eq!(refused.errors[0].rule, "nothing_to_undo");
+    assert_eq!(entries(&session), before, "and nothing was written");
+}
+
+#[test]
+fn a_fresh_session_undoes_the_change_still_in_effect() {
+    // One prior undo, then a relaunch. The walk from `HEAD` skipped the undo entry and landed
+    // on the edit it had already reversed, so the fresh ⌘Z restored the document that was
+    // already there: "no change", no entry, and the key silently did nothing.
+    let (dir, mut session) = opened();
+    set_gain(&mut session, -7.5);
+    set_gain(&mut session, -3.0);
+    undo(&mut session);
+    assert_eq!(gain(&session), -7.5);
+
+    let mut session = reopened(&dir, session);
+    let undone = undo(&mut session);
+    assert!(undone.valid, "{:?}", undone.errors);
+    assert_eq!(gain(&session), -6.5, "the first edit, which is the one still in effect, goes");
+    assert!(!undone.entry_id.is_empty(), "and the press recorded an entry: {}", undone.summary);
+}
+
+#[test]
+fn redo_crosses_sessions_too() {
+    // The same defect pointed the other way: `redo` read the session's list of undone entries
+    // and a fresh session has none, so everything undone before a relaunch could never be
+    // put back — while the log beside it said exactly what had been undone.
+    let (dir, mut session) = opened();
+    set_gain(&mut session, -7.5);
+    set_gain(&mut session, -3.0);
+    undo(&mut session);
+    undo(&mut session);
+
+    let mut session = reopened(&dir, session);
+    let redone = redo(&mut session);
+    assert!(redone.valid, "{:?}", redone.errors);
+    assert_eq!(gain(&session), -7.5, "the change undone last comes back first");
+
+    // Across a second relaunch, mid-way, for the same reason.
+    let mut session = reopened(&dir, session);
+    redo(&mut session);
+    assert_eq!(gain(&session), -3.0);
+    assert_eq!(
+        session.redo(&RedoRequest { dry_run: false }).unwrap().errors[0].rule,
+        "nothing_to_redo",
+        "and then everything is back"
+    );
+}
+
+// ---- what the log says, which a session-held cursor got wrong in one session too ----
+
+#[test]
+fn an_edit_made_after_an_undo_is_never_walked_back_into() {
+    // edit A · edit B · ⌘Z · edit C. B was undone and then superseded: C is the edit that
+    // replaced it, which is what "any other commit clears redo" means. So ⌘Z twice is C then A.
+    //
+    // The session-held walk skipped the undo entry and landed on B, restored the document
+    // before B — which, with C already reversed, was the document already there — and called
+    // the press "no change". Worse, it pushed B onto its list, so ⇧⌘Z later restored B: a
+    // document with B and without C, which this history never contained after B was undone.
+    let (_dir, mut session) = opened();
+    set_gain(&mut session, -7.5); // A
+    set_gain(&mut session, -3.0); // B
+    undo(&mut session);
+    set_gain(&mut session, -1.0); // C
+
+    undo(&mut session);
+    assert_eq!(gain(&session), -7.5, "C is reversed");
+    let second = undo(&mut session);
+    assert_eq!(gain(&session), -6.5, "and then A — not B again: {}", second.summary);
+
+    redo(&mut session);
+    assert_eq!(gain(&session), -7.5, "A is back");
+    redo(&mut session);
+    assert_eq!(gain(&session), -1.0, "and then C, never B");
+}
+
+#[test]
+fn a_merge_that_changed_nothing_is_not_a_change_to_undo() {
+    // Resolving every conflict in this branch's favour records a merge entry with no
+    // operations, because what it records is the join (ADR 0015 §3, extended). Reversing it
+    // restores the document already there, so a cursor read off the log could never move past
+    // it and ⌘Z would answer "no change" for ever. It is skipped like the log's own undo and
+    // redo entries, since ⌘Z means the change before this one and it changed nothing.
+    let (_dir, mut session) = opened();
+    set_gain(&mut session, -7.5);
+    session
+        .create_branch(&CreateBranchRequest {
+            name: "other".to_string(),
             at_entry_id: String::new(),
             dry_run: false,
         })
         .unwrap();
-    let switched = session
-        .switch_branch(&SwitchBranchRequest { name: "elsewhere".to_string(), dry_run: false })
-        .unwrap();
-    assert!(switched.valid);
+    set_gain(&mut session, -3.0);
+    let switch = |session: &mut Session, name: &str| {
+        let switched = session
+            .switch_branch(&SwitchBranchRequest { name: name.to_string(), dry_run: false })
+            .unwrap();
+        assert!(switched.valid, "{:?}", switched.errors);
+    };
+    switch(&mut session, "other");
+    set_gain(&mut session, -1.0);
+    switch(&mut session, "main");
 
-    // `version` counts per branch (ADR 0005 §4's caveat), so a redo here would restore a
-    // document from another line of history onto this one.
-    assert_eq!(
-        session.redo(&RedoRequest { dry_run: false }).unwrap().errors[0].rule,
-        "nothing_to_redo"
-    );
+    let merge = |session: &mut Session, resolve| {
+        session
+            .merge_branch(&MergeBranchRequest { name: "other".to_string(), dry_run: false, resolve })
+            .unwrap()
+    };
+    let conflicts = merge(&mut session, Default::default());
+    assert!(!conflicts.valid, "both sides wrote the gain");
+    let ours = conflicts.errors.iter().map(|e| (e.path.clone(), MergeSide::Ours as i32)).collect();
+    let merged = merge(&mut session, ours);
+    assert!(merged.valid, "{:?}", merged.errors);
+    assert!(!merged.entry_id.is_empty(), "the join is recorded");
+    assert_eq!(gain(&session), -3.0, "and it kept this branch's value");
+
+    let undone = undo(&mut session);
+    assert_eq!(gain(&session), -7.5, "⌘Z reversed the last change, not the join: {}", undone.summary);
 }
 
 // ---- the two refusals, and the dry run ----

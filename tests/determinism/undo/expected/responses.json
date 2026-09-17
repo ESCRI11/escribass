@@ -784,7 +784,7 @@
     "entry_id": "",
     "errors": [
       {
-        "message": "this session has undone nothing to put back",
+        "message": "nothing on this branch has been undone since its last change",
         "path": "/",
         "rule": "nothing_to_redo"
       }
@@ -853,7 +853,7 @@
     "entry_id": "",
     "errors": [
       {
-        "message": "this session has undone nothing to put back",
+        "message": "nothing on this branch has been undone since its last change",
         "path": "/",
         "rule": "nothing_to_redo"
       }

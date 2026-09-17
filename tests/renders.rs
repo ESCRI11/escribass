@@ -32,10 +32,12 @@
 //! every other song in these suites (CLAUDE.md #2). Nothing here writes a `song.json`.
 //!
 //! **What this suite does not have to catch.** ADR 0007 §4 splits a render into the plan `core`
-//! compiles and the rendering the engine does, and the determinism suite already goldens the
-//! plan. So a mismatch here with those plan goldens green is the engine's, and a `core` change
-//! that would move a render shows up there first — which is why no fixture here carries a plan
-//! golden of its own, and why the engine CI job can leave `core/` out of what triggers it.
+//! compiles and the rendering the engine does, and the determinism suite goldens the plan — of
+//! *its* `render` script, not of the fixtures here. So a mismatch here with that plan golden
+//! green is usually the engine's, which is why no fixture here carries a plan golden of its own.
+//! It is not a reason for CI to skip this suite on a change to `compile` itself: a change that
+//! reaches only these fixtures' plans moves a WAV and no plan golden, so since M2 PR 11 the engine
+//! job builds for `core/src/render.rs` and `core/src/engine.rs` and skips only the rest of `core/`.
 //!
 //! `ponytail:` the fixtures live in a scratch directory with a run-specific path, so a plan
 //! golden here would have to have that path erased from it the way `determinism.rs` erases its
@@ -1177,6 +1179,67 @@ fn a_fader_ride_renders_the_curve_the_formula_draws() {
 /// smoothers — with something that was played (docs/plan.md, M2 trap 6), and it is asserted
 /// against the real binary because the claim is about the binary. It needs no device: the
 /// process asked is one that never looks for one.
+#[test]
+fn a_stretch_rubber_band_cannot_make_is_refused_rather_than_corrupting_the_heap() {
+    // M2 PR 11, closing the Known gap M2 PR 10 found: a real export of
+    // `tests/determinism/render` died with glibc's "corrupted double-linked list", every time.
+    // That fixture stretches a four-sample asset over a 960-tick loop, a ratio of 6000, and
+    // Rubber Band's R3 engine clamps its input hop to one sample past a ratio of 512 at 48 kHz —
+    // after which its output hop is the ratio, and past 4096 it writes beyond a 4096-sample
+    // accumulator (`R3Stretcher::synthesiseChannel`; measured under AddressSanitizer). The
+    // library says so first, as a warning nobody read. The engine now hears that warning and
+    // refuses the clip before a single sample is processed.
+    //
+    // The same four samples as that fixture, in the smallest song that asks for the stretch. A
+    // review ran twenty "exports" of the fixture and saw none crash, because without
+    // `--seed-ids` the fixture's literal ids named nothing and its stretch was never added —
+    // which is why this test asserts the clip was added before it asserts anything else.
+    let engine = told("ESCRIBASS_ENGINE", ENGINE);
+    let manifest = told("ESCRIBASS_MANIFEST", "engine/build/manifest.json");
+    let directory = Scratch::new("renders", "overstretch");
+    let wav = directory.0.with_extension("wav");
+    let four_samples = "UklGRiwAAABXQVZFZm10IBAAAAABAAEAgLsAAAB3AQACABAAZGF0YQgAAAAAAAAgAOAAAA==";
+    let requests = [
+        json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "escribass-tests", "version": "1"}}}),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+               "params": call("add_asset", json!({"content": four_samples}))}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+               "params": call("add_track", json!({"name": "Loop", "kind": "TRACK_KIND_AUDIO"}))}),
+        json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call("add_clip", json!({
+            "track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 960,
+            "audio_clip": {
+                "asset_hash": "2286d76f7fa133642170637e5c7635d116dbd96cb8b9892281b945b350870636",
+                "time_stretch": true
+            }}))}),
+        json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+               "params": call("render_export", json!({"output_path": wav, "dry_run": false}))}),
+    ];
+    let frames = speak(
+        &[
+            "--create", "--manifest", &manifest.display().to_string(),
+            "--engine", &engine.display().to_string(),
+            "--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT,
+        ],
+        &directory.0,
+        &requests,
+    );
+    let answer = |id: u64| frames.iter().find(|f| f["id"] == json!(id)).cloned().expect("answered");
+
+    let added = answer(3);
+    assert_eq!(added["result"]["structuredContent"]["valid"], json!(true), "the clip is there: {added}");
+    let failed = answer(4)["error"]["message"].as_str().unwrap_or_default().to_string();
+    assert!(
+        failed.contains("engine_failed") && failed.contains("exited 2"),
+        "refused as a plan this engine cannot take, not killed by the allocator: {}",
+        answer(4)
+    );
+    assert!(failed.contains("stretch"), "and it says what it would not do: {failed}");
+    assert!(!wav.exists(), "and it wrote nothing");
+}
+
 #[test]
 fn an_export_process_refuses_a_preview_by_grpcs_own_dispatch() {
     use escribass_proto::render::preview_client::PreviewClient;

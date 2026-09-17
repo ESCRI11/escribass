@@ -35,10 +35,11 @@
 //! stream; diagnostics go to stderr.
 
 use escribass_core::{
-    new_song, Clock, FixedClock, IdSource, Manifest, Project, ProjectLock, SeededIds, Session,
-    SongTools, SystemClock, UlidSource,
+    new_song, Clock, FixedClock, IdSource, InArrivalOrder, Manifest, Project, ProjectLock,
+    SeededIds, Session, SongTools, SystemClock, UlidSource,
 };
 use escribass_schema::song::Author;
+use rmcp::transport::async_rw::AsyncRwTransport;
 use rmcp::ServiceExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -104,8 +105,13 @@ async fn run() -> Result<(), String> {
 
     // rmcp answers every protocol version it knows, so a client on the current revision and
     // one still sending `initialize` both work against this process.
+    //
+    // Stdio in arrival order: one request at a time, and EOF only once every request read has
+    // been answered — without which a client that pipelines and half-closes loses every answer
+    // still queued five seconds after it closed (`InArrivalOrder`, M2 PR 11).
+    let (stdin, stdout) = rmcp::transport::io::stdio();
     let running = server
-        .serve(rmcp::transport::io::stdio())
+        .serve(InArrivalOrder::new(AsyncRwTransport::new_server(stdin, stdout)))
         .await
         .map_err(|e| format!("the MCP transport failed to start: {e}"))?;
     running.waiting().await.map_err(|e| format!("the MCP server stopped: {e}"))?;

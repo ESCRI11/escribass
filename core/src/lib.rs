@@ -35,7 +35,7 @@ pub use patch::{apply, diff, Op, PatchError};
 pub use manifest::Manifest;
 pub use project::{asset_hash, Prepared, Project, ProjectError, ProjectLock};
 pub use render::compile;
-pub use mcp::SongTools;
+pub use mcp::{InArrivalOrder, SongTools};
 pub use session::{new_song, Session};
 pub use validate::{validate, Violation};
 pub use version::bump_versions;

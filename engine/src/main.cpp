@@ -815,21 +815,63 @@ juce::AudioBuffer<float> resampled (const juce::AudioBuffer<float>& in, double r
     return out;
 }
 
+// Every message Rubber Band sends a logger, kept rather than printed (M2 PR 11).
+//
+// At the library's default debug level only its level-0 messages reach a logger, and every one
+// of those in 4.0.0 is a warning that what it is about to compute, or just computed, cannot be
+// trusted — none is progress or chatter. One of them is the only notice given before a memory
+// error: past a stretch ratio of 512 at 48 kHz R3 clamps its input hop to one sample, its output
+// hop becomes the ratio, and past 4096 `synthesiseChannel` writes beyond a 4096-sample
+// accumulator. The first render of `tests/determinism/render` to reach it asked for 6000, printed
+// "Ratio yields ideal inhop < minimum, results may be suspect" and died in glibc's allocator,
+// every time. So the library's own warning is the refusal, taken from the library rather than
+// from a copy of its hop arithmetic here that a pin bump could quietly leave behind.
+struct Objection final : RubberBand::RubberBandStretcher::Logger
+{
+    std::string said;
+
+    void log (const char* message) override { keep (message); }
+    void log (const char* message, double a) override
+    {
+        keep (std::string (message) + " (" + juce::String (a).toStdString() + ")");
+    }
+    void log (const char* message, double a, double b) override
+    {
+        keep (std::string (message) + " (" + juce::String (a).toStdString() + ", "
+              + juce::String (b).toStdString() + ")");
+    }
+    void keep (std::string message)
+    {
+        if (said.empty())
+            said = std::move (message);
+    }
+};
+
 // The asset stretched to fill the clip, pitch unchanged (ADR 0011 §3). `frames` is the clip's
 // length in samples, and the ratio is derived from it here rather than carried in the plan
-// because `compile` reads no file and so cannot know the asset's duration (ADR 0007 §4).
+// because `compile` reads no file and so cannot know the asset's duration (ADR 0007 §4). Empty on
+// success; otherwise what Rubber Band objected to, and `buffer` is untouched.
+//
+// Refused **before** the first `process`, which is where an unmakeable ratio corrupts the heap,
+// and again after the last `retrieve`, because a warning while processing is the library saying
+// its output is wrong — and a render does not write audio its own time-stretcher disowned. A
+// stretch it accepts logs nothing at all (ADR 0009 §4, measured), so neither check can move a
+// golden. It is the engine's refusal and not compile's for the SFZ's reason: deciding it means
+// reading the asset (ADR 0007 §6, extended).
 //
 // The block size is Rubber Band's own: `getSamplesRequired()` is the documented mode for a
 // caller with no external constraint, and taking it means there is no block-size constant of
 // ours for a golden to depend on. Draining while `available()` is positive and stopping at
 // zero is what the library's own command line does when threading is off, which here it always
 // is (main/main.cpp, the "completing" loop).
-juce::AudioBuffer<float> stretched (const juce::AudioBuffer<float>& in, double rate, int frames)
+std::string stretch (juce::AudioBuffer<float>& buffer, double rate, int frames)
 {
+    const auto& in = buffer;
     const auto channels = (size_t) in.getNumChannels();
     const auto total = in.getNumSamples();
 
-    RubberBand::RubberBandStretcher stretcher ((size_t) rate, channels, kStretchOptions,
+    const auto objection = std::make_shared<Objection>();
+    RubberBand::RubberBandStretcher stretcher ((size_t) rate, channels, objection, kStretchOptions,
                                                frames / (double) total, 1.0);
     stretcher.setExpectedInputDuration ((size_t) total);
 
@@ -839,6 +881,8 @@ juce::AudioBuffer<float> stretched (const juce::AudioBuffer<float>& in, double r
     // Any number of samples at a time is allowed in the study pass, and there is one clip's
     // worth of them, so it is one call.
     stretcher.study (input.data(), (size_t) total, true);
+    if (! objection->said.empty())
+        return objection->said;
 
     juce::AudioBuffer<float> out (in.getNumChannels(), frames);
     out.clear();
@@ -874,7 +918,10 @@ juce::AudioBuffer<float> stretched (const juce::AudioBuffer<float>& in, double r
         drain();
     }
     drain();
-    return out;
+    if (! objection->said.empty())
+        return objection->said;
+    buffer = std::move (out);
+    return {};
 }
 
 // ADR 0011 §2's formula, and it is **ours** rather than Tracktion's fade shapes for the reason
@@ -1388,7 +1435,10 @@ private:
         // the length here is the unit that repeats and never a truncated one (render.proto,
         // PlanAudio; ADR 0007 §6 as amended).
         if (held.time_stretch() && buffer.getNumSamples() != frames)
-            buffer = stretched (buffer, rate, frames);
+            if (const auto why = stretch (buffer, rate, frames); ! why.empty())
+                return "an audio clip stretches '" + source.path() + "' from "
+                       + std::to_string (buffer.getNumSamples()) + " to " + std::to_string (frames)
+                       + " sample frames, and Rubber Band will not: " + why;
 
         // Exactly the clip, which is what makes the fades below run over the clip's length and
         // not the asset's: a shorter asset ends in silence, a longer one stops, and both are
