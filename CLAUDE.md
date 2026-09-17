@@ -24,9 +24,8 @@ deliberate: planning it is its own step, as M1's and M2's were.
 
 Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §18.2 and
 ADR 0003 before starting a step. Read `docs/plan.md`'s "M2, closed" first: it records what M2
-leaves unverified — three merges with no green CI, a preview never played on a real device, and
-three dependency sign-offs the repository cannot confirm — and one ledger row that is due
-before M3's loop can call `set_param`.
+leaves unverified — three merges with no green CI and a preview never played on a real device —
+and one ledger row that is due before M3's loop can call `set_param`.
 
 ## Completed: M2 — UI
 
