@@ -54,6 +54,7 @@ stale.
 | M2.12 | §11 walked against the code, the ledger walked a fourth time, `CLAUDE.md` to M3 — and what M2 leaves unverified written down where a reader will find it | done | this PR |
 | — | **M2 complete.** Tauri app, five views as projections, preview playback over gRPC — with three merges and no green run on `main` since PR 8, see "M2, closed" | done | — |
 | — | The M3 plan: five questions for the user, fourteen an agent can propose answers to, none answered | done | this PR |
+| M3.0 | The spike: five model routes on the tool API over MCP and OpenRouter, cost per edit, what `betterproto2` generates for a service, Surge XT's RNG paths counted — its code unmerged, its numbers in "What the spike found" | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -1134,6 +1135,267 @@ their ADRs (PR 2), after the Libretto ADR (PR 1).
 | U4 — every new dependency, for sign-off | **Both approved.** A Python gRPC stack — `grpcio` with `grpcio-tools`, or `grpclib`, whichever `betterproto2-compiler` 0.10.1 generates service stubs for, which PR 0 checks — and the `openai` Python SDK as the OpenRouter client, with the `httpx` it carries | Each is pinned by exact version in `lock.baseline.json` and §17 when it is first added, not before. **Nothing else is approved**: an agent framework, a prompt library, a tokenizer or a vector store returns to the user before it is installed (CLAUDE.md #4) |
 | U5 — may an external MCP client edit beside the window? | **No; one process at a time.** An external MCP client drives a project only while the window does not have it open | `.escri/lock` (ADR 0012 §3) and ADR 0004's single-writer ordering stand unchanged. §18.2 Stage 1's "any MCP client can drive a project immediately" is narrowed to say it holds with the window closed — a spec amendment that lands with its ADR in PR 2, not here |
 
+### What the spike found (PR 0, run 2026-09-17)
+
+Run on this machine (WSL2, Ubuntu 24.04, x86-64) against `main` at `99f92f3`, with `escribass-mcp`
+built from it, `engine/build/manifest.json` as its manifest, and every project a scratch copy of
+the render fixture: `tests/determinism/render/script.json` replayed through the tool API, whose
+`get_song` came back byte-identical to `tests/determinism/render/expected/song.json` (15,011
+bytes). The spike's code lives outside the repository and is not merged; its numbers are here.
+
+**One instruction set, written before any model ran.** Ten instructions a person might type, each
+with the fewest mutating calls the typed tools need and whether a later call must name an id an
+earlier one mints, recorded beside it: I1 tempo at the start (`set_tempo`), I2 transpose the Keys
+clip an octave (`transpose`), I3 unmute and pan the Pad (`apply_patch`, no typed mix tool), I4 an
+`Intro` section (`add_section`), I5 one more note in an existing clip, keeping the others
+(`set_notes` with the whole set), **I6** a Surge XT `Bass` track with a one-bar clip (`add_track`,
+then `add_clip` on the id it mints), **I7** a `Hook` track, a two-bar clip and −6 dB (three calls,
+two of them on the new track's id), **I8** a `Chorus` section and a tempo change (two independent
+calls), I9 four chords on the Pad (`add_clip` with its notes inline), and I10 "turn on the
+parameter named `A Osc 1 Retrigger`" — written as the control nothing offered could satisfy,
+because `set_param` takes a `ParamID` and no tool reveals one (question 6). **So the share of
+instructions needing several calls is this set's, by construction**: 3 of the 9 feasible ones, 2 of
+them dependent. What a model does with them is what was measured. A checker per instruction reads
+the final `get_song` — the edit asked for, and no other track, clip, section, lane or tempo event
+changed — and each was watched **failing on the unedited song and passing on a scripted correct
+edit made through the tool API** before any model ran. Every run was told the same thing: the
+server's own MCP instructions ("call it first [as a dry run], read the returned RFC 6902 patch,
+then call again to apply") and one paragraph — 960 ticks per quarter, 4/4, a bar is 3,840 ticks,
+MIDI 60 is middle C, make the change so it is applied. The model applied its own edits; no person
+was in the loop. Fourteen tools were offered — question 13's default, with `set_param` in it — and
+the other eleven withheld.
+
+Two halves. **Half A** is Claude Code 2.1.274 as the MCP client, on the user's subscription:
+`claude-opus-5[1m]`, 10 instructions × 3, and `claude-sonnet-5`, × 2, 14:43–14:53 CEST. **Half B**
+is the `openai` Python SDK against OpenRouter, the fourteen tools sent as OpenAI function schemas
+built from the MCP `inputSchema`s — the envelope the sidecar will send — with the whole canonical
+`get_song` text in the first user message, 14:40–15:50 CEST: `deepseek/deepseek-v4-flash` × 5,
+`google/gemini-3.8-flash` × 2 (I10 once), `anthropic/claude-sonnet-5` × 1 plus I6–I8 again. The
+three were chosen to span OpenRouter's price list for tool-capable models on the day — $0.089,
+$0.75 and $2.00 per million input tokens as listed — with two not Anthropic's: DeepSeek V4 Flash as
+the cheapest credible open-weights model, served by sixteen providers and so the widest test of
+routing; Gemini 3.8 Flash as a closed mid-tier model whose function-calling dialect is not
+OpenAI's; Claude Sonnet 5 because the wireframes name `openrouter/anthropic/claude` and Opus 5 was
+already in Half A. **Every number below is one model id, on one day, routed to whichever provider
+OpenRouter picked** (trap 4), cited as evidence and never as the claim (trap 16).
+
+**Question 9 first, because it is the one that shapes M3.** Across both halves, 116 runs of I1–I9
+succeeded; **42 used more than one applied mutating call, and 28 had a call naming an entity an
+earlier call in the same instruction had created** — I6 and I7 every time they succeeded, and I9
+twice, when DeepSeek added the clip and then its notes with `set_notes`. **Not one successful run
+composed a multi-call edit out of dry runs.** Every dependent chain applied its earlier call for
+real and then named the id that call's result returned. Where a model previewed at all, it
+previewed one step, applied it, and previewed the next: DeepSeek and Gemini dry-ran each step of I6
+and I7 after applying the one before. **Through Claude Code, Opus 5 and Sonnet 5 skipped the dry
+run entirely on I6 and I7, 10 runs of 10.** Opus 5 did so while dry-running every single-call
+instruction and both of I8's independent calls, 3 runs of 3 each — it stopped previewing exactly
+where a preview cannot compose. Sonnet 5 rarely dry-ran anything. Trap 8 was reached once: DeepSeek
+(I9, rep 1) dry-ran `add_clip`, dry-ran `set_notes` on the clip id that preview had minted, was
+refused `clip_unknown`, and recovered by applying `add_clip` for real. No model ever used the one
+way a several-entity edit is already a single call — `apply_patch` with ids it mints itself
+(below). And a turn can carry several calls: DeepSeek sent more than one tool call in 18 turns and
+Sonnet 5 in 7 (Gemini never), most of them I8's two independent edits, dry-run together and then
+applied together.
+
+What that does to question 9: **(c) is a restriction, not a non-issue.** One mutating call per
+proposal would have refused I6, I7 and I8 — a new track with anything on it, and any two edits in
+one sentence — which is also the bass-line example the question itself uses. (b) has to carry the
+ids a prepare mints into the next prepare, because that is exactly what every model did with the
+ids a real apply returned. And the single-call half of it already works end to end: **`apply_patch`
+accepts a dry run's returned patch verbatim** — its `version` ops equal what `core` computes, while
+`/version` 99 is refused `version_not_writable` ("this asked for 99 where core computes 25") — and
+the ids the preview showed become the real ones. One DeepSeek run (I5, rep 4) applied its edit that
+way unprompted. It matters because the other way does not keep them: the same `add_track` applied
+with `dry_run: false` after its dry run minted a different track id from the one the preview had
+shown (`…ECTRWWD1FDJS6C9KK8` previewed, `…EFMX5FHZ7JEFSTE7VX` applied), which is `core/src/id.rs`'s
+own warning — and ADR 0017 §4 applies by re-sending the call, which is safe for a drag of notes
+that already exist and is not for a proposal that adds a track.
+
+**Whether a real model drives the tool API at all: yes, all five routes,** on I1–I9.
+
+| Route | Runs | I1–I9 succeeded | Invalid calls, I1–I9 | I10 |
+|---|---|---|---|---|
+| `claude-opus-5[1m]` via Claude Code | 30 | 27/27 | 0 of 81 | **3/3 succeeded** — derived the `ParamID` (below); one `param_unknown` each first |
+| `claude-sonnet-5` via Claude Code | 20 | 17/18 | 3 of 45 | 0/2; said it could not map the name; one tried a `Bash` tool it was not offered |
+| `deepseek/deepseek-v4-flash` via OpenRouter | 50 | 44/45 | 4 of 140 | 0/5: 58 invalid calls, 4 runs hit the 12-turn cap, 1 **false claim** |
+| `google/gemini-3.8-flash` via OpenRouter | 19 | 16/18 | 2 of 62 | 0/1: 6 invalid calls in 8 turns, $0.175, then the budget guard refused its next call |
+| `anthropic/claude-sonnet-5` via OpenRouter | 13 | 12/12 | 0 of 37 | 0/1: 8,192 completion tokens reasoning about the hash, `finish_reason: length`, declined to guess |
+
+The failures that were not the control were all **valid calls doing the wrong thing**, which no
+validator can see and only the checkers did: Sonnet 5 wrote I5's quarter note as 480 ticks, an
+eighth; DeepSeek met I7's "volume −6 dB" with an `add_automation` lane on `gain_db` and left the
+mix at 0 and said it was done. Gemini's two were cut, not wrong — one by an upstream 429 and one by
+the guard. The invalid calls were few and recoverable because the refusals are precise: **eight
+calls by three models asked `set_param` for the new track's `gain_db`** and got `device_unknown`
+("is not an instrument or effect"), and all but one of those runs went on to `apply_patch`
+`/tracks/<id>/mix/gain_db` — no typed tool sets a mix, and the models expect one (question 13).
+Sonnet 5 sent `plugin_id: "Surge XT"` without a version, was told which four plugins this build
+hosts, and fixed it. Gemini dropped one `0` from a 26-character id, got `clip_unknown`, read the
+song and fixed it. And I10 is the loudest thing in the table. **Opus 5 computed the `ParamID`
+itself** — JUCE's `String::hashCode` (`31·h + c`, masked to 31 bits) of Surge's storage name
+`a_osc1_retrigger` is 1217754326, which checks — and said it "couldn't confirm that it's
+specifically the retrigger switch", because the validator confirms only that an id is one of the
+2,855. **DeepSeek guessed three ids that did not exist, then set 1945359057 — an id it copied from
+an automation lane already in the song — and replied that it had set "A Osc 1 Retrigger" (id
+1945359057)**. The call was valid, the parameter was wrong, and the summary was false. Question 6
+is not "a model cannot learn a `ParamID`"; it is that without a tool one model derives it, one
+declines, and one invents it and says it succeeded — and §9's diff before apply is the only thing
+between that sentence and a person believing it.
+
+**What one edit costs**, on successful I1–I9 runs, with the whole canonical `get_song` in context,
+as OpenRouter billed it (`usage.cost`):
+
+| Model, as served | First-turn prompt | Prompt tokens per edit, median | $ per edit, median (single-call / multi-call) | $ max | Seconds, median / max |
+|---|---|---|---|---|---|
+| DeepSeek V4 Flash — DeepInfra, Venice | 8,739–8,783 | 28,562 | 0.0009 (0.0008 / 0.0022) | 0.0049 | 16.4 / 105.2 |
+| Gemini 3.8 Flash — Google | 9,133–9,181 | 31,479 | 0.0265 (0.0192 / 0.0327) | 0.1468 | 15.4 / 314.0 |
+| Claude Sonnet 5 — Amazon Bedrock | 11,894–11,962 | 38,645 | 0.0847 (0.0794 / 0.1189) | 0.1654 | 14.7 / 29.9 |
+
+A single-call edit is three model turns — the dry run, the apply, the answer — which is why a
+9,000-token first turn becomes 28,000–39,000 billed prompt tokens. DeepSeek's providers cached 85%
+of them automatically and Gemini's 50%; Sonnet 5 cached nothing, because nothing sent Anthropic's
+`cache_control`, so its number is the uncached price of the envelope as the sidecar would send it
+unless PR 8 adds the marker. The failed control costs more than a success: up to $0.0083 and 476
+seconds for DeepSeek's twelve-turn loops, $0.175 for Gemini's eight turns, $0.136 for Sonnet 5's
+one long answer — which is question 8's point about where "three" counts, in money. Gemini's
+latency is the spread, not the median: one turn took 107 seconds and one edit 314.
+
+Where the first turn goes, measured as prompt tokens of each text alone (DeepSeek's pinned to
+DeepInfra, with a twenty-token question appended): the fourteen tool schemas are about 3,390 tokens
+to DeepSeek and 1,750 to Gemini; the canonical `get_song` is 5,199 and 7,196 — its compact
+key-sorted form 3,791 and 5,198. **A throwaway bar-block view** — written only to size the
+comparison, **not the Libretto ADR's grammar** (ids, names, devices, mix, tempo, sections, and each
+note as `pitch@bar.beat[.tick] len velocity [id]`; no provenance, versions or empty maps) — is
+2,294 bytes against 15,011, and 1,060 tokens to DeepSeek and 1,596 to Gemini: a fifth of the JSON.
+Run as the first message instead of the JSON, on DeepSeek, I1–I9 × 3, with `get_song` still
+offered: **the model called `get_song` anyway in 25 runs of 27** (3 of 45 with the JSON in front of
+it), so the first turn fell from 8,760 tokens to 4,655 and the whole edit rose, 36,297 tokens and
+$0.0020 against 28,562 and $0.0009 at the median. Success was 27/27 against 44/45 and invalid calls
+2.8% against 2.9% — **no measurable change in invalid calls**, on one model, from a view that was
+not the ADR's. What the number says to PR 1 is narrower than "views help": a read-only summary
+beside a tool that returns the full document was not trusted as the document.
+
+**Whether tool calling survives OpenRouter's routing: the schemas did; the routing is the risk.**
+No provider refused the descriptor-derived schemas — `additionalProperties: false`, maps as
+`additionalProperties` schemas, no `required` — and across 453 tool calls in Half B there was no
+unknown tool name, no unparseable argument string, and no camelCase field (none in Half A's 143
+either; trap 11 did not fire). One argument arrived in the wrong shape: DeepSeek sent `note_clip`
+as a *string* holding malformed JSON, which `core` answered as JSON-RPC `invalid_params` ("invalid
+type: string …, expected struct escribass.song.v1.NoteClip") rather than a refusal, and the model
+corrected it the next turn. Gemini returned `reasoning_details` on all 86 of its turns and they
+went back verbatim with no error. What the router changed was elsewhere:
+
+| Found | Consequence |
+|---|---|
+| **One of DeepSeek V4 Flash's providers silently discards a message whose content is a JSON document.** Pinned to OpenInference, the canonical `get_song` plus a question — "the name of the track at index 4, and its note" — reported 8 prompt tokens, answered `ok`, and cost $0.00000068; the compact JSON the same. The bar-block text with the same question: 1,060 tokens, answered `Keys`. Pinned to DeepInfra: 5,199 and 3,791 tokens, answered `Keys 48`. Unpinned, a request *without* tools was routed there; every tool-calling turn went to DeepInfra, Venice or once Novita | Nothing in the response says the song was dropped except the token count. The sidecar pins its providers (`provider.order` or `only`, `allow_fallbacks: false`) or compares `prompt_tokens` against what it sent; "OpenRouter" is not one backend, and price-based routing changed with the request's shape |
+| Claude Sonnet 5 was served by **Amazon Bedrock on all 44 turns**, never Anthropic's own API; Gemini by `Google` on all 86 | A model id names weights, not a service — the `provenance.model_id` U3 records says nothing of who ran them |
+| Gemini returned an **upstream 429** mid-run ("temporarily rate-limited upstream") | Question 8's third kind, seen live. The SDK was set to `max_retries=0`, so nothing retried it unseen; a sidecar left on the default retries it twice before the loop knows |
+| `usage.cost` is in every response without asking for it, beside `cost_details.upstream_inference_cost` and `is_byok`, and summed to within $0.00000012 of the key's own counter over 545 priced calls. `/api/v1/generation?id=` returned 404 three seconds after a call | The response is the ledger; there is no need to query it afterwards |
+
+**What `betterproto2-compiler` 0.10.1 generates: both stacks, chosen by option, and a server only
+for grpclib.** Two plugin options decide it (`settings.py`, `plugin/parser.py`):
+`client_generation` — `none`, `sync` (the default), `async`, and three combinations — and
+`server_generation`, `none` (the default) or `async`. With the one option `schema/buf.gen.yaml`
+passes today, `pydantic_dataclasses`, `song_tools.proto` becomes `SongToolsStub(channel:
+grpc.Channel)` calling `channel.unary_unary(...)` under `import grpc` — **a synchronous grpcio
+client, and no server**. With `client_generation=async` and `server_generation=async` it becomes
+`SongToolsStub(betterproto2_grpclib.ServiceStub)` and
+`SongToolsBase(betterproto2_grpclib.ServiceBase)` under `import grpclib` — **an async grpclib
+client and a grpclib server**. There is no grpcio server option. The runtime declares both as
+extras, `grpcio>=1.72.1` and `grpclib>=0.4.8`. Five round trips were run, with grpcio 1.84.0 and
+grpclib 0.4.9 in a scratch environment: the generated grpclib server on a Unix socket; the
+generated grpclib client to it over the socket; the generated grpcio client to the same grpclib
+server over `unix:<path>`; and each client against the real tonic `escribass-grpc` (`get_song`, and
+a dry-run `add_section` answered valid) — over TCP, because that binary takes a `SocketAddr` and
+has no Unix listener. **So the stack follows question 1.** Under its default (b) `ai` serves, and
+only grpclib has a generated server; under (a) `ai` only dials and either works. grpcio with a
+server means registering handlers by hand, or `grpcio-tools`' own `_pb2` classes — a second set of
+Python model types beside the Pydantic ones.
+
+**How many of Surge XT's 2,855 `ParamID`s reach an RNG nothing can seed: 194 by the rule below, 24
+to 2,283 by the rules around it — and no denylist of `ParamID`s can be the whole answer.** Read at
+`f7b97c6`. Every `ParamID` was mapped by hashing Surge's JUCE parameter ids (its storage names,
+`SurgeSynthProcessor.cpp:1689`) as dumped from the engine's own compiled Surge libraries — all
+2,855, no collisions: 766 Surge parameters, 8 macros, a bypass, and **2,080 JUCE MIDI-CC proxy
+parameters**. Every RNG site was read in context, and a scratch harness linking those libraries
+rendered each setting in two fresh processes more than a second apart — 278 settings, each as two
+such pairs, every verdict agreeing — driving `SurgeSynthProcessor` directly, not through Tracktion
+or the VST3 wrapper. Its base is Surge's constructor state (no data directory, so not "Init Saw"),
+and "the fixture" is that plus `A Osc 1 Retrigger` = 1, the one `set_param`
+`tests/renders/surge_xt` makes. The unseedable sources are three: `storage->rand*` from a
+`minstd_rand` seeded by `system_clock` (§8's note); C `rand()`, which `SurgeSynthesizer.cpp:86`
+seeds with `srand(time(nullptr))`; and `std::random_device`.
+
+| Rule | ParamIDs |
+|---|---|
+| **Headline**: a value that, with `Instrument.state` empty and only `params` or automation set, selects or switches on an unseedable RNG consumer that reaches the render — type and mode selectors, mute, solo, retrigger and routing switches, and amounts whose zero is that RNG's off (Osc Drift, Extra Noise, Chaos, Knock); plain gains and mixes not counted | **194**: 23 per scene × 2, 4 global, 16 FX types, 128 FX-slot parameters |
+| One parameter changed from the fixture opens a path, **each confirmed by rendering** | **24**: `a_osc1_retrigger`, `a_osc1_type`, `a_drift`, `a_fm_switch`, `scenemode`, `scene_active`, mute and solo of oscillators 2 and 3, both ring modulators and the noise source, and FX Type (Tape) in the 8 A and Global slots |
+| Reaches only through a modulation routing, which lives in `state` | 72 more (LFO Type Noise/S&H/MSEG, Trigger Mode Random, Deform below 0 on Envelope, × 24 LFOs), plus 32 amounts |
+| Its **default** value is the one that reaches | Strictly 1, `A Osc 1 Retrigger`; 15 have their default on the open side (6 retriggers, 6 oscillator types, 2 oscillator-1 mutes, FX Chain Bypass) |
+| Meaning depends on another selector | Oscillator parameters: 6 of 42. FX-slot parameters: 128 of 192 |
+| The 2,080 MIDI-CC proxies | 0 through `params`; 224 are wired to modulation sources by default and need a routing |
+| Constant-seeded only (repeatable in a fresh single-threaded process, order-dependent) | 2 (the waveshaper's Fuzz shapes); Twist engines 7–15, Nimbus and Bonsai are too, already counted elsewhere |
+| Range | 24 · 60 (headline without selector-dependent) · **194** · 275 (plus gains and sends that can silence a path; a floor) · 379 (plus routing-only) · 2,283 (plus MIDI CCs through routing or learn) |
+
+Four facts the count cannot carry and question 7 has to. **A default reaches the RNG**, so a rule
+that only refuses values cannot close it: it would have to *require* `Retrigger` on every
+oscillator that is heard. **A type change resets its dependent parameters at the first block** —
+oscillator and FX-slot values written in the same `params` map as the type are overwritten
+(rendered), so those values reach the engine only through automation lanes or `state`. **FX Type
+Tape reaches `std::random_device` at its default settings** wherever its slot receives audio. And
+**with arbitrary `state` every parameter can matter**, since `state` carries the routings — and
+`apply_patch` writes `state` like any other field (a dry run replacing the Lead's with three bytes
+was valid). Two cautions for any golden that compares renders: C `rand()` is seeded in *whole
+seconds*, so two renders in the same second agreed 3 times of 3 with Drift on; and Alias's noise
+has an 8-bit seed, so one A/B pair in five agreed by chance. Two sites a grep for the RNG finds are
+dead code — the Vocoder's `rand_pm1` sits inside a `/* */` block and `Reverb1.h:403` is commented
+out. Confidence: the 24, the defaults and the MIDI-CC count rest on source and renders and are
+high; the 194 is a per-`ParamID` classification with two judgment calls (which Airwindows amounts
+are RNG-specific; Split Point) and is medium-high; the Airwindows gates beyond their defaults were
+not rendered. Not examined: Init Saw as a base, user configuration, the contents of `state`,
+LuaJIT's own PRNG, whether anything calls the VST3 SDK's `FUID::generate` (which reseeds `rand()`
+from a pointer), and the real engine path. **194 is a validator rule over values and combinations,
+with a required value and a `state` escape beside it — not a PR-sized list**, which is the case
+question 7 wrote (c) for.
+
+| Found beside the six questions | Consequence |
+|---|---|
+| **Every Claude Code session left `.escri/lock` behind** — 50 runs of 50, naming a process that no longer existed, so the next open was refused `project_locked`. Reproduced without Claude Code: `escribass-mcp` removes the lock when stdin closes (exit 0) and leaves it on SIGTERM, SIGINT and SIGKILL — nothing handles a signal, so `ProjectLock`'s `Drop` never runs — and Claude Code ends its stdio servers by signal | §18.2 Stage 1's "any MCP client can drive a project" holds for one session per project; after it, a person deletes a file by hand, which ADR 0012 §3 says nothing does for them. U5 narrowed the promise to "with the window closed", and this narrows it again. `core`'s to fix, not M3's to route around |
+| **`apply_patch` lets a caller mint entity ids and write entity `provenance`.** One `apply_patch` adding a track, its instrument and a clip on it, with ids the caller chose, is valid once each entity carries a `provenance`; a section added with `AUTHOR_HUMAN` and `created_at` 1999 was stored exactly so, while its log entry said `AUTHOR_MODEL` at the real time. A caller's `version: 1` came back 0 | ADR 0006 §4's "a caller cannot set them" holds for the typed tools and not for the raw pipeline. Trap 3's six sites have a seventh: a model can stamp an entity human through the tool question 10 hands a person for Edit. It is also the one existing way a several-entity edit is one call, and no model used it |
+| The tool schemas never say **960 PPQ**; `song.proto` does, in a comment the descriptor carries to no tool | Every run here was told in the prompt. An MCP client that is not told has to infer it from the ticks |
+| Claude Code hands its model the MCP **`structuredContent`** — compact, key-sorted JSON, 9,526 bytes for the fixture — not the canonical `text` (15,011) | What a client's model reads is the client's choice; the view question is not only the sidecar's |
+| **`--bare` cannot use a Claude subscription** — its help says OAuth is never read, only `ANTHROPIC_API_KEY` or an `apiKeyHelper` — and `--safe-mode` keeps OAuth but drops `--mcp-config` servers. What isolated the runs was `--setting-sources "" --disable-slash-commands --strict-mcp-config --tools ""` with `--permission-mode dontAsk` and an allowed/disallowed tool pair; each run's init reported `apiKeySource: none`, no plugins, no skills, no hook events, and the fourteen tools | So a later measurement through Claude Code does not bill an API key by accident |
+| The `openai` SDK today, **3.14.1, carries `httpx2` 2.13.0** — a differently named package — with `httpcore2`, `jiter`, `anyio`, `truststore`, `sniffio`, `h11` and `idna`; and it reads `OPENAI_API_KEY` when no key is passed, which is also set on this machine | U4 approved "the `openai` Python SDK … with the `httpx` it carries"; PR 2's pin names what it actually carries. The sidecar passes the key and `base_url` explicitly, or another provider's key goes to OpenRouter |
+
+**What Half A could and could not say.** It answered capability, questions 1 and 9, for two Claude
+models through a real MCP client — the §18.2 path, with the client's own prompt, its own choice of
+`structuredContent`, and its own dry-run habits. It could not answer cost: subscription usage is
+not a per-token price, so no dollar figure is given for it, and its token counts include Claude
+Code's own system prompt. It could not see routing, because Claude Code talks to Anthropic
+directly. And it is not the sidecar's envelope: its tool schemas reach the model through Claude
+Code's conversion, not as the OpenAI function schemas Half B sent.
+
+**What it spent.** Half B was capped at **$3.00** for every model combined by a guard that, before
+each request, booked a worst case — the request body's bytes plus 3,000 as an upper bound on input
+tokens, times the highest input-side price any tool-capable endpoint of that model lists, plus
+twice `max_tokens` at the highest output-side price — under a file lock, and refused the call if
+spend plus that would pass the cap or the model's allocation. It was watched refusing before it was
+trusted: against a client that fails if reached, at a tiny cap, a tiny allocation, one micro-dollar
+under the worst case, a missing `max_tokens`, spend-so-far plus worst case, and a second caller
+while the first was in flight; then with the real client at a $0.0001 cap, where the client object
+was never constructed. In service it refused twice, both Gemini's allocation. **Total spent:
+$2.42112049** by the sum of `usage.cost` over 545 priced calls — DeepSeek $0.16915284, Gemini
+$0.86625165, Sonnet 5 $1.38571600 — and **$2.421120374 by OpenRouter's own counter for the key**,
+read before the first call and after the last. No request's reported cost exceeded 32% of its
+booked worst case, and no reported prompt exceeded its bound. The key was read from the environment
+only, and is in no file the spike wrote.
+
+**Still open after the spike.** Sonnet 5 through OpenRouter ran once per instruction, and Gemini's
+second repeat lost I6 to a 429 and I9 to the guard. Nothing measured next month's weights under the
+same names. Temperature was each model's default, and no run used Anthropic's `cache_control`. The
+bar-block result is one model and a view that is not PR 1's. The Surge count is a harness verdict,
+not an engine render, and says nothing of Dexed's waveform 5 or sfizz's `*_random`.
+
 ### The open questions — for the user
 
 `CLAUDE.md` line 4: "Sections marked [OPEN] are not yours to decide: stop and ask." Five
@@ -1175,7 +1437,7 @@ question is open regardless.
 
 | # | Branch | Adds |
 |---|---|---|
-| 0 | `m3.0-spike` (**never merged**) | The measurements the ADRs cannot honestly be written without, each a number with a date and a model name beside it. **Whether a real model drives the tool API at all** through the descriptor-generated schemas, over OpenRouter, for two or three candidate ids: calls per instruction, invalid-call rate, and whether structured tool calling survives the routing. **What one edit costs** — tokens, seconds, money — with the full `get_song` (15 KB for the render fixture, 5 KB for `every_tool`'s) against a bar-block view of the same song, which is the number the Libretto ADR cites. **How often a real instruction needs more than one mutating call** (question 9). **What `betterproto2-compiler` 0.10.1 actually generates** for a service — `grpclib` or `grpcio` stubs — on a Unix socket, before U4 names a dependency. And **how many of Surge XT's 2855 `ParamID`s reach an RNG path**, a count that sizes PR 7 and decides between question 7's (a) and (c). M2's spike never took its measurement and PR 10 had to; this one records its numbers in this file, in the ADRs' "measured" sentences, before PR 1 is written |
+| 0 | `m3.0-spike` (**never merged**) | The measurements the ADRs cannot honestly be written without, each a number with a date and a model name beside it. **Whether a real model drives the tool API at all** through the descriptor-generated schemas, over OpenRouter, for two or three candidate ids: calls per instruction, invalid-call rate, and whether structured tool calling survives the routing. **What one edit costs** — tokens, seconds, money — with the full `get_song` (15 KB for the render fixture, 5 KB for `every_tool`'s) against a bar-block view of the same song, which is the number the Libretto ADR cites. **How often a real instruction needs more than one mutating call** (question 9). **What `betterproto2-compiler` 0.10.1 actually generates** for a service — `grpclib` or `grpcio` stubs — on a Unix socket, before U4 names a dependency. And **how many of Surge XT's 2855 `ParamID`s reach an RNG path**, a count that sizes PR 7 and decides between question 7's (a) and (c). M2's spike never took its measurement and PR 10 had to; this one records its numbers in this file, in the ADRs' "measured" sentences, before PR 1 is written. **Run 2026-09-17**; its numbers are in "What the spike found" |
 | 1 | `m3.1-libretto-adr` | **ADR 0018 alone**: the grammar, its direction, where it lives, the six axes and what each is made of, that they are pure, and what was read. Its §15 row, and §18.2's "record this in an ADR before M3" satisfied. No code, and no other ADR, because everything after it is downstream of it (ADR 0003 §6) |
 | 2 | `m3.2-adrs` | The ADRs the fourteen questions resolve into, their §15 rows, and the §17 changes U3 and U4 settle with `lock.baseline.json` mirroring them — the Python packages by exact version, `ai.model` as what it is; §13's `Jobs` line amended or honoured (question 2); §6.1 gaining the sentence that names the third failure kind (question 8). **No code**. The user's five questions are answered here or the rows that need them wait |
 | 3 | `m3.3-proto-py` | `proto/`'s **whole M3 shape in one change**: the `ai` service in whichever direction question 1 picks, provenance where question 3 puts it on the wire, `list_params` if question 6 says so — so `buf breaking` compares it once against a `main` that has not moved (M2 trap 12). And **Python codegen for `proto/`** (ADR 0006 §7), narrowed to what question 1 needs, with its entry under `tool_api` in `lock.baseline.json` as TypeScript's is |
