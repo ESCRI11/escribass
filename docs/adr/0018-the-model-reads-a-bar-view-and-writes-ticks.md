@@ -169,7 +169,8 @@ what the key-reversed golden of decision 5 exists to catch (ADR 0012 §5, amende
 
 **Drums are inside the grammar, and the grammar adds nothing for them.** Libretto
 "deliberately abstracts away velocity, micro-timing, original timbre, and unpitched
-percussion" (paper §3, as read). This product's bundled sampler plays drum kits, and the
+percussion" (paper §3, as read; the package's later grammar carries both — decision 6 — and
+this rule rests on the document, not on the paper). This product's bundled sampler plays drum kits, and the
 wireframes' first track is `Drums · sfizz · kit_808.sfz`. In this model a drum hit is a
 `Note` on an instrument track whose device is a `SamplerRef`: its `pitch` is the key that
 triggers a sample, and the document stores nothing else about it. The view cannot tell a kit
@@ -245,10 +246,14 @@ and emits ticks; nothing from `to_json` reaches a tool).
 ### 4. The six axes are descriptive counts over the document — no corpus, no key, no gate
 
 Libretto's axes are per-song values converted to percentiles "against a frozen 314-song
-corpus" curated from the Lakh MIDI Dataset; its key comes from the grammar's own header and
-its chord metrics from a chord label the agent writes into every bar (paper §3 and Appendix
-B, as read). This repository has no corpus and will not have one in M3 (decision 6 says what
-exists and why it is not taken); it has no key (U1); and its model has no chord label. An
+corpus" curated from the Lakh MIDI Dataset (paper §3; Appendix B's percentile divides by 314).
+Its grammar carries a key in the header and a chord label in every bar, but **no axis in
+Appendix B reads either**: chromaticism maximises over the twelve roots, the chord metrics
+take their chord from the prominent pitch classes of each half-bar, root motion from the
+lowest bass pitch of each bar — every one from the note tokens. (This ADR's first draft said
+the chord metrics read the label; Appendix B, read in full, says otherwise — decision 6.)
+This repository has no corpus and will not have one in M3 (decision 6 says what exists and
+why it is not taken); it has no key (U1); and its model has no chord label. An
 uncalibrated percentile is a number with no meaning, so the axes here are not percentiles.
 They are **exact counts and ratios a reader can check against the view by hand**, taking the
 paper's own definitions wherever a definition needs neither a corpus, a key, a label nor a
@@ -266,11 +271,11 @@ any voice" is what a model can act on and a song-level mean is not.
 | Axis | Computed in M3, from the `Song` alone | Deferred, and why |
 |---|---|---|
 | **Rhythm** | Per bar and per voice: onsets; onsets on a beat; the paper's *syncopation rate* (onsets not on a beat boundary, over onsets); onsets on the 16th grid (multiples of 240 ticks), on the triplet-eighth grid (320), on neither; the smallest inter-onset interval in ticks; mean written length as a fraction. Song totals of the same | *Onset position entropy*, *duration CV*, *density variability* — entropy and standard deviation |
-| **Harmony** | Per bar, over all note voices and again per voice: the paper's *duration-weighted pitch-class mass* — twelve integers, ticks sounding per class; *distinct pitch classes*; the *prominent* classes, at or above 30% of the heaviest, as `10·w ≥ 3·max`; *chromaticism*, `1 − max over roots of (mass on the major scale at that root / total mass)`, which needs no key because it maximises over the twelve. A sampler voice is reported and marked, never excluded | Any key: U1. *Chord change rate*, *chord vocabulary density*, *root-motion entropy*, *fourth-motion rate*, *diminished/augmented colour* — every one reads the chord label the paper's agent writes, and the model here has no such entity. *Pitch-class entropy* — a logarithm |
-| **Melody** | Per voice, per bar and over the song: pitch range; distinct pitches; the interval sequence between successive onsets in signed semitones, where the line at a simultaneous onset is the **highest** note (a stated rule, not a detector); the paper's *step ratio* (intervals with magnitude ≤ 2, over intervals) and *ascending ratio* | *Interval entropy* — a logarithm. The paper's *identified melody voice*: no voice is identified, every voice is reported, and the reader chooses |
-| **Texture** | Per bar: the paper's *voice count* (voices with a note or an audio iteration sounding — an audio clip is a voice with one opaque event); *mean simultaneity* (notes over distinct onset ticks, across voices); *maximum chord width* (largest pitch span among notes sharing an onset tick, across voices); each voice's greatest polyphony; each voice's sounding ticks over the bar's | — |
-| **Form** | Over the song: two bars are *equal* when every voice's list of (clip-relative onset within the bar, pitch, length, velocity) is identical; the bar sequence lettered by first occurrence (`A A B A`); the paper's *distinct-bar fraction*; the paper's *self-similarity*, the Jaccard overlap of each pair's sets of (voice, onset-in-bar, pitch) triples, two empty bars overlapping fully, averaged over pairs as an exact fraction; *novelty rate*, `mean over consecutive pairs of (1 − overlap)`. The document's own sections are listed against the lettering | *Sections per 100 bars* — a checkerboard novelty kernel with a threshold at `mean + 0.5·std`; the document already carries sections |
-| **Within-song variation** | Per voice, per bar, one of six classes against the previous bar: *identical*; *same rhythm* (equal onsets and lengths, different pitches); *same pitches* (equal pitch multiset, different rhythm); *different*; *enters* (silent before, playing now); *leaves*. And per voice the number of distinct bar patterns over the song | The paper's definition entire — windowed standard deviations "normalized against corpus SD" — is a corpus measure twice over |
+| **Harmony** | Per bar, over all note voices and again per voice: the paper's *duration-weighted pitch-class mass* — twelve integers, ticks sounding per class; *distinct pitch classes*; the *prominent* classes, at or above 30% of the heaviest, as `10·w ≥ 3·max`; *chromaticism*, `1 − max over roots of (mass on the major scale at that root / total mass)`, which needs no key because it maximises over the twelve. A sampler voice is reported and marked, never excluded | Any key: U1. *Chord change rate*, *chord vocabulary density*, *diminished/augmented colour* — the paper computes them from the prominent classes of each half-bar or bar, so they need no label and nothing here prevents them; deferred all the same, as a scope choice for PR 6 and not, as this ADR first said, because they read the chord label. *Root-motion entropy* (a logarithm) and *fourth-motion rate* — both read the paper's bass, "the lowest-μ voice", an identification this ADR does not adopt. *Pitch-class entropy* — a logarithm |
+| **Melody** | Per voice, per bar and over the song: pitch range; distinct pitches; the interval sequence between successive onsets in signed semitones, where the line at a simultaneous onset is the **highest** note (a stated rule, not a detector); the paper's *step ratio* (intervals with magnitude ≤ 2, over intervals) and *ascending ratio*, both over the non-zero intervals only, as the paper's set *M* drops a repeated pitch | *Interval entropy* — a logarithm. The paper's *identified melody voice*: no voice is identified, every voice is reported, and the reader chooses |
+| **Texture** | Per bar: the paper's *voice count* (voices with a note or an audio iteration sounding — an audio clip is a voice with one opaque event); *mean simultaneity* (notes over distinct onset ticks, across voices — the paper's divides by distinct (voice, onset) pairs instead); *maximum chord width* (largest pitch span among notes sharing an onset tick, across voices — the paper's is within one voice); each voice's greatest polyphony; each voice's sounding ticks over the bar's | — |
+| **Form** | Over the song: two bars are *equal* when every voice's list of (clip-relative onset within the bar, pitch, length, velocity) is identical; the bar sequence lettered by first occurrence (`A A B A`); the paper's *distinct-bar fraction* over that equality (the paper's compares (voice, onset, pitch) only); the paper's *self-similarity*, the Jaccard overlap of each pair's sets of (voice, onset-in-bar, pitch) triples, two empty bars overlapping fully, averaged over pairs as an exact fraction; *novelty rate*, `mean over consecutive pairs of (1 − overlap)`. The document's own sections are listed against the lettering | *Sections per 100 bars* — a checkerboard novelty kernel with a threshold at `mean + 0.5·std`; the document already carries sections |
+| **Within-song variation** | Per voice, per bar, one of six classes against the previous bar: *identical*; *same rhythm* (equal onsets and lengths, different pitches); *same pitches* (equal pitch multiset, different rhythm); *different*; *enters* (silent before, playing now); *leaves*. And per voice the number of distinct bar patterns over the song | The paper's definition entire — each windowed standard deviation divided by "the corpus standard deviation of axis *a*" (Appendix B) — is a corpus measure twice over |
 
 For the render fixture, from the view above and by hand (PR 6 checks the hand): bar 1 has
 seven Lead onsets of which four are on a beat, so a syncopation rate of 3/7, three on no
@@ -321,43 +326,111 @@ function is not a document under test).
 
 ### 6. What was read, and what was found that the landscape had not
 
-Libretto is arXiv 2606.22708 — Yichen Xu, *Libretto: Giving LLM Agents a Sense of Musical
-Structure*, submitted 21 June 2026. `docs/landscape-2026-09.md` Area 4 (research of
-2026-09-02) recorded its shape and "no public code found", and §18.2's sentence was written
-from that record. For this ADR the paper was read on 2026-09-17 from `arxiv.org/html/2606.22708`,
-through a fetch that summarises; the phrases quoted above are the ones that reading returned
-verbatim, and every other statement about the paper is this repository's reading of it —
-**read, never measured**, since nothing of Libretto's has been run here.
+Libretto is arXiv 2606.22708 — Yichen Xu (University of California, Berkeley), *Libretto:
+Giving LLM Agents a Sense of Musical Structure*, v1 submitted 21 June 2026, cs.SD.
+`docs/landscape-2026-09.md` Area 4 (research of 2026-09-02) recorded its shape and "no public
+code found", and §18.2's sentence was written from that record. For this ADR the paper was
+first read on 2026-09-17 through a fetch that summarises, and re-read the same day in full
+from the HTML rendering at `arxiv.org/html/2606.22708` (§1–§5, Appendix A, Appendix B),
+beside the code repository's `README.md`, `DATA_PROVENANCE.md`, `FROZEN.md`, `CHANGELOG.md`,
+`LICENSE`, `pyproject.toml`, `libretto/__init__.py`, `libretto/core/axes_v3.py` and the
+header of `libretto/data/corpus_distribution.json`, at its head commit of 2026-07-15.
+Quotations are verbatim from those files; every other statement about the paper or the
+package is this repository's reading of it — **read, never measured**, since nothing of
+Libretto's has been run here.
 
-What the grammar was taken from: the paper's §3 (Methods) — "a global header, a voice declaration, and
-one block per bar. The header specifies key, meter, tempo, grid, and bar count"; `VOICES:
-BASS, GTR, KEYS`; blocks headed `@1` carrying "a required chord label followed by
-voice-specific note tokens", a note as `E4@1>1` (pitch, onset slot, duration in slots), and
-simultaneous pitches "joined with a plus sign". What the axes were taken from: Appendix B
-(Metric Definitions), whose features decision 4 names by the paper's own names where it adopts
-them and where it defers them. What was **not** taken, and why: the chord label, because the
-model has no such entity and a label the model wrote into a view would be state outside the
-song; the key, because it comes from the paper's header and this document has none (U1); the
-percentiles, because they are the corpus; and the grammar's own spelling, because decisions 1
-and 2 put the tool's units first.
+**What the grammar was taken from.** The paper's §3 (Methods): "a global header, a voice
+declaration, and one block per bar. The header specifies key, meter, tempo, grid, and bar
+count"; each bar "a required chord label followed by voice-specific note tokens";
+"simultaneous pitches are joined with a plus sign"; "In a 16th-note 4/4 grid, for example, the
+beat positions are slots 1, 5, 9, and 13"; and the representation "deliberately abstracts away
+velocity, micro-timing, original timbre, and unpitched percussion". The spelled-out forms —
+`VOICES: BASS, GTR, KEYS, HORNS, LEAD`, a block headed `@1 [Em]`, a note as `E4@1>1` — are
+Appendix A's three grammar panels, not §3's.
 
-Two corrections to the record. **The paper names a code repository** —
-`github.com/Xyc-arch/Libretto` — and on 2026-09-17 it resolved: public, MIT, its README
-describing a MIDI-to-grammar encoder, the metric code and a frozen corpus shipped inside the
-package, "1,523" songs by that page where the paper says 314. The landscape's "no public code
-found" is therefore stale or was wrong, and `docs/landscape-2026-09.md` is the user's document
-to correct at its quarterly re-check (docs/AGENTS.md; §18.3), not this ADR's. And the paper's
-axes are **per song**, not per bar; §18.2's "self-check metrics" read them as something a
-loop could act on, and per-song percentiles are not that, which is part of why decision 4
-computes per bar.
+**What the axes were taken from, and how many the paper has.** The paper's fingerprint is
+**29 axes** — "35 candidate measurements reduced to 29 axes over rhythm, harmony, melody,
+texture, form, and within-song variation" (Table 1) — defined one by one in Appendix B (Metric
+Definitions): seven of rhythm, eight of harmony, five of melody, four of texture, four of form,
+and one within-song variation. Those six are the paper's *families*, in its own six words in
+the abstract and Table 1, and they are the six that §18.2 names and that decision 4's table is
+organised by. So the "six axes" of this ADR's title are the paper's six families and not six
+of its 29; inside each family decision 4 names which of the 29 it takes and which it defers.
+Every axis in Appendix B is computed over the whole piece — **per song, not per bar** — which
+is part of why decision 4 computes per bar: §18.2's "self-check metrics" read them as
+something a loop could act on, and a per-song percentile is not that.
 
-**The package is not a dependency of M3.** U4 approved a gRPC stack and the `openai` SDK
-and "nothing else"; a corpus curated from Lakh MIDI has a data provenance this repository has
-not read (`DATA_PROVENANCE.md` exists on that page and was not opened); and adopting it would
-make the axes what the paper's are — calibrated verdicts — which decision 4 refuses on its
-own grounds. The trigger to reconsider is a person's sign-off under CLAUDE.md #4 after that
-provenance is read, and it is recorded in `docs/plan.md`'s deferred ledger rather than
-assumed away.
+**Calibration, as the paper defines it.** "Each raw axis value is then converted to a
+percentile against a frozen 314-song corpus" (§3); Appendix B's percentile is the number of
+corpus values at or below the piece's, over 314, rounded, and an axis at or below the 5th or
+at or above the 95th is a "degenerate extreme". The 314 are "314 real MIDI files spanning
+eight genres ... curated from the Lakh MIDI Dataset" (§3), of which 255 carry a genre label
+(Table 1's classification row; the package's `DATA_PROVENANCE.md`: "255 genre-labeled + 59
+original = 314 songs (8 genres)"). The gates that consume the percentiles — a budget of
+extreme axes, a genre-fit floor, a copy-risk threshold — belong to the paper's agent loop, and
+nothing of them is taken here (decision 4).
+
+**What was not taken, and why:** the chord label, because the model has no such entity and a
+label the model wrote into a view would be state outside the song; the key, because it comes
+from the paper's header and this document has none (U1); the percentiles, because they are
+the corpus; and the grammar's own spelling, because decisions 1 and 2 put the tool's units
+first. One reason this ADR's first draft gave was wrong and decision 4 now says so: it said
+the paper's chord metrics read the chord label. Appendix B derives them from the note tokens
+— the prominent pitch classes of each half-bar, and the lowest bass pitch of each bar — and
+no axis reads the header's key either; key adherence is a gate of the paper's education task,
+not an axis.
+
+**The code exists.** The paper's "Code and Website" section names
+`https://github.com/Xyc-arch/Libretto`, and on 2026-09-17 it resolved: public, its `LICENSE`
+beginning "MIT License / Copyright (c) 2026 Yichen Xu", head commit 2026-07-15. It is a Python
+package, `libretto` 3.0.0 (`pyproject.toml`: `numpy`, `scipy`, `scikit-learn`, `pretty_midi`,
+`music21`, with `anthropic` an optional extra), holding a MIDI-to-grammar encoder and decoder,
+the metric code, and, in the README's words, "Frozen data ships inside the package
+(`libretto/data/`)". The landscape's "no public code found" was therefore wrong on 2026-09-02
+or has since become so — the history as read does not say when the repository went public —
+and that one claim is corrected in `docs/landscape-2026-09.md` in this pull request, dated;
+the rest of that document waits for its quarterly re-check (§18.3).
+
+**314 and 1,523 are two corpora, one release apart.** `CHANGELOG.md` v1.0.0 (2026-06-14) and
+v2.0.0 (the same day; a rename of the package from `musicfp`) ship the "29-axis / 314-song /
+2026-06-13 distribution" — the paper's, dated eight days before its submission. v3.0.0
+(2026-07-04, tagged a "CORE change") says "the old 314-song corpus (single-author hand labels,
+60 unlabeled) is superseded by 1612 MusicBrainz-genre-grounded songs across 11 genres" and
+sets `DISTRIBUTION_VERSION = "39-axis / 1523-song / genre-balanced / 2026-07-06"`, which is
+the README's number. So **314 is the paper's frozen corpus, and the package's through v2;
+1,523 is the version string of v3's percentile distribution, which the paper never saw.** The
+package's own files do not agree on what v3 counts: `FROZEN.md` lists "the 1612-song
+genre-grounded corpus" of grammar files and "1525 precomputed 39-dim fingerprints";
+`corpus_distribution.json`'s header says `n_songs: 1525` and calls its axis system "33
+discovered axes" while carrying 39 (the v3.0.0 commit message says the docstrings "were stale
+at 33/28-axis, 1497-song"); and `DATA_PROVENANCE.md` still describes the 314-song, 29-axis
+`corpus_distribution_314.json` that v3.0.0 says it renamed and replaced. Which songs 1,523,
+1,525 and 1,612 differ by is stated nowhere read, and this ADR does not guess.
+
+**The package's axes are not the paper's.** The README's "39 discovered axes" are v3.0.0's:
+`FROZEN.md` says they were "DISCOVERED from scratch by the `axis_evolve` self-loop ...
+replacing the hand-authored 28 metric_discovery axes + `within_song_variation` (preserved in
+git history)" — the paper's 29 replaced, not extended. `libretto/core/axes_v3.py` defines the
+39 by name: `axis_chromaticism`, `axis_duration_cv`, `axis_onset_density` and `axis_pc_entropy`
+keep a paper axis's name, while `axis_drum_ratio`, `axis_velocity_jitter`, `axis_swing_ratio`
+and `axis_instrument_diversity` measure what the paper's grammar abstracts away. Neither that
+file nor the distribution's per-axis `category` field (the first word of each name) groups
+them into the paper's six families, so whether §18.2's six partition the 39 **cannot be
+established from the package as read, and is not claimed**. The grammar moved with them:
+`FROZEN.md` says the v3 corpus "carries `[prog=N]` GM instruments, `[drums]` percussion
+voices, `^V` coarse velocity", so §3's abstraction of velocity and unpitched percussion
+describes the paper's grammar and the package's through v2, not its current one. Decision 1's
+drum rule rests on this document's shape and stands either way.
+
+**The package is not a dependency of M3.** U4 approved a gRPC stack and the `openai` SDK and
+"nothing else"; adopting it would make the axes what the paper's are — calibrated verdicts —
+which decision 4 refuses on its own grounds; and its axes are v3's 39, not the 29 §18.2 was
+written from. Its corpus is, in `DATA_PROVENANCE.md`'s words, "community MIDI transcriptions of
+copyrighted compositions, re-encoded as text grammar and provided here for research
+reproducibility", from the Lakh MIDI Dataset's `clean_midi` subset, whose lineage that file
+gives as "CC-BY 4.0" — stated here as what the file says and no further; what it permits is a
+person's to assess under CLAUDE.md #4, and the item sits in `docs/plan.md`'s deferred ledger
+rather than being assumed away.
 
 ## Alternatives considered
 
@@ -392,7 +465,7 @@ assumed away.
 
 | Alternative | Rejected because |
 |---|---|
-| Adopt the Libretto package (MIT) and its frozen corpus | Not approved under U4; provenance unread; and it would make the axes calibrated verdicts, which decision 4 refuses independently of the dependency |
+| Adopt the Libretto package (MIT) and its frozen corpus | Not approved under U4; its provenance is a person's to assess (decision 6); its axes are v3's 39, not the paper's 29; and it would make the axes calibrated verdicts, which decision 4 refuses independently of the dependency |
 | A key detector, so the harmony axis can name a key | U1: §6.3's analysis is out of M3, and a detector here would be a `[OPEN]` item decided by an agent |
 | Entropies and standard deviations, as the paper defines them | `libm` in a byte-compared golden. Exact rationals carry the same information a reader can check, and the deferred ones are named rather than approximated |
 | Song-level values only, as the paper's are | A model acts on a bar; "the song's syncopation rate is 3/9" says nothing about where |
@@ -416,10 +489,12 @@ assumed away.
 - **No `proto/` change and no `song.proto` change.** `buf breaking` has nothing to compare, and
   no golden of M0.4, M1 or M2 moves.
 - `docs/specs.md` §15 gains this ADR's row and §18.2 a pointer to it; §18.2's "record this in
-  an ADR before M3" is satisfied. §18.2's *claims* are untouched, and Area 4's "no public code
-  found" is flagged for the landscape's re-check rather than corrected here.
+  an ADR before M3" is satisfied. §18.2's *claims* are untouched. Area 4's "no public code
+  found" — that one claim, with its echoes in the landscape's table and caveats and in §18's
+  overlap list — is corrected and dated in this pull request; the rest of the landscape waits
+  for its quarterly re-check.
 - `docs/plan.md`'s deferred ledger gains one row from decision 6 (the Libretto package, on a
-  person's sign-off after its provenance is read) and one from decision 4 (the deferred
+  person's sign-off after they assess its provenance) and one from decision 4 (the deferred
   features, on a corpus this repository may redistribute) — added when PR 2 walks the ledger,
   since this pull request is the ADR alone.
 - An MCP client does not get the view (decision 3), and "What M3 will not claim" says so.

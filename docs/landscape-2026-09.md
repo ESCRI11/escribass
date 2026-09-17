@@ -41,7 +41,7 @@ Companion to `specs.md` §18. Research conducted 2026-09-02. Point-in-time; re-c
 - **Live coding + LLM**: Strudel/Tidal/Sonic Pi experiments; text code without typed persistent model or pinned deterministic renders.
 
 ## Area 4 — Academic systems (2024–2026)
-- **Libretto** (arXiv 2606.22708): LLM-native grammar with integer onset slots, explicit voices, bar-level blocks (key/meter/tempo/grid/bar count); corpus-calibrated statistical space over rhythm, harmony, melody, texture, form, variation; supports retrieval, diagnosis, copy-risk control, self-revision. Abstracts away velocity, micro-timing, timbre, unpitched percussion. No public code found.
+- **Libretto** (arXiv 2606.22708): LLM-native grammar with integer onset slots, explicit voices, bar-level blocks (key/meter/tempo/grid/bar count); corpus-calibrated statistical space over rhythm, harmony, melody, texture, form, variation; supports retrieval, diagnosis, copy-risk control, self-revision. Abstracts away velocity, micro-timing, timbre, unpitched percussion. Code: `github.com/Xyc-arch/Libretto` (public, MIT, Python package `libretto`, last commit 2026-07-15) — checked 2026-09-17; this line said "No public code found" on 2026-09-02 (ADR 0018 §6).
 - **CoComposer** (arXiv 2509.00132): 5 agents → ABC notation; better editability than MusicLM, worse audio.
 - **ComposerX** (arXiv 2404.18081), **WeaveMuse** (arXiv 2509.11183; open, multimodal, constraint schemas, structured decoding), **MusicAgent**, **Loop Copilot**, **ChatMusician**, **MuMu-LLaMA**: tool orchestration / symbolic generation; no typed persistent model + render.
 - **NotaGen** (IJCAI 2025, open): 516M symbolic model, ABC/MusicXML/MIDI export.
@@ -80,7 +80,7 @@ Ranked by threat/overlap: 1 Waveform MCP · 2 Producer Pal · 3 chuk-mcp-music �
 | REAPER MCP family | ✅ | ⚠️ RPP parse | ✅ | ❌ | ❌ | ❌ | ✅ REAPER | Desktop | ✅ | hobby | active |
 | midi-composer-mcp | ✅ MIT | ⚠️ MIDI | ✅ | ⚠️ | ✅ | ❌ | ❌ | CLI/MCP | ✅ | tiny | Jun 2026 |
 | chuk-mcp-music | ⚠️ | ✅ Score IR | ✅ | ✅ | ✅ | ❌ | ❌ | CLI/MCP | ✅ | tiny | active |
-| Libretto | ❌ no code | ✅ grammar | ✅ | ⚠️ | ⚠️ | ❌ | ❌ | research | ✅ | academic | 2026 |
+| Libretto | ✅ MIT (found 2026-09-17) | ✅ grammar | ✅ | ⚠️ | ⚠️ | ❌ | ❌ | research | ✅ | academic | 2026 |
 | NotaGen | ✅ weights | ⚠️ ABC | ✅ | ❌ | ❌ | ❌ | ❌ | model | n/a | academic | 2025 |
 | ACE-Step 1.5 | ✅ weights | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | local model | n/a | OSS | 2026 |
 
@@ -89,8 +89,9 @@ See `specs.md` §18 for the binding version. Summary: defend determinism, instru
 
 ## Caveats
 - Fast-moving: several products updated within weeks of this report.
-- Unverified: Foundation42/miditool; Libretto code release; exact licences/activity for voho/midi-composer-mcp, chuk-mcp-music, Waveform MCP; LLMidi, Sirenum, AaltoAivo, ByteComposer, WavCraft/WavJourney, and the Springer CCAC "Web-Based DAW for AI-Generated Music Workflow" paper were not verified within budget.
+- Unverified: Foundation42/miditool; exact licences/activity for voho/midi-composer-mcp, chuk-mcp-music, Waveform MCP; LLMidi, Sirenum, AaltoAivo, ByteComposer, WavCraft/WavJourney, and the Springer CCAC "Web-Based DAW for AI-Generated Music Workflow" paper were not verified within budget.
 - Vendor claims (Suno plugin design, Google Spaces DAWs) come from vendor blogs; validate hands-on.
+- Corrected 2026-09-17: the Libretto code release, which this report had listed as unverified and Area 4 as not found, exists at the URL above (ADR 0018 §6).
 
 ## Reading list
 1. Libretto, arXiv 2606.22708 — grammar + evaluation blueprint.
