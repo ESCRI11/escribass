@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-15. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-17. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -50,7 +50,9 @@ stale.
 | M2.8 | The patch log with its provenance column, branch switching, and `merge_branch`'s per-path resolution | done | PR #62 |
 | M2.9 | `Render` over gRPC, the stdio path deleted, and the four goldens unmoved | done | PR #63 |
 | M2.10 | Preview: the live process, the device, the `Preview` stream, `render_preview`, and the window's transport — ADR 0013 §4's thread shape measured first | done | PR #64 |
-| M2.11 | A whole-stack review of M2: a fresh session's ⌘Z going forwards, answers lost after stdin closes, two CI holes, and the export crash reproduced and refused | done | this PR |
+| M2.11 | A whole-stack review of M2: a fresh session's ⌘Z going forwards, answers lost after stdin closes, two CI holes, and the export crash reproduced and refused | done | PR #65 |
+| M2.12 | §11 walked against the code, the ledger walked a fourth time, `CLAUDE.md` to M3 — and what M2 leaves unverified written down where a reader will find it | done | this PR |
+| — | **M2 complete.** Tauri app, five views as projections, preview playback over gRPC — with three merges and no green run on `main` since PR 8, see "M2, closed" | done | — |
 
 ## M0.2 — `core/`
 
@@ -723,7 +725,7 @@ wrong answer, which is why the decision does not wait on them and the code does.
 | 9 | `m2.9-engine-grpc` | `Render` over gRPC, the stdio path deleted, `core/src/engine.rs` and the render suite moved onto the new transport, and gRPC added to `tests/renders.rs`'s `COMPONENTS` and the engine job's list. **The silent PR**: the four goldens must not move, and any byte that does needs a named cause (trap 5). **Done, and no byte moved.** The build questions ADR 0013 §1 left open were answered by building: gRPC owns the one `add_subdirectory` of our protobuf, aimed at our submodule, and costs 11 m 16 s cold on two cores and 6.1 s warm. The design question the row did not anticipate is how `core` learns where to dial — the engine names its own socket and prints it once the server is listening, so the address and the readiness are one line and nothing polls or sleeps (ADR 0013 §3, amended). One flake was found and fixed rather than lived with: this suite writes the program it then executes, and under load `exec` refused it with `ETXTBSY` twice in forty runs. And one consequence nothing predicted: the engine's provenance is *one* list, so `grpc` joining it reaches the build manifest's `engine` block and therefore every project's `lock.json` — five determinism goldens gained one line each, which is `tests/AGENTS.md`'s pin rule arriving rather than a surprise, and it was CI's fixture-subset step that said so |
 | 10 | `m2.10-preview` | Preview playback: the live process, the audio device, the `Preview` stream, and `render_preview` — one of §5's tools, and the milestone it has been between since M0.3. **Done, and the measurement came first**, because PR 0 never took it: ADR 0013 §4's shape **held** — `main` pumps the JUCE loop and drains the stream's commands between turns, gRPC reads and writes on its own threads, the device calls back on ALSA's — measured against a real JUCE ALSA device on ALSA's `null` PCM, since this machine has **no ALSA device at all** and JUCE speaks no PulseAudio. Every later command answers in one 10 ms turn; a first play, cold, in about 190 ms. The package a person installs to hear it here is named in ADR 0013 §4 (`libasound2-plugins`, and a default PCM of `type pulse`). The design question the row did not name was **which event answers which command**: the transport writes events of its own while it plays, order cannot tell them from an answer, and `PreviewEvent.applied` is the one field `render.proto`'s preview shape took after PR 3. Three things became checks rather than sentences: a machine with no device is exit 6 before any socket exists (the engine job runs it), an export refuses to render if it was offered a device type (every render in CI runs that), and an export process answers a `Preview` stream `UNIMPLEMENTED` (asserted against the real binary, and a mutant that served one failed it). The scripting guard grew a tooth it lacked: a tool scripted only as dry runs now fails it unless it names the test that asserts its seam. The window plays, stops and returns to the start, draws the engine's own tick, and says *live preview · not the render* beside the button. **Found on the way and not fixed here:** a real export of `tests/determinism/render` crashes the engine on `main` too — heap corruption after Rubber Band warns about a 0.0853 stretch ratio — which is M1's and PR 11's (Known gaps) |
 | 11 | `m2.11-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen per milestone and M1 returned eighteen; budgeting a PR for it is cheaper than discovering it. **Done.** One blocker, three majors, three minors, and the Known gap it was asked only to investigate turned out to be a second blocker. ⌘Z in a fresh session went *forwards*, because the undo cursor lived in the session: it now lives nowhere, and the log is replayed as an undo stack on every press (ADR 0005 §4, amended). `escribass-mcp` dropped answers still queued five seconds after stdin closed and applied calls in the scheduler's order: a transport adapter now serves one request at a time and withholds EOF (ADR 0006 §6, extended). The render suite's staleness guard did not walk the two protos the engine generates C++ from, and the engine job skipped a pull request touching only `compile` or the engine client. The export crash reproduced every time once driven with seeded ids, and is Rubber Band overflowing at a ratio of 6000: refused on the library's own warning (ADR 0011 §3, extended). Every fix has a test that was watched failing first. No render golden moved; one determinism golden did, by one sentence — `nothing_to_redo`'s message stopped saying "this session" |
-| 12 | `m2.12-close` | Docs walked against the code, the deferred ledger walked again, `CLAUDE.md` to M3 |
+| 12 | `m2.12-close` | Docs walked against the code, the deferred ledger walked again, `CLAUDE.md` to M3. **Done**, and the walk was held to M1's standard — each of §11's six bullets named against the test, CI step or code path that enforces it, by reading and by running, never from memory — and it turned up nothing missing from the code and one thing missing from the *record*: every §11 enforcer has run only on one machine since M2 PR 8, because GitHub has refused every job since, on the pull requests and on `main`. The "M2, closed" section below says so, with the run ids. Two more findings, both left where they are: ADR 0010's Consequences promised M2 "a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text editor" and M2 delivered neither (a new ledger row); and `Preview::drop` discards the engine's exit status (a Known gap, found in PR 11). Three sign-offs in `lock.baseline.json` and §15 are recorded as what they are — claims about a person's decision that the repository cannot verify — and are neither removed nor confirmed. Nothing here is code |
 
 **Which rows can be sized now, and which cannot.** PR 2 is the one that changed most: question 1
 made it a Tauri host with an embedded session rather than a host with a server and a proxy, and
@@ -879,6 +881,87 @@ did). Mixing them gets the silent half reviewed as plumbing.
 - **Not a resolution of any `[OPEN]` item.** Minimum supported OS versions is the one M2 walks
   into, and ADR 0014 §2 answers M2's scope without touching it. The other three are unchanged.
 
+Every line above was checked against `main` at `b0520f4` at the close and every one still holds:
+no view goldens a pixel, CI names `ubuntu-24.04` and nothing else, the play button sits beside
+*live preview · not the render*, `app/src` has no AI panel and imports nothing from `codemirror`,
+the parameter editor is `form.tsx` over the manifest and hosts no plugin window, no denylist
+exists, and §15's closing paragraph lists the same four `[OPEN]` items it did on 2026-09-07.
+
+## M2, closed
+
+Twelve pull requests, six ADRs, one whole-stack review. What M2 delivers: a Tauri host that
+embeds `core` and dispatches every control through the function the MCP server already
+dispatched through; five of §9's views as pure projections of one decoded `Song`, with a golden
+that proves it; ⌘Z as a tool; `merge_branch` finished one path at a time; a `ParamRef` that
+reaches a fader with no schema change; the engine serving `Render` and `Preview` over gRPC with
+the pipe deleted; and preview playback, measured to the edge of the sound card and not past it.
+The four golden WAVs are byte-for-byte what M1 blessed.
+
+M0's and M1's lesson held a third time, and this milestone's review found the same class of
+defect one layer up: not a wrong render but a wrong *session* — a fresh process whose ⌘Z walked
+past undos it had not made and re-applied an edit, recorded as `undo`. The cursor that had to
+stay alive to be right was state the log should carry, and now does (ADR 0005 §4, amended).
+
+**What this close verified, and on what.** §11's six bullets were walked as M1's close walked
+five: for each, the enforcer was named and then read or run. All six have one. Unseeded
+randomness and wall-clock reads are structural in `core` (`clock.rs`, `id.rs`) and absent from
+`engine/src` (its one `mkdtemp` names a directory, not a sample); the lock is `Project::open`,
+which the Tauri host calls too; the goldens are `tests/renders.rs`; the projection golden is
+`app/tests/projection.test.ts`; the determinism suite is `tests/determinism.rs`. On 2026-09-17,
+on this machine — an AMD Ryzen AI 9 HX PRO 370 under WSL2, Ubuntu 24.04, g++ 13.3 — against an
+engine rebuilt from `main`'s `engine/src`: both codegen checks clean; 422 workspace tests, 17
+determinism tests, 9 render tests with the device test ignored, 6 projection tests, the host's
+test, schema's three suites, `buf lint`, `buf format` and `buf breaking` against `main`, all
+pass; the manifest fixture is still a subset of the built manifest; a preview with no device
+exits 6 with nothing on stdout. Every one of those numbers is from **one machine**, and that is
+the first carried item.
+
+**What M2 leaves unverified**, recorded here because the pull requests that carry it are not
+where a reader of this file will look:
+
+- **M2 PRs 9, 10 and 11 were merged on local CI runs, and `main` has no green run since PR 8.**
+  A GitHub billing limit refused the jobs — `renders` and `cross-cpu` on PR 9 (#63), every job on
+  PRs 10 (#64) and 11 (#65) — and refused them again on each merge commit: the runs on `main` for
+  `8bc6487`, `8b0678f` and `b0520f4` are all `failure`, and the last success on `main` is
+  `17356bd` (M2 PR 8, 2026-09-09). The local runs are recorded as comments on #63, #64 and #65,
+  and GitHub's check history for those three pull requests shows failures, not passes. This
+  pull request is documentation only, so CI's path gate would skip it even if the limit lifted;
+  it changes none of the above. Until a full run on `main` succeeds: `checks`, `app` and
+  `engine` last ran on GitHub for PR 9's head, `renders` and `cross-cpu` for PR 8's merge, and
+  everything since has been exercised on one machine and one CPU model — which is exactly what
+  ADR 0009 §6 says is not evidence.
+- **Preview has never played on a real audio device anywhere.** The thread shape was measured
+  against ALSA's `null` PCM, which does not pace (ADR 0013 §4);
+  `a_preview_plays_on_this_machines_audio_device` is `#[ignore]`d and prints why on every run.
+  Sound reaching a speaker, real-time pacing and underruns are measured nowhere, and
+  `roadmap.md`'s "press play and hear it" is a description of M2's intent, not of anything
+  measured.
+- **ADR 0009 §6's cross-CPU question is unanswerable at the current sfizz pin**: its AVX dispatch
+  table is empty (M1 PR 13), and M2 changed no plugin pin. `cross-cpu` has not run since PR 8
+  either way.
+- **`Preview::drop` ignores the engine's exit status** (`core/src/engine.rs`), so a preview
+  engine that crashes after its last command goes unreported. Found in PR 11, not fixed; a Known
+  gap below.
+- **Logs written by the pre-PR-11 `undo` defect are not repaired.** A project whose log already
+  carries an `undo` that went forwards is read as it says (ADR 0005 §4, amended); a Known gap.
+- **The plugin manifest was not rebuilt in PR 11 or here.** Dexed's build needs `jack/jack.h`,
+  not installed on the machine every local run was made on; the engine binary is current and
+  the manifest is the 2026-09-09 build, which the fixture-subset check still matches because no
+  pin has moved. CI's `Build` step, which regenerates it, has not run since PR 8.
+- **ADR 0010's Consequences promised M2 a re-pin tool** and the UI that makes `lock_mismatch`
+  recoverable without a text editor, and nothing in M2's plan, its ADRs or its code delivered
+  either — ADR 0010 §3's "delete the entry and the next write pins it" is still the only way to
+  re-pin. A ledger row below carries it rather than the sentence in ADR 0010 carrying it alone.
+- **Three sign-offs the repository cannot verify.** `lock.baseline.json` and §15/§17 record
+  protobuf v21.12 as "signed off 2026-09-07" (changed from "pending sign-off" in M2 PR 2, whose
+  commit says the user said so), gRPC v1.54.3 as "approved as a dependency under CLAUDE.md #4",
+  and the frontend package set as "one sign-off" (ADR 0016 §2). Whether a person gave any of
+  the three is not a fact the repository holds, and this close neither removes, rewords nor
+  confirms the words; it lists them for the user, who is the only one who can.
+
+What M2 does not claim is above, checked; what M1 did not claim, M2 inherits unchanged: Linux
+x86-64 on one image and compiler, and nothing about any other CPU.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -899,6 +982,17 @@ point was a milestone rather than an event now names an event, because M2's own 
 found three rows waiting on a milestone that had never been placed. A trigger that names a
 milestone cannot be checked at that milestone's close; it can only be argued about.
 
+Walked a fourth time at M2's close, 2026-09-17, one row at a time, asking of each whether its
+trigger had fired and whether it *could* fire. Three rows closed during M2 and say so in their
+own text (`ParamRef` to mix params, interactive merge resolution, and the undo tools). No open
+row has a trigger that fired and was ignored, and every open row's trigger is a condition
+something can produce: PR 11 had already re-tied the one row whose
+trigger nothing was scheduled to produce — the §2.2 randomness gap — to M3, and it is the one
+row **due before M3 starts its loop**. Two rows were checked against the window rather than the
+prose: no loop control exists in `App.tsx` (play, stop and a seek to tick 0 are the transport),
+and nothing in `app/` or the tool API writes an `Instrument.state`. One row is **added**, for a
+promise an ADR made and no PR kept.
+
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
 | `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler | M4 | ADR 0002 §7 |
@@ -918,6 +1012,7 @@ milestone cannot be checked at that milestone's close; it can only be argued abo
 | ~~Undo/redo **tools**~~ | **Closed 2026-09-09 in M2 PR 5.** `undo` and `redo` are RPCs with `dry_run` and the shared `ToolResult`, and the one thing ADR 0005 §4 named without specifying — the session-held stack — is a cursor into the log's first-parent chain that **skips the log's own undo and redo entries**, cleared by any other commit and by a branch switch. Both halves were found by pressing the key: reading `HEAD` again undoes the undo, and walking the mechanism's own entries takes the document forwards (ADR 0005 §4, extended). **Amended 2026-09-15 in M2 PR 11**: the session-held cursor is gone, because it was empty in every fresh session — two edits, two undos, a relaunch and one more undo re-applied the first edit. The chain is replayed as an editor's undo stack on every press instead (ADR 0005 §4, amended) | closed — M2 PR 5; amended M2 PR 11 | ADR 0005 §4 |
 | Committing a direct-manipulation gesture on release, without a separate approval | ADR 0017 §4 gives the first control §9's flow whole — release proposes, a person applies — because it is the first control that has a diff to show and the flow should be reviewed where it can be seen. Whether *every* gesture should keep asking is a different question: undo is what would make committing on release safe, and it exists now | The first time per-gesture approval is measured as friction rather than argued about — a session where the Apply click is counted | ADR 0017 §4 |
 | `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
+| A re-pin tool, and a window that recovers from `lock_mismatch` | ADR 0010's Consequences said "**M2** gains a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text editor", and M2 delivered neither: no PR row named it, no M2 ADR placed it, and the only way to re-pin is still ADR 0010 §3's — an operator deletes the entry and the next write pins it. Found at M2's close, walking ADR 0010 against the code. Not built there and then because a tool is a `song_tools.proto` change and a re-pin is a `lock.json` write outside the patch log, which is a decision and not a closing PR's | The first `lock_mismatch` a person meets, which needs a plugin pin to have moved — and no bundled pin has moved since M1 | ADR 0010 Consequences; M2 PR 12 |
 | Loop and seek controls in the window | `render_preview` takes a loop and a seek, and the window offers play, stop and back-to-start: one control per thing a person has asked for, and a loop needs a range gesture on the timeline, which is a second hit region ADR 0017 would have to be applied to | The first time someone wants to hear a bar loop while editing it — the tool already does it, and a loop survives the replacement plan an edit sends | M2 PR 10 |
 | Choosing the audio device, its rate and its buffer | A preview plays on ALSA's default output at whatever the device offers, and nothing in the window or on the command line chooses another. A device list is a view over the machine, and the one this repository has measured on had none | A machine whose default ALSA output is not the one wanted, or a buffer the default underruns on | M2 PR 10 |
 | Refusing a plugin parameter that reaches an RNG nothing can seed | §8 forbids Surge XT's `rand_pm1`, Dexed's LFO waveform 5 and sfizz's `*_random` **in a fixture**, and nothing refuses them in a user's song. §11's first bullet is about our own code and holds; §2.2's promise — "every source of randomness carries an explicit seed stored in the project" — is wider, and neither of those two RNGs can be seeded at all (Surge's is the wall clock with `seed_rand` commented out; Dexed's `randstate_` is indeterminate memory). Closing it is a validator rule and therefore an ADR — and the rule has no producer: something must say which parameter values reach an unseedable RNG, and today that is prose in §8 for three plugins vetted by hand. Deferred rather than opened as an M2 question because M2 adds no plugin and no randomness: the gap is M1's, unchanged, and an ADR now would design a denylist against a build manifest that carries none, which is ADR 0002 §7's reason ~~The first milestone that lets a user *choose* a patch or supply a plugin~~ — **retriggered 2026-09-07** (ADR 0014 §3). That trigger has now fired: M2 places a parameter editor and choosing a patch is exactly how a user reaches those RNGs. It fired and the work still cannot be done, and the blocker is the second fact, not the first: closing it needs a **denylist of `ParamID`s per plugin in the build manifest**, and §8's prose names the paths in English — "oscillator random start phase, unison detune, the sample-and-hold LFO shape, and the effects that call `rand_pm1`" — which becomes `ParamID`s only by auditing Surge XT's 2855 parameters against its source. That is a source audit, and no user interface produces one. Half a denylist is worse than none, because it looks complete. ~~A build manifest that can say which parameters reach an unseedable RNG~~ — **retriggered 2026-09-15 in M2 PR 11**: that trigger named a capability, and nothing in §16 or this plan is scheduled to produce it, so it could never fire and the row could only wait for ever. What does arrive on a schedule is the reason to close it: M3's loop calls `set_param` with values a model chose, so the RNG paths stop needing a person to wander into them, and a model told only "valid" will not avoid what nothing refuses | **M3**, before its tool-calling loop can call `set_param` — the first milestone to set parameters programmatically. The source audit that produces the `ParamID` denylist is the work, and it is due then whether or not a manifest field exists to carry it | §8's per-plugin notes; M2 planning, 2026-09-07; retriggered by ADR 0014 §3; retriggered by M2 PR 11's review |
@@ -947,7 +1042,27 @@ milestone cannot be checked at that milestone's close; it can only be argued abo
   trigger has now passed and the gap did not: M1's render fixtures drive the longest scripts in
   the repository through the tool API and the suites still finish in seconds, because a script
   is tens of entries and a process is one project. What would make it visible is a session that
-  stays open and keeps appending, which is `app`. Revisit at M2.
+  stays open and keeps appending, which is `app`. ~~Revisit at M2.~~ **Revisited in M2 and
+  measured, not fixed**: an applied `set_notes` costs 17 ms at 21 entries and 30.6 ms at 300,
+  and 300 in a row take 6.7 s (ADR 0017 §5). ADR 0017 §1 keeps a drag from multiplying it — one
+  entry per gesture — and the loop in `Project::write` is unchanged. What would make it a defect
+  rather than a number is a project whose history is long enough for one commit to be felt,
+  which nothing has produced; M3's loop, which commits without a person between calls, is the
+  next thing that could.
+
+- **`Preview::drop` discards the engine's exit status.** `core/src/engine.rs` closes the
+  stream, waits for the process to leave, kills it if it will not, and `let _ = self.child.wait()`
+  — so a preview engine that crashes after answering its last command exits non-zero into
+  nothing, and the caller learns only that the next play starts a fresh process. Found by M2
+  PR 11's review and not fixed there; recorded at the close rather than fixed there either,
+  because a close is reviewed as documentation. The render path is not affected: an export's
+  exit status is its verdict (ADR 0013 §3).
+
+- **A log written by the pre-PR-11 `undo` is read as it stands.** Before M2 PR 11 a fresh
+  session's ⌘Z could re-apply an edit and record it under the tool name `undo`; a project whose
+  log carries one is not repaired, because the log is the record and rewriting it is what
+  ADR 0001 refuses (ADR 0005 §4, amended). Replaying such a log as an undo stack treats that
+  entry as an undo, which is what the log says it is. No project in the repository carries one.
 - ~~**No lock file on an `.escri` directory.**~~ ADR 0001 §2 assumes a single writer and ADR
   0004's commit is three renames; two processes on one project would race them. M0.3 made it
   structural (one project per process, ADR 0006 §5) rather than enforced, and M1's second
@@ -961,8 +1076,8 @@ milestone cannot be checked at that milestone's close; it can only be argued abo
 
 ## Open — not ours to decide
 
-`docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocked M0 or M1,
-and none blocks M2.
+`docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocked M0, M1 or
+M2. Symbolic model choice is the one M3 walks into.
 
 Minimum supported OS versions is the one M2 walks into, and it is **still open**. ADR 0014 §2
 answers a different question — which platform M2 *targets*, which is Linux x86-64, as M1 — and
@@ -970,12 +1085,18 @@ that is scope, not a product commitment. What version of any operating system th
 outlives M2 and belongs with the installer, where `roadmap.md` already places it (M5). The item
 stays in §15's closing paragraph unchanged, and M2 is on record as not resolving it.
 
-Also worth a person's attention rather than an agent's, though it is a sign-off and not an
-`[OPEN]` item: **protobuf v21.12 has carried "pending sign-off" since M1 PR 5**, in §15, in
-§17's table and in `lock.baseline.json`'s own note. grpc++ v1.54.3 is approved and it brings
-that same protobuf commit as its own submodule (ADR 0013 §1), which makes the outstanding
-sign-off load-bearing for two things instead of one. Nobody has removed the words; nobody
-should, unsigned.
+Also worth a person's attention rather than an agent's, though they are sign-offs and not
+`[OPEN]` items: three dependency approvals are recorded in this repository as **given**, and the
+repository cannot show that they were. ~~protobuf v21.12 has carried "pending sign-off" since
+M1 PR 5~~ — M2 PR 2 (#56) changed those words to "signed off 2026-09-07" in §15, in §17's table
+and in `lock.baseline.json`, and its commit message says the user said so. grpc++ v1.54.3 is
+recorded as "approved as a dependency under CLAUDE.md #4" (ADR 0013 §1), and it brings that
+same protobuf commit as its own submodule, so the first sign-off is load-bearing for two things.
+The frontend package set is recorded as "one sign-off" (ADR 0016 §2; §15; `lock.baseline.json`).
+An agent cannot give any of the three and cannot verify any of the three from what is committed;
+M2's close (2026-09-17) walked past them deliberately — neither removed, reworded nor confirmed
+— and lists them here for the user to confirm or retract. Until then they are claims, and a
+reader should weigh them as such.
 
 - Neural runtime packaging: ONNX Runtime linked into `engine`, or a separate process. Now due
   before M4, which is where the neural runtime lands (ADR 0003 §7).
