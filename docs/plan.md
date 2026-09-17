@@ -53,6 +53,7 @@ stale.
 | M2.11 | A whole-stack review of M2: a fresh session's ⌘Z going forwards, answers lost after stdin closes, two CI holes, and the export crash reproduced and refused | done | PR #65 |
 | M2.12 | §11 walked against the code, the ledger walked a fourth time, `CLAUDE.md` to M3 — and what M2 leaves unverified written down where a reader will find it | done | this PR |
 | — | **M2 complete.** Tauri app, five views as projections, preview playback over gRPC — with three merges and no green run on `main` since PR 8, see "M2, closed" | done | — |
+| — | The M3 plan: five questions for the user, fourteen an agent can propose answers to, none answered | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -963,6 +964,374 @@ where a reader of this file will look:
 What M2 does not claim is above, checked; what M1 did not claim, M2 inherits unchanged: Linux
 x86-64 on one image and compiler, and nothing about any other CPU.
 
+## M3 — AI loop
+
+Planned 2026-09-17 against `main` at `1b87fea`. Same reason as the M0.4, M1 and M2 plans: the
+reasoning is the expensive part, none of it is in code yet, and a conversation is not where it
+should live. M1's planning PR raised eight questions and a second PR answered them; M2's raised
+twelve and a second PR answered those. This is the first half only, and the separation is the
+point — an ADR written before its question is settled is what that separation exists to
+prevent. **Nothing below is decided.** Where a question has a default an agent would propose,
+the default is written beside it and the question stays open; where a question is a person's,
+`CLAUDE.md` says so and it is listed apart.
+
+One thing is different about this milestone and shapes the whole plan. Every milestone so far
+put something deterministic under the tool API — a validator, a render, a view. M3 puts
+something **nondeterministic above it**: a hosted language model, which cannot be seeded,
+cannot be pinned by anyone, and changes under its own name. What the determinism guarantee can
+honestly mean once that is true is worked out below, before the questions, because half of the
+questions turn on it.
+
+### What was already decided, so M3 does not re-decide it
+
+| Decided | Where | Consequence |
+|---|---|---|
+| `ai` is a **Python 3.12 sidecar** under `uv`, and its model types are the generated Pydantic ones — nothing hand-written | §3, tier 1; §6; §17; CLAUDE.md, Toolchain; §4.1 | `schema/gen/python` has existed since M0.1 and `schema/tests/test_roundtrip.py` reads the fixture with it. `proto/` generates no Python: ADR 0006 §7 deferred it to M3, and this is M3 (PR 3) |
+| `app` ↔ `ai` is **gRPC**, and `app` supervises `ai` as it supervises `engine` | §3; §9 | Not a pipe, not MCP, not HTTP. But `app` **opens no network port** (ADR 0012 §1), so the socket is a Unix one, and the engine already shows the shape: it names its own socket and prints it once listening (ADR 0013 §3). *Which* side listens is question 1 |
+| The AI edits through the tool API as JSON Patch, exactly as the UI does, and holds **no second representation** of the song | CLAUDE.md #1, #2; §2.1, §2.3, §5, §14.2 | The model never sees `song.json` and never writes it; what it sees is a read and what it does is a tool call. A Libretto view is a projection and is discarded, never stored (trap 7) |
+| The loop is **system prompt + song summary + tool schemas → tool calls → dry run → apply**, a validation error fed back, **three retries at most**; provider-agnostic behind an OpenAI-compatible client; **OpenRouter in v1**; no local LLM ships | §6.1; §15 | The shape is given; what is not given is which failures count as "validation error" (question 8), what the summary is (the Libretto ADR), and what a retry sends back |
+| The AI process is **audio-agnostic** and has no audio path | CLAUDE.md #6; §6; §14.6 | It cannot listen to a preview or a render. Anything in the loop that needs to know how something sounds needs an answer that is not "ask the model" — and M3 as specified has no such thing, which is the honest reading (see "What M3 will not claim") |
+| The **Libretto-grammar ADR precedes M3** and "constrains M3's design rather than following from it" | §16; §18.2; ADR 0003 §6 | It is not one question among the rest. It is PR 1 on its own, before the ADRs that answer the questions, and "The Libretto ADR, first" below says what it has to decide |
+| A caller-fixable failure is `valid = false`; an operator failure is `Err`; **the split is made once, in the session** | ADR 0006 §2; §5 | Written for exactly this loop, two milestones before it had a consumer. M3 is its first real one, and a misclassified error is a retry loop that cannot succeed (trap 2) |
+| A proposal is **dry runs, committed once, and a person applies**; the panel shows the RFC 6902 diff before anything lands; a person may apply, reject or edit | §9; ADR 0017 §1–§4 and its Consequences ("every gesture M2 and M3 add") | The AI panel is the same flow with a different author. What ADR 0017 did not have to face is a proposal made of *several* tool calls, and that is question 9 |
+| **Every entity and every log entry carries `Provenance`**, with `author` `HUMAN` or `MODEL` and optional `model_id`, `prompt_id`, `tool_call_id`; the history view already shows the author column | §4.3; `song.proto`; `history.proto`; ADR 0012 §1; §9 | The fields have existed since M0.1 and **nothing has ever set the three optional ones**: `core` writes `None` for all three at every site (`tools.rs`, `project.rs`, `session.rs`). Filling them is M3's, and *how* they reach the log is question 3 |
+| Tool schemas are **generated from the protobuf descriptor**, never hand-written, and omit `id`, `provenance` and `version` | ADR 0006 §4, §6 | The model's tool definitions are the MCP `inputSchema`s that already exist. No second description of the API is written in Python (trap 11) |
+| `ai/` is in §13 | §13; `AGENTS.md` | No new-directory ADR. The precedent is `engine/` in M1 PR 5 and `app/` in M2 PR 2 |
+| CLAUDE.md #3 names **`core`, `compilers` and `engine`** — not `ai` | CLAUDE.md #3; §11 | An LLM is nondeterministic by nature and the rule was written not to pretend otherwise. What M3 claims instead is below. §7.1's DSL, which runs *inside* `ai`, is M4's and must be pure — so `ai` is not exempt from the rule for ever, only for the model |
+| Linux x86-64 only, on the image and compiler §17 pins | ADR 0009 §1; ADR 0014 §2 | M3 inherits the claim and does not widen it. A sidecar is a fourth process on the same machine |
+| The `[OPEN]` items in §15 are a person's | CLAUDE.md, line 4; §15 | Two of the four sit directly in M3's path and are listed below as questions **for the user** |
+
+**The deferred ledger and the known gaps send four rows and two carried items here.** The
+§2.2 randomness row — refusing a plugin parameter that reaches an RNG nothing can seed — was
+retriggered in M2 PR 11 to "**M3, before its tool-calling loop can call `set_param`**", and it
+is the one row whose revisit point is an event this milestone produces on a schedule
+(question 7). `schema/pyproject.toml`'s missing `[build-system]` waits on "when `ai/` depends
+on it", which is PR 5. `Project::write`'s O(history) rewrite is a known gap whose text now
+names "M3's loop, which commits without a person between calls" as the next thing that could
+make it a defect rather than a number (trap 9). ADR 0010's Consequences promised M2 a re-pin
+tool and M2 delivered none; its trigger — a `lock_mismatch` a person meets — has not fired,
+and whether M3 fires it is question 14. And two of the items "M2, closed" carried forward are
+not M3's to fix and are M3's to state: **CI has not gone green on `main` since M2 PR 8**, so
+every check named in this plan will be run on one machine until GitHub runs a job again
+(trap 6); and **preview has never played on a real audio device**, which the AI panel does not
+change and does not depend on.
+
+Two more things sit in no milestone and are placed here by this plan rather than by §16. §13
+lists `/proto` as holding "`SongTools`, `Render`, `Jobs`", and §6 says "long tasks are jobs
+with progress" — and no `Jobs` service has ever been defined, placed or mentioned since. M3's
+loop is the first long task, so it is where the sentence is either honoured or amended
+(question 2). And §17's Python row says "pin exact patch in `ai/.python-version`" while
+`lock.baseline.json` records `"3.12"` — the row describes a file that does not exist, and PR 5
+is where it starts to.
+
+### What "deterministic" means with a model in the loop
+
+§2.2 promises "same project file + same pinned versions → bit-identical rendered audio", and
+"every source of randomness carries an explicit seed stored in the project". An LLM is a
+source of randomness with no seed anyone can honour: temperature 0 is not determinism, a
+`seed` parameter is honoured by some providers and ignored by others, OpenRouter routes one
+model name across several providers, and the weights behind a name are replaced without the
+name changing — which is `ubuntu-latest` (M1 trap 12) one layer up, with money attached. No
+test in this repository can make two runs of a hosted model agree, and no test should be
+written that pretends to.
+
+So the claim is drawn at the tool API, and it is the same line CLAUDE.md #3 already draws.
+**Below the line, nothing changes.** A model's edit enters as a tool call, becomes RFC 6902 ops
+through the same `prepare`, is validated by the same rules, bumps the same versions, and is
+appended to the same log with `Author::Model` in its provenance. M0.4's suite already proves
+that replaying that log is byte-identical whoever wrote it, and M1's that rendering the result
+is byte-identical whatever wrote it. **A song is therefore reproducible from its log even when
+its author is not** — and that is not a weakening of §2.2, because a *person* dragging a note
+was never seeded either. §2.2's boundary was always the model → render path; a human and an
+LLM sit on the same side of it, as authors. The determinism guarantee survives a
+nondeterministic author the way it survives a human one: by recording what the author did,
+not by predicting it.
+
+What M3 can add, and should be held to, is narrower and real. **The `ai` process's own code is
+a pure function of what the model said.** The song view it renders, the six axes it computes,
+the loop's decisions — which failure retries, what goes back to the model, what becomes a
+proposal — contain no randomness and no clock of their own, and are goldened the way ADR 0012
+§5 goldens a view: from a fixed `Song`, to a serialisable description, compared against
+committed bytes. And the loop as a whole is goldened against a **scripted model**: a fake
+provider replaying a recorded transcript, driven twice, producing a project compared byte for
+byte with a committed one (question 11). "Same transcript → same log" is the claim, and it is
+the one the suite can check without a key.
+
+Three things follow that the ADRs should say outright. **Provenance is what makes the claim
+useful**: a log entry that says `AUTHOR_MODEL` with no `model_id` records that *something*
+wrote it; one that names the model and the tool call is an audit trail (§5's word) that a
+reader can act on, which is why question 3 is not cosmetic. **A model id in `lock.json` is a
+choice, not a pin**: §17's "model ids pinned per project under `ai.model`" cannot mean what
+"pinned" means everywhere else in that table, and a status bar reading `lock.json 14/14
+verified` must not count it (trap 15). And **the model is never told it is deterministic**: a
+system prompt that says "your edits are reproducible" is true of the log and false of the
+model, and the panel's wording has to make the same distinction the wireframes' *live preview
+· not the render* makes for sound.
+
+### The Libretto ADR, first
+
+§18.2 asks for "a Libretto-style grammar for the composition layer's LLM-facing view — integer
+onset slots on a bar grid (already implied by 960 PPQ ticks), explicit voices, bar-level blocks
+— and its structural evaluation axes (rhythm, harmony, melody, texture, form, within-song
+variation) as the AI orchestrator's self-check metrics", recorded "in an ADR before M3". ADR
+0003 §6 places that ADR before M3 and says it constrains M3's design. It is therefore PR 1,
+alone, and every question below that touches what the model reads or how it is checked is
+answered downstream of it. What it has to decide, with the facts that bear on each:
+
+1. **What the view is, concretely.** A bar-block is text; the model reads text. The ADR has to
+   write one down — for a `Song` with two tracks, a clip each, a tempo change and a time
+   signature — derived from ticks by a stated rule, and say which of §4.2's fields it carries
+   and which it abstracts away. Libretto's paper abstracts velocity, micro-timing, timbre and
+   **unpitched percussion** (`docs/landscape-2026-09.md`, Area 4). This project's bundled
+   sampler plays drum kits and the wireframes' first track is `Drums · sfizz · kit_808.sfz`;
+   a grammar that cannot say what a drum track does is a view the loop cannot use for the
+   first thing a person asks. The ADR decides what is added to the paper's grammar for that,
+   or says drums are outside it.
+2. **Read only, or read and write.** §18.2 says "view". A model that *writes* in the grammar —
+   a bar-block of notes that `ai` turns into `set_notes` — is a compiler in §2.3's sense ("free-form
+   code only enters through compilers that validate before the result touches the model"), and
+   a second way of writing notes beside the typed tool. A model that reads the grammar and
+   writes through `set_notes` in ticks needs no compiler and no second path. The ADR decides
+   which, and if it is the first, the compiler is M3's and needs its own golden.
+3. **Where it is computed.** In `ai`, as a Python projection over the generated Pydantic `Song`
+   (a second language projecting the model, which the projection golden has done in
+   TypeScript since M2 PR 4); or in `core`, as a read tool every carrier serves, so an MCP
+   client (§18.2 Stage 1) gets the same view the sidecar does. The second makes the view part
+   of the tool API's surface and reviewed under `buf breaking`; the first keeps `proto/`
+   unchanged and puts the golden under `unittest`.
+4. **What the six axes are made of, and what they are for.** Libretto's are "corpus-calibrated"
+   — a statistical space fitted to a corpus. This repository has no corpus and will not have
+   one in M3. An uncalibrated axis is a number with no meaning attached, so the ADR has to say
+   per axis what is computed from the `Song` alone (a rhythm axis can be onset density per
+   slot; a harmony axis needs a key, which §6.3's key detection is `[OPEN]`), which are
+   deferred, and what the model is told about them. They are **self-check text the model
+   reads**, never a gate: nothing about a metric may decide whether a proposal is applied — a
+   person does (§9), and a metric that refused a patch would be a validator rule nobody wrote
+   an ADR for.
+5. **That they are pure.** Six functions of the `Song`, no randomness, no clock, goldened
+   against `tests/determinism/render/expected/song.json` — the same fixture ADR 0012 §5 chose
+   for having something to get wrong — and against the same document with every map's keys
+   reversed, for ADR 0012 §5's reason.
+6. **What was read.** Libretto is arXiv 2606.22708 and the landscape found **no released
+   code**. Whatever M3 builds is this repository's own reading of a paper, and the ADR says
+   which sections it took the grammar and the axes from, so that a later reader comparing the
+   two knows which is the source and which the interpretation.
+
+The spike (PR 0) informs this ADR and does not decide it: whether a bar-block view lowers a
+real model's invalid-call rate against a raw `get_song` is a number the ADR should cite, and it
+is a measurement about one model on one day, dated as such (trap 4).
+### The open questions — for the user
+
+`CLAUDE.md` line 4: "Sections marked [OPEN] are not yours to decide: stop and ask." Five
+questions below are a person's for that reason or for CLAUDE.md #4's. An agent may lay out the
+options and their costs, which is what each row does, and may not take one.
+
+| # | Question | What bears on it |
+|---|---|---|
+| U1 | **Are §6's analysis features and symbolic generation v1 scope at all?** `[OPEN]`, ADR 0003 "Still unplaced" | §6.2 (melody, harmony, drums, variation from MIDI-domain models) and §6.3 (key, chord and structure detection, tempo estimation, Demucs-class stem separation) are orchestrator responsibilities, so M3 is the only milestone that could carry them — and M3 as §16 specifies it is the loop and the panel. Taking them in makes M3 the widest milestone after M4 and brings model weights, a second inference stack and the `[OPEN]` item below with them. Leaving them out leaves the Libretto harmony axis (item 4 above) without a key to compute against, which the ADR then says. **This plan assumes "not in M3" for sizing and says so in every row it affects; the assumption is the user's to confirm or reverse** |
+| U2 | **Symbolic model choice for v1 melody and drum generation.** `[OPEN]`, §15 | Only reachable if U1 says yes. The landscape's candidates are NotaGen (IJCAI 2025, open weights, ABC/MusicXML/MIDI out), Anticipatory Music Transformer, and Magenta RealTime; each is a weight file that would be content-hashed and pinned (§7.3, §17) and a Python inference dependency under CLAUDE.md #4. Not an agent's, and not this plan's to narrow |
+| U3 | **Which model, and what does its pin mean?** `lock.baseline.json` has `"provider": "openrouter"`, `"model": null` | Three parts, all a person's. *Which id* is the default — it is a cost per call, and the spike (PR 0) will report what one edit costs in tokens and money for two or three candidates rather than one. *What "pinned" means*: §17's "model ids pinned per project in `lock.json` under `ai.model`" cannot mean what every other row means, because a hosted model changes under its name and nothing can verify one; the honest record is the name in `lock.json` as the *choice* and the name in every entry's `provenance.model_id` as *what actually wrote it* (question 3, trap 15). *The key*: `OPENROUTER_API_KEY` reaches the sidecar from the environment and nowhere else — never a flag (`ps` shows flags), never `lock.json` (committed), never a recorded transcript (trap 10) — and the plan assumes that and asks |
+| U4 | **Every new dependency, for sign-off before any is installed** (CLAUDE.md #4) | The sidecar needs, at minimum: **a Python gRPC stack** — `grpcio` with `grpcio-tools`, or `grpclib`, whichever `betterproto2-compiler` 0.10.1 (already pinned) generates service stubs for; ADR 0006 §7 assumed `grpclib`, and PR 0 checks which the pinned compiler actually emits before anyone chooses. **An HTTP client for OpenRouter** — the `openai` Python SDK is the literal "OpenAI-compatible client" §6 names and carries `httpx` with it; plain `httpx` is smaller and means writing the tool-calling envelope by hand. **Nothing else** is proposed: `pydantic` is pinned, `unittest` is stdlib (ADR 0016 §3's reason, one language over), and no agent framework, no prompt library, no tokenizer, no vector store — each is a decision a Python LLM project usually makes without noticing, and each is refused here for ADR 0016 §3's reason with its cost written out in the ADR. On the Rust side nothing new: `tonic` already serves `SongTools`, and `tokio`'s `net` feature is already on. Listed here for a person; none is added by this plan |
+| U5 | **May an external MCP client and the window edit one project at once?** | Not `[OPEN]` in §15, but it is §18's promise and §18 is "[MUST read before roadmap changes]". §18.2 Stage 1 sells "Claude/Cursor/any MCP client can drive a project immediately", ADR 0012 §3's context says §18.2 "actively sells leaving an MCP client pointed at the same directory" — and ADR 0012 §3's decision, `.escri/lock`, refuses a second process on the directory while the window has it. Both are correct and they contradict each other while a window is open. M3 is where the *bundled* model reaches the session (question 1), and the same mechanism is what an external client would use — so the option exists to have `app` serve MCP on the same session, and the option exists to leave §18.2 true only with the window closed. Which the product wants is a person's; the plan assumes the second and says so in "What M3 will not claim" |
+
+### The open questions — an agent can propose an answer
+
+Fourteen. Each changes what gets built rather than how, which is the test M1 and M2 used for
+what had to be answered before code. A **default** is stated where this plan has one; the
+question is open regardless.
+
+| # | Question | Options, and what each costs |
+|---|---|---|
+| 1 | **How does `ai` reach the session — who listens, and what crosses?** | The lock decides more than it looks. `ai` cannot open the project itself: `.escri/lock` refuses a second process (ADR 0012 §3), and `escribass-grpc` is a second process. So the sidecar reaches **`app`'s session**, and the question is the direction. (a) `app` serves `SongTools` over a Unix socket it names, and `ai` is an ordinary generated client — §3's sentence read literally, Python codegen for `SongTools` (ADR 0006 §7), a listening socket in `app` that ADR 0012 §1 permitted only as "not a network port", and a second `Session` holder beside the Tauri command whose author is not the window's (question 3). (b) `ai` serves, `app` dials, and the model's tool calls come **back** over a bidirectional stream as `{name, args}` — which is exactly the envelope `call(session, name, args)` already takes, so the host becomes the third envelope around the one dispatch (ADR 0012 §1) and Python holds no `SongTools` client at all; it needs the tool *schemas*, which the host hands it once, and the generated `Song` for reading. `app` opens nothing and supervises `ai` the way it supervises the engine — spawn, read one `unix:<path>` line, dial (ADR 0013 §3). (c) Both — a `SongTools` server in `app` for external clients (U5) and a stream for the bundled model — is two paths for one thing. **Default: (b)**, because it puts the model's calls on the dispatch the determinism suite already drives, gives the host the author and the ids, and keeps ADR 0012 §1 true without a reading. Its cost is that `proto/`'s Python target generates the *new* service and not `SongTools`, which is a narrower thing than ADR 0006 §7 promised and should be said |
+| 2 | **What is `ai`'s wire shape, and is `Jobs` a service?** | Whatever question 1 picks, `proto/` gains a service and `buf breaking` guards it on pull requests only — so it lands **once, early, whole** (PR 3; M2 trap 12). What crosses: a prompt in; a stream of events out — model text, a tool call proposed, its dry-run result, a proposal ready, an error; cancellation, which a stream's close gives for free as `Preview`'s does (ADR 0013 §2). §6 says "long tasks are jobs with progress" and §13 names a `Jobs` service that has never existed. A streaming RPC *is* a job with progress; a `Jobs` service beside it would be a second way to ask about the same thing. **Default: no `Jobs` service; §13's line is amended to what exists**, and the ADR says why a stream is enough until something that is not a conversation needs a job |
+| 3 | **How does the model's provenance reach the log?** | `Author` is **per session**: `Session::new(.., author)`, `--author human\|model` on both binaries (the MCP one defaults to `model`, the gRPC one to `human`, and the determinism suite passes both explicitly), and `app` hardcodes `Author::Human`. One session per project (ADR 0012 §3) shared by the window and the model means the model's edits are stamped `HUMAN` unless the author moves. And `model_id`, `prompt_id`, `tool_call_id` are `None` at every site that builds a `Provenance`. Options: (a) author on **every request message** — an additive field on each of the twenty-odd requests that can record an entry, on the wire for every carrier, and a caller that lies about being human; (b) a second session on the project — refused by the write ordering ADR 0004 depends on and by ADR 0012 §3; (c) **author is a parameter of the call, not of the session**: `Session::call` takes a `Provenance` with the call, the Tauri command passes the window's, the sidecar's path passes `MODEL` with the three ids, and the two binaries keep their flag as the default for callers that have no other way to say. On the wire it appears only where `ai`'s calls enter, which under question 1(b) is inside the host. **Default: (c)**. Either way the determinism goldens are touched — every `provenance` in five scripts — so it is a silent PR (PR 4) whose every changed byte is named. Trap 3: the author is set at three sites today and a change that misses one keeps stamping `HUMAN` |
+| 4 | **Where does the conversation live, and what is a `prompt_id`?** | A `prompt_id` in a log entry has to name something, or it is a dangling reference in what §5 calls the audit trail. The conversation is **not song state** — CLAUDE.md #1 is about the song — so it does not go in `song.json` and does not go through the log. Options: (a) not persisted: the panel is per window session, `prompt_id` names a thing that is gone when the window closes, and the audit trail records that a prompt existed; (b) persisted **in** the `.escri` — a fifth artefact beside §10's four, which is a §10 change and an ADR, and a thing branches and merges know nothing about; (c) persisted beside the project and outside it, keyed by project, with `prompt_id` a **content hash** of the prompt text so it is stable, replayable and says nothing a reader cannot verify. A prompt may also contain text a person would not commit, and `patches/` is committed. **Default: (c), with the hash**, and an honest sentence in the ADR that a log can then name prompts a machine no longer has |
+| 5 | **Read-only view, or a write grammar — and where is it computed?** | This is the Libretto ADR's items 2 and 3, listed here so the table is complete. **Default: the model reads the grammar and writes through the typed tools in ticks**, so no second way of writing notes exists; **computed in `ai`**, goldened under `unittest` like the TypeScript projection is under `node:test`, with a note that an MCP client does not get it — moving it to `core` as a read tool is additive if that ever matters |
+| 6 | **How does the model learn a plugin's parameters?** | `set_param` takes a `ParamID` (ADR 0010 §4) and the model has no way to learn one: ADR 0014 §1 refused a `get_manifest` tool "because it would hand the AI a plugin catalogue as a side effect of drawing a form, which is a decision about §6's surface" — and this is the decision. Without one the model calls `set_param` with a display name and gets `param_unknown` for ever, and it is *by design* that the frontend never predicts a refusal (ADR 0017 §3), so nothing else will tell it. Options: (a) a **read tool**, `list_params(device_id)` say, returning the plugin's `ParamID`s with their display names — a `proto/` change (PR 3), and MCP clients get it too; (b) the manifest handed to `ai` at launch by the host, as the form gets it by a second Tauri command — no tool, no proto change, and an external client gets nothing; (c) nothing, and `set_param` is not among the tools the model is offered in M3. Two facts bear on it: display names are **not unique** (Surge XT's 2855 carry 2679 distinct), so a tool that takes a name is a tool that guesses; and the denylist of question 7 is precisely a fact about parameters that such a tool is the natural place to surface. **Default: (a)**, keyed by `ParamID`, names beside |
+| 7 | **What does M3 do about the §2.2 randomness row before its loop calls `set_param`?** | The row is due now and the blocker is unchanged: "the source audit that produces the `ParamID` denylist is the work". Surge XT's `rand_pm1` callers, Dexed's LFO waveform 5, sfizz's `*_random` opcodes — §8 names them in English, and the manifest cannot produce them because they are facts about a plugin's *source*, not what a VST3 reports. Options: (a) **the audit, whole, for all three**, as its own PR: a hand-written denylist beside the manifest, versioned by the plugin commit it was read against, and a validator rule (`param_unseedable`, an ADR since it is a rule) that refuses the value for **every** author — a rule that refused only a model would make §5's "identically" false (trap 18); (b) the audit for Surge XT alone, which is where the 2855 are, with Dexed's one waveform and sfizz's opcodes handled as they are today; (c) defer again, with `set_param` withheld from the model's tools until it lands, and "What M3 will not claim" saying so. "Half a denylist is worse than none, because it looks complete" (ADR 0014 §3) rules out shipping (a) partially. **Default: (a) as PR 7, before the loop PR**, sized by PR 0's count of how many of the 2855 reach an RNG path, and if that count makes it larger than a PR, (c) with the withholding — never a list that is missing entries and does not say so |
+| 8 | **What does the retry loop retry, what does it send back, and where does "three" live?** | ADR 0006 §2 gives two kinds: `valid = false` (retry, differently) and `Err` (no retry helps). A hosted model adds a **third the ADR did not have to name**: the provider's own failure — a 429, a 5xx, a timeout, a malformed tool call the provider emitted — which is neither the caller's to fix by calling differently nor an operator's project error. §6's "on validation error, feed the error back and retry (max 3)" says nothing about it. Options for the third kind: retry with backoff a bounded number of times and then surface it as the panel's own error, distinct from both of ADR 0006 §2's; or treat it as an `Err` and stop. What goes back on `valid = false`: **every** `Violation`, `path` `rule` `message`, as `ToolResult` already says ("a model fixing one problem at a time wastes them"). Where "three" counts: per tool call, per proposal, or per prompt — the options differ by an order of magnitude in what a prompt can cost. **Default: three per tool call, a named third category with its own bounded retry, and a test per category that was watched failing first** (trap 1). M1 PR 13's finding is the reason this is a question and not a detail: an engine that exited 0 having written nothing was `valid: true`, and the loop's equivalent is a provider error reported as a refusal, spent three times |
+| 9 | **How is a proposal of several tool calls previewed, when dry runs do not compose?** | The central technical question, and ADR 0017 did not have to face it: one gesture is one tool. A model asked to "add a bass line" will call `add_track`, then `add_clip` on the id the first would mint, then `set_notes` on the id the second would mint — and **a dry run writes nothing, so the second call's track does not exist**. The ids are real (ADR 0012 §4) and the entity is not. Options: (a) **the model works on a branch**: `create_branch`, apply each call for real with `Author::Model`, and Apply is `merge_branch`, Reject is `delete_branch` — every step validated and in the log, the audit trail literal, a rejected proposal a deleted branch whose entries stay (ADR 0001 §2), the panel's diff the merge's dry run. Cost: `switch_branch` moves **the session's one HEAD** under the window, so the person and the model cannot be on different branches of one session; either the window follows the proposal branch (which is what a dashed pending clip *is*), or a per-caller HEAD, which is a `refs.json` change and an ADR. And it fires trap 9 with every step. (b) **a proposal is a fork**: `prepare` is pure and `ids.fork()` exists, so a sequence of prepares chained on a forked in-memory document produces one combined patch, `diff(current, final)`, committed as **one entry** on approval — ADR 0017 §1 transferred whole, and no branch machinery. Cost: the entry's `tool` is `apply_patch` and the model's individual calls are not in the log unless the entry gains a way to say them; and it is new `core` machinery on the same seam ADR 0006 §3 says has no second implementation. (c) one mutating call per proposal — no new machinery and no bass line. **Default: (b), with the entry recording the calls it was composed from** — ADR 0006 §3's argument that `dry_run` *is* `prepare` extends to a chain of them and to nothing else; PR 0 measures how often a real instruction needs more than one call, which is what says whether (c) is a restriction or a non-issue |
+| 10 | **What may the panel apply, and what may a person edit?** | §9: "users can apply, reject, or edit". The wireframes draw Apply, Reject, Edit and *⌘Z undoes*. Apply is the proposal with `dry_run: false` (whatever question 9 makes that). Edit is a person changing the RFC 6902 text and applying it through `apply_patch` — which is why that tool exists (`song_tools.proto`) — and it is the one control in the application where a person writes a patch by hand, so it needs the refusal path ADR 0017 §3 gives a drag. Two pending things on one session — the model's proposal and a person's held drag — are settled by §4.3's `version` check as ADR 0012 §4 already settles one, and what M3 owes is the same sentence: the refusal names what moved. **Default: all three controls, with Edit landing last and only after Apply and Reject are driven against a real proposal** |
+| 11 | **How is the loop tested without a model, and what does CI run?** | No key in CI, ever, and no money spent by a test. `core/tests/engine.rs` drives `render_export` against a fake engine that is a shell script; the loop gets the same: a **scripted provider** replaying a recorded transcript of model turns, so the sidecar is driven twice and the project it produces is compared with a committed golden — the determinism suite's shape, one process over. A **live run** exists behind an environment variable and is `#[ignore]`d loudly, printing why, as the device test is (M2 trap 13). And the Python tests need a CI step: the `checks` job already installs `uv` and runs `schema/`'s, and its path gate would let an `ai/` change through — to a job with no step that runs `ai/`'s tests (trap 17). **Default: as stated**, plus `ai/`'s tests in the `checks` job in PR 5, the PR that creates the directory |
+| 12 | **How does `ai` ship and start?** | Who spawns it — the Tauri host (as it holds the session) or `core`'s session (as it spawns the engine); how Python is found — a `uv`-managed environment from `ai/uv.lock`, run from a build tree in M3 as `app` is, with packaging M5's; what it is told at launch — never the project path (§5: "agents never read or write the project file directly"), the socket, the key from the environment, and the schemas under question 1(b); what the window shows — the wireframes' three health dots, and "the UI keeps working when it does" die. And the same class of defect `Preview::drop` has (Known gaps): a sidecar that dies after its last message exits into nothing. **Default: the host spawns it, because the session is `core`'s and `core` should know nothing about a Python interpreter**; the dot is the process's exit status, read |
+| 13 | **Which tools is the model offered, and are any withheld?** | Twenty-five are implemented. Some are not a model's to call from a panel: `render_export` writes a file at a path the model chose; `render_preview` starts an engine and the model cannot hear it (CLAUDE.md #6); the four branch tools move the session's HEAD under the window (question 9); `undo` and `redo` reverse a person's approved change; `add_asset` takes bytes the model does not have. Offering a tool "spends a model's turn on a call that can only fail" (`core/AGENTS.md` on `IMPLEMENTED`). **Default: the model is offered the tools that produce ops on the document and nothing that leaves it or moves HEAD**, with `set_param` conditional on question 7, and the list is data the schemas are filtered by rather than a second hand-written surface |
+| 14 | **Does the re-pin tool land in M3?** | ADR 0010's Consequences promised M2 "a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text editor", M2 built neither, and the ledger row's trigger is "the first `lock_mismatch` a person meets, which needs a plugin pin to have moved". M3 moves no plugin pin. And `lock_mismatch` is raised at **open**, which a model never does — so "an AI will hit it too" is true of an MCP client opening a project and not of the bundled loop. A re-pin is a `lock.json` write outside the patch log, which is the objection the ledger row already records. **Default: not M3's; the row's trigger stands and has not fired**, and the plan says so rather than letting a second milestone's silence look like a second promise |
+
+### PRs
+
+| # | Branch | Adds |
+|---|---|---|
+| 0 | `m3.0-spike` (**never merged**) | The measurements the ADRs cannot honestly be written without, each a number with a date and a model name beside it. **Whether a real model drives the tool API at all** through the descriptor-generated schemas, over OpenRouter, for two or three candidate ids: calls per instruction, invalid-call rate, and whether structured tool calling survives the routing. **What one edit costs** — tokens, seconds, money — with the full `get_song` (15 KB for the render fixture, 5 KB for `every_tool`'s) against a bar-block view of the same song, which is the number the Libretto ADR cites. **How often a real instruction needs more than one mutating call** (question 9). **What `betterproto2-compiler` 0.10.1 actually generates** for a service — `grpclib` or `grpcio` stubs — on a Unix socket, before U4 names a dependency. And **how many of Surge XT's 2855 `ParamID`s reach an RNG path**, a count that sizes PR 7 and decides between question 7's (a) and (c). M2's spike never took its measurement and PR 10 had to; this one records its numbers in this file, in the ADRs' "measured" sentences, before PR 1 is written |
+| 1 | `m3.1-libretto-adr` | **ADR 0018 alone**: the grammar, its direction, where it lives, the six axes and what each is made of, that they are pure, and what was read. Its §15 row, and §18.2's "record this in an ADR before M3" satisfied. No code, and no other ADR, because everything after it is downstream of it (ADR 0003 §6) |
+| 2 | `m3.2-adrs` | The ADRs the fourteen questions resolve into, their §15 rows, and the §17 changes U3 and U4 settle with `lock.baseline.json` mirroring them — the Python packages by exact version, `ai.model` as what it is; §13's `Jobs` line amended or honoured (question 2); §6.1 gaining the sentence that names the third failure kind (question 8). **No code**. The user's five questions are answered here or the rows that need them wait |
+| 3 | `m3.3-proto-py` | `proto/`'s **whole M3 shape in one change**: the `ai` service in whichever direction question 1 picks, provenance where question 3 puts it on the wire, `list_params` if question 6 says so — so `buf breaking` compares it once against a `main` that has not moved (M2 trap 12). And **Python codegen for `proto/`** (ADR 0006 §7), narrowed to what question 1 needs, with its entry under `tool_api` in `lock.baseline.json` as TypeScript's is |
+| 4 | `m3.4-provenance` | `core`: the author travels with the call (question 3), `model_id`, `prompt_id` and `tool_call_id` reach the log for the first time, the two binaries keep their flag as a default, `app` stops hardcoding `Author::Human` where a model can call — and the history view shows the model's name beside its author column. **The silent PR**: five determinism goldens carry provenance on every entity and every entry, and any byte that moves is named |
+| 5 | `m3.5-ai-shell` | **The first PR that produces a process a person can see**, and the smallest one that can. `ai/`: the package, `pyproject.toml`, `uv.lock`, `.python-version` with the exact patch §17 asks for, `schema/pyproject.toml`'s `[build-system]` (the ledger row's trigger, fired), the gRPC half of question 1 over a socket it names, the scripted provider of question 11 with one recorded transcript, and a process the host spawns, shows a health dot for, and survives the death of. It answers a prompt with no model — the transcript's answer — and proposes nothing. `ai/`'s tests join the `checks` job here, not later (trap 17). No loop, no view, no panel |
+| 6 | `m3.6-view-and-axes` | The Libretto view and the six axes as PR 1 decided them, pure, goldened against `tests/determinism/render/expected/song.json` and its key-reversed twin — a projection golden in a third language, for ADR 0012 §5's reason. Read-only: nothing here calls a mutating tool |
+| 7 | `m3.7-unseedable` | The §2.2 randomness row: the source audit of Surge XT, Dexed and sfizz, the denylist beside the manifest versioned by plugin commit, the validator rule and its ADR, refusing the value for every author. Or, if PR 0's count says the audit is larger than a PR, question 7's (c): `set_param` withheld from the model's tools and "What M3 will not claim" saying why. **Before PR 8**, because the row is due before the loop can call `set_param` |
+| 8 | `m3.8-loop` | The loop: prompt → the view and the schemas → tool calls → dry runs → a proposal, with the composition question 9 chose; `valid = false` fed back with every violation, `Err` never retried, the third kind retried its own bounded way, each watched failing first; the scripted provider's transcripts as fixtures, driven twice and compared; the live run behind an environment variable, ignored loudly. **What it does not do**: nothing is applied — a proposal ends in the stream and waits for PR 9 |
+| 9 | `m3.9-panel` | The AI panel: the conversation, the proposal drawn dashed where the wireframes draw it, the RFC 6902 diff, Apply, Reject and Edit (question 10), `Author::Model` rows in the history view with the model named, and the wording that says what the model is and is not (the *live preview · not the render* precedent). ADR 0017's shape, with a proposal in place of a drag. The bar-17 demo driven by the assistant, diff on screen before apply — `roadmap.md`'s proof point — is this PR's own test, against the scripted provider |
+| 10 | `m3.10-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen per milestone, M1 returned eighteen, M2 a blocker, three majors and a heap corruption nobody had filed; budgeting a PR for it is cheaper than discovering it |
+| 11 | `m3.11-close` | Docs walked against the code, §11 walked bullet by bullet with the enforcer named for each, the ledger walked a fifth time, `CLAUDE.md` to M4 — and what M3 leaves unverified written where a reader will find it |
+
+**Which rows cannot be sized yet, and why.** PR 3 is entirely question 1's answer — a
+`SongTools` server in `app` with a Python client is a different amount of work from a stream
+the host executes, and only the first needs `SongTools` generated in Python. PR 4 is question
+3's, and its size is how many sites set an author today (three) and how many goldens move
+(five). PR 6 has no size until PR 1 says which axes can be computed without a corpus and
+without U1. PR 7 has no size until PR 0 counts — it may be a PR or it may be the withholding.
+PR 8 is question 9's: a fork chain is `core` work before it is a loop, a branch is none, and
+one-call-per-proposal is the smallest loop and the least useful. PR 9 is the size it looks
+only if question 10 leaves Edit for last. Only PRs 0, 1, 2, 5, 10 and 11 are the size they
+look.
+
+The split follows M0.2's lesson, which M1 and M2 each confirmed: PR 8 is the loud concern
+(does a model produce a valid proposal), PR 4 the silent one (did every entry in five goldens
+change provenance the way the ADR says and no other way). Mixing them gets the silent half
+reviewed as plumbing — and this time the silent half is the audit trail.
+### Traps
+
+Written from what actually went wrong in M0, M1 and M2, applied one milestone over — not from
+a list of generic risks.
+
+1. **A check that cannot fail.** A loop test against a scripted provider whose every turn is a
+   valid call proves that valid calls are applied, which nothing doubted. The retry path
+   needs a transcript that returns an invalid call four times and a test that counts three
+   retries and one surfaced failure; the `Err` path needs a transcript that hits one and a
+   test that counts zero retries. M2 PR 11's rule — every fix has a test that was watched
+   failing first — applies before there is a fix, to every branch of question 8.
+2. **A misclassified error is a retry loop that cannot succeed.** M1 PR 13 found an engine that
+   exited 0 having written nothing reported as `valid: true`. The loop's version is a provider
+   429 reported as `valid = false` — three retries spent on a wall that is not the caller's —
+   or a `plugin_unknown` reported as `Err`, which the panel then shows as a corrupt project.
+   ADR 0006 §2 made the split once, in the session; the third kind question 8 names has to be
+   split in one place too, and a test per kind is what keeps the three from drifting into two.
+3. **A defect fixed at one site and left at its twin.** The author is set in three places today
+   — parsed in `escribass-grpc`, parsed in `escribass-mcp`, hardcoded in `app`'s host — and
+   `Provenance` is built with three `None`s in three more (`tools.rs`, `project.rs`,
+   `session.rs`). Making provenance travel with the call (question 3) touches all six or one of
+   them keeps stamping `HUMAN` with no ids, and the history view will show it as a person's
+   edit. M2 PR 7 found ADR 0017 §3's own defect in the element chosen to avoid it; this is the
+   same shape with a wider spread.
+4. **A "measured" claim that was false.** PR 7's "the factory init patch does not reach Surge's
+   RNG" was read off three renders that had appended to one file. M3's spike measures a
+   *hosted model* — "it drives the API reliably", "the bar-block view halves invalid calls" —
+   and every such number is true of one model id on one day, routed to one provider, and may
+   be false next week under the same name. A spike number goes in this file with its model id
+   and its date, is cited as evidence and never as the claim, and nothing in an ADR says
+   "reliably" without the sentence after it saying on what.
+5. **A promised change that never happened.** ADR 0010 promised M2 a re-pin tool and M2's plan
+   never listed it, so nothing built it. ADR 0006 §7 promises Python codegen "at M3"; §17 says
+   `ai/.python-version` pins an exact patch; `schema/pyproject.toml` waits on "when `ai/`
+   depends on it"; ADR 0003 §6 promises the Libretto ADR before M3. Each is in a PR row above
+   by name, because a promise that is only in an ADR is the one that gets kept by nobody.
+6. **Testing something CI cannot run — twice over.** A hosted model needs a key CI does not
+   have and money a test must not spend, so the live run is ignored loudly, as the device test
+   is. And GitHub has refused every job since M2 PR 8, so an `ai/` CI step written now is a
+   step nobody has watched pass on a runner — "merged on local runs" is how M2 PRs 9–11 landed
+   and how M3's will until the limit lifts. Every green number in this milestone's PRs is from
+   one machine, and each PR says so, as "M2, closed" does.
+7. **The view that becomes a second representation.** A Libretto bar-block is text derived
+   from the `Song`, and the moment it is cached between turns, edited, or written back it is
+   CLAUDE.md #1's failure in a fourth language. M2 trap 1 was answered by a golden that proves
+   a view is a pure function of the model; the same golden, in Python, is the only thing that
+   would catch a summary that drifted from the document — the prose has existed since §2.1 and
+   would not.
+8. **Dry runs do not compose.** A dry run writes nothing and mints real ids from a fork, so the
+   second call of a two-call proposal names an entity that does not exist. The model will do
+   exactly this on the first real instruction anyone types, and a panel that shows "valid" for
+   the first call and `track_unknown` for the second has shown a person a proposal that cannot
+   be applied. Question 9 exists because ADR 0017 answered one gesture and a proposal is
+   several.
+9. **`Project::write` is O(history), and the loop is the first author with no person between
+   commits.** Measured in M2 PR 5: 17 ms at 21 entries, 30.6 ms at 300, 6.7 s for 300 in a
+   row. A branch-per-proposal (question 9(a)) commits every model call; a fork (9(b)) commits
+   once per approval; the difference is trap 8 of M2 arriving as a design decision rather than
+   as UI lag. Whichever is chosen, the number is re-measured with a model driving.
+10. **The key in a fixture.** A transcript recorder that saves the request saves its headers,
+    and `Authorization: Bearer …` is then in `tests/`. It parses, replays, passes every test
+    that does not read it — M0.3 shipped MCP dropping `provenance` for a milestone by the same
+    mechanism — and is in `git log` for ever. The recorder saves responses and the request
+    *body* only, a test asserts no fixture contains the key's prefix, and the key reaches the
+    process from the environment alone (U3).
+11. **The model learns a contract that is not real.** ADR 0006 §4's argument, one language
+    over. The tool schemas are proto3 JSON with **proto field names** — `core/src/call.rs`
+    decodes with `preserve_proto_field_names`, so `start_tick` — and betterproto2's `to_json`
+    emits **camelCase and a `Z` timestamp** (`schema/tests/test_roundtrip.py`, its own header).
+    A sidecar that builds a `Note` from the generated type and hands its `to_json` to the tool
+    API sends `startTick`, which the tool refuses or ignores. `proto/AGENTS.md` already names
+    the TypeScript half of this trap; the Python half is the same sentence, and the schemas the
+    model is given are the descriptor's, never the Pydantic model's.
+12. **A second validator, in Python.** `from_json` coerces and constructors validate
+    (`test_roundtrip.py`, `TestParsingIsNotValidation`), so a sidecar that constructs a `Note`
+    from the model's output gets a `pydantic.ValidationError` *before* the call — and turning
+    that into a refusal the loop retries on is a second implementation of §4.4, in a third
+    language, which is exactly the shape ADR 0017 §3 refused for a drag. The tool API is the
+    validator; the sidecar sends what the model said and lets `core` refuse it, with the rule.
+13. **Two pending things on one session.** A person's held drag and the model's proposal are
+    both dry runs against the same document; whichever applies second is refused by §4.3's
+    `version` check (ADR 0012 §4), and the refusal has to say *what moved* — "the model edited
+    this clip while you were dragging it" — rather than "version 3 is not version 4". The
+    wireframes draw both pending at once and never say which wins.
+14. **`buf breaking` is the only guard on `proto/`, and it runs on pull requests only.** The
+    `ai` service, provenance on the wire, `list_params` — all three land in PR 3 together,
+    for M2 trap 12's reason; spread across PRs 3, 4 and 8 they are compared against a `main`
+    that already moved.
+15. **A "verified" readout counting a thing that cannot be verified.** The wireframes' status
+    bar reads `lock.json 14/14 verified`, and `ai.model` will be a line in that file. A hosted
+    model id verifies nothing — there is no commit, no hash, no build to compare — and a count
+    that includes it is a check that cannot fail dressed as one that passed. M2 trap 4 kept
+    every §11 number out of the status bar until `core` reported it; this one is not `core`'s
+    to report at all.
+16. **The spike's number is not the decision.** M2's question 6 was answered by measurement
+    and the measurement did not cover everything — coexistence and cost were "the unverified
+    half", and PR 9 paid for them. PR 0 will measure a model on a day; what it cannot measure
+    is next month's model, and the ADRs say which half is unverified rather than reading a
+    sample as a mechanism (ADR 0009 §6's own lesson).
+17. **`ai/` runs the `checks` job and the job runs nothing of it.** The path gate skips only
+    `docs/`, `engine/`, `.githooks/` and root prose, so a change under `ai/` runs the job — to
+    a job whose steps do not know `ai/` exists. A green run then says nothing, which is
+    `checks.yml`'s own words for a gate that gets it wrong: "it does not fail, it just stops
+    testing something and nobody notices". PR 5 adds the step in the PR that adds the
+    directory.
+18. **A rule that depends on who is asking.** Refusing a parameter for `Author::Model` that a
+    person may set makes §5's "used by the UI and the AI identically" false, and is a rule by
+    author that no ADR has ever written. The denylist (question 7), the retry categories, the
+    tool list — none of them may check the author to decide what is valid. What differs by
+    author is what is *offered* (question 13), never what is *accepted*.
+
+### What M3 will not claim
+
+- **Not that the same prompt produces the same song.** A hosted model cannot be seeded, and no
+  test pretends it can. What is claimed is narrower and is written that way above: the song is
+  reproducible from its log, and the sidecar's own functions are pure and goldened.
+- **Not that `ai` is deterministic in CLAUDE.md #3's sense.** It is not in the list and this
+  does not put it there. §7.1's DSL, when M4 puts one inside it, is.
+- **Not that the model is pinned.** `ai.model` is a name a person chose; what answers to it
+  moves. `provenance.model_id` records what actually wrote an entry, and that is the record.
+- **Not symbolic generation and not analysis** (§6.2, §6.3), unless U1 says they are v1 — and
+  then not in M3 without a re-plan. The Libretto axes that need a key say so rather than
+  computing one.
+- **Not code generation for the compilers** (§6.4): M4's, with the compilers.
+- **Not a local LLM** (§15): a config change, and a config nobody has tested.
+- **Not that a user-chosen or model-chosen patch is reproducible**, unless PR 7 lands the
+  denylist whole. Half of one is not claimed either.
+- **Not that an external MCP client and the window can edit one project at once.** The lock
+  refuses it (ADR 0012 §3), and whether that changes is U5.
+- **Not that the model can hear anything.** CLAUDE.md #6, and nothing in M3 gives it ears: a
+  proposal is judged by a person who pressed play, and the sidecar never learns what they
+  heard.
+- **Not macOS or Windows.** Linux x86-64, on the image and compiler §17 pins, exactly as M1 and
+  M2 (ADR 0014 §2). Unclaimed, not contradicted.
+- **Not anything CI has verified**, until a run on `main` goes green again. Every number will
+  be one machine's, as "M2, closed" already says of M2's.
+- **Not that a preview has played on a device.** M3 does not touch the engine.
+- **Not the plugin's own editor, not code views** (M4), **not DAWproject or MIDI** (M5), **not an
+  installer** (M5): M3 runs from a build tree, and so does its sidecar.
+- **Not a resolution of any `[OPEN]` item.** Two are in M3's path — symbolic model choice, and
+  whether §6's analysis and generation are v1 at all — and both are U1 and U2 above, asked and
+  not answered. The other two are unchanged.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -1078,7 +1447,10 @@ promise an ADR made and no PR kept.
 ## Open — not ours to decide
 
 `docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocked M0, M1 or
-M2. Symbolic model choice is the one M3 walks into.
+M2. **Two are in M3's path**, and M3's plan lists both as questions for the user — U1 and U2 —
+and takes neither: whether §6's analysis and symbolic generation are v1 at all decides whether
+the second is reachable, and the plan is sized on the assumption that they are not in M3, an
+assumption the user confirms or reverses before the decisions PR.
 
 Minimum supported OS versions is the one M2 walks into, and it is **still open**. ADR 0014 §2
 answers a different question — which platform M2 *targets*, which is Linux x86-64, as M1 — and
