@@ -1120,10 +1120,24 @@ answered downstream of it. What it has to decide, with the facts that bear on ea
 The spike (PR 0) informs this ADR and does not decide it: whether a bar-block view lowers a
 real model's invalid-call rate against a raw `get_song` is a number the ADR should cite, and it
 is a measurement about one model on one day, dated as such (trap 4).
+### Decisions taken, 2026-09-17
+
+The five questions below were the user's. Four were answered directly, and the fifth is not
+reached. The fourteen an agent can propose an answer to are unchanged, and are decided with
+their ADRs (PR 2), after the Libretto ADR (PR 1).
+
+| Question | Decided | Consequence |
+|---|---|---|
+| U1 — are §6's symbolic generation and analysis v1 scope? | **Out of M3; v1 scope decided later.** The `[OPEN]` item in §15 stays open | M3 is §16's loop, sidecar and panel, exactly as this plan sized it. The Libretto harmony axis has no key to compute against, and the Libretto ADR says so rather than inventing one. One thing the question surfaced stays true for whoever reopens it: §6.3's analysis, as written, needs audio — stem separation, tempo estimation, reference-track extraction — while §6's own last bullet and CLAUDE.md #6 keep the `ai` process audio-agnostic, so "analysis in v1" cannot mean analysis in `ai` as §6 describes it |
+| U2 — which symbolic model for melody and drums? | **Not reached.** It was reachable only if U1 said yes | Stays `[OPEN]` in §15 beside U1, and is taken whenever U1 is |
+| U3 — which model, and what does its pin mean? | **Recorded, not pinned.** `lock.json`'s `ai.model` records the *choice*; every entry's `provenance.model_id` records the model that *actually answered*. No reproducibility is claimed for a hosted model — only for the song, from its log | §17's "model ids pinned per project" is read as a record, not a guarantee, and §17 is amended with the ADR to say so. `OPENROUTER_API_KEY` reaches the sidecar from the environment and nowhere else: never a flag, never `lock.json`, never a recorded transcript (trap 10). **Which id is the default is still open**, and is chosen after the spike (PR 0) reports cost per edit for two or three candidates |
+| U4 — every new dependency, for sign-off | **Both approved.** A Python gRPC stack — `grpcio` with `grpcio-tools`, or `grpclib`, whichever `betterproto2-compiler` 0.10.1 generates service stubs for, which PR 0 checks — and the `openai` Python SDK as the OpenRouter client, with the `httpx` it carries | Each is pinned by exact version in `lock.baseline.json` and §17 when it is first added, not before. **Nothing else is approved**: an agent framework, a prompt library, a tokenizer or a vector store returns to the user before it is installed (CLAUDE.md #4) |
+| U5 — may an external MCP client edit beside the window? | **No; one process at a time.** An external MCP client drives a project only while the window does not have it open | `.escri/lock` (ADR 0012 §3) and ADR 0004's single-writer ordering stand unchanged. §18.2 Stage 1's "any MCP client can drive a project immediately" is narrowed to say it holds with the window closed — a spec amendment that lands with its ADR in PR 2, not here |
+
 ### The open questions — for the user
 
 `CLAUDE.md` line 4: "Sections marked [OPEN] are not yours to decide: stop and ask." Five
-questions below are a person's for that reason or for CLAUDE.md #4's. An agent may lay out the
+questions below are a person's for that reason or for CLAUDE.md #4's. **Decided 2026-09-17 — see "Decisions taken" above**; the questions are kept as the record of what was weighed. An agent may lay out the
 options and their costs, which is what each row does, and may not take one.
 
 | # | Question | What bears on it |
