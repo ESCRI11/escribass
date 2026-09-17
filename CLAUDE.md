@@ -14,15 +14,49 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 ## Repo layout
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
 
-## Current milestone: M2 — UI
+## Current milestone: M3 — AI loop
 
-M0 and M1 are complete: the schema, `core` and the tool API below the engine; the render
-engine above it. §16 makes M2 the Tauri app — timeline, piano roll, mixer and history as
-projections of the model — plus preview playback, which is the live process `Render` gets its
-gRPC implementation for (ADR 0008 §1).
+M0, M1 and M2 are complete: the schema, `core` and the tool API; the render engine; the Tauri
+app with its views as projections of the model and preview playback. §16 makes M3 the AI loop —
+a Python sidecar, a tool-calling loop with dry-run/diff/apply, and the AI panel — preceded by
+the Libretto-grammar ADR §18.2 requires (ADR 0003 §6). **M3 is not planned yet**, and that is
+deliberate: planning it is its own step, as M1's and M2's were.
 
-Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16 and
-ADR 0003 before starting a step; they place what M2 owns and what it does not.
+Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §18.2 and
+ADR 0003 before starting a step. Read `docs/plan.md`'s "M2, closed" first: it records what M2
+leaves unverified — three merges with no green CI and a preview never played on a real device —
+and one ledger row that is due before M3's loop can call `set_param`.
+
+## Completed: M2 — UI
+
+1. ADRs 0012–0017: what the webview calls and holds, gRPC in the engine and what a preview is,
+   the seventh view and the one platform, a `ParamRef` reaching a fader, the pinned frontend
+   set, and a gesture as dry runs committed once. **No `song.proto` change**: `schema/` is
+   byte-identical to M1's close. `render.proto` gains `Preview`, `PlanTrack.mix_lanes` and
+   `PreviewEvent.applied`; `song_tools.proto` gains `undo`, `redo`, `render_preview` and
+   `merge_branch`'s per-path resolutions.
+2. `app/`: a Tauri host embedding `core`, with one `tool` command dispatching into `core::call`
+   — the function the MCP server dispatches through — and a `manifest` command, and `.escri/lock`
+   taken with `create_new`. The frontend holds one decoded `Song`, re-read after every applied
+   call, and draws the arrangement, the piano roll, the mixer, the patch log with branch
+   switching and merge resolution, and a generic parameter editor over the build manifest. Every
+   position of a drag is a `dry_run` and one entry is committed. `app/tests/projection.test.ts`
+   is §11's projection golden.
+3. `core`: `call(session, name, args)`; `undo` and `redo` read off the log, with no cursor in
+   the session; a `ParamRef` naming a track for `gain_db` or `pan`, and `compile` emitting
+   `mix_lanes`; `render_preview` over the live `Preview` stream in `core/src/engine.rs`; and
+   `InArrivalOrder`, which serves the MCP transport one request at a time.
+4. `engine/`: grpc++ v1.54.3 vendored. One binary in two modes over a Unix socket it names on
+   its own stdout — `--render` serves one `Render` call in a fresh process, `--preview` serves
+   one `Preview` stream on the machine's default ALSA output and exits 6 without one — and the
+   stdio path is deleted. A mix lane drives Tracktion's fader in slider position, split to
+   0.02 dB with its smoothing zeroed; a stretch Rubber Band objects to is refused.
+5. `tests/`: the four golden WAVs did not move over the new transport. `renders.rs` gains the
+   fader ride, the export process refusing `Preview`, the stretch refusal, and a device test that
+   is `#[ignore]`d because no machine this repository has run on had a real audio output — it has
+   passed only against ALSA's `null` PCM, which does not pace. `render-once`
+   is the client the engine job's shell steps render through, `determinism/undo` is a fifth
+   script, and CI gains an `app` job.
 
 ## Completed: M1 — Render engine
 
