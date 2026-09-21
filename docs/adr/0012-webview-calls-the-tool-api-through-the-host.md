@@ -117,6 +117,17 @@ interleaved renames and a patch log that no longer matches the `song.json` besid
 not atomic gets no protection from this; nothing in v1 is expected to run a project over NFS,
 and a real lock protocol is worth writing when one does.
 
+**Amended 2026-09-21, in the M3 ADRs, after the spike measured what "never broken
+automatically" cost.** Every Claude Code session — 50 of 50 — left `.escri/lock` behind naming
+a process that no longer existed, because a signal is how that client ends its MCP server and a
+`Drop` does not run in a process a signal ended; the next open was refused until a person deleted
+the file. The premise above holds and the rule was wider than it: the file *records its holder's
+pid*, and a pid that names no process is something a program can adjudicate. From ADR 0020 §5 a
+lock whose recorded holder no longer exists is **stale**: `take` replaces it and says so in its
+result, a lock naming a live pid is refused exactly as before, and one with no pid is refused
+because there is nothing to check. Nothing is broken while its holder may be alive; that is the
+sentence that stands. Landed in M3 PR 4.
+
 ### 4. A held dry run is applied optimistically, and the frontend mints no ids
 
 The wireframes draw an unapplied edit dashed in the timeline and a pending row at the head of

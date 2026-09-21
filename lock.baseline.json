@@ -139,18 +139,34 @@
     }
   },
   "ai": {
+    "_note": "The Python sidecar (docs/specs.md §6, §17). Written 2026-09-21 in M3 PR 2 from the user's decisions of 2026-09-17: U3 (the model is recorded, not pinned) and U4 (the packages, by name). Three packages are approved and carry `version: null` on purpose — U4 pins each 'by exact version when it is first added, not before', and nothing is installed until M3 PR 5, which writes the exact versions here, in §17 and in ai/uv.lock in one change; the file's own idiom for a pin that is owed is `null` with a note, as clap_sdk and faust below. No package here can reach a render (§17's last rule, ADR 0016 §4): the sidecar is audio-agnostic (CLAUDE.md #6) and everything it does to a song is a tool call.",
     "python": {
-      "version": "3.12"
+      "version": "3.12",
+      "note": "exact patch in ai/.python-version from M3 PR 5 (§17)"
     },
     "provider": "openrouter",
-    "model": null
+    "model": "deepseek/deepseek-v4.1-flash",
+    "model_note": "A RECORD, NOT A PIN (ADR 0021 §4; docs/specs.md §17, amended). A hosted model changes under its name and nothing can verify one, so this is the default a project records in its own lock.json `ai.model` on first use, and every log entry's `provenance.model_id` records what actually answered. Chosen by the user after the M3 spike and measured before it was recorded (2026-09-17: 45/45 on the nine feasible instructions, 5.8% refused calls all recovered, $0.0014 an edit at the median, and the same wrong-parameter mistake on `set_param` that withholding the tool removes). Cost and latency are properties of OpenRouter's routing, not of the name. Never counted by any 'verified' readout (docs/plan.md, M3 trap 15).",
+    "grpclib": {
+      "version": null,
+      "note": "The Python gRPC stack, decided by what the pinned betterproto2-compiler 0.10.1 generates: an async grpclib client AND server under client_generation=async, server_generation=async; a synchronous grpcio client and no server otherwise. `ai` serves (ADR 0020 §1), so grpclib it is, as betterproto2's `grpclib` extra plus the package (ADR 0020 §2). No grpcio, no grpcio-tools. The spike's scratch environment used 0.4.9; the pin is PR 5's."
+    },
+    "openai": {
+      "version": null,
+      "note": "The OpenRouter client — §6's 'OpenAI-compatible client', literally. Approved 2026-09-17 (U4). The sidecar passes the key and base_url explicitly, because the SDK otherwise reads OPENAI_API_KEY. The spike ran 3.14.1; the pin is PR 5's."
+    },
+    "httpx2": {
+      "version": null,
+      "note": "What the openai SDK carries today: a differently named package from httpx, which the first approval named and the spike corrected; approved by name 2026-09-17 (U4). The spike saw 2.13.0; the pin is PR 5's."
+    }
   },
   "notes": [
     "commit: null means the tag hash must be resolved and filled in when the dependency is first vendored.",
     "JUCE is never upgraded independently of tracktion_engine.",
     "Any change here requires an ADR, and a full golden-render pass if the pin can reach a render; a pin that cannot says why in its ADR rather than skipping in silence (docs/specs.md §17, last rule; ADR 0016 §4).",
     "bundled_plugins resolved from upstream git on 2026-09-05 (ADR 0010); date is the commit's own date. sfizz_ui is a new entry, not a re-pin.",
-    "app and engine.grpc added 2026-09-07 in M2 PR 1 (ADR 0013 §1, ADR 0016). The frontend set is one sign-off; the golden-render pass is required of any pin that can reach a render, and app.* cannot."
+    "app and engine.grpc added 2026-09-07 in M2 PR 1 (ADR 0013 §1, ADR 0016). The frontend set is one sign-off; the golden-render pass is required of any pin that can reach a render, and app.* cannot.",
+    "ai filled in 2026-09-21 in M3 PR 2 (ADR 0020 §2, ADR 0021 §4): the model is a record and not a pin, and the three packages carry null until M3 PR 5 installs them, per U4's 'when it is first added, not before'. None can reach a render."
   ],
   "schema": {
     "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md §17, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",

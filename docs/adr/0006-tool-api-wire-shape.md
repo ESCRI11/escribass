@@ -143,6 +143,16 @@ The generated tool schemas therefore **omit** those three fields for an embedded
 fills it in on every call, inventing ids and writing its own provenance, and learns a contract
 that is not real.
 
+**Extended 2026-09-21, in the M3 ADRs, after the spike reached the one path this did not
+cover.** "Core overwrites" was true of the typed tools and not of `apply_patch`, which stored a
+caller's `provenance` verbatim: a session run as `--author model` applied a section claiming
+`AUTHOR_HUMAN`, created in 1999, and `get_song` returned it so. From ADR 0021 §1 `prepare`
+decides every entity's `provenance` on **every** path — a new entity gets the call's, an
+existing one keeps its own — as it already decides `version` (ADR 0005 §3), and `prepare_merge`
+leaves both alone. Ids are the one §4.3 field a caller may state, because a dry run's ids are
+the keys a pending edit is applied by (ADR 0012 §4), and the validator's `id_not_ulid` and
+`key_id_mismatch` are their guard.
+
 ### 5. One project per process, named at launch; there is no `open_project` tool
 
 The project directory is a launch argument, and creating one is a flag on the binary
@@ -234,6 +244,16 @@ Python orchestrator, neither of which exists. Generating service stubs today wou
 
 Rust now; TypeScript at M2; Python at M3. The `.proto` is the artefact that has to be right,
 and it is right regardless of who has generated from it.
+
+**Carried out 2026-09-21 in the M3 ADRs, and narrowed.** Python for `proto/` lands in M3 PR 3,
+with `server_generation=async` and `client_generation=none`, because the sidecar **serves** one
+service and dials nothing: `ai` serves `Assistant` over a stream the host dials, and the model's
+tool calls come back over it to the host, which executes them (ADR 0020 §1). So what the Python
+target has a consumer for is `Assistant`'s server, and the `SongTools` and `Preview` servers the
+same run generates are left unused rather than excluded. That is narrower than the `SongTools`
+client this decision assumed — "would pull `grpclib` into `schema/`" was right about the
+package and wrong about who would call what — and the stack is `grpclib`, the only one the
+pinned compiler generates a server for (ADR 0020 §2).
 
 ### 8. `buf lint` exceptions are scoped to the `proto` module
 
