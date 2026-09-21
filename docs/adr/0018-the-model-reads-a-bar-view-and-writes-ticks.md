@@ -266,26 +266,35 @@ exact rational (`fractions.Fraction`, stdlib), so the golden is byte-stable: an 
 standard deviation reaches `libm`, whose last bit is the platform's, and a golden that
 compares bytes cannot carry one (the reason ADR 0009 §3 pins an ISA, one layer up). Where the
 paper's feature is defined per song, ours is per bar as well, because "bar 3 has no onset on
-any voice" is what a model can act on and a song-level mean is not.
+any voice" is what a model can act on and a song-level mean is not. An *onset* is the paper's
+𝒪: a distinct (voice, tick) pair, so two notes one voice strikes at one tick are two notes and
+one onset. Where the paper's definition divides by nothing — a bar with no onset, a line with
+no interval, a maximum over no chord — the value is *none*, except where the paper sets one:
+an ascending ratio with no interval is 1/2.
 
 | Axis | Computed in M3, from the `Song` alone | Deferred, and why |
 |---|---|---|
 | **Rhythm** | Per bar and per voice: onsets; onsets on a beat; the paper's *syncopation rate* (onsets not on a beat boundary, over onsets); onsets on the 16th grid (multiples of 240 ticks), on the triplet-eighth grid (320), on neither; the smallest inter-onset interval in ticks; mean written length as a fraction. Song totals of the same | *Onset position entropy*, *duration CV*, *density variability* — entropy and standard deviation |
 | **Harmony** | Per bar, over all note voices and again per voice: the paper's *duration-weighted pitch-class mass* — twelve integers, ticks sounding per class; *distinct pitch classes*; the *prominent* classes, at or above 30% of the heaviest, as `10·w ≥ 3·max`; *chromaticism*, `1 − max over roots of (mass on the major scale at that root / total mass)`, which needs no key because it maximises over the twelve. A sampler voice is reported and marked, never excluded | Any key: U1. *Chord change rate*, *chord vocabulary density*, *diminished/augmented colour* — the paper computes them from the prominent classes of each half-bar or bar, so they need no label and nothing here prevents them; deferred all the same, as a scope choice for PR 6 and not, as this ADR first said, because they read the chord label. *Root-motion entropy* (a logarithm) and *fourth-motion rate* — both read the paper's bass, "the lowest-μ voice", an identification this ADR does not adopt. *Pitch-class entropy* — a logarithm |
 | **Melody** | Per voice, per bar and over the song: pitch range; distinct pitches; the interval sequence between successive onsets in signed semitones, where the line at a simultaneous onset is the **highest** note (a stated rule, not a detector); the paper's *step ratio* (intervals with magnitude ≤ 2, over intervals) and *ascending ratio*, both over the non-zero intervals only, as the paper's set *M* drops a repeated pitch | *Interval entropy* — a logarithm. The paper's *identified melody voice*: no voice is identified, every voice is reported, and the reader chooses |
-| **Texture** | Per bar: the paper's *voice count* (voices with a note or an audio iteration sounding — an audio clip is a voice with one opaque event); *mean simultaneity* (notes over distinct onset ticks, across voices — the paper's divides by distinct (voice, onset) pairs instead); *maximum chord width* (largest pitch span among notes sharing an onset tick, across voices — the paper's is within one voice); each voice's greatest polyphony; each voice's sounding ticks over the bar's | — |
-| **Form** | Over the song: two bars are *equal* when every voice's list of (clip-relative onset within the bar, pitch, length, velocity) is identical; the bar sequence lettered by first occurrence (`A A B A`); the paper's *distinct-bar fraction* over that equality (the paper's compares (voice, onset, pitch) only); the paper's *self-similarity*, the Jaccard overlap of each pair's sets of (voice, onset-in-bar, pitch) triples, two empty bars overlapping fully, averaged over pairs as an exact fraction; *novelty rate*, `mean over consecutive pairs of (1 − overlap)`. The document's own sections are listed against the lettering | *Sections per 100 bars* — a checkerboard novelty kernel with a threshold at `mean + 0.5·std`; the document already carries sections |
+| **Texture** | Per bar: the paper's *voice count* (voices with a note or an audio iteration sounding — an audio clip is a voice with one opaque event); the paper's *mean simultaneity* (notes over onsets); the paper's *maximum chord width* (the largest pitch span among the notes one voice strikes at one tick, over every voice and tick where it strikes two or more); each voice's greatest polyphony; each voice's sounding ticks over the bar's | — |
+| **Form** | Over the song: a bar is the paper's set *A_b* of (voice, onset-in-bar, pitch) triples, and two bars are *equal* when their sets are — length and velocity are not compared; the bar sequence lettered by first occurrence (`A A B A`); the paper's *distinct-bar fraction*; the paper's *self-similarity*, the Jaccard overlap of each pair's sets, two empty bars overlapping fully, averaged over pairs as an exact fraction; *novelty rate*, `mean over consecutive pairs of (1 − overlap)`. The document's own sections are listed against the lettering | *Sections per 100 bars* — a checkerboard novelty kernel with a threshold at `mean + 0.5·std`; the document already carries sections |
 | **Within-song variation** | Per voice, per bar, one of six classes against the previous bar: *identical*; *same rhythm* (equal onsets and lengths, different pitches); *same pitches* (equal pitch multiset, different rhythm); *different*; *enters* (silent before, playing now); *leaves*. And per voice the number of distinct bar patterns over the song | The paper's definition entire — each windowed standard deviation divided by "the corpus standard deviation of axis *a*" (Appendix B) — is a corpus measure twice over |
 
 For the render fixture, from the view above and by hand (PR 6 checks the hand): bar 1 has
 seven Lead onsets of which four are on a beat, so a syncopation rate of 3/7, three on no
 grid, a smallest interval of 160 ticks; its pitch-class mass is C 1800 (Lead 840, Keys 960)
 and E 480, two distinct classes, chromaticism 0; Lead's line in bar 1 is 60 64 60 64 60 64 60,
-six intervals all leaps, three ascending; three voices sound, mean simultaneity 8/7, chord
-width 12 at tick 960. Bar 2 has two Lead onsets, both on a beat, C 480 and G 480, one
-interval of +7. The form is `A B C`, distinct-bar fraction 3/3, self-similarity
-`(1/9 + 0 + 0)/3 = 1/27`, novelty 17/18. Lead is *different* in bar 2 and *leaves* in bar 3;
-Keys *leaves* in bar 2.
+six intervals all leaps, three ascending; three voices sound; eight notes over eight onsets
+(Lead's seven and Keys' one — Keys' tick 960 is Lead's too, but an onset is per voice), so a
+mean simultaneity of 8/8 = 1; no chord width, because no voice strikes two notes at one tick
+anywhere in the fixture. Bar 2 has two Lead onsets, both on a beat, C 480 and G 480, one
+interval of +7, two notes over two onsets so simultaneity 1, no chord width; bar 3 has no
+onset, so neither has a value. The bar sets are eight triples, two — `(Lead, 0, 60)` in both
+— and none, so the form is `A B C`, distinct-bar fraction 3/3, self-similarity
+`(1/9 + 0 + 0)/3 = 1/27` with `1/9 = 1/(8 + 2 − 1)`, novelty
+`((1 − 1/9) + (1 − 0))/2 = 17/18`. Lead is *different* in bar 2 and *leaves* in bar 3; Keys
+*leaves* in bar 2.
 
 **What they are for, and what they may never do.** The axes are text the model reads beside
 the view — a description of the document as it stands, and of a proposal's document if
@@ -318,7 +327,9 @@ map iterates in creation order and a projection that lost its `sort` would other
 green (ADR 0012 §5, amended — measured there, not reasoned). Two things that fixture cannot
 exercise are asserted against constructed values, as the frontend's bar grid is: a second
 time-signature event, which no tool mints and the piecewise grid gets silently wrong, and a
-clip spanning a bar line, which the fixture's four clips do not do.
+clip spanning a bar line, which the fixture's four clips do not do; and a third, a voice
+striking two notes at one tick, because the fixture never does and the paper's maximum chord
+width and a simultaneity above 1 would otherwise be goldened only as *none* and 1.
 
 This ADR decides it; **PR 6 implements it**, and PR 6 is read-only — nothing in it calls a
 mutating tool (CLAUDE.md #2 is about mutations, and a constructed `Song` handed to a pure
