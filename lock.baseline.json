@@ -166,7 +166,8 @@
     "Any change here requires an ADR, and a full golden-render pass if the pin can reach a render; a pin that cannot says why in its ADR rather than skipping in silence (docs/specs.md §17, last rule; ADR 0016 §4).",
     "bundled_plugins resolved from upstream git on 2026-09-05 (ADR 0010); date is the commit's own date. sfizz_ui is a new entry, not a re-pin.",
     "app and engine.grpc added 2026-09-07 in M2 PR 1 (ADR 0013 §1, ADR 0016). The frontend set is one sign-off; the golden-render pass is required of any pin that can reach a render, and app.* cannot.",
-    "ai filled in 2026-09-21 in M3 PR 2 (ADR 0020 §2, ADR 0021 §4): the model is a record and not a pin, and the three packages carry null until M3 PR 5 installs them, per U4's 'when it is first added, not before'. None can reach a render."
+    "ai filled in 2026-09-21 in M3 PR 2 (ADR 0020 §2, ADR 0021 §4): the model is a record and not a pin, and the three packages carry null until M3 PR 5 installs them, per U4's 'when it is first added, not before'. None can reach a render.",
+    "tool_api.python added 2026-09-22 in M3 PR 3 (ADR 0006 §7, ADR 0020 §1). Nothing new is pinned and nothing is installed: it records a third consumer of schema's already-pinned Python codegen, as tool_api.typescript records a second consumer of the TypeScript one. It cannot reach a render."
   ],
   "schema": {
     "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md §17, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",
@@ -283,6 +284,15 @@
         "protoc_gen_es": "2.14.1",
         "bufbuild_protobuf": "2.14.1",
         "typescript": "5.9.3"
+      }
+    },
+    "python": {
+      "_note": "The service's Python, generated since 2026-09-22 in M3 PR 3 — the milestone ADR 0006 §7 deferred it to, narrowed by ADR 0020 §1 to server_generation=async and client_generation=none because `ai` serves Assistant and dials nothing. Nothing new is pinned: betterproto2-compiler writes it and betterproto2 with pydantic is what it imports, and all three are already pinned under `schema.python` at the versions below, run out of schema/'s environment by `uv run --project ../schema`. `proto` is a new consumer, not a new dependency — the same relationship `typescript._reused` records — so this needs no sign-off under CLAUDE.md #4; it is written here because proto/AGENTS.md's 'adding a language target' checklist asks for the version, and because a reader of §17 should see that the tool API has a third language target without reading a buf.gen.yaml. Two things this target does NOT bring. The generated AssistantBase imports `grpclib`, which is `ai`'s package and is deliberately unpinned and uninstalled until M3 PR 5 (see `ai.grpclib`), so this code is regenerated and compared byte for byte by proto/codegen.sh --check and is imported and type-checked by nothing until then — a deferred check, recorded as one in docs/plan.md's ledger so PR 5 is obliged to close it. And betterproto2 has no extern_path, so it re-emits song.proto and history.proto; codegen.sh deletes that copy and rewrites the imports to escribass_schema, because a second Song in the tree is CLAUDE.md #1's failure in a fourth language (ADR 0020 §1, amended).",
+      "_reused": {
+        "python": "3.12",
+        "betterproto2": "0.10.0",
+        "betterproto2_compiler": "0.10.1",
+        "pydantic": "2.13.5"
       }
     }
   },

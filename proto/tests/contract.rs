@@ -150,6 +150,12 @@ fn the_plan_carries_the_model_types_themselves() {
 /// Walked from the descriptor rather than the generated code, because a `map<...>` is a
 /// synthetic nested message with `map_entry` set, and that is the one place it cannot hide.
 ///
+/// Scoped to `render.v1` in both directions, because rule 2 is a rule about a **plan**: what
+/// the engine is handed has its order carried for it, since it is never patched (ADR 0007 §2).
+/// `assistant.proto`'s stream is not a plan — it carries the `Song` itself, map-keyed
+/// collections and all — so it is outside this walk on purpose and not by oversight, and a map
+/// on it would be neither new nor wrong (M3 PR 3).
+///
 /// Seeded from what the engine is *handed* — every RPC's argument — rather than from
 /// `RenderPlan` by name. Revised 2026-09-08 in M2 PR 3: `PreviewCommand` carries a plan
 /// (ADR 0013 §2) and is not called `Plan*`, and the coverage assertion at the end of this test

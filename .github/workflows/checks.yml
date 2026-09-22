@@ -125,7 +125,9 @@ jobs:
       # TypeScript (ADR 0006 §7). It has no toolchain of its own — schema's pinned `tsc` and
       # `protoc-gen-es` are the ones that run — only the two runtime packages its generated
       # code imports, installed here because a `file:` link resolves its own imports from its
-      # own directory and never from the caller's.
+      # own directory and never from the caller's. `uv sync` below is what `proto`'s Python
+      # codegen borrows too: `buf.gen.yaml` runs the compiler with `--project ../schema`,
+      # because `proto` has no Python environment of its own either.
       - name: Install JavaScript and Python dependencies
         if: env.SKIP != '1'
         working-directory: schema
@@ -134,8 +136,11 @@ jobs:
           npm --prefix ../proto ci
           uv sync --locked
 
-      # 1/4 — generated code matches the protos. Two modules, two scripts: the model
-      # generates Rust, TypeScript and Python; the service generates Rust only (ADR 0006 §7).
+      # 1/4 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
+      # both generate Rust, TypeScript and Python (ADR 0006 §7, carried out). `proto`'s Python
+      # is regenerated and byte-compared here and imported by nothing: it needs `grpclib`,
+      # which M3 PR 5 pins where it is first installed, and which adds the step that imports
+      # it (docs/plan.md, the ledger row of 2026-09-22).
       - name: Generated code is in sync
         if: env.SKIP != '1'
         run: |

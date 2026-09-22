@@ -16,6 +16,12 @@
 //! `RenderPlan` core compiles, the `RenderResult` the engine answers with, and a `Render`
 //! service nobody implements before M2. Its leaf messages are `song.proto`'s by the same
 //! `extern_path`, which is what makes a plan carry *the* `Note` rather than a copy of it.
+//!
+//! `assistant` is the AI sidecar's boundary (`proto/assistant.proto`, ADR 0020): one
+//! bidirectional stream per prompt, on which the model's tool calls come **back** to the host
+//! as a name and arguments. Here the generated `assistant_client` is the half that matters —
+//! `ai` serves and `core` dials (ADR 0020 §1) — which is the opposite of `song_tools`, and
+//! nothing implements either half before M3 PR 5.
 
 pub mod escribass {
     pub mod tools {
@@ -36,8 +42,17 @@ pub mod escribass {
             ));
         }
     }
+    pub mod assistant {
+        pub mod v1 {
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/gen/rust/escribass/assistant/v1/escribass.assistant.v1.rs"
+            ));
+        }
+    }
 }
 
+pub use escribass::assistant::v1 as assistant;
 pub use escribass::render::v1 as render;
 pub use escribass::tools::v1 as tools;
 

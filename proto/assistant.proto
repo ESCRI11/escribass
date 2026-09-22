@@ -1,0 +1,245 @@
+// What crosses between `app` and the AI sidecar (docs/specs.md §3, §6). The choices this file
+// makes that §3 leaves open: docs/adr/0020-ai-serves-one-stream-the-host-executes-and-a-dead-holders-lock-is-stale.md
+// §1 (which side listens) and §3 (what crosses, and that there is no `Jobs` service).
+//
+// **`ai` serves this and `app` dials it.** That is the opposite direction from render.proto —
+// where the child also serves and `core` dials — and it is the same shape for a different
+// reason: only `grpclib` has a generated *server*, and `grpclib` is what the pinned
+// betterproto2-compiler emits, so the process that serves is the one whose gRPC is generated
+// (ADR 0020 §1, §2). `core` starts the sidecar from a command it was told, reads the one
+// `unix:<path>` line it prints once it is listening, and dials — the engine's own shape, one
+// process over (ADR 0020 §4; ADR 0013 §3).
+//
+// The model's tool calls come **back** over this stream as a name and arguments — the envelope
+// `core::call(session, name, args)` already takes — and the host executes each against the
+// proposal (ADR 0019 §1). So `ai` holds no `SongTools` stub, no session and no project path:
+// §5's "agents never read or write the project file directly" is a property of what the
+// process is given rather than of what it is told not to do.
+//
+// Three things this file deliberately does not carry, each decided elsewhere:
+//
+//   1. **No provenance.** The three ids of ADR 0021 §2 — `model_id`, `prompt_id`,
+//      `tool_call_id` — travel with the proposal, inside `core`. A field here would be a
+//      field a caller can lie in, which is the reason no request message has an author
+//      either (ADR 0021 §1, §2).
+//   2. **No `oneof` of the twelve request messages.** A call's arguments cross as JSON text:
+//      twelve typed arms mirroring song_tools.proto are the second description ADR 0006 §4
+//      refuses, free to drift from the first, and the host hands the object to `call` exactly
+//      as the MCP server hands it one.
+//   3. **No `Jobs` service.** §6's "long tasks are jobs with progress" is this stream:
+//      progress is the events, cancellation is closing it, the answer is `done`. A service
+//      beside it would be a second way to ask about one thing, with a handle nobody needs
+//      (ADR 0020 §3; §13, amended).
+
+syntax = "proto3";
+
+package escribass.assistant.v1;
+
+import "song.proto";
+import "song_tools.proto";
+
+// ---------------------------------------------------------------------------
+// Host → `ai` (ADR 0020 §3)
+// ---------------------------------------------------------------------------
+
+// One tool as the model is offered it.
+//
+// The descriptor's own schema (ADR 0006 §6), filtered by the host to the twelve of ADR 0022
+// §1 and with `dry_run` taken out — every offered call is executed against the proposal and a
+// person approves the whole, so a dry run is meaningless to the model and costs it a turn.
+// Never a second tool list written in Python: what differs by author is what is *offered*,
+// and `core` already describes and orders every tool (ADR 0022 §1; docs/plan.md, M3 trap 11).
+//
+// Per prompt rather than once at launch, because the filtered list is per prompt: a
+// launch-time contract is a second thing the filter would then have to match (ADR 0020 §3).
+message ToolSchema {
+  // The RPC name in the snake_case form §5 uses: `AddTrack` is `add_track`.
+  string name = 1;
+
+  // The RPC's leading comment in song_tools.proto. The proto is the documentation.
+  string description = 2;
+
+  // The request message as a JSON Schema object, as JSON text — `core`'s own `input_schema`,
+  // serialised. Text rather than `google.protobuf.Struct`, because the schema is handed to
+  // the provider verbatim and modelling it here would describe a second time what the
+  // descriptor already produced once.
+  //
+  // It names **proto** fields — `start_tick`, never `startTick`. `core` decodes arguments
+  // with `preserve_proto_field_names`, and the generated Pydantic model's `to_json` writes
+  // camelCase, so a schema built from the model rather than from the descriptor would teach
+  // the model a contract the tool then refuses or ignores (docs/plan.md, M3 trap 11).
+  string input_schema = 3;
+}
+
+// One call the model made in an earlier turn, and what it was answered.
+message CompletedCall {
+  ToolCall call = 1;
+
+  // Whole, every violation included, because that is what the model was given at the time: a
+  // model fixing one problem at a time wastes its retries (song_tools.proto, `ToolResult`).
+  escribass.tools.v1.ToolResult result = 2;
+}
+
+// One finished turn.
+//
+// The conversation is the **host's**: held for the window's life, persisted beside the project
+// and outside it, and sent whole with every prompt — so `ai` is a function of what it is sent,
+// holds nothing between streams, and a restarted sidecar forgets nothing mid-conversation
+// (ADR 0021 §3).
+//
+// It carries what the provider's message list is rebuilt from and nothing else. What *became*
+// of a turn — applied as which entry, rejected, edited — is the host's record, shown in the
+// history view and written to its own file; a field for it here would put the panel's state
+// on the model's wire (ADR 0021 §3).
+message Turn {
+  string prompt = 1;
+  repeated CompletedCall calls = 2;
+
+  // The model's final text for that turn, as `Done.text` carried it.
+  string reply = 3;
+}
+
+// A prompt and everything the turn is computed from. Exactly one crosses per stream: the
+// stream is the turn's identifier, and closing it is cancellation (ADR 0020 §3, ADR 0013 §2).
+message Prompt {
+  // What the person typed. Its SHA-256 is the `prompt_id` every entity and entry of the turn
+  // is stamped with — computed by the **host**, with the one hasher the project store already
+  // has, never here (ADR 0021 §2).
+  string text = 1;
+
+  // The document the bar view is computed from (ADR 0018 §2). The model never sees this: it
+  // sees the view `ai` derives, which is text derived and discarded — held between turns,
+  // edited, or written back it would be CLAUDE.md #1's failure in a fourth language
+  // (docs/plan.md, M3 trap 7).
+  //
+  // The model's own message, by value. A hand-written copy would be a second representation
+  // of song state under another name, and it would stop matching the first time a field is
+  // added to song.proto (CLAUDE.md #1, ADR 0006 §4). Binary proto on the wire, as §4.1 has
+  // it: the canonical JSON is the project file's form, not this one.
+  escribass.song.v1.Song song = 2;
+
+  // The tools the host offers for this prompt, already filtered (ADR 0022 §1).
+  repeated ToolSchema tools = 3;
+
+  // The model the project records under `ai.model` — a record of a person's choice and never
+  // a pin, because nothing verifies a hosted model id (ADR 0021 §4). What actually answered
+  // comes back on `ToolCall.model_id` and `Done.model_id`, and that is what the log records.
+  string model_id = 4;
+
+  // Every turn before this one, oldest first.
+  //
+  // ponytail: the whole conversation crosses on every prompt, so the bytes sent grow with
+  // its length — the cost ADR 0021 §3 accepted to keep `ai` stateless. The upgrade path is
+  // the host sending a window or a summary of it, which changes nothing here because the
+  // host is what decides; the first measurement of a long conversation's first turn is what
+  // would ask for it.
+  repeated Turn conversation = 5;
+}
+
+// What one of the model's calls was answered.
+message CallResult {
+  // The provider's own id for the call this answers, echoed from `ToolCall.call_id`: a turn
+  // may have several calls in flight and order alone cannot say which is which.
+  string call_id = 1;
+
+  // Whole, violations included — the model retries by calling differently, and the loop
+  // counts three refused calls in one turn before it ends (ADR 0022 §3).
+  escribass.tools.v1.ToolResult result = 2;
+
+  // The document as the proposal now has it, from which `ai` recomputes the view
+  // (ADR 0018 §2). Sent again rather than diffed, for the reason a preview replaces its plan
+  // rather than patching it: a diff here would be a second RFC 6902 applied where the
+  // validator does not run (ADR 0013 §2).
+  escribass.song.v1.Song song = 3;
+}
+
+// One message from the host to `ai`.
+//
+// The stream is the session, so neither arm names the turn it belongs to. Two unary calls
+// would each need a handle for that, which is the surface ADR 0006 §5 declined to invent for
+// projects and ADR 0013 §2 declined to invent for previews.
+message AssistantCommand {
+  oneof command {
+    Prompt prompt = 1;
+    CallResult result = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// `ai` → host (ADR 0020 §3)
+// ---------------------------------------------------------------------------
+
+// A fragment of the model's reply, as it is produced.
+//
+// Its own message rather than a bare `string` arm of the oneof below, for the reason
+// `PreviewStop` is its own message rather than the well-known empty: an arm that may need a
+// second field later cannot grow one. The spike's `finish_reason: length` after 8,192 tokens
+// of *reasoning* names the field that might be asked for — text a panel would show
+// differently from the reply — and it is additive here and a break there.
+message ReplyText {
+  string text = 1;
+}
+
+// One tool call the model made.
+message ToolCall {
+  // The id the provider assigned it (`tool_calls[].id`). It is the string that ties an entity
+  // to a line of the conversation once it reaches `provenance.tool_call_id` (ADR 0021 §2),
+  // and it is what `CallResult.call_id` answers.
+  string call_id = 1;
+
+  // One of the names the prompt offered, in `ToolSchema.name`'s form. Nothing here checks
+  // that it was offered or that it exists: what is *accepted* is the same for every caller
+  // and `core` is what accepts it, so a name the model invented comes back as a refusal with
+  // its rule rather than as a rule written twice (docs/plan.md, M3 traps 12 and 18).
+  string name = 2;
+
+  // The arguments as the JSON object the model wrote, verbatim, as text.
+  //
+  // Verbatim because parsing here would be a second validator in a third language: the
+  // generated Pydantic constructors validate, so building a request from the model's output
+  // would raise before the call and turn §4.4 into something implemented twice (docs/plan.md,
+  // M3 trap 12). The host hands this to `call` as the MCP server hands it one.
+  string args_json = 3;
+
+  // The model id **the provider's response named**, never the id that was asked for: a router
+  // may answer one turn from another provider under the same name, and the log should record
+  // what wrote an entity rather than what was requested (ADR 0021 §2).
+  string model_id = 4;
+}
+
+// The turn is over: the model answered and asked for nothing more.
+//
+// There is no error arm, for the reason `PreviewEvent` has none — a failure ends the stream
+// with a gRPC status rather than travelling as a value a caller may forget to read. Each of
+// the three kinds ends somewhere of its own: a refusal is a `ToolResult` the model sees, an
+// operator error ends the turn at the host, and a provider failure is retried inside `ai` its
+// bounded number of times and then ends this stream naming itself — never fed back to the
+// model as a validation error, which it is not (ADR 0022 §3).
+message Done {
+  string text = 1;
+  string model_id = 2;
+}
+
+// One message from `ai` to the host.
+message AssistantEvent {
+  oneof event {
+    ReplyText text = 1;
+    ToolCall call = 2;
+    Done done = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The service (ADR 0020 §1, §3)
+// ---------------------------------------------------------------------------
+
+// Defined in M3 PR 3 and implemented in PR 5, for the reason `Render` and `Preview` were each
+// defined a pull request or a milestone before anything served them: `buf breaking` runs on
+// pull requests only, so a wire that grows across two of them is compared against a `main`
+// that has already moved (docs/plan.md, M3 trap 14; M2 trap 12). Everything M3 adds to
+// `proto/` is in this file, and this file is one service.
+service Assistant {
+  // One prompt, for as long as the stream is open. Closing it cancels the turn, and `app`
+  // dying closes it for free.
+  rpc Prompt(stream AssistantCommand) returns (stream AssistantEvent);
+}

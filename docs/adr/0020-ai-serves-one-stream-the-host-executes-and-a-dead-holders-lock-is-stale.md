@@ -82,6 +82,28 @@ consumer and are left unused rather than excluded, since a per-file plugin confi
 second thing to keep in step. That is narrower than "Python for `SongTools`", which ADR 0006
 §7 assumed, and the plan asked that the narrowing be said.
 
+**Extended 2026-09-22, in PR 3, on a fact this decision did not have.** "Left unused rather
+than excluded" was written about the two *servers* and turns out to be true of more than
+that: `betterproto2-compiler` generates a module for **every file in the request, imports
+included** — it ignores `file_to_generate` — and it has no `extern_path` and no
+`rewrite_imports`. So the run also re-emits `song.proto` and `history.proto` under
+`proto/gen/python`, byte for byte identical to `schema/`'s copy and a **different class at run
+time**. That is not an unused server, it is the second `Song` the four `extern_path` lines and
+the two `rewrite_imports` in `proto/buf.gen.yaml` exist to prevent for Rust and TypeScript
+(CLAUDE.md #1, ADR 0006 §4), and it would have been a real defect rather than a tidiness one:
+the bar view is a pure function of `escribass_schema`'s `Song` (ADR 0018 §2) and would not have
+taken the `Song` a `Prompt` arrives carrying.
+
+So `proto/codegen.sh` deletes the re-emitted `escribass/song`, `escribass/history` and
+`google` packages after `buf generate` and rewrites the imports that named them to
+`escribass_schema`, with two `grep`s that fail the run if either the rewrite missed a line or
+matched none. That is the Python spelling of the options the other two targets set, done by
+the script because the plugin has none — and it is the whole of what this decision's "one
+plugin entry" costs in practice. The alternative, generating `proto`'s Python into
+`schema/gen/python`, was rejected: two scripts would write one tree, each deleting it whole,
+and `proto/codegen.sh --check` hashes only its own `gen/`, so running them in the wrong order
+would drop the `Assistant` module and the drift gate would pass.
+
 ### 2. The stack is `grpclib`, and each package is pinned where it is first installed
 
 U4 approved "a Python gRPC stack — `grpcio` with `grpcio-tools`, or `grpclib`, whichever
@@ -249,7 +271,13 @@ Its test is loud, so it does not muddy that pull request's silent half.
   `client_generation=none`, its entry under `tool_api` in `lock.baseline.json` as TypeScript's
   is — the whole M3 shape of `proto/` in one change, since `buf breaking` compares it once
   (trap 14). No provenance on the wire (ADR 0021 §2) and no `list_params` (ADR 0022 §2), so
-  the shape is one service.
+  the shape is one service. **Done 2026-09-22**, with the extension to decision 1 above and
+  one thing left owed and written down rather than quietly skipped: the generated
+  `AssistantBase` imports `grpclib`, which decision 2 pins in PR 5 and not before, so the
+  Python this pull request commits is regenerated and byte-compared by
+  `proto/codegen.sh --check` and is **imported by nothing**. The ledger row says so and names
+  PR 5 as the trigger; pinning `grpclib` here to close it would have contradicted U4 in the
+  pull request that recorded U4's reading.
 - **PR 4** (`m3.4-provenance`): `ProjectLock::take` replaces a dead holder's lock and says so,
   with the two tests above; §10's and ADR 0012 §3's sentences change in this pull request,
   ahead of the code, as the ADR convention requires.
@@ -258,7 +286,9 @@ Its test is loud, so it does not muddy that pull request's silent half.
   `.python-version` with the exact patch §17 asks for; the generated `Assistant` server on a
   socket it names; `core/src/assistant.rs` spawning it and reading the line; the window's
   health dot from the exit status. It answers a prompt with the scripted provider's text and
-  proposes nothing.
+  proposes nothing. It also owes PR 3's deferred check, and is the first pull request that
+  can run it: `escribass_proto.escribass.assistant.v1` imported and its `AssistantBase`
+  registered, in the `checks` step this pull request adds for `ai/` anyway (trap 17).
 - `docs/specs.md`: §3 says which side listens and what comes back; §6 names `grpclib` where it
   said `grpcio`; §10 and ADR 0012 §3 say what a stale lock is; §13 names the four services and
   loses `Jobs`; §17 and `lock.baseline.json` gain the three packages by name, unpinned until PR

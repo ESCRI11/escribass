@@ -11,11 +11,13 @@ project file directly (§5), so what is not here cannot be done to a song.
 |---|---|---|
 | `song_tools.proto` | The `SongTools` service, its request messages, `ToolResult` and `Violation`. | hand |
 | `render.proto` | The engine's boundary: `RenderPlan`, `RenderResult`, the `Preview` command and event messages, and the engine's two services — `Render`, served since M2 PR 9, and `Preview`, since PR 10 (ADR 0007, ADR 0008, ADR 0013). | hand |
-| `buf.gen.yaml` | Four plugins: `protoc-gen-prost`, `protoc-gen-prost-serde`, `protoc-gen-tonic`, `protoc-gen-es`. | hand |
-| `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`. `--check` is the drift gate. | hand |
+| `assistant.proto` | The AI sidecar's boundary: one service, `Assistant`, one bidirectional stream per prompt, and the messages that cross it. **`ai` serves and `app` dials** (ADR 0020 §1, §3). Defined in M3 PR 3, served from PR 5. | hand |
+| `buf.gen.yaml` | Five plugins: `protoc-gen-prost`, `protoc-gen-prost-serde`, `protoc-gen-tonic`, `protoc-gen-es`, `protoc-gen-python_betterproto2`. | hand |
+| `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`, then the Python import rewrite below. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
 | `gen/ts/` | Generated TypeScript, for `app` (M2 PR 3, ADR 0006 §7). Same rules as `gen/rust/`: wholly generated, deleted whole on every run. | generated |
-| `package.json`, `package-lock.json`, `tsconfig.json` | Package `@escribass/proto`, `private`, exporting `./tools` and `./render`. Two runtime packages and a `file:../schema` link — no toolchain of its own: `schema`'s pinned `protoc-gen-es` generates and `schema`'s pinned `tsc` checks. | hand |
+| `gen/python/` | Generated Python, for `ai` (M3 PR 3, ADR 0006 §7 as ADR 0020 §1 narrows it): a **server and no client**, because the sidecar serves `Assistant` and dials nothing. Same rules as the other two, plus one: `codegen.sh` deletes the model's re-emitted packages and rewrites their imports — see "The trap, named once". **Nothing imports it yet**; that check is PR 5's and is in `docs/plan.md`'s ledger. | generated |
+| `package.json`, `package-lock.json`, `tsconfig.json` | Package `@escribass/proto`, `private`, exporting `./tools` and `./render` — and **not** `assistant_pb.ts`, which is generated because excluding one file from a plugin is a second thing to keep in step, and unexported because nothing in the window dials `ai`: `core` does. Two runtime packages and a `file:../schema` link — no toolchain of its own: `schema`'s pinned `protoc-gen-es` generates and `schema`'s pinned `tsc` checks. | hand |
 | `gen/descriptor.binpb` | The compiled `FileDescriptorSet`, imports included. `core` turns it into a JSON Schema per tool, so the schemas and the Rust types come from one artefact. Exposed as `escribass_proto::DESCRIPTOR`. | generated |
 | `src/lib.rs` | The hand-written module tree that `include!`s the generated file. Nothing else. | hand |
 | `tests/contract.rs` | The five things about this file a change could break silently. | hand |
@@ -31,6 +33,12 @@ npm --prefix proto ci                                   # once, for the two runt
 schema/node_modules/.bin/tsc --noEmit --project proto   # the generated TypeScript compiles
 ```
 
+There is no line here for the generated Python, and that is the point: it imports `grpclib`,
+which is approved by name and unpinned until M3 PR 5 installs it (`lock.baseline.json`,
+`ai.grpclib`). Until then `codegen.sh --check` is the only thing that touches it — it proves
+the code matches the `.proto` and proves nothing about whether it imports. The ledger row
+dated 2026-09-22 in `docs/plan.md` says so and names PR 5 as the trigger.
+
 ## Why it looks like this
 
 | Decision | Reason | Where |
@@ -42,7 +50,11 @@ schema/node_modules/.bin/tsc --noEmit --project proto   # the generated TypeScri
 | Requests embed `escribass.song.v1` types | A hand-written `NoteSpec` mirroring `Note` is a second representation of song state under another name, and it stops matching the first time a field is added. | ADR 0006 §4, CLAUDE.md #1 |
 | `Violation` rather than a per-transport error | `Violation`, `PatchError`, `HistoryError` and `ProjectError` in `core` already carry `path`/`rule`/`message`. This transports that shape; it does not add a fifth. | ADR 0006 §2 |
 | `dry_run` on every request, defaulting to false | §5's name and polarity. Inverting it would make the wire disagree with the spec that names it. | ADR 0006 §3 |
-| Rust and TypeScript, not Python | TypeScript's consumer arrived in M2 PR 2 and the codegen followed in PR 3; Python's is M3's orchestrator and does not exist, so generating it now pulls `grpclib` into `schema/` to satisfy nothing. | ADR 0006 §7 |
+| Rust, TypeScript and — since M3 PR 3 — Python | Each language arrived in the milestone that gave it a consumer: TypeScript with `app` in M2 PR 2, Python with the sidecar that serves `Assistant`. "Generating it now pulls `grpclib` in to satisfy nothing" was right about the package and about the timing; it was wrong only about who would call what, since `ai` serves rather than dials. | ADR 0006 §7, carried out and narrowed |
+| The Python is a **server and no client** | `ai` serves one service and dials nothing, so `server_generation=async, client_generation=none`. The direction itself was decided by this plugin: it emits a `grpclib` client *and* server under `client_generation=async, server_generation=async`, a synchronous `grpcio` client and no server otherwise, and no `grpcio` server at all — so the process that serves is the one whose gRPC is generated. | ADR 0020 §1, §2 |
+| `Assistant` is `ai`'s service, not the host's | The lock puts the session in `app`, so the only question was direction; the model's calls come **back** over the stream as `{name, args}`, which is the envelope `core::call` already takes, and `ai` gets no `SongTools` stub to be told not to use. A `Jobs` service beside it was refused: a stream carries progress, cancellation and the answer already. | ADR 0020 §1, §3 |
+| A call's arguments cross as **JSON text**, not a `oneof` | Twelve arms mirroring `song_tools.proto` are the second description ADR 0006 §4 refuses, free to drift from the first — and the host hands the object to `call` exactly as the MCP server does. Parsing it in `ai` would be a second validator in a third language. | ADR 0020 §3; `docs/plan.md`, M3 trap 12 |
+| No provenance and no `list_params` on this wire | The three ids travel with the proposal, inside `core`: a field here is a field a caller can lie in. And with `set_param` withheld, a tool returning 2,855 `ParamID`s returns ids nothing the model is offered can act on. | ADR 0021 §2; ADR 0022 §2 |
 | The TypeScript reaches the model by package name, not by generating it | `rewrite_imports` in `buf.gen.yaml` is the TypeScript spelling of the Rust `extern_path` lines beside it. Left alone the generated code imports `./song_pb.js`, a file this module must not generate: a second `Song` in the tree compiles perfectly well and is wrong. `@escribass/schema`'s `"./*_pb.js"` export exists to answer that rewrite. | CLAUDE.md #1, ADR 0006 §4 |
 | `RenderPreview` answers with `PreviewResponse`, and takes `PreviewFrom` rather than `PreviewPlay` | A preview records nothing, and where the transport is has nowhere to go in `ToolResult`. Its `play` cannot carry `PreviewPlay`, whose plan is `core`'s to compile from the document and never a caller's; the other three commands reuse the engine's messages whole. | ADR 0006 §1, extended; ADR 0013 §2, amended |
 | `PreviewEvent.applied` | The one field the preview shape took after PR 3 settled it. The transport writes events of its own while it plays, and an answer can only be told from them by the count of commands it answers. Additive, so `buf breaking` had nothing to say. | ADR 0013 §2, amended |
@@ -74,6 +86,29 @@ base64. A consumer that round-trips through the generated schemas must ask for
 `useProtoFieldName` and must not put `patch` through them. The generated types describe the
 *shape*; `call.rs` and the MCP `inputSchema` describe the bytes.
 
+It has a Python half too, and the same sentence covers it: betterproto2's `to_json` writes
+camelCase and a `Z` timestamp (`schema/tests/test_roundtrip.py` says so in its own header), so
+a sidecar that built a request from the generated model and handed its `to_json` to the tool
+API would send `startTick`. The schemas the model is given are **the descriptor's**, never the
+Pydantic model's — which is why `assistant.proto`'s `ToolSchema.input_schema` carries the text
+`core` produced rather than anything `ai` can derive.
+
+## The second trap, which is Python's alone
+
+`betterproto2-compiler` generates a module for **every file in the request** — it ignores
+`file_to_generate` — and it has no `extern_path` and no `rewrite_imports`. So `buf generate`
+re-emits `song.proto` and `history.proto` under `gen/python`, byte for byte identical to
+`schema/`'s copy and a **different class at run time**. That is the second `Song` the four
+`extern_path` lines and the two `rewrite_imports` in `buf.gen.yaml` exist to prevent, arriving
+by a route neither of them covers, and it imports and type-checks perfectly well.
+
+`codegen.sh` deletes those packages after `buf generate` and rewrites the imports that named
+them to `escribass_schema`, then refuses the run if a relative import into the model survived
+or if no rewritten one exists. Both greps matter: the rewrite is two regular expressions over
+generated text, and a compiler that changed how it spells a cross-package import would leave
+them matching nothing and commit a tree importing three deleted packages (ADR 0020 §1,
+extended 2026-09-22).
+
 ## Adding things
 
 - **An RPC:** add the request message and the `rpc` line, keeping `ToolResult` as the return
@@ -87,7 +122,12 @@ base64. A consumer that round-trips through the generated schemas must ask for
 - **A language target:** one plugin entry in `buf.gen.yaml`, the version in
   `lock.baseline.json` under `tool_api`, and a consumer that actually needs it. TypeScript was
   added this way in M2 PR 3, and cost a `package.json` beside it — the generated code has
-  imports, and a `file:` link resolves its own from its own directory.
+  imports, and a `file:` link resolves its own from its own directory. Python was added this
+  way in M3 PR 3 and cost no package file at all — it borrows `schema/`'s environment, as the
+  TypeScript borrows `schema/`'s `tsc` — but it did cost the rewrite below, because its plugin
+  has no way to say "this type lives in another package". **Check that first** for any
+  language after it: a target that cannot be told where the model lives will generate a second
+  one, and it will compile.
 
 `buf breaking` runs on pull requests only, so work that skips the PR skips the wire check
 (CLAUDE.md, Working style).
