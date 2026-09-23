@@ -24,7 +24,7 @@ use crate::id::IdSource;
 use crate::manifest::Manifest;
 use crate::patch::{apply, Op};
 use crate::validate::{validate, Violation};
-use crate::version::bump_versions;
+use crate::version::{bump_versions, stamp_provenance};
 use escribass_schema::song::{device_ref, Author, DeviceRef, Provenance};
 use crate::history::{
     check_refs, entry_from_json, entry_to_json, refs_from_json, refs_to_json, History,
@@ -176,14 +176,17 @@ impl Prepared {
 /// holding. The lock belongs to whoever opened the project and outlives every `Project` value
 /// built from it, which is the host, or one of the two server binaries.
 ///
-/// **It is never broken automatically.** A lock whose owner may still be alive is not
-/// something a program can adjudicate, and git's `index.lock` has taught a generation of users
-/// what to do with the message. The cost is deliberate and is the reason this is chosen over
-/// the alternative: a crash leaves a project that says why it will not open, rather than two
-/// interleaved commits and a patch log that no longer matches the `song.json` beside it.
+/// **Nothing is broken while its holder may be alive**, which is narrower than the "never
+/// broken automatically" this started as. The file records its holder's pid, and a pid that
+/// names no process is something a program *can* adjudicate: a lock a dead holder left is
+/// stale, and `take` replaces it and says so (ADR 0020 §5, amending ADR 0012 §3). A live pid
+/// refuses exactly as before, which is git's `index.lock` bargain where it still applies —
+/// against two interleaved commits and a patch log that no longer matches the `song.json`
+/// beside it.
 #[derive(Debug)]
 pub struct ProjectLock {
     path: PathBuf,
+    replaced: Option<String>,
 }
 
 impl ProjectLock {
@@ -193,36 +196,107 @@ impl ProjectLock {
     /// [`Project::create`] rather than before: creating the directory in order to lock it
     /// would leave one behind for every mistyped path. Two simultaneous creates are still a
     /// race, and a much smaller one — `create` refuses outright if a project is already there.
+    ///
+    /// A lock left by a process that no longer exists is **replaced**, and [`replaced`] then
+    /// carries the sentence that says so. That is the whole of ADR 0020 §5, and what it is
+    /// worth is measured: 50 headless MCP sessions of 50 ended by a signal, and a signal does
+    /// not run a Rust `Drop` — so every one of them left a project no next process would open.
+    ///
+    /// [`replaced`]: Self::replaced
     pub fn take(root: impl AsRef<Path>) -> Result<Self, ProjectError> {
         let path = root.as_ref().join(HELD);
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        if let Some(lock) = Self::create(&path)? {
+            return Ok(lock);
+        }
+
+        let held = std::fs::read_to_string(&path).unwrap_or_default();
+        let owner = held.trim().to_string();
+        // Refused unless the recorded pid names no process: a live holder as before, and a
+        // lock with **no** pid as before too — one written by hand, or one whose holder took
+        // the file and failed the best-effort write below. There is nothing to ask about, so
+        // nothing is assumed (ADR 0020 §5).
+        let Some(gone) = owner.parse::<u32>().ok().filter(|pid| !running(*pid)) else {
+            let named = if owner.is_empty() { "an unnamed process" } else { &owner };
+            return Err(err(
+                &path,
+                "project_locked",
+                format!(
+                    "process {named} has this project open. Close it — a lock is replaced only \
+                     once the process that recorded it no longer exists, and nothing is broken \
+                     while its holder may be alive (ADR 0012 §3, amended by ADR 0020 §5)"
+                ),
+            ));
+        };
+
+        // Removed and re-created rather than written over, so taking a stale lock is still one
+        // `O_EXCL`: if another process replaced it in the same instant, this `create` finds the
+        // file there and refuses — to a holder that is alive.
+        std::fs::remove_file(&path).map_err(|e| err(&path, "unwritable", e.to_string()))?;
+        match Self::create(&path)? {
+            Some(mut lock) => {
+                lock.replaced = Some(format!(
+                    "replaced a lock left by process {gone}, which is gone: it ended without \
+                     removing the lock, which a crash or a signal does (ADR 0020 §5)"
+                ));
+                Ok(lock)
+            }
+            None => Err(err(
+                &path,
+                "project_locked",
+                format!("process {gone}'s lock was stale and another process took it first"),
+            )),
+        }
+    }
+
+    /// One `O_EXCL`. `Ok(None)` is "the file is already there", which is the only outcome
+    /// [`take`](Self::take) has anything further to decide about.
+    fn create(path: &Path) -> Result<Option<Self>, ProjectError> {
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(path) {
             Ok(mut file) => {
-                // Best effort: the pid is what the refusal below names, and a lock that was
-                // taken but not annotated is still a lock.
+                // Best effort: the pid is what a refusal names and what the next opener
+                // adjudicates. A lock that was taken but not annotated is still a lock, and it
+                // is refused for ever after, because there is no number to check.
                 let _ = std::io::Write::write_all(
                     &mut file,
                     format!("{}\n", std::process::id()).as_bytes(),
                 );
-                Ok(Self { path })
+                Ok(Some(Self { path: path.to_path_buf(), replaced: None }))
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                let held = std::fs::read_to_string(&path).unwrap_or_default();
-                let owner = held.trim();
-                let owner = if owner.is_empty() { "an unnamed process" } else { owner };
-                Err(err(
-                    &path,
-                    "project_locked",
-                    format!(
-                        "process {owner} has this project open. Close it, or — if that process \
-                         is gone — remove the file by hand. It is never removed automatically: \
-                         a lock whose owner may still be alive is not something a program can \
-                         adjudicate (ADR 0012 §3)"
-                    ),
-                ))
-            }
-            Err(e) => Err(err(&path, "unwritable", e.to_string())),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
+            Err(e) => Err(err(path, "unwritable", e.to_string())),
         }
     }
+
+    /// What this take had to replace, if anything: one sentence naming the process whose lock
+    /// was left behind, so a person learns a crash happened rather than nothing (ADR 0020 §5).
+    pub fn replaced(&self) -> Option<&str> {
+        self.replaced.as_deref()
+    }
+}
+
+/// Whether a process by this number exists — `/proc`, which is the one platform M3 claims
+/// (ADR 0014 §2) and costs no dependency (ADR 0020 §5; `kill(pid, 0)` would cost `libc`).
+///
+/// **Pid reuse cannot produce two writers.** A number a dead holder wore that some unrelated
+/// program now wears reads as *alive*, so the lock stands and a person is told to close
+/// something that is not this project — a spurious refusal, which is the direction ADR 0012 §3
+/// already chose. The other direction is closed by what the file records: a process writes its
+/// **own** pid when it takes the lock, replacement included, so the pid a later opener
+/// adjudicates always belongs to the process that is actually holding it. A zombie reads as
+/// alive for the same reason and to the same effect.
+///
+/// `ponytail:` Linux only, and it asks for the directory rather than trusting a path's absence
+/// — on a platform with no `/proc` every holder would read as gone and a live process's lock
+/// would be replaced. macOS and Windows get their own answer with the installer (M5); until
+/// then a build for either refuses exactly as before.
+#[cfg(target_os = "linux")]
+fn running(pid: u32) -> bool {
+    Path::new("/proc").join(pid.to_string()).is_dir()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn running(_pid: u32) -> bool {
+    true
 }
 
 impl Drop for ProjectLock {
@@ -342,7 +416,8 @@ impl Project {
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
-        let prepared = self.prepare(ops).map_err(|v| refusal(&self.root, &v))?;
+        let prepared =
+            self.prepare(ops, &authorship(author, clock)).map_err(|v| refusal(&self.root, &v))?;
         let Some(head) = self.history.head_id().map(str::to_string) else {
             return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
         };
@@ -362,12 +437,18 @@ impl Project {
     /// no file: every way it can fail is something the caller can fix by calling differently.
     /// That is the `Ok(valid = false)` half of ADR 0006 §2's split, and it falls out of the
     /// signature instead of needing a classifier.
-    pub fn prepare(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
-        self.prepare_inner(ops, true)
+    ///
+    /// `made` is **the call's** provenance, and it is what a new entity is stamped with: core
+    /// decides every entity's `provenance` here, on this path as on the typed ones, because
+    /// this is the path a caller can write one through (ADR 0021 §1). The three optional ids
+    /// are `None` for every caller that exists today; the proposal is the one place that will
+    /// fill them (ADR 0021 §2, M3 PR 8).
+    pub fn prepare(&self, ops: &[Op], made: &Provenance) -> Result<Prepared, Vec<Violation>> {
+        self.prepare_inner(ops, Some(made))
     }
 
     /// [`prepare`](Self::prepare) for the callers whose operations legitimately carry an entity
-    /// `version`: a merge, and — since M2 PR 5 — `undo` and `redo`.
+    /// `version` and an entity `provenance`: a merge, and — since M2 PR 5 — `undo` and `redo`.
     ///
     /// A merge's patch is the diff between two states core itself produced, so the versions in
     /// it are core's own — the incoming branch's numbers, which ADR 0005 §2 needs in order to
@@ -380,17 +461,42 @@ impl Project {
     /// refuse this API's own history as though a caller had tried to write a field it does not
     /// own, and the resolution rule is exactly the one undo needs — `max` of the number the
     /// entity has now and the number it had then, plus one, which is one *past* where it is.
+    ///
+    /// **Provenance is exempt on exactly the same grounds** (ADR 0021 §1). A merge's new
+    /// entities were minted by the other branch's author and an undo's re-added entity by
+    /// whoever added it; both are core's own values arriving from the log, and stamping them
+    /// with the author of the call that merged or redid would rewrite who made what.
     pub fn prepare_merge(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
-        self.prepare_inner(ops, false)
+        self.prepare_inner(ops, None)
     }
 
-    fn prepare_inner(&self, ops: &[Op], guard_version: bool) -> Result<Prepared, Vec<Violation>> {
+    /// `made` is `Some` exactly for the callers whose operations are a *caller's*, which is
+    /// the one question both §4.3 exemptions turn on: those ops get their versions guarded and
+    /// their provenance decided, and core's own ops — a merge, an undo, a redo — get neither.
+    fn prepare_inner(
+        &self,
+        ops: &[Op],
+        made: Option<&Provenance>,
+    ) -> Result<Prepared, Vec<Violation>> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
 
         let mut patched = apply(&before, ops).map_err(|e| {
             vec![Violation { path: e.path, rule: e.rule, message: e.message }]
         })?;
-        let disputed = bump_versions(&before, &mut patched, !guard_version);
+
+        // Provenance first, versions second. A caller that rewrote nothing but a provenance has
+        // then changed nothing at all, so nothing bumps and nothing is recorded — where bumping
+        // first would write an entry whose only operation raised a version for a field that was
+        // put straight back (ADR 0021 §1).
+        if let Some(made) = made {
+            stamp_provenance(
+                &before,
+                &mut patched,
+                &serde_json::to_value(made).expect("a Provenance serialises"),
+            );
+        }
+
+        let disputed = bump_versions(&before, &mut patched, made.is_none());
         if !disputed.is_empty() {
             return Err(disputed);
         }
@@ -725,9 +831,13 @@ impl Project {
     }
 }
 
-/// Provenance for a commit. `created_at` comes from the injected clock, never
-/// `SystemTime::now` (§11). The model fields stay unset until M3 produces one.
-fn authorship(author: Author, clock: &dyn Clock) -> Provenance {
+/// Provenance for a call: the entry it records, and every entity it creates (ADR 0021 §1).
+///
+/// `created_at` comes from the injected clock, never `SystemTime::now` (§11). The three model
+/// fields stay unset for every caller there is today, and the proposal is the one that will
+/// set them — an MCP client's model stays anonymous even then, because nothing on that wire
+/// says which model is on the other side (ADR 0021 §2).
+pub fn authorship(author: Author, clock: &dyn Clock) -> Provenance {
     Provenance {
         author: author as i32,
         model_id: None,

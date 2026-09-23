@@ -486,20 +486,21 @@ fn a_log_missing_a_parent_is_still_refused() {
     assert_eq!(History::from_parts(vec![orphan], refs).unwrap_err().rule, "parent_missing");
 }
 
-// ---- the directory lock (ADR 0012 §3) ----
+// ---- the directory lock (ADR 0012 §3, amended by ADR 0020 §5) ----
 
 #[test]
-fn a_second_opener_is_refused_and_the_lock_is_never_broken() {
+fn a_live_holders_lock_is_refused_and_is_not_broken() {
     // The race `app` makes ordinary rather than hypothetical: two processes on one `.escri`,
     // interleaving ADR 0004's three renames. What closes it is one `O_EXCL`, and what makes
     // the choice a real one is the second half of this test — the refusal leaves the lock
-    // exactly where it was. A crashed process therefore leaves a project that says why it
-    // will not open, which is git's `index.lock` bargain, taken deliberately.
+    // exactly where it was. The holder here is this test process, which is as alive as a
+    // holder gets, so ADR 0020 §5's replacement cannot fire and must not.
     let dir = Scratch::new();
     std::fs::create_dir_all(&dir.0).expect("a directory to lock");
 
     let held = ProjectLock::take(&dir.0).expect("the first opener takes it");
     assert!(dir.0.join("lock").exists());
+    assert_eq!(held.replaced(), None, "nothing was there to replace");
 
     let refused = ProjectLock::take(&dir.0).expect_err("the second opener is refused");
     assert_eq!(refused.rule, "project_locked");
@@ -513,4 +514,118 @@ fn a_second_opener_is_refused_and_the_lock_is_never_broken() {
     drop(held);
     assert!(!dir.0.join("lock").exists(), "a clean close removes it");
     ProjectLock::take(&dir.0).expect("and the next opener gets it");
+}
+
+#[test]
+fn a_lock_with_no_pid_in_it_is_still_refused() {
+    // The one case the pid check cannot adjudicate, and it is left exactly as it was: a lock
+    // written by hand, or one whose holder took the file and failed the best-effort write of
+    // its number. There is nothing to ask about, so nothing is assumed (ADR 0020 §5).
+    let dir = Scratch::new();
+    std::fs::create_dir_all(&dir.0).expect("a directory to lock");
+    std::fs::write(dir.0.join("lock"), b"").expect("a lock nobody signed");
+
+    let refused = ProjectLock::take(&dir.0).expect_err("refused, as before");
+    assert_eq!(refused.rule, "project_locked");
+    assert!(dir.0.join("lock").exists(), "and left where it was");
+}
+
+/// A real `escribass-mcp` holding the lock on `project`, for the two tests that need a holder
+/// this process can kill.
+///
+/// The binary rather than a bare `ProjectLock` in a helper process, because the binary is what
+/// the spike measured: 50 Claude Code sessions of 50 left `.escri/lock` behind, and the first
+/// thing these tests assert is that they still do. Nothing here installs a signal handler and
+/// nothing should — a `Drop` that does not run under `SIGKILL` is the premise, not the defect
+/// (ADR 0020 §5).
+#[cfg(unix)]
+struct Holder(std::process::Child);
+
+#[cfg(unix)]
+impl Holder {
+    fn on(project: &std::path::Path) -> Self {
+        let child = std::process::Command::new(env!("CARGO_BIN_EXE_escribass-mcp"))
+            .args(["--create", "--manifest", MANIFEST])
+            // stdin stays open for the life of this value: the server exits cleanly on EOF,
+            // removing the lock, which is the one way these tests could pass vacuously.
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .arg(project)
+            .spawn()
+            .expect("the MCP binary runs");
+        let held = Self(child);
+        for _ in 0..1_000 {
+            if project.join("lock").exists() {
+                return held;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the holder never took the lock");
+    }
+
+    fn pid(&self) -> u32 {
+        self.0.id()
+    }
+
+    /// `SIGKILL`, and then **reap**. A killed child its parent has not waited on is a zombie,
+    /// and `/proc/<pid>` exists for a zombie — so a test that skipped the `wait` would find the
+    /// holder "alive" and prove the opposite of what it claims. In production the holder is
+    /// nobody's child and there is no zombie to meet; where there is one, the check refuses,
+    /// which is the side ADR 0012 §3 already chose.
+    fn sigkill(&mut self) {
+        self.0.kill().expect("the holder is killable");
+        self.0.wait().expect("and reapable");
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Holder {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dead_holders_lock_is_replaced_and_the_replacement_says_so() {
+    // The defect §18.2 pays for daily: Claude Code ends its stdio servers by signal, a Rust
+    // `Drop` does not run in a process a signal ended, and the next open was refused until a
+    // person deleted a file by hand (ADR 0020 §5; plan, "Found beside the six questions").
+    let dir = Scratch::new();
+    let mut holder = Holder::on(&dir.0);
+    let gone = holder.pid();
+
+    holder.sigkill();
+    assert!(dir.0.join("lock").exists(), "the premise: a signal leaves the lock behind");
+
+    let taken = ProjectLock::take(&dir.0).expect("a dead holder's lock is stale");
+    let said = taken.replaced().expect("and the replacement says so");
+    assert!(
+        said.contains(&gone.to_string()),
+        "a person learns a crash happened, and whose: {said}"
+    );
+    assert!(dir.0.join("lock").exists(), "and the lock is this process's now");
+
+    drop(taken);
+    assert!(!dir.0.join("lock").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_live_holder_in_another_process_is_refused() {
+    // The half that must not move. Replacing a lock is adjudicating a *dead* pid; a live one
+    // is refused exactly as it was before ADR 0020 §5, and the message names it.
+    let dir = Scratch::new();
+    let holder = Holder::on(&dir.0);
+
+    let refused = ProjectLock::take(&dir.0).expect_err("a live holder still refuses");
+    assert_eq!(refused.rule, "project_locked");
+    assert!(
+        refused.message.contains(&holder.pid().to_string()),
+        "the refusal names the process holding it: {}",
+        refused.message
+    );
+    assert!(dir.0.join("lock").exists(), "a refused take must not remove the lock");
 }
