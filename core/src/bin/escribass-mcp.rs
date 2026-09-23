@@ -78,9 +78,9 @@ async fn run() -> Result<(), String> {
     // One writer per `.escri`, enforced rather than assumed (ADR 0012 §3). Taken before an
     // open, because reading a project another process is committing to is the race this
     // closes; taken after a create, because the directory has to exist to hold the file.
-    // `_lock` and not `_`: the binding is what holds it open for the life of the process, and
-    // the file is removed when this function returns.
-    let (project, _lock) = if options.create {
+    // The binding is what holds the lock open for the life of the process, and the file is
+    // removed when this function returns.
+    let (project, lock) = if options.create {
         let song = new_song(&mut *ids, &*clock, options.author);
         let project =
             Project::create(&options.project, &song, &mut *ids, &*clock, options.author, manifest)
@@ -93,6 +93,12 @@ async fn run() -> Result<(), String> {
             .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?;
         (project, lock)
     };
+
+    // A lock replaced because its holder is gone is said out loud, on stderr, once: a person
+    // learns that something crashed rather than nothing (ADR 0020 §5).
+    if let Some(said) = lock.replaced() {
+        eprintln!("{said}");
+    }
 
     let mut session = Session::new(project, ids, clock, options.author);
     // The engine is told or absent, never searched (ADR 0008 §2, `core/src/engine.rs`). It is

@@ -272,6 +272,12 @@ fn opened() -> (Scratch, Project, SeededIds, FixedClock) {
     (dir, project, ids, clock)
 }
 
+/// The provenance a call carries. Its own test file is `provenance.rs`; here it is only what
+/// `prepare` needs in order to be called at all.
+fn made() -> escribass_schema::song::Provenance {
+    escribass_core::authorship(Author::Model, &FixedClock(1_788_307_200_000))
+}
+
 fn set_gain(to: f64) -> Vec<Op> {
     serde_json::from_value(json!([
         {"op": "replace", "path": format!("/tracks/{BASS}/mix/gain_db"), "value": to}
@@ -299,7 +305,7 @@ fn preparing_a_change_produces_exactly_what_committing_it_records() {
     // patch a caller approves stops being the patch that gets written.
     let (_dir, mut project, mut ids, clock) = opened();
 
-    let previewed = project.prepare(&set_gain(-3.0)).unwrap();
+    let previewed = project.prepare(&set_gain(-3.0), &made()).unwrap();
     let ops = previewed.ops().to_vec();
     // Preparing touches nothing.
     assert_eq!(project.history().entries().len(), 1);

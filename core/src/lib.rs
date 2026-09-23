@@ -33,9 +33,9 @@ pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use manifest::Manifest;
-pub use project::{asset_hash, Prepared, Project, ProjectError, ProjectLock};
+pub use project::{asset_hash, authorship, Prepared, Project, ProjectError, ProjectLock};
 pub use render::compile;
 pub use mcp::{InArrivalOrder, SongTools};
 pub use session::{new_song, Session};
 pub use validate::{validate, Violation};
-pub use version::bump_versions;
+pub use version::{bump_versions, stamp_provenance};

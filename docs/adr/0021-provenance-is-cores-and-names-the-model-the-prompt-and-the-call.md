@@ -200,6 +200,13 @@ render* already keeps for sound.
   `apply_patch` in the five scripts adds an entity, and an existing entity keeps its provenance
   under the new walk as it did under the old absence of one. Any byte that does move is named
   in that pull request. The lock's fix lands beside it (ADR 0020 §5), with a loud test.
+  **Done 2026-09-23, and no golden moved** — not one of the five, and not the projection
+  golden. Two things the decision did not have to say and the code did. The walk runs
+  **before** `bump_versions`, because a caller who rewrote nothing but a provenance has then
+  changed nothing at all: bumping first would have recorded an entry whose only operation
+  raised a version for a field that had been put straight back. And `prepare` takes the call's
+  `Provenance` rather than an author and a clock, which is the parameter the proposal will fill
+  with the three ids (decision 2) without changing the signature again.
 - **PR 8** (`m3.8-loop`): the proposal carries the three ids into every entity it mints and
   the entry it commits; the `Lock` struct gains `ai`, written on first use; the loop reads the
   project's model id and hands it to `ai` per prompt.

@@ -902,7 +902,13 @@ impl Session {
         normalise_input(&mut ops);
         let ops = &ops[..];
 
-        let prepared = match self.project.prepare(ops) {
+        // The session's author is the default for every call that arrives with no other word
+        // — the binaries' `--author`, the window's `Human` — and no request message gains an
+        // author field, because a field on the wire is a field a caller can lie in. The three
+        // optional ids stay `None` here and reach the log through the proposal, which is the
+        // only place a model's calls enter (ADR 0021 §1, §2; ADR 0020 §1).
+        let made = crate::project::authorship(self.author, &*self.clock);
+        let prepared = match self.project.prepare(ops, &made) {
             Ok(prepared) => prepared,
             Err(violations) => return Ok(refused(violations)),
         };

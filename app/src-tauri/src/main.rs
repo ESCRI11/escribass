@@ -138,8 +138,16 @@ fn run() -> Result<i32, String> {
 
     // The lock first, then the read: a project another process is committing to is exactly
     // what this refuses to open (ADR 0012 §3).
-    let held: Held =
-        Arc::new(Mutex::new(Some(ProjectLock::take(&options.project).map_err(|e| e.to_string())?)));
+    let lock = ProjectLock::take(&options.project).map_err(|e| e.to_string())?;
+    // A lock left by a process that is gone is replaced rather than refused, and the window
+    // says so on stderr rather than silently: the crash a person is being told about is
+    // usually an MCP client's, which ends by signal and runs no `Drop` (ADR 0020 §5).
+    // `ponytail:` stderr, not a banner in the window. A place for it in the UI is the status
+    // bar, and it costs a view decision this pull request has no reason to take.
+    if let Some(said) = lock.replaced() {
+        eprintln!("{said}");
+    }
+    let held: Held = Arc::new(Mutex::new(Some(lock)));
     let project = Project::open(&options.project, Arc::clone(&hosts))
         .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?;
 

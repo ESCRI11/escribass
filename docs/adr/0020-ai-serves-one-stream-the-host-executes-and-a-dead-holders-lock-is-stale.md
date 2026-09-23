@@ -294,7 +294,16 @@ Its test is loud, so it does not muddy that pull request's silent half.
   since a duplicate imports as happily as the real thing.
 - **PR 4** (`m3.4-provenance`): `ProjectLock::take` replaces a dead holder's lock and says so,
   with the two tests above; §10's and ADR 0012 §3's sentences change in this pull request,
-  ahead of the code, as the ADR convention requires.
+  ahead of the code, as the ADR convention requires. **Done 2026-09-23.** The sentences had
+  landed in PR 2 and needed no further change. `take` is two `O_EXCL` attempts rather than one
+  — the stale file is removed and re-created, so a second process that replaced it in the same
+  instant wins and this one is refused, by a holder that is alive. The tests spawn a real
+  `escribass-mcp`, and the one that is killed asserts the premise first: the lock is still
+  there after the signal, which is the `Drop` that did not run. What the test had to learn that
+  the decision did not say: a killed child its parent has not waited on is a **zombie**, and
+  `/proc/<pid>` exists for a zombie — so the test reaps before it takes the lock, and in
+  production a zombie holder reads as alive and refuses, which is the side this errs on
+  anyway.
 - **PR 5** (`m3.5-ai-shell`): `ai/` with `grpclib`, `openai` and `httpx2` pinned by exact
   version in `pyproject.toml`, `uv.lock`, `lock.baseline.json` and §17 in the same change;
   `.python-version` with the exact patch §17 asks for; the generated `Assistant` server on a

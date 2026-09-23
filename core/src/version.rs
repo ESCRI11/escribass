@@ -1,11 +1,14 @@
-//! Entity `version` maintenance (ADR 0005 §1–§3).
+//! The two §4.3 fields core owns: entity `version` (ADR 0005 §1–§3) and entity `provenance`
+//! (ADR 0021 §1).
 //!
 //! `version` is core's, never a tool's (ADR 0001 §4). The interesting part is *where* the bump
 //! happens: `Project::commit` records `diff(before, after)`, so anything changed after that
 //! diff is taken lives in `song.json` and in nothing else, and every replay of the log comes
 //! out one version behind the file beside it. The bump therefore runs on the patched document
 //! *before* it is re-deserialised, which puts the resulting `replace /…/version` operations
-//! inside the entry that gets written.
+//! inside the entry that gets written. [`stamp_provenance`] is a second walk over the same
+//! shape, for the same reason and in the same position, and the two are here together because
+//! "core owns this field and a caller may not choose it" is one statement made twice.
 //!
 //! It works on `serde_json::Value` rather than on `Song` because the rule is one statement
 //! about a shape — an object with an `id` and a `version` — and expressing it over the typed
@@ -46,6 +49,69 @@ pub fn bump_versions(before: &Value, patched: &mut Value, merging: bool) -> Vec<
     let mut disputed = Vec::new();
     walk(Some(before), patched, "", merging, &mut disputed);
     disputed
+}
+
+/// Decides every entity's `provenance` in `patched`: an entity that did not exist before gets
+/// `made`, an entity that existed keeps the one it had (ADR 0021 §1).
+///
+/// An **overwrite and not a refusal**, which is the half that took a decision. `created_at`
+/// comes from the clock the call runs under, so a guard that compared what a caller sent
+/// against what core would write would refuse every previewed patch re-applied — §9's
+/// approve-then-apply sends the dry run's patch back verbatim — and, ignoring `created_at`,
+/// would still refuse Edit, where a person applies a patch whose new entities carry the
+/// *model's* provenance and should get hers. There is nothing a caller can legitimately be
+/// disputing, because provenance was never the caller's to state; this is ADR 0006 §4 on the
+/// one path that had not enforced it.
+///
+/// **Ids are not touched.** A dry run mints real ids from a fork and those ids are the keys a
+/// pending edit is applied by (ADR 0012 §4), so a caller's ids are its own; what guards them is
+/// the validator's `id_not_ulid` and `key_id_mismatch`.
+///
+/// `made` arrives already serialised because it is one value for the whole call and there are
+/// hundreds of entities in a song.
+pub fn stamp_provenance(before: &Value, patched: &mut Value, made: &Value) {
+    stamp(Some(before), patched, made);
+}
+
+fn stamp(before: Option<&Value>, patched: &mut Value, made: &Value) {
+    let Value::Object(map) = patched else {
+        return;
+    };
+    let before_map = before.and_then(Value::as_object);
+    // The version rule's reading of "entity", and for its reason: an object that *was* one
+    // still is one, whatever arrived in its place.
+    let entity = is_entity(map) || before_map.is_some_and(is_entity);
+
+    let keys: Vec<String> = map.keys().cloned().collect();
+    for key in keys {
+        // No clone of the subtree, unlike `walk` below: `before` and `patched` are two values,
+        // so the shared borrow of one and the mutable borrow of the other do not meet.
+        let was = before_map.and_then(|m| m.get(&key));
+        stamp(was, map.get_mut(&key).expect("the key came from this map"), made);
+    }
+
+    if !entity {
+        return;
+    }
+    // A different `id` in the same place is a *different entity*, not an edit to this one —
+    // `set_track_instrument` replaces an instrument wholesale — so it is new here.
+    match before_map.filter(|was| was.get("id") == map.get("id")).map(|was| was.get("provenance")) {
+        // It existed: an edit does not change who created a thing. What records this call's
+        // author is the entry (ADR 0001 §2).
+        Some(Some(had)) => {
+            map.insert("provenance".to_string(), had.clone());
+        }
+        // It existed and recorded nothing — only reachable on a document the validator would
+        // already refuse (`message_missing`). Keeping its own means keeping none: filling one
+        // in here would invent a creation nothing witnessed, which is the forgery this walk
+        // exists to stop, arriving from the other side.
+        Some(None) => {
+            map.remove("provenance");
+        }
+        None => {
+            map.insert("provenance".to_string(), made.clone());
+        }
+    }
 }
 
 /// Returns whether this subtree changed, and fixes up versions on the way back up.
