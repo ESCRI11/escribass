@@ -123,7 +123,18 @@ a version pinned in prose today would be re-resolved by `uv` in PR 5 and either 
 drift in silence — the `codemirror: "6.x"` shape ADR 0016 §1 refused. So §17 and
 `lock.baseline.json` record the three packages by **name**, approved and unpinned, and **PR 5**
 (`m3.5-ai-shell`), which first runs `uv lock`, writes the exact versions and `uv.lock`'s hashes
-beside them in the same change. A row that says a pin is owed is not a pin, and the file's own
+beside them in the same change.
+
+**Amended 2026-09-23 by the user, for `grpclib` alone.** "PR 5" was this ADR's reading of
+*where* each package is first added, and it was wrong for one of the three: PR 3 generates a
+server that imports `grpclib`, and the check that the generated tree imports — and that its
+`Song` is `escribass_schema`'s class and not the copy `betterproto2` re-emits (decision 1,
+extended) — cannot run without it. So `grpclib` is first added in **PR 3**, and U4's rule,
+unchanged, pins it there: 0.4.9, resolved by `uv`, hashed in `schema/uv.lock`, recorded in
+§17 and `lock.baseline.json` in that same change. It lives in `schema/`'s dev group, because
+`proto/` has no Python environment of its own on purpose; PR 5 declares it again for `ai/` at
+this version. `openai` and `httpx2` are untouched — nothing before PR 5 imports either, so
+for them the paragraph above stands exactly as written. A row that says a pin is owed is not a pin, and the file's own
 `commit: null` idiom already says so for two other rows. The spike's scratch environment used
 `grpclib` 0.4.9 and `openai` 3.14.1 with `httpx2` 2.13.0; those are what it measured with, not
 what is pinned.
@@ -272,12 +283,15 @@ Its test is loud, so it does not muddy that pull request's silent half.
   is — the whole M3 shape of `proto/` in one change, since `buf breaking` compares it once
   (trap 14). No provenance on the wire (ADR 0021 §2) and no `list_params` (ADR 0022 §2), so
   the shape is one service. **Done 2026-09-22**, with the extension to decision 1 above and
-  one thing left owed and written down rather than quietly skipped: the generated
-  `AssistantBase` imports `grpclib`, which decision 2 pins in PR 5 and not before, so the
-  Python this pull request commits is regenerated and byte-compared by
-  `proto/codegen.sh --check` and is **imported by nothing**. The ledger row says so and names
-  PR 5 as the trigger; pinning `grpclib` here to close it would have contradicted U4 in the
-  pull request that recorded U4's reading.
+  one thing first left owed: the generated `AssistantBase` imports `grpclib`, which decision 2
+  places in PR 5, so the Python committed here was byte-compared by
+  `proto/codegen.sh --check` and **imported by nothing**. That was written down as a deferred
+  check rather than skipped. **The user closed it on 2026-09-23, in this same pull request**:
+  the check is what first *adds* `grpclib`, so PR 3 is where U4 pins it, and decision 2's "PR
+  5" is amended to that extent — see its own paragraph. `grpclib` 0.4.9, resolved by `uv`, in
+  `schema/`'s dev group; `proto/tests/test_generated_python.py` imports the tree and asserts
+  that a `Prompt`'s `song` is `escribass_schema`'s `Song`, which an import alone would not,
+  since a duplicate imports as happily as the real thing.
 - **PR 4** (`m3.4-provenance`): `ProjectLock::take` replaces a dead holder's lock and says so,
   with the two tests above; §10's and ADR 0012 §3's sentences change in this pull request,
   ahead of the code, as the ADR convention requires.
@@ -286,9 +300,11 @@ Its test is loud, so it does not muddy that pull request's silent half.
   `.python-version` with the exact patch §17 asks for; the generated `Assistant` server on a
   socket it names; `core/src/assistant.rs` spawning it and reading the line; the window's
   health dot from the exit status. It answers a prompt with the scripted provider's text and
-  proposes nothing. It also owes PR 3's deferred check, and is the first pull request that
-  can run it: `escribass_proto.escribass.assistant.v1` imported and its `AssistantBase`
-  registered, in the `checks` step this pull request adds for `ai/` anyway (trap 17).
+  proposes nothing. PR 3's deferred check is **not** owed here any more: `grpclib` was
+  pinned there on 2026-09-23 and `proto/tests/test_generated_python.py` runs in `checks`
+  already. What this pull request adds for the package is its declaration in
+  `ai/pyproject.toml` — `betterproto2[pydantic,grpclib]` plus the package — at the version
+  `lock.baseline.json` already names.
 - `docs/specs.md`: §3 says which side listens and what comes back; §6 names `grpclib` where it
   said `grpcio`; §10 and ADR 0012 §3 say what a stale lock is; §13 names the four services and
   loses `Jobs`; §17 and `lock.baseline.json` gain the three packages by name, unpinned until PR

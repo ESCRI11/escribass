@@ -16,11 +16,12 @@ project file directly (§5), so what is not here cannot be done to a song.
 | `codegen.sh` | `buf format -w`, `buf lint`, `rm -rf gen`, `buf generate`, then the Python import rewrite below. `--check` is the drift gate. | hand |
 | `gen/rust/` | Generated output, committed for review (§4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
 | `gen/ts/` | Generated TypeScript, for `app` (M2 PR 3, ADR 0006 §7). Same rules as `gen/rust/`: wholly generated, deleted whole on every run. | generated |
-| `gen/python/` | Generated Python, for `ai` (M3 PR 3, ADR 0006 §7 as ADR 0020 §1 narrows it): a **server and no client**, because the sidecar serves `Assistant` and dials nothing. Same rules as the other two, plus one: `codegen.sh` deletes the model's re-emitted packages and rewrites their imports — see "The trap, named once". **Nothing imports it yet**; that check is PR 5's and is in `docs/plan.md`'s ledger. | generated |
+| `gen/python/` | Generated Python, for `ai` (M3 PR 3, ADR 0006 §7 as ADR 0020 §1 narrows it): a **server and no client**, because the sidecar serves `Assistant` and dials nothing. Same rules as the other two, plus one: `codegen.sh` deletes the model's re-emitted packages and rewrites their imports — see the second trap below. `tests/test_generated_python.py` is what checks it. | generated |
 | `package.json`, `package-lock.json`, `tsconfig.json` | Package `@escribass/proto`, `private`, exporting `./tools` and `./render` — and **not** `assistant_pb.ts`, which is generated because excluding one file from a plugin is a second thing to keep in step, and unexported because nothing in the window dials `ai`: `core` does. Two runtime packages and a `file:../schema` link — no toolchain of its own: `schema`'s pinned `protoc-gen-es` generates and `schema`'s pinned `tsc` checks. | hand |
 | `gen/descriptor.binpb` | The compiled `FileDescriptorSet`, imports included. `core` turns it into a JSON Schema per tool, so the schemas and the Rust types come from one artefact. Exposed as `escribass_proto::DESCRIPTOR`. | generated |
 | `src/lib.rs` | The hand-written module tree that `include!`s the generated file. Nothing else. | hand |
 | `tests/contract.rs` | The five things about this file a change could break silently. | hand |
+| `tests/test_generated_python.py` | That `gen/python` imports, that its `Assistant` server maps the one RPC, and that there is **one** `Song` — `escribass_schema`'s. Runs in `schema`'s environment (M3 PR 3). | hand |
 
 The workspace `buf.yaml` is at the repository root, not here: buf v2 wants one at the common
 ancestor of every module, and `song_tools.proto` imports `schema/song.proto`.
@@ -33,11 +34,21 @@ npm --prefix proto ci                                   # once, for the two runt
 schema/node_modules/.bin/tsc --noEmit --project proto   # the generated TypeScript compiles
 ```
 
-There is no line here for the generated Python, and that is the point: it imports `grpclib`,
-which is approved by name and unpinned until M3 PR 5 installs it (`lock.baseline.json`,
-`ai.grpclib`). Until then `codegen.sh --check` is the only thing that touches it — it proves
-the code matches the `.proto` and proves nothing about whether it imports. The ledger row
-dated 2026-09-22 in `docs/plan.md` says so and names PR 5 as the trigger.
+```
+cd schema && uv run python -m unittest discover -s ../proto/tests   # the generated Python
+```
+
+That line was owed to M3 PR 5 for one day and landed here instead: the generated
+`AssistantBase` imports `grpclib`, `grpclib` was approved by name and unpinned, and the user
+decided on 2026-09-23 that a check which is itself the package's first use is exactly where
+U4 pins it (`lock.baseline.json`, `ai.grpclib`; the struck-through ledger row of 2026-09-22
+in `docs/plan.md` keeps the reasoning). It runs from `schema/`, because `proto/` has no
+Python environment of its own — the same borrowing as `tsc` above.
+
+`codegen.sh --check` proves the generated code matches the `.proto`; **`test_generated_python.py`
+is what proves it imports**, and — the half that matters — that a `Prompt`'s `song` is
+`escribass_schema`'s `Song` class. An import alone would pass against the duplicate the next
+section describes, because a duplicate imports as happily as the real thing.
 
 ## Why it looks like this
 
@@ -108,6 +119,13 @@ or if no rewritten one exists. Both greps matter: the rewrite is two regular exp
 generated text, and a compiler that changed how it spells a cross-package import would leave
 them matching nothing and commit a tree importing three deleted packages (ADR 0020 §1,
 extended 2026-09-22).
+
+`tests/test_generated_python.py` is the other end of it, and it is the end that would catch a
+rewrite that ran and got it *wrong* rather than one that did not run: it builds a `Prompt`
+with `escribass_schema`'s `Song` and asserts the field holds that class. Against a tree
+regenerated without the rewrite it does not even reach the assertion — pydantic refuses the
+value, "Input should be a dictionary or an instance of `Song`", with the same name on both
+sides of the sentence.
 
 ## Adding things
 
