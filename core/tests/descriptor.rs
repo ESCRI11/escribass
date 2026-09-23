@@ -49,6 +49,16 @@ fn the_engine_service_is_not_a_tool() {
 }
 
 #[test]
+fn the_assistant_service_is_not_a_tool() {
+    // `Assistant` (proto/assistant.proto, M3 PR 3) is the third service in this descriptor,
+    // and the only one whose caller is the host talking *about* a model. Advertised, `prompt`
+    // would offer the model a tool that prompts a model — a loop with the session on one side
+    // of it and no person between the calls. The count above already refuses it; this says
+    // which name to look for when it is not obvious why the count moved.
+    assert!(!tool_names(DESCRIPTOR).unwrap().contains(&"prompt".to_string()));
+}
+
+#[test]
 fn names_are_the_snake_case_of_the_rpc() {
     let names = tool_names(DESCRIPTOR).unwrap();
     assert!(names.contains(&"set_track_instrument".to_string()), "{names:?}");

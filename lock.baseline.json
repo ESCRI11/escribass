@@ -148,8 +148,8 @@
     "model": "deepseek/deepseek-v4.1-flash",
     "model_note": "A RECORD, NOT A PIN (ADR 0021 §4; docs/specs.md §17, amended). A hosted model changes under its name and nothing can verify one, so this is the default a project records in its own lock.json `ai.model` on first use, and every log entry's `provenance.model_id` records what actually answered. Chosen by the user after the M3 spike and measured before it was recorded (2026-09-17: 45/45 on the nine feasible instructions, 5.8% refused calls all recovered, $0.0014 an edit at the median, and the same wrong-parameter mistake on `set_param` that withholding the tool removes). Cost and latency are properties of OpenRouter's routing, not of the name. Never counted by any 'verified' readout (docs/plan.md, M3 trap 15).",
     "grpclib": {
-      "version": null,
-      "note": "The Python gRPC stack, decided by what the pinned betterproto2-compiler 0.10.1 generates: an async grpclib client AND server under client_generation=async, server_generation=async; a synchronous grpcio client and no server otherwise. `ai` serves (ADR 0020 §1), so grpclib it is, as betterproto2's `grpclib` extra plus the package (ADR 0020 §2). No grpcio, no grpcio-tools. The spike's scratch environment used 0.4.9; the pin is PR 5's."
+      "version": "0.4.9",
+      "note": "The Python gRPC stack, decided by what the pinned betterproto2-compiler 0.10.1 generates: an async grpclib client AND server under client_generation=async, server_generation=async; a synchronous grpcio client and no server otherwise. `ai` serves (ADR 0020 §1), so grpclib it is, as betterproto2's `grpclib` extra plus the package (ADR 0020 §2). No grpcio, no grpcio-tools. PINNED 2026-09-23 in M3 PR 3, not PR 5: the user closed that deferral so the check that proto/gen/python imports — and that its Song is escribass_schema's class and not the copy betterproto2 re-emits — lands in the pull request that generates the code rather than one later. Resolved by `uv add --dev grpclib` in schema/, which is also the version the spike measured with. It is installed in schema/'s dev group, because proto/ has no Python environment of its own on purpose and borrows that one for its codegen; M3 PR 5 declares it again in ai/pyproject.toml at this version, and this row is what both mean. It brings h2, hpack, hyperframe and multidict transitively, hashed in schema/uv.lock and not listed here, as pydantic's own transitive set is not. Reaches no render."
     },
     "openai": {
       "version": null,
@@ -166,7 +166,8 @@
     "Any change here requires an ADR, and a full golden-render pass if the pin can reach a render; a pin that cannot says why in its ADR rather than skipping in silence (docs/specs.md §17, last rule; ADR 0016 §4).",
     "bundled_plugins resolved from upstream git on 2026-09-05 (ADR 0010); date is the commit's own date. sfizz_ui is a new entry, not a re-pin.",
     "app and engine.grpc added 2026-09-07 in M2 PR 1 (ADR 0013 §1, ADR 0016). The frontend set is one sign-off; the golden-render pass is required of any pin that can reach a render, and app.* cannot.",
-    "ai filled in 2026-09-21 in M3 PR 2 (ADR 0020 §2, ADR 0021 §4): the model is a record and not a pin, and the three packages carry null until M3 PR 5 installs them, per U4's 'when it is first added, not before'. None can reach a render."
+    "ai filled in 2026-09-21 in M3 PR 2 (ADR 0020 §2, ADR 0021 §4): the model is a record and not a pin, and the three packages carry null until M3 PR 5 installs them, per U4's 'when it is first added, not before'. None can reach a render.",
+    "tool_api.python added 2026-09-22 in M3 PR 3 (ADR 0006 §7, ADR 0020 §1): a third consumer of schema's already-pinned Python codegen, as tool_api.typescript records a second consumer of the TypeScript one. One thing IS newly pinned, added to the same pull request on 2026-09-23 at the user's decision: grpclib 0.4.9, which the generated Assistant server imports and without which nothing could check that the generated tree imports at all. It is U4's pin arriving a pull request earlier than ADR 0020 §2 scheduled it, in the change that first needs it, which is what U4 asks for. It cannot reach a render."
   ],
   "schema": {
     "_note": "Build-time codegen for schema/*.proto; none of it ships in the built product. Registry packages are pinned by exact version per docs/specs.md §17, with integrity hashes in Cargo.lock, package-lock.json and uv.lock.",
@@ -235,6 +236,10 @@
       },
       "pydantic": {
         "version": "2.13.5"
+      },
+      "grpclib": {
+        "version": "0.4.9",
+        "note": "Not schema's own: schema/*.proto declares no service and nothing here imports it. It is `ai.grpclib` above — the sidecar's stack, approved under U4 — installed in this project's dev group because proto/ borrows this environment for its codegen and for the check that proto/gen/python imports. One version, two declarations; ai.grpclib is the one that decides it."
       }
     }
   },
@@ -283,6 +288,15 @@
         "protoc_gen_es": "2.14.1",
         "bufbuild_protobuf": "2.14.1",
         "typescript": "5.9.3"
+      }
+    },
+    "python": {
+      "_note": "The service's Python, generated since 2026-09-22 in M3 PR 3 — the milestone ADR 0006 §7 deferred it to, narrowed by ADR 0020 §1 to server_generation=async and client_generation=none because `ai` serves Assistant and dials nothing. Nothing new is pinned: betterproto2-compiler writes it and betterproto2 with pydantic is what it imports, and all three are already pinned under `schema.python` at the versions below, run out of schema/'s environment by `uv run --project ../schema`. `proto` is a new consumer, not a new dependency — the same relationship `typescript._reused` records — so this needs no sign-off under CLAUDE.md #4; it is written here because proto/AGENTS.md's 'adding a language target' checklist asks for the version, and because a reader of §17 should see that the tool API has a third language target without reading a buf.gen.yaml. Two things this target does NOT bring. The generated AssistantBase imports `grpclib`, which is `ai`'s package and is deliberately unpinned and uninstalled until M3 PR 5 (see `ai.grpclib`), so this code is regenerated and compared byte for byte by proto/codegen.sh --check and is imported and type-checked by nothing until then — a deferred check, recorded as one in docs/plan.md's ledger so PR 5 is obliged to close it. And betterproto2 has no extern_path, so it re-emits song.proto and history.proto; codegen.sh deletes that copy and rewrites the imports to escribass_schema, because a second Song in the tree is CLAUDE.md #1's failure in a fourth language (ADR 0020 §1, amended).",
+      "_reused": {
+        "python": "3.12",
+        "betterproto2": "0.10.0",
+        "betterproto2_compiler": "0.10.1",
+        "pydantic": "2.13.5"
       }
     }
   },

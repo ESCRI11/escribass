@@ -6,8 +6,19 @@ license = "AGPL-3.0-only"
 requires-python = ">=3.12"
 dependencies = ["betterproto2[pydantic]==0.10.0"]
 
+# `grpclib` is not this package's dependency in any honest sense: schema/*.proto declares no
+# service, and nothing here imports it. It is `ai`'s runtime stack (ADR 0020 §2), pinned here
+# because `proto/` has no Python environment of its own on purpose — it borrows this one for
+# its codegen, the way it borrows schema's `tsc` and `protoc-gen-es` — and because the check
+# that `proto/gen/python` imports at all has to run somewhere. A dev group is where a
+# build-time-only package belongs, and nothing in this project ships. M3 PR 5 declares it
+# again in `ai/pyproject.toml`, as `betterproto2[pydantic,grpclib]` plus the package; the one
+# place that says which version both mean is `lock.baseline.json`'s `ai.grpclib`.
 [dependency-groups]
-dev = ["betterproto2-compiler==0.10.1"]
+dev = [
+    "betterproto2-compiler==0.10.1",
+    "grpclib==0.4.9",
+]
 
 # No [build-system]: this is not built as a wheel yet. The generated tree is imported
 # from gen/python by path (see tests). Add packaging when ai/ needs to depend on it.

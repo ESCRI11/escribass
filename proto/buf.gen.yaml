@@ -2,9 +2,10 @@ version: v2
 inputs:
   - directory: .
 plugins:
-  # Rust only. The service's consumers are M2's Tauri app and M3's Python orchestrator, and
-  # neither exists; generating stubs for them today would pull grpclib into schema/'s
-  # environment to satisfy nothing (ADR 0006 §7). TypeScript at M2, Python at M3.
+  # Rust first, then TypeScript (M2 PR 3) and Python (M3 PR 3) — ADR 0006 §7's "Rust now;
+  # TypeScript at M2; Python at M3", each landing in the milestone that gave it a consumer.
+  # The service's Python is a *server* and no client, because `ai` serves and dials nothing
+  # (ADR 0020 §1); the plugin entry at the bottom of this file says the rest.
   - local: protoc-gen-prost
     out: gen/rust
     opt:
@@ -43,7 +44,8 @@ plugins:
   # TypeScript, for `app` (ADR 0006 §7, which deferred it until a consumer existed; M2 PR 2 is
   # the consumer). Messages, enums and service *descriptors* — protoc-gen-es generates no
   # client, and `app` needs none: it reaches the tool API through one Tauri command into the
-  # `core` linked beside it, not over a port (ADR 0012 §1). Python still waits for M3.
+  # `core` linked beside it, not over a port (ADR 0012 §1). Nothing consumes the `Assistant`
+  # types it now writes either: `app` reaches the sidecar through `core` too.
   - local: protoc-gen-es
     out: gen/ts
     opt:
@@ -58,3 +60,30 @@ plugins:
       # `@escribass/schema`'s exports map answers to for exactly this.
       - rewrite_imports=./song_pb.js:@escribass/schema
       - rewrite_imports=./history_pb.js:@escribass/schema
+  # Python, for `ai` (ADR 0006 §7, carried out and narrowed by ADR 0020 §1). The sidecar
+  # **serves** `Assistant` and dials nothing, so a server and no client — and the reason the
+  # direction was decided that way is this plugin: `client_generation=async,
+  # server_generation=async` emits a grpclib client *and* server, the defaults emit a
+  # synchronous grpcio client and no server, and there is no grpcio server option at all
+  # (ADR 0020 §2). The `SongTools` and `Preview` servers this same run generates have no
+  # consumer and are left unused rather than excluded, since a per-file plugin configuration
+  # is a second thing to keep in step.
+  #
+  # `uv run --project ../schema` because the compiler is pinned in schema/'s environment and
+  # this module has no Python environment of its own — the same borrowing as `protoc-gen-es`
+  # and `tsc` above.
+  #
+  # This plugin has no `extern_path` and no `rewrite_imports`: it generates a module for
+  # **every** file in the request, imports included, so this run re-emits song.proto and
+  # history.proto beside the service — a second `Song` in the tree, which is what the four
+  # `extern_path` lines and the two `rewrite_imports` above exist to prevent (CLAUDE.md #1,
+  # ADR 0006 §4). codegen.sh deletes the copy and sends those imports to `escribass_schema`,
+  # and fails the run if it cannot (ADR 0020 §1, amended 2026-09-22).
+  - local: [uv, run, --project, ../schema, protoc-gen-python_betterproto2]
+    out: gen/python/escribass_proto
+    opt:
+      # Constructors validate; from_json() does not — the trap schema/tests names, and this
+      # is the same runtime.
+      - pydantic_dataclasses
+      - client_generation=none
+      - server_generation=async
