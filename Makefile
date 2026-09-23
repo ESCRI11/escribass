@@ -50,6 +50,17 @@ endif
 # takes on a machine whose sound goes through PulseAudio.
 ENGINE ?=
 
+# The AI sidecar the window starts, and the same rule as ENGINE: told, never searched
+# (ADR 0020 §4). Empty by default, and the window's health dot then says there is none while
+# everything else works. This build answers from a recorded transcript and proposes nothing —
+# the loop is M3 PR 8 — so the command carries one:
+#
+#   make run AI="uv run --project ai escribass-ai --transcript ai/tests/transcripts/one-answer.json"
+#
+# `OPENROUTER_API_KEY` is **not** here and never will be: it reaches the sidecar from the
+# environment, because `ps` shows flags (U3).
+AI ?=
+
 # A prefix for the launch itself, empty by default. It exists because the webview a Tauri app
 # renders in belongs to the operating system (ADR 0016 §5), and a machine whose WebKitGTK is
 # not where the loader expects needs the binary wrapped rather than the recipe changed. The
@@ -94,6 +105,7 @@ help:
 	@echo 'PROJECT  = $(PROJECT)'
 	@echo 'MANIFEST = $(MANIFEST)'
 	@echo 'ENGINE   = $(ENGINE)'
+	@echo 'AI       = $(AI)'
 	@echo 'LAUNCH   = $(LAUNCH)'
 
 # `--features custom-protocol` is not optional and not a detail: without it the host builds in
@@ -101,7 +113,7 @@ help:
 # the binary serves the `app/dist` it embedded, which is why the frontend is built first.
 run: webkit project app/dist
 	cargo build --release -p escribass-app --features custom-protocol
-	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(PROJECT)
+	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(PROJECT)
 
 # The iteration loop: Vite serves the frontend, the debug host loads it from there, and an edit
 # to `app/src` reloads the window. No `--features custom-protocol` here — dev mode is exactly
@@ -129,7 +141,7 @@ dev: webkit project app/node_modules
 	vite=$$!; \
 	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
 	until curl -sf http://localhost:5173/ >/dev/null 2>&1; do sleep 0.3; done; \
-	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(PROJECT)
+	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(PROJECT)
 
 # A project to look at. `escribass-mcp --create` makes one and serves it, which is the whole
 # of it — `app` has no File · New yet, and creating a project is not a tool (ADR 0006 §5).
@@ -163,6 +175,8 @@ check-core: schema/node_modules proto/node_modules
 	cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 	cd schema && npx tsc --noEmit --project ../proto
 	cd schema && uv run python -m unittest discover -s tests
+	cd schema && uv run python -m unittest discover -s ../proto/tests
+	cd ai && uv run python -m unittest discover -s tests
 
 # `--features custom-protocol` for the reason `run` uses it: that is the binary that ships,
 # and it is the one that fails if `app/dist` is not there.

@@ -320,3 +320,106 @@ impl Heard {
         self.heard.lock().expect("the fake preview has not panicked").clone()
     }
 }
+
+/// An `Assistant` server on a Unix socket in `dir`, answering one turn with `events`.
+///
+/// A **model of the sidecar's side**, for [`fake_engine`]'s and [`fake_preview`]'s reason: what
+/// `core/tests/assistant.rs` tests is `core`'s half of the boundary — the line it reads, the
+/// prompt it sends, the events it collects and which failures are whose. The sidecar's own half
+/// is `ai/tests/test_sidecar.py`, which drives the real process over a real socket, and the two
+/// meet in the ignored end-to-end test at the bottom of that suite (ADR 0020 §4).
+#[cfg(unix)]
+pub fn fake_assistant(
+    dir: &Path,
+    events: Vec<escribass_proto::assistant::AssistantEvent>,
+) -> AskedFor {
+    use escribass_proto::assistant::assistant_server::AssistantServer;
+    use escribass_proto::assistant::{AssistantCommand, AssistantEvent};
+
+    let socket = dir.join("assistant.sock");
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let service = Answering { events, asked: asked.clone() };
+    let bound = socket.clone();
+    let (listening, ready) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime for the fake assistant");
+        runtime.block_on(async move {
+            let socket = tokio::net::UnixListener::bind(&bound).expect("a socket to serve on");
+            listening.send(()).expect("the test is still waiting");
+            tonic::transport::Server::builder()
+                .add_service(AssistantServer::new(service))
+                .serve_with_incoming(
+                    tonic::codegen::tokio_stream::wrappers::UnixListenerStream::new(socket),
+                )
+                .await
+                .expect("the fake assistant serves");
+        });
+    });
+    ready.recv().expect("the fake assistant binds its socket");
+    return AskedFor { socket, asked };
+
+    struct Answering {
+        events: Vec<AssistantEvent>,
+        asked: Arc<Mutex<Vec<AssistantCommand>>>,
+    }
+
+    #[tonic::async_trait]
+    impl escribass_proto::assistant::assistant_server::Assistant for Answering {
+        type PromptStream = std::pin::Pin<
+            Box<
+                dyn tonic::codegen::tokio_stream::Stream<
+                        Item = Result<AssistantEvent, tonic::Status>,
+                    > + Send,
+            >,
+        >;
+
+        async fn prompt(
+            &self,
+            request: tonic::Request<tonic::Streaming<AssistantCommand>>,
+        ) -> Result<tonic::Response<Self::PromptStream>, tonic::Status> {
+            let mut inbound = request.into_inner();
+            // The prompt is read before anything is sent, as the sidecar reads it: a turn
+            // whose first message is not a prompt is a defect on the host's side.
+            let first = inbound
+                .message()
+                .await?
+                .ok_or_else(|| tonic::Status::invalid_argument("no prompt arrived"))?;
+            self.asked.lock().expect("nothing else panicked").push(first);
+            let events = self.events.clone();
+            let (sent, outgoing) = tokio::sync::mpsc::unbounded_channel();
+            tokio::spawn(async move {
+                for event in events {
+                    let _ = sent.send(Ok(event));
+                }
+                // Dropping the sender ends the stream, which is what ends the turn.
+                drop(sent);
+                while let Ok(Some(_)) = inbound.message().await {}
+            });
+            Ok(tonic::Response::new(Box::pin(
+                tonic::codegen::tokio_stream::wrappers::UnboundedReceiverStream::new(outgoing),
+            )))
+        }
+    }
+}
+
+/// A running [`fake_assistant`]: where it listens, and what it was asked.
+#[cfg(unix)]
+pub struct AskedFor {
+    pub socket: PathBuf,
+    asked: Arc<Mutex<Vec<escribass_proto::assistant::AssistantCommand>>>,
+}
+
+#[cfg(unix)]
+impl AskedFor {
+    pub fn commands(&self) -> Vec<escribass_proto::assistant::AssistantCommand> {
+        self.asked.lock().expect("the fake assistant has not panicked").clone()
+    }
+
+    /// The line a fake sidecar prints to send `core` here.
+    pub fn address(&self) -> String {
+        format!("echo unix:{}", self.socket.display())
+    }
+}

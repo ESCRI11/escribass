@@ -1,0 +1,38 @@
+# Package `escribass-proto`: the generated Python under `gen/python`, for `ai` to depend on.
+#
+# The Python half of what `package.json` next to this file does for TypeScript — a package
+# file and no toolchain of its own. `proto/` still has **no Python environment**: there is no
+# `uv.lock` and no `.venv` here, `codegen.sh` runs the compiler with `--project ../schema`, and
+# `tests/test_generated_python.py` runs from `schema/`'s environment. What this file adds is
+# only the metadata a consumer needs to depend on the tree by path (M3 PR 5; ADR 0020 §4).
+#
+# Its dependencies are what the generated code imports and nothing else: `betterproto2`'s
+# runtime with the `pydantic` models `buf.gen.yaml` asks for, `grpclib`, which the generated
+# `AssistantBase` imports at module scope, and `escribass-schema`, because `codegen.sh` rewrites
+# the model's imports to it rather than letting the compiler re-emit a second `Song`
+# (ADR 0020 §1, extended). One version of `grpclib` for both declarations; the row that decides
+# it is `lock.baseline.json`'s `ai.grpclib`.
+[project]
+name = "escribass-proto"
+version = "0.1.0"
+description = "Generated Python for the escribass tool API, render and assistant services"
+license = "AGPL-3.0-only"
+requires-python = ">=3.12"
+dependencies = [
+    "escribass-schema",
+    "betterproto2[pydantic]==0.10.0",
+    "grpclib==0.4.9",
+]
+
+# Editable, for `schema/pyproject.toml`'s reason: `codegen.sh` deletes `gen/` whole on every
+# run, so a built copy in a consumer's environment would be a stale second tree.
+[tool.uv.sources]
+escribass-schema = { path = "../schema", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "gen/python"
+module-name = "escribass_proto"

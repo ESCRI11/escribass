@@ -85,7 +85,7 @@ const ANSWERING: Duration = Duration::from_secs(60);
 /// and it is counted in iterations for the reason the engine's own dispatch bound is
 /// (`engine/src/main.cpp`): what it decides is which of two failures is reported, never a
 /// sample. Five seconds is far more than a failing engine takes to leave.
-const LEAVING_OF_ITS_OWN_ACCORD: u32 = 500;
+pub(crate) const LEAVING_OF_ITS_OWN_ACCORD: u32 = 500;
 
 /// Where the engine is, and the manifest it is handed.
 ///
@@ -238,37 +238,9 @@ impl Engine {
         // this position. A preview, which can run for an hour, needs it more.
         let said = child.stderr.take().map(drain);
 
-        match self.listening(&mut child) {
+        match listening(&mut child, NAMING_ITS_SOCKET, "engine") {
             Ok(address) => Ok((child, said, address)),
-            Err(why) => Err(self.verdict(&mut child, said, why)),
-        }
-    }
-
-    /// The address the engine printed, or what it did instead.
-    ///
-    /// The read is bounded because a blocking one is not: an engine that starts, binds nothing
-    /// and never exits would hold this thread — and with it the tool API — for good. What the
-    /// bound buys is a failure; see [`NAMING_ITS_SOCKET`].
-    fn listening(&self, child: &mut Child) -> Result<String, &'static str> {
-        let Some(stdout) = child.stdout.take() else {
-            return Err("the engine was started without a stdout to name its socket on");
-        };
-        let (sent, arriving) = mpsc::channel();
-        // The rest of stdout is read and dropped so the pipe cannot fill either; the engine
-        // writes nothing after the address, and an engine that did would otherwise wedge on it.
-        std::thread::spawn(move || {
-            let mut lines = BufReader::new(stdout).lines();
-            let _ = sent.send(lines.next().and_then(Result::ok));
-            for _ in lines {}
-        });
-        match arriving.recv_timeout(NAMING_ITS_SOCKET) {
-            Ok(Some(line)) if !line.trim().is_empty() => Ok(line.trim().to_string()),
-            // An empty line, or end of stream with none: the engine's stdout closed without an
-            // address, which for a live process means it is on its way out.
-            Ok(_) => Err("the engine closed its stdout without naming a socket to serve on"),
-            // Not killed here: `verdict` kills whatever is still running, for every path that
-            // reaches it, so the one that ends in a hang is not the one somebody forgot.
-            Err(_) => Err("the engine started and named no socket within a minute"),
+            Err(why) => Err(self.verdict(&mut child, said, &why)),
         }
     }
 
@@ -295,22 +267,11 @@ impl Engine {
         &self,
         child: &mut Child,
         said: Option<JoinHandle<Vec<u8>>>,
-        what: &'static str,
+        what: &str,
     ) -> ProjectError {
-        for _ in 0..LEAVING_OF_ITS_OWN_ACCORD {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                _ => std::thread::sleep(Duration::from_millis(10)),
-            }
-        }
-        if matches!(child.try_wait(), Ok(None)) {
-            let _ = child.kill();
-        }
-        let Ok(finished) = child.wait() else {
-            return self.broke("engine_failed", format!("{what}, and could not be waited for"));
-        };
-        let rule = if finished.success() { "engine_unreadable" } else { "engine_failed" };
-        self.broke(rule, format!("{what}; it {}{}", how(&finished), tail(said)))
+        let gone = ended(child, said, what);
+        let rule = if gone.crashed { "engine_failed" } else { "engine_unreadable" };
+        self.broke(rule, gone.message)
     }
 
     fn broke(&self, rule: &'static str, message: String) -> ProjectError {
@@ -459,8 +420,99 @@ fn render_one(address: &str, plan: &RenderPlan) -> Result<RenderResult, String> 
     })
 }
 
+/// The address a child printed, or what it did instead — the first and only line of its stdout.
+///
+/// **Shared with the AI sidecar** (`core/src/assistant.rs`), which is started the same way and
+/// for the same reason (ADR 0020 §4): one line that is the address and the readiness at once,
+/// printed after the server is listening, so a caller has nothing to poll and no port to guess.
+/// One copy rather than two, because the second copy is the one that stops matching what `core`
+/// actually spawns — the shape `core/tests/common/mod.rs` already keeps for the fake engine.
+///
+/// The read is bounded because a blocking one is not: a child that starts, binds nothing and
+/// never exits would hold this thread — and with it the tool API — for good. What the bound
+/// buys is a failure; see [`NAMING_ITS_SOCKET`].
+pub(crate) fn listening(
+    child: &mut Child,
+    within: Duration,
+    who: &str,
+) -> Result<String, String> {
+    let Some(stdout) = child.stdout.take() else {
+        return Err(format!("the {who} was started without a stdout to name its socket on"));
+    };
+    let (sent, arriving) = mpsc::channel();
+    // The rest of stdout is read and dropped so the pipe cannot fill either; the engine
+    // writes nothing after the address, and an engine that did would otherwise wedge on it.
+    std::thread::spawn(move || {
+        let mut lines = BufReader::new(stdout).lines();
+        let _ = sent.send(lines.next().and_then(Result::ok));
+        for _ in lines {}
+    });
+    match arriving.recv_timeout(within) {
+        Ok(Some(line)) if !line.trim().is_empty() => Ok(line.trim().to_string()),
+        // An empty line, or end of stream with none: the child's stdout closed without an
+        // address, which for a live process means it is on its way out.
+        Ok(_) => Err(format!("the {who} closed its stdout without naming a socket to serve on")),
+        // Not killed here: [`ended`] kills whatever is still running, for every path that
+        // reaches it, so the one that ends in a hang is not the one somebody forgot.
+        Err(_) => Err(format!("the {who} started and named no socket within a minute")),
+    }
+}
+
+/// What became of a child that did not answer: whether it crashed, and what to tell a person.
+///
+/// **The verdict is the child's exit status, not the transport's.** A child that exited
+/// non-zero failed and said why on its stderr, which is what a person needs; one that exited 0
+/// without answering is the defect M1 PR 13 found on the other transport — a render that never
+/// happened, reported as a success — and it is *unreadable* rather than failed, because nothing
+/// about it is a crash to be looked up in a log. Which of the two it was is [`Ended::crashed`],
+/// and the rule id is the caller's to name: an engine's and a sidecar's differ (ADR 0020 §5).
+///
+/// **One that is still running is given a moment and then killed**, rather than waited for.
+/// Every path into here has already established that this child is not going to answer, and
+/// `wait` on a live one is an unbounded block in the thread the tool API answers from — the
+/// one thing this file bounds everywhere else.
+///
+/// The moment is not politeness: a child whose call has just failed is on its way out and its
+/// **exit code is the verdict**, so killing it the instant the call returns would trade
+/// "exited 3, and here is why" for "killed by a signal" — this file's own answer thrown away
+/// on a race. Five seconds is far past what a failing process takes to leave, and the loop
+/// stops the moment it has, so a real failure costs a poll or two. What is left after it is
+/// a binary that will not exit at all, which is a hang and is reported instead.
+pub(crate) fn ended(
+    child: &mut Child,
+    said: Option<JoinHandle<Vec<u8>>>,
+    what: &str,
+) -> Ended {
+    for _ in 0..LEAVING_OF_ITS_OWN_ACCORD {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            _ => std::thread::sleep(Duration::from_millis(10)),
+        }
+    }
+    if matches!(child.try_wait(), Ok(None)) {
+        let _ = child.kill();
+    }
+    let Ok(finished) = child.wait() else {
+        return Ended {
+            crashed: true,
+            message: format!("{what}, and could not be waited for"),
+        };
+    };
+    Ended {
+        crashed: !finished.success(),
+        message: format!("{what}; it {}{}", how(&finished), tail(said)),
+    }
+}
+
+/// How a child ended, as [`ended`] read it.
+pub(crate) struct Ended {
+    /// Whether it exited non-zero or was killed — as against exiting 0 without answering.
+    pub crashed: bool,
+    pub message: String,
+}
+
 /// Reads a pipe to end of stream, on a thread, so it can never fill.
-fn drain(mut pipe: ChildStderr) -> JoinHandle<Vec<u8>> {
+pub(crate) fn drain(mut pipe: ChildStderr) -> JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut said = Vec::new();
         let _ = pipe.read_to_end(&mut said);
@@ -469,7 +521,7 @@ fn drain(mut pipe: ChildStderr) -> JoinHandle<Vec<u8>> {
 }
 
 /// How a process ended, for the message a person reads.
-fn how(finished: &std::process::ExitStatus) -> String {
+pub(crate) fn how(finished: &std::process::ExitStatus) -> String {
     match finished.code() {
         Some(code) => format!("exited {code}"),
         None => "was killed by a signal".to_string(),
@@ -481,7 +533,7 @@ fn how(finished: &std::process::ExitStatus) -> String {
 /// Trimmed to the tail: a render's stderr carries JUCE's and every plugin's chatter, and what
 /// says why it failed is the end of it. Joining the draining thread is also what waits for the
 /// pipe to close, so nothing the engine said on its way out is missed.
-fn tail(said: Option<JoinHandle<Vec<u8>>>) -> String {
+pub(crate) fn tail(said: Option<JoinHandle<Vec<u8>>>) -> String {
     let said = said.and_then(|thread| thread.join().ok()).unwrap_or_default();
     let text = String::from_utf8_lossy(&said);
     let tail: Vec<&str> = text.lines().rev().take(3).collect();

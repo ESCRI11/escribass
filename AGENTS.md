@@ -33,6 +33,7 @@ Never at the root: source code, generated code, project files, or any representa
 | `buf`, `protoc-gen-es`, `tsx`, `typescript` | see lock | `cd schema && npm ci` | `schema/package-lock.json` |
 | `@bufbuild/protobuf` for `proto/gen/ts` | 2.14.1, the version `schema` already pins | `npm --prefix proto ci` | `proto/package-lock.json` |
 | Python, `uv`, `betterproto2-compiler` | 3.12 | `cd schema && uv sync` | `schema/uv.lock` |
+| The AI sidecar's own environment (`ai/`, M3 PR 5) | Python 3.12.12, `grpclib`, `openai`, `httpx2` | `cd ai && uv sync` | `ai/uv.lock` |
 
 `make` lists the shortcuts for all of this — running the app, the Vite loop, a scratch
 project, and the checks below. It shells out to exactly these commands and CI does not use it.
@@ -47,7 +48,14 @@ cargo test
 cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 npm --prefix proto ci && cd schema && npx tsc --noEmit --project ../proto
 cd schema && uv run python -m unittest discover -s tests
+cd schema && uv run python -m unittest discover -s ../proto/tests
+cd ai && uv run python -m unittest discover -s tests
 ```
+
+The last two are the newer halves of the Python check: `proto/`'s generated tree imports and
+reaches *the* model (M3 PR 3), and the AI sidecar starts, names a socket, answers one turn from
+its recorded transcript and leaves with a status (M3 PR 5). Both run in an environment of their
+own — `proto/` borrows `schema`'s, `ai/` has one, with the exact Python patch §17 pins.
 
 `cargo test` builds the four default members. The fifth, `app/src-tauri`, needs
 `libwebkit2gtk-4.1-dev` and a built `app/dist`; where both are present, add:

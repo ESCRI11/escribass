@@ -313,7 +313,18 @@ Its test is loud, so it does not muddy that pull request's silent half.
   pinned there on 2026-09-23 and `proto/tests/test_generated_python.py` runs in `checks`
   already. What this pull request adds for the package is its declaration in
   `ai/pyproject.toml` — `betterproto2[pydantic,grpclib]` plus the package — at the version
-  `lock.baseline.json` already names.
+  `lock.baseline.json` already names. **Done 2026-09-23**, with `openai` 3.19.0 and `httpx2`
+  2.13.1 as `uv` resolved them. Three things this decision did not have to say and the build
+  did. **`ai` depends on the generated trees as packages**, not by `sys.path`: the deferred
+  `[build-system]` row fired as written, and it took a `proto/pyproject.toml` with it, because
+  the sidecar imports `escribass_proto` as well as `escribass_schema` — both editable, since
+  `codegen.sh` deletes `gen/` whole on every run and a built copy would be the second `Song`
+  decision 1 spent a paragraph preventing. **Stopping it is closing its stdin**: a sidecar has
+  no last call to end on, so the pipe is the signal — `escribass-mcp`'s own, named in this
+  ADR's Context — and it is what makes an exit status of 0 distinguishable from a crash for
+  §5's dot. And **a failed turn does not kill a live sidecar**, which is the one place the
+  engine's shape could not be copied: an engine is born with its work and dies with its answer
+  (ADR 0008 §2), where this serves a session.
 - `docs/specs.md`: §3 says which side listens and what comes back; §6 names `grpclib` where it
   said `grpcio`; §10 and ADR 0012 §3 say what a stale lock is; §13 names the four services and
   loses `Jobs`; §17 and `lock.baseline.json` gain the three packages by name, unpinned until PR
