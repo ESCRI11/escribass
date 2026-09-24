@@ -49,13 +49,22 @@ cd schema && npx tsc --noEmit && node --import tsx --test tests/*.test.ts
 npm --prefix proto ci && cd schema && npx tsc --noEmit --project ../proto
 cd schema && uv run python -m unittest discover -s tests
 cd schema && uv run python -m unittest discover -s ../proto/tests
-cd ai && uv run python -m unittest discover -s tests
+cd ai && uv sync --locked && uv run python -m unittest discover -s tests
+cargo test -p escribass-tests --features ai   # after the line above: it spawns the real `ai`
 ```
 
 The last two are the newer halves of the Python check: `proto/`'s generated tree imports and
-reaches *the* model (M3 PR 3), and the AI sidecar starts, names a socket, answers one turn from
-its recorded transcript and leaves with a status (M3 PR 5). Both run in an environment of their
-own — `proto/` borrows `schema`'s, `ai/` has one, with the exact Python patch §17 pins.
+reaches *the* model (M3 PR 3), and the AI sidecar starts, names a socket, drives a two-call
+turn from a transcript and leaves with a status (M3 PR 5, extended in PR 8). Both run in an
+environment of their own — `proto/` borrows `schema`'s, `ai/` has one, with the exact Python
+patch §17 pins.
+
+The `ai` **cargo feature** is the loop's end-to-end golden (M3 PR 8): a prompt driven through
+the real `ai` process with a scripted provider and `core`'s own client, the proposal applied,
+the project compared with committed bytes and driven twice. It is a feature rather than a test
+that notices `uv` is missing and returns, for the reason `renders` is (`tests/AGENTS.md`). Its
+**live** half spends money and is `#[ignore]`d: nothing in this repository calls a paid service
+without the user saying so (CLAUDE.md #7).
 
 `cargo test` builds the four default members. The fifth, `app/src-tauri`, needs
 `libwebkit2gtk-4.1-dev` and a built `app/dist`; where both are present, add:

@@ -32,6 +32,13 @@ path = "render_once.rs"
 
 [features]
 renders = []
+# The loop's end-to-end golden (M3 PR 8; ADR 0022 §4). A feature rather than a test that
+# notices there is no `uv` and returns, for `renders`' reason: that would be the quiet skip
+# M0.4 exists to prevent. With it, the suite spawns the real `ai` process and insists.
+#
+#     cd ai && uv sync --locked
+#     cargo test -p escribass-tests --features ai
+ai = []
 
 # `escribass-core`, `escribass-proto` and `prost` are dependencies rather than dev-dependencies
 # because `render-once` above links them, and a `[[bin]]` sees only the first list. Nothing

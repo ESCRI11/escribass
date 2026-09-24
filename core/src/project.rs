@@ -93,7 +93,41 @@ struct Lock {
     engine: BTreeMap<String, String>,
     #[serde(default)]
     plugins: BTreeMap<String, Pin>,
+    /// The model this project's prompts go to — **a record, not a pin** (ADR 0021 §4).
+    ///
+    /// Absent until the first prompt is sent, and absent from the file when absent here:
+    /// every `lock.json` written before M3 PR 8 has no `ai` block and none gains one by
+    /// being rewritten, which is what keeps the determinism goldens where they are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ai: Option<Ai>,
 }
+
+/// What a project records about the model it is edited by (ADR 0021 §4).
+///
+/// Not a pin, and the difference is the whole row: a hosted model changes under its name, no
+/// commit or hash verifies one, and nothing that counts "verified" versions may count this
+/// (docs/plan.md, M3 trap 15). What it records is a **choice** — the provider and the model id
+/// a person picked for this project — written on first use as ADR 0010 §2 writes a plugin pin,
+/// never rewritten by a tool, and changed by editing the text (§2.6). What actually answered
+/// is `provenance.model_id` on every entry, which is the fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ai {
+    pub provider: String,
+    pub model: String,
+}
+
+/// The provider and model a project records when it records none of its own (ADR 0021 §4).
+///
+/// `lock.baseline.json`'s `ai.provider` and `ai.model`. That file is the repository's baseline
+/// document and not something a shipped binary can read, so the default lives here as well —
+/// and `core/tests/project.rs` asserts the two agree, which is the only thing that keeps a
+/// constant in code and a row in a JSON file from drifting apart.
+pub const DEFAULT_PROVIDER: &str = "openrouter";
+/// See [`DEFAULT_PROVIDER`]. Chosen by the user after the M3 spike and measured before it was
+/// recorded (docs/plan.md, "DeepSeek V4.1 Flash, measured before it became the default").
+pub const DEFAULT_MODEL: &str = "deepseek/deepseek-v4.1-flash";
+
 
 /// What a project pins about one plugin.
 ///
@@ -322,6 +356,9 @@ pub struct Project {
     /// adds an entry for every referenced plugin that has none and removes nothing
     /// (ADR 0010 §2).
     pins: BTreeMap<String, Pin>,
+    /// What `lock.json`'s `ai` block says, if it says anything (ADR 0021 §4). `None` until a
+    /// prompt has been sent in this project.
+    ai: Option<Ai>,
 }
 
 impl Project {
@@ -332,7 +369,7 @@ impl Project {
         history: History,
         manifest: Arc<Manifest>,
     ) -> Self {
-        Self { root: root.into(), song, history, manifest, pins: BTreeMap::new() }
+        Self { root: root.into(), song, history, manifest, pins: BTreeMap::new(), ai: None }
     }
 
     pub fn root(&self) -> &Path {
@@ -382,8 +419,14 @@ impl Project {
         history.create_ref("main", &id).map_err(|e| err(&root, e.rule, e.message))?;
         history.set_head("main").map_err(|e| err(&root, e.rule, e.message))?;
 
-        let mut project =
-            Project { root, song: song.clone(), history, manifest, pins: BTreeMap::new() };
+        let mut project = Project {
+            root,
+            song: song.clone(),
+            history,
+            manifest,
+            pins: BTreeMap::new(),
+            ai: None,
+        };
         project.write()?;
         Ok(project)
     }
@@ -416,12 +459,12 @@ impl Project {
         ids: &mut dyn IdSource,
         clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
-        let prepared =
-            self.prepare(ops, &authorship(author, clock)).map_err(|v| refusal(&self.root, &v))?;
+        let made = authorship(author, clock);
+        let prepared = self.prepare(ops, &made).map_err(|v| refusal(&self.root, &v))?;
         let Some(head) = self.history.head_id().map(str::to_string) else {
             return Err(err(self.root.join(REFS), "head_unset", "HEAD names no entry"));
         };
-        self.record(prepared, tool, vec![head], author, ids, clock)
+        self.record(prepared, tool, vec![head], &made, ids)
     }
 
     /// Everything a commit does *except* commit: apply, bump, validate, re-derive the patch.
@@ -444,7 +487,23 @@ impl Project {
     /// are `None` for every caller that exists today; the proposal is the one place that will
     /// fill them (ADR 0021 §2, M3 PR 8).
     pub fn prepare(&self, ops: &[Op], made: &Provenance) -> Result<Prepared, Vec<Violation>> {
-        self.prepare_inner(ops, Some(made))
+        self.prepare_inner(ops, Some(made), false)
+    }
+
+    /// [`prepare`](Self::prepare) for a **proposal's patch** (ADR 0019 §2): the version rule of
+    /// an ordinary edit, and provenance left exactly as the ops carry it.
+    ///
+    /// The two exemptions `prepare_merge` grants together come apart here, which is why this is
+    /// its own entry point rather than a third argument at the call site. Versions **are**
+    /// guarded, because the patch is a caller's claim about a document that may have moved
+    /// under it — that guard is the whole of how a pending proposal meets a person's
+    /// concurrent edit (ADR 0019 §2; ADR 0012 §4). Provenance is **not** decided, because it
+    /// already was: every entity in these ops was stamped by `prepare` on the fork, with the
+    /// three ids of the call that minted it (ADR 0021 §2). Re-deciding it here would replace
+    /// the call with the turn and lose the `tool_call_id` the entity is supposed to carry,
+    /// which is the same "core's own values arriving from elsewhere" that exempts a merge.
+    pub fn prepare_proposal(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
+        self.prepare_inner(ops, None, false)
     }
 
     /// [`prepare`](Self::prepare) for the callers whose operations legitimately carry an entity
@@ -467,16 +526,27 @@ impl Project {
     /// whoever added it; both are core's own values arriving from the log, and stamping them
     /// with the author of the call that merged or redid would rewrite who made what.
     pub fn prepare_merge(&self, ops: &[Op]) -> Result<Prepared, Vec<Violation>> {
-        self.prepare_inner(ops, None)
+        self.prepare_inner(ops, None, true)
     }
 
-    /// `made` is `Some` exactly for the callers whose operations are a *caller's*, which is
-    /// the one question both §4.3 exemptions turn on: those ops get their versions guarded and
-    /// their provenance decided, and core's own ops — a merge, an undo, a redo — get neither.
+    /// Two independent questions, asked separately because M3 found a caller that answers them
+    /// differently.
+    ///
+    /// `made` decides **provenance**: `Some` for ops that are a caller's, so a new entity is
+    /// stamped with the call; `None` for ops carrying provenance core itself wrote — a merge,
+    /// an undo, a redo, and a proposal's patch.
+    ///
+    /// `merging` decides the **version** rule: `false` bumps by one and disputes a number the
+    /// caller chose (ADR 0005 §3), `true` resolves `max(ours, theirs) + 1` and disputes
+    /// nothing (ADR 0005 §2).
+    ///
+    /// The two coincided for the only two callers that existed until M3, which is why they
+    /// were one argument; a proposal's patch is `None` and `false` (ADR 0019 §2).
     fn prepare_inner(
         &self,
         ops: &[Op],
         made: Option<&Provenance>,
+        merging: bool,
     ) -> Result<Prepared, Vec<Violation>> {
         let before = serde_json::to_value(&self.song).expect("a Song serialises");
 
@@ -496,7 +566,7 @@ impl Project {
             );
         }
 
-        let disputed = bump_versions(&before, &mut patched, made.is_none());
+        let disputed = bump_versions(&before, &mut patched, merging);
         if !disputed.is_empty() {
             return Err(disputed);
         }
@@ -527,19 +597,21 @@ impl Project {
     /// `parents` rather than one parent: a merge appends a single entry naming both sides
     /// (ADR 0001 §1), and that is the only difference between a merge and a commit at this
     /// level.
+    /// `made` is the **entry's** provenance, stated rather than derived from an author and a
+    /// clock: a proposal's entry names the model and the prompt as well (ADR 0021 §2), and the
+    /// session is what knows which of those it has.
     pub fn record(
         &mut self,
         prepared: Prepared,
         tool: &str,
         parents: Vec<String>,
-        author: Author,
+        made: &Provenance,
         ids: &mut dyn IdSource,
-        clock: &dyn Clock,
     ) -> Result<String, ProjectError> {
         let branch = self.history.refs().head.clone();
         let id = ids.next_id();
         let entry = new_entry(id.clone(), parents, tool, &prepared.ops,
-            authorship(author, clock), SCHEMA_VERSION);
+            made.clone(), SCHEMA_VERSION);
 
         // The next state is built beside this one and only swapped in once it is on disk.
         // Mutating first and writing second left a failed write with the session one commit
@@ -556,10 +628,23 @@ impl Project {
             history,
             manifest: Arc::clone(&self.manifest),
             pins: self.pins.clone(),
+            ai: self.ai.clone(),
         };
         next.write()?;
         *self = next;
         Ok(id)
+    }
+
+    /// Adopts a prepared document, recording nothing and writing nothing.
+    ///
+    /// The **proposal's** step and nothing else's (ADR 0019 §1): the model's calls run against
+    /// a copy of the project, each one prepared by the same `prepare` and validated by the same
+    /// rules, and what they leave behind is a document a person has not approved yet. It is
+    /// `pub(crate)` because a document with no entry is exactly what ADR 0001 §2 and ADR 0004
+    /// forbid on disk — the fork is in memory, is thrown away on Reject, and reaches the log
+    /// only as the one patch decision 2 commits.
+    pub(crate) fn keep(&mut self, prepared: Prepared) {
+        self.song = prepared.song;
     }
 
     // ---- branches (ADR 0001 §2) ----
@@ -673,6 +758,7 @@ impl Project {
             history,
             manifest: Arc::clone(&self.manifest),
             pins: self.pins.clone(),
+            ai: self.ai.clone(),
         };
         next.write()?;
         *self = next;
@@ -737,7 +823,7 @@ impl Project {
         // there is exactly one engine and a project cannot choose it, so refusing would refuse
         // every project on the machine at once, repaired by hand-editing each. Nothing is lost
         // by it, because what a render was made with travels with the render (ADR 0008 §5).
-        let project = Project { root, song, history, manifest, pins: lock.plugins };
+        let project = Project { root, song, history, manifest, pins: lock.plugins, ai: lock.ai };
         project.verify_against_replay()?;
         Ok(project)
     }
@@ -767,6 +853,49 @@ impl Project {
                 differing.join(", ")
             ),
         ))
+    }
+
+    /// What `lock.json` holds right now, as text (ADR 0010 §1).
+    ///
+    /// Its own function because two callers write it: [`write`](Self::write), which writes the
+    /// whole project, and [`record_ai`](Self::record_ai), which writes this file alone. A
+    /// second spelling of the same block is how the two would come to disagree about what a
+    /// lock contains.
+    fn lock_text(&self) -> String {
+        serde_json::to_string_pretty(&Lock {
+            schema_version: SCHEMA_VERSION,
+            engine: self.manifest.engine.clone(),
+            plugins: self.pins.clone(),
+            ai: self.ai.clone(),
+        })
+        .expect("the lock serialises")
+            + "\n"
+    }
+
+    /// What this project records about the model it is edited by, if it records anything
+    /// (ADR 0021 §4).
+    pub fn ai(&self) -> Option<&Ai> {
+        self.ai.as_ref()
+    }
+
+    /// Records the provider and model this project's prompts go to, **on first use**.
+    ///
+    /// ADR 0010 §2's shape, one block over: a plugin pin is added the first time a song
+    /// references that plugin and never rewritten by a tool, and this is added the first time
+    /// a prompt is sent and never rewritten either. A project that already records one keeps
+    /// it — including one naming a different model, because changing it is editing the text
+    /// (§2.6) and a tool that rewrote it would be writing `lock.json` outside the patch log,
+    /// which is the objection the re-pin row already records (ADR 0010 §3).
+    ///
+    /// It writes `lock.json` and nothing else. A full [`write`](Self::write) here would rewrite
+    /// every entry in `patches/` to record a fact about no entry at all — O(history) for one
+    /// line (docs/plan.md, M3 trap 9).
+    pub fn record_ai(&mut self, provider: &str, model: &str) -> Result<(), ProjectError> {
+        if self.ai.is_some() {
+            return Ok(());
+        }
+        self.ai = Some(Ai { provider: provider.to_string(), model: model.to_string() });
+        write_atomically(&self.root.join(LOCK), self.lock_text())
     }
 
     /// Writes the whole project.
@@ -805,14 +934,7 @@ impl Project {
             }
         }
 
-        let lock = serde_json::to_string_pretty(&Lock {
-            schema_version: SCHEMA_VERSION,
-            engine: self.manifest.engine.clone(),
-            plugins: self.pins.clone(),
-        })
-        .expect("the lock serialises")
-            + "\n";
-        write_atomically(&self.root.join(LOCK), &lock)?;
+        write_atomically(&self.root.join(LOCK), self.lock_text())?;
 
         for (id, entry) in self.history.entries() {
             let text = entry_to_json(entry)

@@ -96,7 +96,11 @@ fn through_call(directory: &Path) -> Vec<Value> {
     script()
         .iter()
         .map(|(name, arguments)| match call(&mut session, name, arguments) {
-            Ok(Answer { text, structured, refused }) => {
+            // `result` is the session's own `ToolResult`, carried for the one carrier that
+            // needs the message rather than its JSON (assistant.proto). It is deliberately not
+            // compared here: `structured` is the same answer, and it is the shape both
+            // transports actually hand a caller.
+            Ok(Answer { text, structured, refused, result: _ }) => {
                 json!({"text": text, "structured": structured, "refused": refused})
             }
             Err(e) => json!({"error": e.message, "kind": format!("{:?}", e.kind)}),

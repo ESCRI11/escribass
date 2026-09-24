@@ -24,20 +24,22 @@ pub mod tools;
 pub mod validate;
 pub mod version;
 
-pub use assistant::{Assistant, Health, Sidecar};
-pub use call::{call, Answer, CallError, ErrorKind};
+pub use assistant::{Assistant, Health, Sidecar, Turn, TurnEnd, REFUSALS_PER_TURN};
+pub use call::{call, Answer, CallError, ErrorKind, IMPLEMENTED, OFFERED};
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
 pub use engine::{Engine, Preview};
-pub use descriptor::{message_fields, tool_names, tool_schemas, Field, ToolSchema};
+pub use descriptor::{message_fields, offered_schemas, tool_names, tool_schemas, Field,
+    ToolSchema};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
     refs_from_json, refs_to_json, History, HistoryError};
 pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use manifest::Manifest;
-pub use project::{asset_hash, authorship, Prepared, Project, ProjectError, ProjectLock};
+pub use project::{asset_hash, authorship, Ai, Prepared, Project, ProjectError, ProjectLock,
+    DEFAULT_MODEL, DEFAULT_PROVIDER};
 pub use render::compile;
 pub use mcp::{InArrivalOrder, SongTools};
-pub use session::{new_song, Session};
+pub use session::{new_song, Proposal, Session};
 pub use validate::{validate, Violation};
-pub use version::{bump_versions, stamp_provenance};
+pub use version::{bump_versions, restore_versions, stamp_provenance};

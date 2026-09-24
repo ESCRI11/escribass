@@ -234,7 +234,44 @@ promise (plan, trap 5).
 - **PR 8** (`m3.8-loop`): `OFFERED`, the subset test, the filtered schemas without `dry_run`;
   the three kinds split where decision 3 puts them, the refusal budget and the response cap,
   a test per kind watched failing first; the end-to-end golden in `tests/`, driven twice; the
-  live run behind its variable.
+  live run behind its variable. **Done 2026-09-24.** The numbers decision 3 left as the loop's
+  configuration: **three** refused calls a turn, **twelve** responses a turn, **three** provider
+  retries at 0.25 s doubling, and a token floor of one token per **twenty** bytes of messages
+  sent. Four things the decision did not have to say.
+
+  **The refusal budget is the host's and the response cap is `ai`'s**, because each is counted
+  where it is seen: the host executes a call, so it is what sees one refused, and it ends the
+  turn by closing the stream (ADR 0013 §2's "cancel is close"). `ai` sees the responses.
+  Neither number exists twice.
+
+  **An operator failure is barely reachable inside a turn, and that is a property worth
+  stating rather than a gap.** A proposal records nothing and writes nothing, so none of the
+  twelve can reach a `Project::write`, a lock or a `head_unset`; the arm is kept and
+  documented. What a turn *can* meet is the project refusing to record the model it was sent
+  to (ADR 0021 §4), which happens before the prompt goes out — zero retries, nothing fed back,
+  and the test for the second kind is exactly that.
+
+  **A provider failure and a transport failure are told apart by whether `ai` returned a
+  status.** The host maps `UNAVAILABLE` to `provider_failed` and `RESOURCE_EXHAUSTED` to
+  `turn_unfinished` — the fourth thing, a model with neither a call nor text, or one that will
+  not stop calling — and everything else, including a socket that broke and a child that died,
+  stays `assistant_failed`. A dead child overrides all of it: a provider cannot have failed
+  inside a process that is gone.
+
+  **The transcripts are hand-written, and this is where that is said.** The recorder decision 4
+  describes costs a paid call to OpenRouter, and `CLAUDE.md` #7 says nothing calls a paid
+  service without the user's confirmation, which this pull request did not have. Every
+  transcript here is built from the shape of `ai/tests/transcripts/one-answer.json`, the one
+  exchange M3 PR 5 really recorded, with only `choices` and `usage.prompt_tokens` changed; each
+  file says so. The **live run** behind `OPENROUTER_API_KEY` is what replaces them, and until a
+  person makes it, "a real model composes a multi-call proposal through this loop" is the
+  spike's measurement of a different loop, dated 2026-09-17, and nothing more.
+
+  One measured consequence of the token floor, kept because it is evidence: replaying the
+  *recorded* `one-answer.json` through the loop is refused as a provider failure. Its 68 prompt
+  tokens are a true record of the spike's 250-byte prompt, and the loop sends nine kilobytes, so
+  that response cannot honestly be an answer to it. `ai/tests/test_sidecar.py` asserts it, which
+  is the one place a real response exercises the floor.
 - `docs/specs.md` §6 names the twelve, the three kinds and where "three" counts; §6.1 gains
   the third kind's sentence.
 - `docs/plan.md`'s ledger gains two rows: `list_params`, on the first offer of `set_param`;

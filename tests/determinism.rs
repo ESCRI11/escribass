@@ -629,6 +629,300 @@ fn the_plan_is_reproducible() {
 }
 
 // ---------------------------------------------------------------------------
+// The loop, end to end (ADR 0022 §4)
+// ---------------------------------------------------------------------------
+//
+// Behind the `ai` cargo feature, for `renders.rs`'s reason and by the same mechanism: it needs
+// `uv` and a synced `ai/` environment, which `cargo test` cannot produce, and a `#[test]` that
+// noticed that and returned early would be the quiet skip this suite exists to prevent. Without
+// the feature the code below does not exist; with it, it insists.
+//
+//     cd ai && uv sync --locked
+//     cargo test -p escribass-tests --features ai
+//
+// What it drives is the **real** `ai` process with the scripted provider, and **`core`'s own
+// client** — `Assistant`, `Sidecar::turn`, `Session`, the proposal (ADR 0020 §4). A fake
+// `Assistant` server in Rust would test the host half against a description of the sidecar
+// rather than the sidecar, which is the alternative ADR 0022 §4 rejected. The one thing it does
+// not drive is a model: "same transcript → same log" is the claim, and it is the one a suite
+// can check without a key (docs/plan.md, "What 'deterministic' means with a model in the loop").
+#[cfg(feature = "ai")]
+mod through_the_sidecar {
+    use super::*;
+    use escribass_core::{Assistant, FixedClock, Project, SeededIds, Session, Sidecar};
+    use escribass_schema::song::Author;
+
+    /// Where the turn's ids start.
+    ///
+    /// Past everything the script minted, because the script ran in another process with its
+    /// own seeded source and two sources at the same counter would mint the same ULIDs. 100 is
+    /// far enough to be obviously past, and it is what makes the transcript's
+    /// `01M1FPMP000000000000000034` — 100 in Crockford base32 — a number a reader can check.
+    const TURN_SEED: u64 = 100;
+
+    fn ai_command(transcript: &Path) -> Vec<String> {
+        let ai = common::workspace().join("ai");
+        vec![
+            "uv".to_string(),
+            "run".to_string(),
+            "--project".to_string(),
+            ai.display().to_string(),
+            "escribass-ai".to_string(),
+            "--transcript".to_string(),
+            transcript.display().to_string(),
+        ]
+    }
+
+    /// One prompt, driven to its end against a project the script built.
+    ///
+    /// The project is created and edited by a **real `escribass-mcp` process** first, exactly
+    /// as every other script is, so nothing here writes `song.json` and every mutation before
+    /// the turn came through the tool API (CLAUDE.md #2). The turn's own mutations come through
+    /// `core::call`, which is the same dispatch.
+    fn drive(name: &str, clock: &str) -> Run {
+        let mut session_run = run(name, clock);
+        let at: i64 = clock.parse().expect("the clock is milliseconds");
+
+        let manifest = std::sync::Arc::new(
+            escribass_core::Manifest::read(MANIFEST).expect("the manifest fixture is readable"),
+        );
+        let project = Project::open(&session_run.directory.0, manifest)
+            .expect("the script left a project that opens");
+        let mut session = Session::new(
+            project,
+            Box::new(SeededIds::new(at, TURN_SEED)),
+            Box::new(FixedClock(at)),
+            // The window's author, which is what it stays: the model's calls never enter
+            // through it (ADR 0021 §1, Consequences).
+            Author::Human,
+        );
+
+        let transcript = PathBuf::from(SCRIPTS).join(name).join("transcript.json");
+        let mut sidecar: Sidecar = Assistant::new(ai_command(&transcript))
+            .start()
+            .expect("the real sidecar starts; run `cd ai && uv sync --locked` if it does not");
+
+        let turn = sidecar
+            .turn(&mut session, "add a lead line over the bass", &[])
+            .expect("the turn answers");
+        session_run.results.push(json!({
+            "turn": {
+                "end": format!("{:?}", turn.end),
+                "model_id": turn.model_id,
+                "reply": turn.recorded.reply,
+                "calls": turn.recorded.calls.iter().map(|done| {
+                    let call = done.call.as_ref().expect("a completed call has its call");
+                    let result = done.result.as_ref().expect("and its result");
+                    json!({
+                        "name": call.name,
+                        "call_id": call.call_id,
+                        "args": call.args_json,
+                        "valid": result.valid,
+                        "summary": result.summary,
+                        "errors": result.errors.iter().map(|e| json!({
+                            "path": e.path, "rule": e.rule, "message": e.message,
+                        })).collect::<Vec<_>>(),
+                    })
+                }).collect::<Vec<_>>(),
+            }
+        }));
+
+        // Nothing is applied by the loop: a proposal ends in the stream and waits for a person
+        // (ADR 0019 §2). This test is that person.
+        let proposal = session.proposal().expect("the turn left a proposal");
+        let pending = proposal.patch().expect("the patch is computable after every call");
+        session_run.results.push(json!({
+            "pending": {
+                "ops": serde_json::from_str::<Value>(&escribass_core::ops_text(pending.ops()))
+                    .expect("a patch is JSON"),
+                "calls": proposal.calls(),
+                "prompt_id": proposal.prompt_id(),
+            }
+        }));
+
+        let applied = session.apply_proposal(&turn.model_id).expect("the project writes");
+        assert!(applied.valid, "the proposal was refused: {applied:?}");
+        session_run.results.push(json!({
+            "applied": {
+                "entry_id": applied.entry_id,
+                "summary": applied.summary,
+                "patch": serde_json::from_slice::<Value>(&applied.patch).expect("a patch is JSON"),
+            }
+        }));
+
+        println!("{}", sidecar.stop());
+        session_run
+    }
+
+    #[test]
+    fn a_scripted_turn_produces_the_same_project_twice_and_the_one_committed() {
+        // §11's shape, with a model above the tool API. Two runs against each other catch a
+        // clock or an unseeded source; the committed golden catches drift, which two runs in
+        // one job cannot, because both produce the same wrong bytes (docs/plan.md, M0.4).
+        let first = drive("proposal", AT);
+        let second = drive("proposal", AT);
+        assert_same(
+            "the same transcript produced different projects",
+            &Snapshot::of(&first),
+            &Snapshot::of(&second),
+        );
+        assert_matches_golden("proposal", &first);
+    }
+
+    #[test]
+    fn what_the_golden_covers_that_a_single_call_turn_would_not() {
+        // Named claims, read off the committed golden rather than off a fresh run, so the
+        // golden cannot quietly stop covering them (docs/plan.md, M3 trap 1: a check that
+        // cannot fail). Every one of these is false for a loop that never composes anything.
+        let committed = Snapshot::read("proposal");
+        let answers: Value = serde_json::from_slice(
+            committed.0.get("responses.json").expect("the golden has responses.json"),
+        )
+        .expect("responses.json is JSON");
+        let turn = &answers.as_array().expect("an array").iter()
+            .find(|answer| answer.get("turn").is_some())
+            .expect("the golden has a turn")["turn"];
+
+        // 1. **Two mutating calls**, not one, and both accepted.
+        let calls = turn["calls"].as_array().expect("calls");
+        assert_eq!(calls.len(), 2, "the golden stopped being a multi-call turn");
+        assert!(calls.iter().all(|call| call["valid"] == json!(true)), "{calls:?}");
+        assert_eq!(calls[0]["name"], json!("add_track"));
+        assert_eq!(calls[1]["name"], json!("add_clip"));
+
+        // 2. **The second call names the id the first call minted** — the whole of what a fork
+        //    buys over a dry run, and the thing the spike watched every model get refused for.
+        let minted = calls[0]["summary"].as_str().expect("a summary names the path");
+        let named = calls[1]["args"].as_str().expect("the arguments as the model wrote them");
+        let id = minted
+            .split('/')
+            .nth(2)
+            .expect("`1 op: /tracks/<id>, …` names the track")
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .next()
+            .expect("a ULID is alphanumeric");
+        assert_eq!(id.len(), 26, "that is not a ULID: {minted}");
+        assert!(named.contains(id), "the second call named `{id}`? {named}");
+
+        // 3. **One entry** for both calls, and its patch touches a track *and* a clip — which a
+        //    single-call golden cannot show, because one call cannot make both.
+        let applied = &answers.as_array().expect("an array").iter()
+            .find(|answer| answer.get("applied").is_some())
+            .expect("the golden has an apply")["applied"];
+        let paths: Vec<String> = applied["patch"]
+            .as_array()
+            .expect("a patch is an array")
+            .iter()
+            .map(|op| op["path"].as_str().unwrap_or_default().to_string())
+            .collect();
+        assert!(paths.iter().any(|path| path.starts_with("/tracks/")), "{paths:?}");
+        assert!(paths.iter().any(|path| path.starts_with("/clips/")), "{paths:?}");
+
+        // 4. **The log grew by exactly one**, whatever the number of calls (ADR 0017 §1).
+        let entries = committed.0.keys().filter(|name| name.starts_with("patches/")).count();
+        assert_eq!(entries, 4, "one create, two script steps, one proposal");
+
+        // 5. **The entry names the model and the prompt**, and its entities name their call
+        //    (ADR 0021 §2) — visible in the committed log itself.
+        let entry = committed
+            .0
+            .iter()
+            .find(|(name, bytes)| {
+                name.starts_with("patches/")
+                    && String::from_utf8_lossy(bytes).contains("\"tool\": \"proposal\"")
+            })
+            .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+            .expect("the golden has a `proposal` entry");
+        assert!(entry.contains("\"AUTHOR_MODEL\""), "{entry}");
+        assert!(entry.contains("deepseek/deepseek-v4.1-flash"), "{entry}");
+        assert!(entry.contains("\"tool_call_id\": \"call_1\""), "{entry}");
+        assert!(entry.contains("\"tool_call_id\": \"call_2\""), "{entry}");
+
+        // 6. **The project records the model it was sent to**, on first use (ADR 0021 §4).
+        let lock: Value =
+            serde_json::from_slice(committed.0.get("lock.json").expect("lock.json"))
+                .expect("lock.json is JSON");
+        assert_eq!(lock["ai"]["model"], json!("deepseek/deepseek-v4.1-flash"));
+        assert_eq!(lock["ai"]["provider"], json!("openrouter"));
+    }
+
+    /// The live run (ADR 0022 §4), **skipped loudly**.
+    ///
+    /// `#[ignore]`d rather than conditional, for `renders.rs`'s device test's reason: a test
+    /// that noticed the variable was missing and returned would be the quiet skip this suite
+    /// exists to prevent, and this one would also spend the user's money the moment the
+    /// variable happened to be set. It prints why on every run of the suite.
+    ///
+    /// ```text
+    /// OPENROUTER_API_KEY=… cargo test -p escribass-tests --features ai -- --ignored --nocapture
+    /// ```
+    ///
+    /// **Nothing else in this repository spends money**, and nothing calls a paid service
+    /// without the user saying so (CLAUDE.md #7). What this run is *for* is the one thing a
+    /// transcript cannot be: evidence that a real model, offered these twelve schemas, composes
+    /// a multi-call proposal through this loop. Until someone runs it, that claim is the
+    /// spike's measurement of a different loop, dated 2026-09-17, and nothing more.
+    #[test]
+    #[ignore = "spends money: set OPENROUTER_API_KEY and run with --ignored"]
+    fn a_live_model_drives_the_loop() {
+        let Ok(_key) = std::env::var("OPENROUTER_API_KEY") else {
+            panic!(
+                "OPENROUTER_API_KEY is not set, so there is no live run to make.\n\
+                 This test is `#[ignore]`d and spends the user's money when it runs; it is \
+                 here so that a person can make the run, not so that CI can (ADR 0022 §4)."
+            );
+        };
+        println!(
+            "about to spend money against OpenRouter with the default model. Nothing else in \
+             this suite does (CLAUDE.md #7)."
+        );
+
+        let session_run = run("proposal", AT);
+        let at: i64 = AT.parse().expect("the clock is milliseconds");
+        let manifest = std::sync::Arc::new(
+            escribass_core::Manifest::read(MANIFEST).expect("the manifest fixture is readable"),
+        );
+        let project =
+            Project::open(&session_run.directory.0, manifest).expect("a project that opens");
+        let mut session = Session::new(
+            project,
+            Box::new(SeededIds::new(at, TURN_SEED)),
+            Box::new(FixedClock(at)),
+            Author::Human,
+        );
+
+        // No `--transcript`: the sidecar builds the real client, which reads the key from this
+        // process's environment and nowhere else (ADR 0020 §4).
+        let ai = common::workspace().join("ai");
+        let mut sidecar = Assistant::new(vec![
+            "uv".to_string(),
+            "run".to_string(),
+            "--project".to_string(),
+            ai.display().to_string(),
+            "escribass-ai".to_string(),
+        ])
+        .start()
+        .expect("the real sidecar starts");
+
+        let turn = sidecar
+            .turn(&mut session, "add a lead line an octave above the bass", &[])
+            .expect("the turn answers");
+        println!("{:#?}", turn.recorded);
+        println!("model that answered: {}", turn.model_id);
+        let proposal = session.proposal().expect("the turn left a proposal");
+        println!("calls: {:?}", proposal.calls());
+        match proposal.patch() {
+            Ok(pending) => println!("{}", escribass_core::ops_text(pending.ops())),
+            Err(refused) => println!("the proposal will not apply: {refused:?}"),
+        }
+        // Deliberately **not** applied: what a live run is for is watching a real model compose
+        // a proposal, and a golden of a nondeterministic turn is the thing this milestone
+        // refuses to write (docs/plan.md, "What M3 will not claim").
+        println!("{}", sidecar.stop());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The other transport
 // ---------------------------------------------------------------------------
 

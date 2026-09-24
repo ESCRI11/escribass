@@ -1,0 +1,132 @@
+{
+  "tracks": [
+    {
+      "instrument": {
+        "instrument": {
+          "id": "",
+          "version": 0,
+          "ref": {
+            "plugin": {
+              "plugin_id": "Surge Synth Team/Surge XT",
+              "version": "1.3.4"
+            }
+          },
+          "state": "",
+          "params": {}
+        },
+        "lanes": [],
+        "sfz_path": ""
+      },
+      "effects": [],
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "clips": [
+        {
+          "start_tick": 0,
+          "length_ticks": 3840,
+          "notes": {
+            "notes": [
+              {
+                "id": "",
+                "version": 0,
+                "pitch": 36,
+                "microtonal_cents": 0.0,
+                "start_tick": 0,
+                "length_ticks": 960,
+                "velocity": 100,
+                "expression": {}
+              }
+            ]
+          }
+        }
+      ],
+      "mix_lanes": []
+    },
+    {
+      "instrument": {
+        "instrument": {
+          "id": "",
+          "version": 0,
+          "ref": {
+            "plugin": {
+              "plugin_id": "Surge Synth Team/Surge XT",
+              "version": "1.3.4"
+            }
+          },
+          "state": "",
+          "params": {}
+        },
+        "lanes": [],
+        "sfz_path": ""
+      },
+      "effects": [],
+      "mix": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false
+      },
+      "clips": [
+        {
+          "start_tick": 3840,
+          "length_ticks": 1920,
+          "notes": {
+            "notes": [
+              {
+                "id": "",
+                "version": 0,
+                "pitch": 72,
+                "microtonal_cents": 0.0,
+                "start_tick": 0,
+                "length_ticks": 480,
+                "velocity": 88,
+                "expression": {}
+              },
+              {
+                "id": "",
+                "version": 0,
+                "pitch": 76,
+                "microtonal_cents": 0.0,
+                "start_tick": 960,
+                "length_ticks": 480,
+                "velocity": 80,
+                "expression": {}
+              }
+            ]
+          }
+        }
+      ],
+      "mix_lanes": []
+    }
+  ],
+  "master": {
+    "effects": [],
+    "mix": {
+      "gain_db": 0.0,
+      "pan": 0.0,
+      "mute": false,
+      "solo": false
+    },
+    "clips": [],
+    "mix_lanes": []
+  },
+  "tempo": [
+    {
+      "id": "",
+      "tick": 0,
+      "bpm": 120.0
+    }
+  ],
+  "target": {
+    "kind": "RENDER_KIND_MASTER",
+    "sample_rate": 48000,
+    "bit_depth": 24,
+    "dither": false
+  },
+  "length_ticks": 5760,
+  "output_path": ""
+}

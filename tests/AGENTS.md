@@ -16,6 +16,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 | `renders/<name>/script.json` | A fixture, as tool calls. No `render_export` step: the harness appends it, because `output_path` is a scratch path that only exists at run time and `render.proto` requires an absolute one. Assets travel as base64 inside `add_asset`, since what a render golden commits is the WAV. | hand |
 | `renders/<name>/golden.wav`, `golden.wav.sha256` | The blessed render, whole, and the SHA-256 of its `data` chunk — the number §18.2 publishes. | `UPDATE_FIXTURES=1 cargo test -p escribass-tests --features renders` |
 | `determinism/<name>/script.json` | A scripted session: `[{tool, args, refused?}]`. One script, one claim. | hand |
+| `determinism/proposal/transcript.json` | The scripted provider's recording for the end-to-end loop golden (M3 PR 8; ADR 0022 §4): request bodies and responses, **never headers**, so the bearer token a request carries cannot reach a fixture (M3 trap 10) — and `ai/tests/test_sidecar.py` counts, over this directory as well as its own, to make sure. Keep the header's own name out of any file here: that test is a substring count, and prose naming it reads as a key. Read by the **real `ai` process**, which `determinism.rs` spawns behind the `ai` cargo feature. **Hand-written** from the shape of `ai/tests/transcripts/one-answer.json`, the one exchange M3 PR 5 recorded: a turn costs a paid call and CLAUDE.md #7 says nothing spends the user's money without the user. Its own `note` says so, and the ledger carries the row. | hand |
 | `determinism/<name>/expected/` | What that script produced when it was last blessed: the project's files, plus `responses.json`, `origin.json` and `plan.json` — what `compile` says about the project, the `RenderPlan` or every reason there is none (ADR 0007 §4). | `UPDATE_FIXTURES=1 cargo test` |
 
 `determinism/branches/expected/` gained the same kind of second consumer in M2 PR 8: `app/tests/projection.test.ts` reads its `patches/*.json` and `refs.json` as the fixed **log** for the history view, in the shape `get_history` answers with — `entry_to_json` writes the wire form and the file form from one function, so the files *are* the answer. It was chosen for having a log worth projecting: two branches, two merges with two parents, a conflict resolved per path, and a deleted branch whose entries stay behind. Reblessing `branches` therefore moves `app/tests/projection.golden.json` too.
@@ -55,6 +56,7 @@ This is a Cargo package, `escribass-tests`, with no library: suites and their in
 - **`plan.json`** is written for every script, so a project M1 cannot render goldens its refusal, naming the field. Its asset index is built from the `assets/` listing under the fixed root `/escri/assets`: `compile` reads no file, so the path is opaque to it, and a run's temporary directory in a golden would be the one kind of input the suite exists to keep out.
 - **A render fixture:** a directory under `renders/` with a `script.json`, its name added to `NAMES` in `renders.rs` — a fixture the list does not name fails rather than being quietly unrun — and a golden written with `UPDATE_FIXTURES=1`. Say in the pull request what it is: instrument, duration, rate, depth, channels, peak and PCM hash. A fixture that needs randomness to sound right is not one M1 can golden.
 - **A determinism script:** a directory under `determinism/` with a `script.json`. Add a test that runs it twice and compares. Give a step `"refused": "<rule>"` when it is meant to fail, so it is checked at the step rather than surfacing later as a mismatch between two large documents.
+- **A turn through the sidecar:** a `transcript.json` beside the `script.json`, and a test in `determinism.rs`'s `through_the_sidecar` module. The script builds the starting project through a real `escribass-mcp`, as every other script does; the turn is then driven in-process with `core`'s own client against the real `ai` process, and the answers it produced join `responses.json` so the golden pins them. **The turn's id source is seeded past the script's** (`TURN_SEED`), because the two processes mint from one seed and two sources at one counter produce the same ULIDs. The transcript names the id its second call depends on **literally**, for the same reason a script names ids literally.
 - **A cross-language check:** `schema/tests/replay.test.ts` and `schema/tests/test_replay.py` read the golden and replay it. They compare *documents*, not bytes — neither side's serialiser is the canonical writer, and that the bytes are canonical is Rust's claim.
 - **A tool:** add it to a script — `every_implemented_tool_is_scripted` enforces this — add an arm to the gRPC driver's `call!`, and run the suite — the ids of every later step shift if the new tool mints any. A tool whose real effect leaves the document, and so can only be scripted as a dry run, goes in `BEYOND_THE_DOCUMENT` with the test that asserts its seam.
 
@@ -65,6 +67,14 @@ cargo test                      # from the workspace root: builds the binaries, 
 cargo test -p escribass-tests   # only works if the binaries are already built
 cargo test -p escribass-tests --features renders   # and only with a built engine
 ```
+
+`ai` is a cargo feature for `renders`' reason, one tier up: the loop's end-to-end golden spawns
+the real `ai` process, which needs `uv` and a synced `ai/` environment that cargo cannot
+produce. Run `cd ai && uv sync --locked` first, then
+`cargo test -p escribass-tests --features ai`. The `checks` job runs both lines. Its live half —
+a real model over OpenRouter — is `#[ignore]`d **and spends money when it runs**, which nothing
+else in this repository does (`CLAUDE.md` #7): it prints why it was skipped on every run, as the
+device test does.
 
 `renders` is a cargo feature rather than a test that notices there is no engine and returns:
 that would be the quiet skip M0.4 exists to prevent. Without the feature the target does not

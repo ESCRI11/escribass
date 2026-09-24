@@ -329,6 +329,40 @@ pub fn tool_names(descriptor: &[u8]) -> Result<Vec<String>, String> {
     Ok(tool_schemas(descriptor)?.into_iter().map(|t| t.name).collect())
 }
 
+/// The schemas the **model** is offered, in [`crate::call::OFFERED`]'s order, with `dry_run`
+/// taken out (ADR 0022 §1).
+///
+/// Two filters and no third description. The list is `OFFERED`, which is data beside
+/// `IMPLEMENTED` rather than a second surface written in Python (M3 trap 11), and the schemas
+/// are [`tool_schemas`]'s own — proto field names, `id`, `provenance` and `version` already
+/// omitted (ADR 0006 §4, §6).
+///
+/// **`dry_run` is removed rather than left for the model to ignore.** Every offered call is
+/// executed against the proposal and a person approves the whole (ADR 0019 §2), so previewing
+/// is meaningless to the model and costs it a turn: the spike measured three model turns for a
+/// single-call edit — dry run, apply, answer — which is how a 9,000-token first turn became
+/// 28,000 to 39,000 billed prompt tokens. The field stays on the wire and in the request, and a
+/// model that sends it anyway gets a dry run of the fork.
+///
+/// A name in `OFFERED` that the service does not declare is an error rather than a silent gap:
+/// the two lists are one thing said twice, and the day they disagree is the day a tool the
+/// model is told about does not exist.
+pub fn offered_schemas(descriptor: &[u8]) -> Result<Vec<ToolSchema>, String> {
+    let mut all: BTreeMap<String, ToolSchema> =
+        tool_schemas(descriptor)?.into_iter().map(|tool| (tool.name.clone(), tool)).collect();
+    let mut offered = Vec::with_capacity(crate::call::OFFERED.len());
+    for name in crate::call::OFFERED {
+        let mut tool = all
+            .remove(*name)
+            .ok_or_else(|| format!("`{name}` is offered and the service declares no such rpc"))?;
+        if let Some(Value::Object(properties)) = tool.input_schema.get_mut("properties") {
+            properties.remove("dry_run");
+        }
+        offered.push(tool);
+    }
+    Ok(offered)
+}
+
 /// One field of a message, as the field-coverage guard sees it (ADR 0007 §5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
