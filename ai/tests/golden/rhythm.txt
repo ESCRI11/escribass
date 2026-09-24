@@ -1,0 +1,10 @@
+rhythm · an onset is a (voice, tick) pair over notes; a beat is the signature's
+@1 8 onsets · 5 on a beat · syncopation 3/8 · on the 16th grid 5, the triplet-8th grid 5, neither 3 · smallest gap 160 · mean written length 390
+  Lead 7 onsets · 4 on a beat · syncopation 3/7 · on the 16th grid 4, the triplet-8th grid 4, neither 3 · smallest gap 160 · mean written length 2160/7
+  Keys 1 onset · 1 on a beat · syncopation 0 · on the 16th grid 1, the triplet-8th grid 1, neither 0 · smallest gap none · mean written length 960
+@2 2 onsets · 2 on a beat · syncopation 0 · on the 16th grid 2, the triplet-8th grid 2, neither 0 · smallest gap 960 · mean written length 480
+  Lead 2 onsets · 2 on a beat · syncopation 0 · on the 16th grid 2, the triplet-8th grid 2, neither 0 · smallest gap 960 · mean written length 480
+@3 0 onsets · 0 on a beat · syncopation none · on the 16th grid 0, the triplet-8th grid 0, neither 0 · smallest gap none · mean written length none
+song 10 onsets · 7 on a beat · syncopation 3/10 · on the 16th grid 7, the triplet-8th grid 7, neither 3 · smallest gap 160 · mean written length 408
+  Lead 9 onsets · 6 on a beat · syncopation 1/3 · on the 16th grid 6, the triplet-8th grid 6, neither 3 · smallest gap 160 · mean written length 1040/3
+  Keys 1 onset · 1 on a beat · syncopation 0 · on the 16th grid 1, the triplet-8th grid 1, neither 0 · smallest gap none · mean written length 960
