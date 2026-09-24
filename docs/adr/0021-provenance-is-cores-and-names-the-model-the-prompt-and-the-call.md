@@ -84,8 +84,10 @@ is the only place a model's calls enter under ADR 0020 §1.
   the response that produced the call or the reply — and never the id that was asked for.
   U3's "what actually answered", per response, because a router may answer one turn from
   another provider under the same name and the entry should say what wrote it. It says nothing
-  of who ran the weights; the serving provider is recorded in the conversation (decision 3),
-  not the log.
+  of who ran the weights; ~~the serving provider is recorded in the conversation (decision 3),
+  not the log~~ — **corrected 2026-09-24, see decision 3**: what the conversation records is
+  the provider the *project is configured with*, and the one that served is not carried at
+  all.
 - **`prompt_id`** is the **SHA-256 of the prompt's text**, UTF-8, lowercase hex — computed by
   the host with the one hasher the project store already has (`core::asset_hash`, §10), so a
   prompt is content-addressed as an asset is: stable, replayable by the scripted provider
@@ -114,9 +116,26 @@ prompt (ADR 0020 §3), so `ai` holds nothing between streams; and it is **persis
 host**, outside the `.escri`, as one append-only JSON Lines file per project under the
 application data directory Tauri already names, keyed by the song's own id (`Song.id`, which
 survives a rename or a move of the directory). Each line is a turn: `prompt_id`, the prompt,
-when, `model_id` and the provider that served, the calls with their ids, names, arguments and
+when, `model_id` and the provider, the calls with their ids, names, arguments and
 whether each was refused, the reply, and the outcome — applied as which entry, rejected,
 edited into which entry, or failed how. The panel reads it back when the project is opened.
+
+**Corrected 2026-09-24, in M3 PR 10, and it is a correction rather than a change.** This
+decision said "the provider that served" in three places, and the code has always written
+`session.ai().0` — `lock.json`'s `ai.provider`, which is `"openrouter"` for every turn this
+repository has recorded. The provider that *served* is in the response (`"Together"` in all
+three exchanges of `tests/determinism/proposal/transcript.json`) and crosses nothing:
+`assistant.proto`'s `ToolCall` and `Done` carry `model_id` alone.
+
+The claim is corrected rather than the code, for the reason the alternatives table below gives
+about the log, arriving one layer up. Carrying it is a `proto/assistant.proto` change — a field
+on two messages, plus reading OpenRouter's non-standard `provider` off a `ChatCompletion` the
+SDK does not model it on — and nothing reads it: the panel names the endpoint a person
+configured, which is what the header is for, and the *model* that answered is already recorded
+per call and per entry, which is what U3 asked for. `panel.rs` already refuses to keep a field
+nothing reads, in as many words, and this would be one. If a turn ever has to be traced back to
+the machine that ran the weights, that is the change to make, and it is written in
+`docs/plan.md`'s known gaps with the trigger.
 
 Outside the project, for the plan's two reasons: a prompt may contain text a person would not
 commit, and `patches/` is committed; and a fifth artefact in §10 would be a thing branches and
@@ -189,7 +208,8 @@ render* already keeps for sound.
 |---|---|
 | Treat `ai.model` as a pin and count it in the status bar | Nothing can verify it; trap 15 |
 | A `set_model` tool | A tool writing `lock.json` outside the patch log, which is the objection the re-pin row already records (ADR 0010 §3); editing the text is enough until a person asks otherwise |
-| Record the serving provider in the log's provenance | `song.proto` has no field for it, and the value is a fact about one request's routing, not about the entity; the conversation records it |
+| Record the serving provider in the log's provenance | `song.proto` has no field for it, and the value is a fact about one request's routing, not about the entity; ~~the conversation records it~~ — **2026-09-24: the conversation records the configured provider, not the serving one, and the same reasoning is why** (decision 3) |
+| Carry the serving provider on `assistant.proto` | Added 2026-09-24. A field on `ToolCall` and `Done`, plus reading OpenRouter's own non-standard `provider` off a response the SDK does not model it on — for a value nothing reads. The model that answered is already per call and per entry (decision 2) |
 
 ## Consequences
 

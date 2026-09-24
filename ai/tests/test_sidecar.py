@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import io
 import json
 import os
 import subprocess
@@ -27,6 +28,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from escribass_ai import main
 from escribass_ai import provider as provider_module
 from escribass_ai.provider import (
     CEILING_USD,
@@ -180,6 +182,49 @@ class TestTheProcess(unittest.TestCase):
             assert sidecar.child.stdout is not None
             self.assertEqual(sidecar.child.stdout.read(), "")
 
+    def test_closing_its_stdin_ends_a_turn_that_is_still_in_flight(self) -> None:
+        # The other half of `core`'s `Halt` (`core/src/assistant.rs`, M3 review 2026-09-24).
+        # The window's exit path can now close this pipe without waiting for the turn that is
+        # holding the sidecar — and this is what makes that worth doing: a turn **in flight**,
+        # parked on a call nobody has answered, is ended rather than waited for. Until the
+        # review, closing the window mid-turn left the process, its socket and the project's
+        # `.escri/lock` alive until the model answered.
+        #
+        # The turn is genuinely mid-flight: the first `call` event has arrived, the host has
+        # answered nothing, and `run` is parked on `anext(commands)`.
+        with Started("--transcript", str(TRANSCRIPT)) as sidecar:
+            socket = sidecar.address().removeprefix("unix:")
+
+            async def until_the_host_lets_go() -> None:
+                async with Channel(path=socket) as channel:
+                    async with channel.request(
+                        PROMPT, Cardinality.STREAM_STREAM, AssistantCommand, AssistantEvent
+                    ) as stream:
+                        await stream.send_message(
+                            AssistantCommand(
+                                prompt=Prompt(
+                                    text="add a lead line",
+                                    song=Song(id="01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                                    model_id="deepseek/deepseek-v4.1-flash",
+                                )
+                            )
+                        )
+                        event = await stream.recv_message()
+                        assert event is not None and event.call is not None
+                        # **Nothing is answered**, and the host lets go of the pipe. What the
+                        # window does on its way out, with the turn still holding everything.
+                        assert sidecar.child.stdin is not None
+                        sidecar.child.stdin.close()
+                        # The turn ends rather than waiting for a result: the stream is reset
+                        # under it. Which way grpclib reports that is not the claim — that it
+                        # does not hang is.
+                        with contextlib.suppress(Exception):
+                            while await stream.recv_message() is not None:
+                                pass
+
+            asyncio.run(asyncio.wait_for(until_the_host_lets_go(), timeout=30))
+            self.assertEqual(sidecar.child.wait(timeout=30), 0)
+
     def test_a_transcript_that_is_not_one_stops_it_before_it_serves(self) -> None:
         with Started("--transcript", str(HERE / "no-such-transcript.json")) as sidecar:
             status = sidecar.child.wait(timeout=30)
@@ -237,8 +282,11 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
     between a loop and an unbounded bill.
     """
 
-    #: Made up, and in the right proportion: $1 a million in, $10 a million out.
-    PRICED = Prices(0.000001, 0.00001, 131072, "2026-09-24", "a test")
+    #: The prices OpenRouter listed for the default model on 2026-09-24 — the ones the three
+    #: rows in the real ledger were priced at. Real rather than made up because the ceiling is
+    #: now what that run actually cost, so a test priced at a round invented number would be
+    #: arithmetic about a different ceiling than the one in the file.
+    PRICED = Prices(1.4e-07, 4.2e-07, 131072, "2026-09-24", "a test")
 
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -288,7 +336,7 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
             provider.call(self.body(over))
         self.assertEqual(client.made, [], "the call went out anyway")
         self.assertIn("refusing to spend", str(refused.exception))
-        self.assertIn(f"${CEILING_USD:.2f}", str(refused.exception))
+        self.assertIn(f"${CEILING_USD:.8f}", str(refused.exception))
         self.assertFalse(self.ledger.exists(), "a call nobody made is not a charge")
 
     def test_the_ledger_records_the_estimate_the_cost_and_the_running_total(self) -> None:
@@ -326,6 +374,60 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         self.assertEqual(row["charged_usd"], row["estimated_usd"])
         self.assertIn("boom", row["failed"])
 
+    def test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back(self) -> None:
+        # CLAUDE.md #7, and the hole the `ponytail:` used to name: the ledger lives in `$HOME`
+        # and a program can delete it, so if the ceiling were large the reset would hand the
+        # next run the whole remaining grant. It is not large any more — it is exactly what the
+        # recorded run cost — and the three rows of that run were *estimated* at $0.0045,
+        # $0.0048 and $0.0052 apiece, each above it on its own.
+        #
+        # So this prices the **recorded request body**, at the **recorded prices**, against an
+        # **empty** ledger, and watches it refuse. Nothing about the reset needs closing: the
+        # enforcement point is the constant, and no file stands between it and a call.
+        #
+        # Watched failing first at `CEILING_USD = 0.25`, where the same call is let out.
+        recorded = json.loads(TRANSCRIPT.read_text(encoding="utf-8"))
+        first = recorded["exchanges"][0]["request"]
+        client = self.stub(self.answered())
+        provider = Live(client, self.ledger, priced=self.PRICED)
+        self.assertEqual(provider._spent, 0.0, "the ledger is empty, which is the premise")
+        with self.assertRaises(BudgetExhausted):
+            provider.call(first)
+        self.assertEqual(client.made, [], "the call went out anyway")
+
+    def test_the_prompt_the_request_carries_is_priced_too(self) -> None:
+        # `_worst_case` is two terms, and the one a mutant drops is the prompt's: without it a
+        # request of any size costs what its `max_tokens` costs, and a turn whose messages grow
+        # with every applied call is priced as though they had not (ADR 0022 §4).
+        #
+        # Watched failing first with the `sent / BYTES_PER_TOKEN * priced.prompt` term removed:
+        # both numbers came out equal.
+        small = self.body()
+        large = dict(small, messages=[{"role": "user", "content": "x" * 100_000}])
+        cheap = provider_module._worst_case(small, self.PRICED)
+        dear = provider_module._worst_case(large, self.PRICED)
+        self.assertGreater(dear, cheap, "the request's own bytes are not priced")
+        grew = len(json.dumps(large, default=str)) - len(json.dumps(small, default=str))
+        self.assertAlmostEqual(
+            dear - cheap,
+            grew / provider_module.BYTES_PER_TOKEN * self.PRICED.prompt,
+            places=10,
+        )
+
+    def test_an_sdk_failure_is_not_retried_a_second_time(self) -> None:
+        # The module docstring's "neither wraps the other": what the SDK classifies it has
+        # already retried `PROVIDER_RETRIES` times, because `live` sets that, so `ask` retrying
+        # it again would be a budget of retries multiplied by a budget of retries (ADR 0022 §3).
+        #
+        # Watched failing first by moving the `openai.OpenAIError` arm under the retrying one:
+        # four calls, and the message read "after 3 retries".
+        client = self.stub(provider_module.openai.OpenAIError("the SDK gave up"))
+        provider = Live(client, self.ledger, priced=self.PRICED)
+        with self.assertRaises(provider_module.ProviderFailure) as failed:
+            asyncio.run(provider_module.ask(provider, self.body()))
+        self.assertEqual(len(client.made), 1, "the SDK's failure was retried again")
+        self.assertNotIn("after 3 retries", str(failed.exception))
+
     def test_a_recording_is_a_transcript_and_carries_no_headers(self) -> None:
         # M3 trap 10, as an assertion rather than as a property of how the recorder happens to
         # be written: what is saved is the body that was handed to the SDK, and the SDK is
@@ -346,6 +448,53 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         # And it is a transcript: the thing that replays it is what reads it back.
         replayer = Scripted.read(recording)
         self.assertEqual(replayer.answer().model, self.answered().model)
+
+
+class TestTheCounterIsRead(unittest.TestCase):
+    """The other half of the reconciliation, and the reason it is a flag rather than a function.
+
+    `account_usage` and `generation_cost` had **no caller** until 2026-09-24 — not in Python,
+    not in Rust, not in a script — while `docs/specs.md` §6.1 and ADR 0022 §4 both said the
+    ledger *is* reconciled against the provider's own counter. It was, once, by hand. These two
+    flags are what a code path reconciles with, and `tests/determinism.rs` is the code path
+    (`a_live_model_drives_the_loop`).
+
+    Both endpoints are free; `_counter` is stubbed here so this runs with no key and no network.
+    """
+
+    def read(self, *arguments: str) -> tuple[int, str]:
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            code = main(list(arguments))
+        return code, said.getvalue()
+
+    def test_the_account_counter_is_printed_and_nothing_is_served(self) -> None:
+        # Watched failing first: without the flag `argparse` exits 2 and prints usage.
+        with mock.patch.object(provider_module, "_counter", return_value={"usage": 0.00376174}):
+            code, said = self.read("--account-usage")
+        self.assertEqual(code, 0)
+        self.assertEqual(float(said.strip()), 0.00376174)
+
+    def test_one_generations_cost_is_printed(self) -> None:
+        seen: list[str] = []
+
+        def counter(path: str) -> dict:
+            seen.append(path)
+            return {"total_cost": 0.0019545}
+
+        with mock.patch.object(provider_module, "_counter", counter):
+            code, said = self.read("--generation-cost", "gen-1790253793-LtEy4JVKFobyalAF30LH")
+        self.assertEqual(code, 0)
+        self.assertEqual(float(said.strip()), 0.0019545)
+        self.assertEqual(seen, ["/generation?id=gen-1790253793-LtEy4JVKFobyalAF30LH"])
+
+    def test_a_counter_that_will_not_answer_is_an_exit_code_and_nothing_on_stdout(self) -> None:
+        # `core` reads stdout with `parse::<f64>`, so a failure that printed a sentence there
+        # would arrive as a number that would not parse rather than as a status.
+        with mock.patch.object(provider_module, "_counter", side_effect=RuntimeError("no key")):
+            code, said = self.read("--account-usage")
+        self.assertEqual(code, 2)
+        self.assertEqual(said, "")
 
 
 class TestTheKey(unittest.TestCase):
@@ -406,6 +555,10 @@ class TestTheKey(unittest.TestCase):
             str(provider.client.base_url).rstrip("/"), "https://openrouter.ai/api/v1"
         )
         self.assertEqual(provider.ledger, provider_module.SPEND)
+        # **Ours, not the SDK's default of 2** (ADR 0022 §3): the count of what the SDK retries
+        # is a number this repository chose, and leaving it off would restore that default
+        # silently. Watched failing first by deleting `max_retries=` from `live`.
+        self.assertEqual(provider.client.max_retries, provider_module.PROVIDER_RETRIES)
 
     def test_without_the_variable_there_is_no_client_at_all(self) -> None:
         with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "the-wrong-one"}):

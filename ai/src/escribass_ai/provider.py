@@ -54,7 +54,17 @@ because it is the only object in this repository that can spend money.
 3. **Reconciliation against the provider's own counter**: [`account_usage`] reads what
    OpenRouter says this key has spent and [`generation_cost`] what it says one generation cost.
    A ledger that only ever agrees with itself is a check that cannot fail (`docs/plan.md`,
-   M3 trap 1), so the numbers either side of a run are compared with it by hand and reported.
+   M3 trap 1), so both are read **by the live run itself** — `escribass-ai --account-usage` and
+   `--generation-cost <id>`, two free GETs and no provider object at all — either side of the
+   turn, printed, and asserted against the rows the run appended
+   (`tests/determinism.rs`, `a_live_model_drives_the_loop`). Until 2026-09-24 that comparison
+   was made by hand once and by no code path ever, which is the same defect in the check as in
+   the thing checked.
+
+   **The account figure lags.** Seconds after the recorded run it had not moved; minutes later
+   it had, by exactly the ledger's total. So the live run *waits* for it, bounded, printing
+   each read, and fails if it has not settled inside the bound rather than passing on a figure
+   that has not arrived — a reconciliation that gives up quietly is worse than none.
 
 `ponytail:` one ceiling, one ledger, one reconciliation — no budget framework, no cost model,
 no price cache. The ceiling is a committed constant rather than an environment variable on
@@ -117,9 +127,24 @@ MODELS = "https://openrouter.ai/api/v1/models"
 #:
 #: A committed constant and not an environment variable: a ceiling an operator can raise from
 #: the shell is not a ceiling, and a change to this number should be a diff somebody reads.
-#: $0.25 is the grant of 2026-09-24, under which `ai/tests/transcripts/live-turn.json` was
-#: recorded (ADR 0022 §4). Raising it is the user's decision and nobody else's (CLAUDE.md #7).
-CEILING_USD = 0.25
+#:
+#: **It is what the grant of 2026-09-24 actually bought, to the cent it bought it at.** That
+#: grant was one recording session, it produced `tests/determinism/proposal/transcript.json`,
+#: and it cost $0.00376174 — so the number here is $0.00376174 and the grant is spent. CLAUDE.md
+#: #7 says a previous authorisation does not carry to the next task; a residual $0.246 sitting
+#: behind a $0.25 constant *is* that authorisation carrying, machine-wide and all-time, and the
+#: next live run would have spent it without anybody being asked. Raising this line is how a
+#: person grants the next one, in code, where a reviewer sees it (the user's decision,
+#: 2026-09-24).
+#:
+#: **Deleting the ledger, or moving `HOME`, does not buy a call back**, and that is measured
+#: rather than hoped: the three recorded rows were *estimated* at $0.00453901, $0.00480732 and
+#: $0.00516824, each on its own above this ceiling, so the first call of a turn is refused
+#: against an empty ledger exactly as it is against a full one. The ledger is a record, not the
+#: enforcement point — the enforcement point is this constant, and no file a program can delete
+#: is between it and a call (`test_provider.py`, the empty-ledger test, which prices the
+#: recorded request body against the recorded prices and watches it refuse).
+CEILING_USD = 0.00376174
 
 #: Where the ledger is written: outside the repository, because it is a record of real money
 #: and not a fixture, and in one fixed place, because the ceiling is only a ceiling if every
@@ -308,7 +333,7 @@ class Live:
             raise BudgetExhausted(
                 f"refusing to spend: ${self._spent:.6f} is already on the ledger and this "
                 f"call could cost ${worst:.6f}, which crosses the ceiling of "
-                f"${CEILING_USD:.2f} (priced at ${priced.prompt}/${priced.completion} per "
+                f"${CEILING_USD:.8f} (priced at ${priced.prompt}/${priced.completion} per "
                 f"token from {priced.source}, {priced.on}; ledger {self.ledger})"
             )
         try:
@@ -382,7 +407,7 @@ class Live:
                 f"request bodies this loop built and the responses the provider gave, with no "
                 f"headers, so no key can ever be in here (ADR 0022 §4; docs/plan.md, M3 trap "
                 f"10). {len(self._exchanges)} exchange(s); ${self._spent:.8f} on the ledger "
-                f"after them, against a ceiling of ${CEILING_USD:.2f}."
+                f"after them, against a ceiling of ${CEILING_USD:.8f}."
             ),
             "exchanges": self._exchanges,
         }

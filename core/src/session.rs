@@ -976,10 +976,11 @@ impl Session {
     /// document the calls produced with the fork's per-call version bumps put back
     /// ([`Proposal::ops`]). It goes through [`Session::run`] like every other mutating tool,
     /// so there is no second commit path and the version rule is applied by the same code to
-    /// the same shape. And the document having **moved** underneath is refused there, by
-    /// ADR 0005 §3's guard, exactly as it refuses a held drag (ADR 0012 §4) — after which the
-    /// proposal is still pending, because a refusal is something a person acts on rather than
-    /// a reason to throw their turn away.
+    /// the same shape. And the document having **moved** underneath is refused — by
+    /// [`Proposal::moved_under`] first, which compares the paths the patch touches against the
+    /// document the patch was computed from, and by ADR 0005 §3's guard inside `run` after it
+    /// — after which the proposal is still pending, because a refusal is something a person
+    /// acts on rather than a reason to throw their turn away.
     pub fn apply_proposal(&mut self, model_id: &str) -> Result<ToolResult, ProjectError> {
         let Some(proposal) = self.proposal.take() else {
             return Ok(refused(vec![Violation {
@@ -988,6 +989,26 @@ impl Session {
                 message: "there is no proposal to apply".to_string(),
             }]));
         };
+        // **Before anything is prepared** (ADR 0019 §2, amended 2026-09-24). The version rule
+        // cannot see an edit that moved an entity by exactly one, and a proposal sits pending
+        // for as long as a person takes to read it — minutes, where a drag is milliseconds —
+        // so that is the likeliest concurrent edit there is, not the rarest.
+        let moved = proposal.moved_under(self.project.song());
+        if !moved.is_empty() {
+            let why = moved
+                .into_iter()
+                .map(|path| Violation {
+                    path,
+                    rule: "document_moved",
+                    message: "this changed after the proposal was composed, and applying the \
+                              proposal would write over it. Reject and ask again — the next \
+                              prompt reads the document as it is now (ADR 0019 §2)"
+                        .to_string(),
+                })
+                .collect();
+            self.proposal = Some(proposal);
+            return Ok(refused(why));
+        }
         // The patch as it was computed against the document the fork was taken from, carrying
         // version claims of `before + 1`. `run` prepares it again against the document as it
         // stands *now*, and that second prepare is where a person's concurrent edit is refused.
@@ -1008,7 +1029,7 @@ impl Session {
             tool_call_id: None,
             created_at: Some(self.clock.now()),
         };
-        let previously = std::mem::replace(&mut self.made, Made::Proposal(entry));
+        let made = Made::Proposal(entry);
         // **The session moves past every id the proposal minted, and this is where.**
         // `from_tool` does the same for a single call and for the same two reasons: the entry
         // `record` mints comes *after* the ids the call used, and the session never mints one
@@ -1023,8 +1044,7 @@ impl Session {
         // — which is what the test for the guard's blind spot caught when this was a swap.
         let onwards = ahead(self.ids.fork(), proposal.fork.ids.fork());
         let spent = std::mem::replace(&mut self.ids, onwards);
-        let result = self.run("proposal", &ops, false);
-        self.made = previously;
+        let result = self.making(made, |session| session.run("proposal", &ops, false));
         // Kept on anything but a clean commit, including a refusal: Reject is a person's
         // decision and this is not it (ADR 0019 §3). The ids go back with it, because a
         // proposal that did not apply has minted nothing that exists.
@@ -1075,20 +1095,16 @@ impl Session {
                 }]));
             }
         };
-        let previously = std::mem::replace(
-            &mut self.made,
-            Made::Edit(Provenance {
-                author: Author::Human as i32,
-                model_id: None,
-                prompt_id: Some(proposal.prompt_id.clone()),
-                tool_call_id: None,
-                created_at: Some(self.clock.now()),
-            }),
-        );
+        let made = Made::Edit(Provenance {
+            author: Author::Human as i32,
+            model_id: None,
+            prompt_id: Some(proposal.prompt_id.clone()),
+            tool_call_id: None,
+            created_at: Some(self.clock.now()),
+        });
         let onwards = ahead(self.ids.fork(), proposal.fork.ids.fork());
         let spent = std::mem::replace(&mut self.ids, onwards);
-        let result = self.run("apply_patch", &ops, false);
-        self.made = previously;
+        let result = self.making(made, |session| session.run("apply_patch", &ops, false));
         // An entry is what says the edit happened. A refusal keeps the proposal for the reason
         // above; so does "no change", where a person's patch applied to nothing at all and the
         // proposal they were editing is still the thing in front of them.
@@ -1238,6 +1254,30 @@ impl Session {
     /// It used to be the one place the undo cursor was cleared as well. There is no cursor to
     /// clear: an entry that is not an undo or a redo discards what had been undone by being in
     /// the log, which `undo_stack` reads (ADR 0005 §4, amended 2026-09-15).
+    /// Runs `doing` with `made` in place, and puts the previous one back **whatever happens**.
+    ///
+    /// A `mem::replace` … restore pair is only a pair while nothing unwinds between the two
+    /// halves, and something can: a panic anywhere inside the commit pipeline left `made` at
+    /// `Made::Proposal(…)` for the rest of the session's life. The Tauri host recovers a
+    /// poisoned mutex rather than propagating it (`app/src-tauri/src/main.rs`) — which is the
+    /// right call for one bad call, and is what turned this into a live hole: **every later
+    /// human commit was then recorded as the model's**, which is exactly the forgery ADR 0021
+    /// §1 closed. Found by the M3 review, 2026-09-24.
+    ///
+    /// `ponytail:` `catch_unwind` rather than a drop guard, because a guard that restored a
+    /// field of `Session` would have to hold `&mut Session` and nothing could then use it. The
+    /// panic is re-raised unchanged — this decides nothing about the failure, only that the
+    /// session does not keep the model's identity afterwards.
+    fn making<T>(&mut self, made: Made, doing: impl FnOnce(&mut Self) -> T) -> T {
+        let previously = std::mem::replace(&mut self.made, made);
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| doing(self)));
+        self.made = previously;
+        match outcome {
+            Ok(answered) => answered,
+            Err(panicked) => std::panic::resume_unwind(panicked),
+        }
+    }
+
     fn append(
         &mut self,
         prepared: Prepared,
@@ -1409,6 +1449,39 @@ impl Proposal {
         let mut proposed = serde_json::to_value(self.song()).expect("a Song serialises");
         restore_versions(&before, &mut proposed);
         diff(&before, &proposed)
+    }
+
+    /// Every path this proposal's operations touch whose value in the project **is no longer
+    /// what it was** when the fork was taken (ADR 0019 §2, amended 2026-09-24).
+    ///
+    /// ADR 0005 §3's version guard has a blind spot and this is where it is closed. A
+    /// proposal's patch claims `before + 1`; after exactly one intervening entry the entity
+    /// *holds* `before + 1`, and a claim equal to the number core computes reads as disputing
+    /// nothing — so one edit to an entity the proposal touched merged over that edit in
+    /// silence. `core/tests/proposal.rs` proved it, and ADR 0019's Consequences wrote it down,
+    /// while §5 went on saying any such edit was refused.
+    ///
+    /// **This does not change the version rule**, which is ADR 0005's to change and is a held
+    /// drag's as much as a proposal's. It adds the thing a proposal has and a drag does not:
+    /// [`Proposal::base`], the document the patch was computed against. Comparing the ops'
+    /// own paths in that document with the same paths now answers the question the version
+    /// number was standing in for — *did what I am about to overwrite move?* — exactly, at
+    /// the granularity the patch writes at, and it names what moved rather than a number.
+    ///
+    /// An edit **elsewhere** is still not a dispute and still merges: a path no operation
+    /// touches is not compared. A path neither document has — the id of a track the proposal
+    /// is adding — compares equal, which is the right answer and not a special case.
+    fn moved_under(&self, now: &Song) -> Vec<String> {
+        let was = serde_json::to_value(self.base.song()).expect("a Song serialises");
+        let now = serde_json::to_value(now).expect("a Song serialises");
+        let mut moved: Vec<String> = Vec::new();
+        for op in self.ops() {
+            let path = op.path();
+            if was.pointer(path) != now.pointer(path) && !moved.iter().any(|seen| seen == path) {
+                moved.push(path.to_string());
+            }
+        }
+        moved
     }
 
     /// **The patch a person approves** (ADR 0019 §2): those operations as one `prepare` records

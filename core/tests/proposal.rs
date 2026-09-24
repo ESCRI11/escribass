@@ -403,16 +403,11 @@ fn a_track_the_model_edited_three_times_is_one_version_on() {
 
 #[test]
 fn a_document_that_moved_under_the_proposal_is_refused() {
-    // ADR 0019 §2's last paragraph: the patch carries version claims from the document as it
-    // stood, so a person's edit to an entity the proposal touched is met by ADR 0005 §3's
-    // guard, exactly as a held drag is (ADR 0012 §4).
-    //
-    // **Two edits, not one, and that is a real limit of the guard rather than a quirk of this
-    // test.** A claim of `before + 1` against a document that moved by exactly one is a claim
-    // that now equals the number the entity holds, and ADR 0005 §3 reads "the version core
-    // already has" as "not disputing anything" — by design, because that is what a typed
-    // tool's own ops look like. So one intervening edit merges in silence and two are refused.
-    // ADR 0019's Consequences say so, dated, rather than leaving the sentence over-claiming.
+    // ADR 0019 §2's promise, and from 2026-09-24 it is kept by the thing that can keep it:
+    // `Proposal::base` is the document the patch was computed against, so a path the patch
+    // writes to whose value has since moved is refused by comparison, not by inference from a
+    // version number. Two edits here rather than one only because this test predates the
+    // amendment; one is refused too, by the test below.
     let (_dir, mut session) = opened();
     session.propose("prompt-hash").expect("a proposal opens");
     proposed(&mut session, "transpose", json!({"clip_id": CLIP, "semitones": 1}), "c1");
@@ -431,7 +426,7 @@ fn a_document_that_moved_under_the_proposal_is_refused() {
     let refused = session.apply_proposal("deepseek/deepseek-v4.1-flash").expect("it answers");
     assert!(!refused.valid, "{refused:?}");
     let rules: Vec<&str> = refused.errors.iter().map(|e| e.rule.as_str()).collect();
-    assert!(rules.contains(&"version_not_writable"), "{rules:?}");
+    assert!(rules.contains(&"document_moved"), "{rules:?}");
     // Named, so a person can be told *what* moved rather than a number (ADR 0019 §2).
     assert!(
         refused.errors.iter().any(|e| e.path.contains(CLIP)),
@@ -442,20 +437,23 @@ fn a_document_that_moved_under_the_proposal_is_refused() {
 }
 
 #[test]
-fn exactly_one_intervening_edit_is_the_guards_blind_spot() {
-    // Measured, not reasoned, and written down because ADR 0019 §2 reads as though **any**
-    // concurrent edit to a touched entity is refused, and it is not.
+fn exactly_one_intervening_edit_is_refused_and_the_refusal_names_what_moved() {
+    // **This test used to be called `exactly_one_intervening_edit_is_the_guards_blind_spot`,
+    // and it asserted the opposite.** It was right about the mechanism and it was written down
+    // honestly: ADR 0005 §3 reads a claim equal to the number core computes as disputing
+    // nothing, a proposal's patch claims `before + 1`, and after exactly one intervening entry
+    // the entity *holds* `before + 1` — so the proposal merged over a person's edit in
+    // silence, and the person's five semitones were gone with nothing said.
     //
-    // ADR 0005 §3's rule is "a patch that states the version core computes is disputing
-    // nothing", where "computes" means either the number the entity holds or that number plus
-    // one — the first because a typed tool's own ops restate it, the second because an approved
-    // patch carries it. A proposal's patch claims `before + 1`. After exactly one intervening
-    // entry the entity **holds** `before + 1`, so the stale claim reads as the first case and
-    // the proposal merges over the person's edit in silence. Two entries and it is refused.
+    // What changed on 2026-09-24 is not the version rule, which is still ADR 0005's and is
+    // still a held drag's. It is that a proposal knows something a drag does not: the document
+    // its patch was computed against. `Proposal::moved_under` compares the paths the patch
+    // writes with what those paths hold now, which answers the question the version number was
+    // standing in for. A proposal sits pending for as long as a person takes to read it, so
+    // this was the likeliest concurrent edit there is (M3 review, 2026-09-24).
     //
-    // This is ADR 0012 §4's optimistic apply as it has always been, and it is a held drag's
-    // property too. It is not widened here: changing the version rule is ADR 0005's, and this
-    // test is what stops the limit being rediscovered as a bug report.
+    // Watched failing first: before `moved_under` this ran green with the apply *valid* and
+    // the person's pitch of 43 overwritten by the model's 39.
     let (_dir, mut session) = opened();
     let before = session.project().song().clips[CLIP].version;
     session.propose("prompt-hash").expect("a proposal opens");
@@ -471,15 +469,29 @@ fn exactly_one_intervening_edit_is_the_guards_blind_spot() {
         .expect("a person's own edit applies");
     assert_eq!(session.project().song().clips[CLIP].version, before + 1);
 
-    let applied = session.apply_proposal("deepseek/deepseek-v4.1-flash").expect("it answers");
-    assert!(applied.valid, "one intervening edit was refused after all: {applied:?}");
-    // And the person's five semitones are gone: the proposal's one semitone won.
+    let refused = session.apply_proposal("deepseek/deepseek-v4.1-flash").expect("it answers");
+    assert!(!refused.valid, "one intervening edit merged in silence: {refused:?}");
+    assert!(
+        refused.errors.iter().all(|e| e.rule == "document_moved"),
+        "{refused:?}"
+    );
+    // **What moved**, and at the granularity the patch writes at: the notes the person
+    // transposed, each named by its own path, so the panel can say which and not "a number".
+    assert!(
+        refused.errors.iter().all(|e| e.path.contains(CLIP)),
+        "the refusal does not name what moved: {refused:?}"
+    );
+    // And the person's five semitones are still there: nothing was written over.
     let content = session.project().song().clips[CLIP].content.clone();
     let Some(escribass_schema::song::clip::Content::NoteClip(notes)) = content else {
         panic!("the fixture's clip is a note clip");
     };
     let pitches: Vec<i32> = notes.notes.values().map(|note| note.pitch).collect();
-    assert!(pitches.contains(&39), "the proposal did not overwrite: {pitches:?}");
+    assert!(pitches.contains(&43), "the person's own edit was overwritten: {pitches:?}");
+    assert!(!pitches.contains(&39), "the proposal's pitch landed: {pitches:?}");
+    // Still pending, as every refusal leaves it: Reject and ask again is the way out
+    // (ADR 0019 §2).
+    assert!(session.proposal().is_some());
 }
 
 #[test]
@@ -867,4 +879,108 @@ fn there_is_nothing_to_apply_or_edit_without_a_proposal() {
     let edited = session.edit_proposal(b"[]").expect("an answer");
     assert_eq!(edited.errors[0].rule, "no_proposal");
     assert!(!session.reject());
+}
+
+// ---------------------------------------------------------------------------
+// A panic in the commit pipeline (M3 review, 2026-09-24)
+// ---------------------------------------------------------------------------
+
+/// An id source that panics once `remaining` mints have been served, sharing that budget with
+/// every fork of itself.
+///
+/// The smallest injectable way to make the commit pipeline unwind: `IdSource` is a constructor
+/// parameter precisely so a test can decide what it mints (ADR 0001 §5), and the budget is
+/// shared because [`Session::apply_proposal`] mints from a *fork* it chooses, not from the
+/// source the session was built with.
+struct PanicsWhenSpent {
+    inner: Box<dyn escribass_core::IdSource + Send>,
+    remaining: std::sync::Arc<AtomicUsize>,
+    served: std::sync::Arc<AtomicUsize>,
+}
+
+impl escribass_core::IdSource for PanicsWhenSpent {
+    fn next_id(&mut self) -> String {
+        if self.remaining.load(Ordering::Relaxed) == 0 {
+            panic!("the id source gave up");
+        }
+        self.remaining.fetch_sub(1, Ordering::Relaxed);
+        self.served.fetch_add(1, Ordering::Relaxed);
+        self.inner.next_id()
+    }
+
+    fn fork(&self) -> Box<dyn escribass_core::IdSource + Send> {
+        Box::new(PanicsWhenSpent {
+            inner: self.inner.fork(),
+            remaining: std::sync::Arc::clone(&self.remaining),
+            served: std::sync::Arc::clone(&self.served),
+        })
+    }
+}
+
+#[test]
+fn a_panic_while_applying_does_not_leave_the_session_recording_as_the_model() {
+    // **The forgery hole ADR 0021 §1 closed, reopened by a `mem::replace` nothing unwound**
+    // (M3 review, 2026-09-24). `apply_proposal` swapped `Session::made` to the model's
+    // provenance, committed, and swapped it back — and a panic between the two halves left it
+    // swapped for the rest of the session's life. The Tauri host *recovers* a poisoned mutex
+    // rather than propagating it, which is right for one bad call and is what made this live:
+    // every later commit a person made was then recorded as the model's.
+    //
+    // Watched failing first: with the restore written as a plain assignment after `run`, the
+    // person's transpose below came back `AUTHOR_MODEL` with `deepseek/deepseek-v4.1-flash`
+    // on it.
+    let dir = Scratch::new();
+    let mut ids = SeededIds::default();
+    let clock = FixedClock(AT);
+    let project =
+        Project::create(&dir.0, &fixture_song(), &mut ids, &clock, Author::Human, manifest())
+            .expect("the project is created");
+    let remaining = std::sync::Arc::new(AtomicUsize::new(usize::MAX));
+    let served = std::sync::Arc::new(AtomicUsize::new(0));
+    let mut session = Session::new(
+        project,
+        Box::new(PanicsWhenSpent {
+            inner: Box::new(ids),
+            remaining: std::sync::Arc::clone(&remaining),
+            served: std::sync::Arc::clone(&served),
+        }),
+        Box::new(clock),
+        Author::Human,
+    );
+
+    session.propose("prompt-hash").expect("a proposal opens");
+    proposed(&mut session, "add_track", add_lead(), "c1");
+
+    // Two mints are `ahead`'s, one from a fork of each source; the third is the entry id
+    // `Project::record` takes, which is inside the commit — so the budget runs out exactly
+    // there. `served` is asserted below so that a change in `ahead` fails this loudly rather
+    // than moving the panic somewhere the hole is not.
+    served.store(0, Ordering::Relaxed);
+    remaining.store(2, Ordering::Relaxed);
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        session.apply_proposal("deepseek/deepseek-v4.1-flash")
+    }));
+    assert!(panicked.is_err(), "the id source did not panic");
+    assert_eq!(served.load(Ordering::Relaxed), 2, "the panic was not inside the commit");
+    remaining.store(usize::MAX, Ordering::Relaxed);
+
+    // The session is used again, as the host uses it after recovering the poisoned mutex.
+    let applied = session
+        .transpose(&TransposeRequest {
+            clip_id: CLIP.to_string(),
+            semitones: 1,
+            note_ids: vec![],
+            dry_run: false,
+        })
+        .expect("a person's own edit applies");
+    let entry = session
+        .project()
+        .history()
+        .get(&applied.entry_id)
+        .expect("the entry")
+        .clone();
+    let made = entry.provenance.expect("an entry carries provenance");
+    assert_eq!(made.author, Author::Human as i32, "a person's commit was recorded as the model's");
+    assert_eq!(made.model_id, None, "a person's commit names a model");
+    assert_eq!(made.prompt_id, None, "a person's commit names a prompt");
 }

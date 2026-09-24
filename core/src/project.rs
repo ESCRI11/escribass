@@ -200,26 +200,44 @@ impl Prepared {
 /// The `.escri` directory lock, held for as long as a process has the project open
 /// (ADR 0012 §3).
 ///
-/// One `O_EXCL` create and no dependency. `ponytail:` advisory, and it assumes a local
-/// filesystem — a network filesystem where `O_EXCL` is not atomic gets no protection from
-/// this. Nothing in v1 is expected to run a project over NFS, and a real lock protocol is
-/// worth writing when something is (ADR 0012 §3).
+/// **The lock is the kernel's, not the file's** (`std::fs::File::try_lock`, stable since Rust
+/// 1.89 and therefore free of a dependency). A process opens `.escri/lock`, takes an advisory
+/// lock on the open file, and holds the descriptor for as long as it has the project open; the
+/// kernel releases the lock when that descriptor closes, which happens when the process ends —
+/// cleanly, by `SIGKILL`, or by a crash. So there is nothing to adjudicate and nothing to
+/// break: a second opener asks the kernel, and the answer is a fact about a running process
+/// rather than an inference from a number in a file.
+///
+/// **Amended 2026-09-24 (ADR 0020 §5), replacing the pid protocol.** What stood here until
+/// then read the holder's pid out of the file, asked `/proc` whether it was alive, and — if it
+/// was not — unlinked the file and created a fresh one. That had two defects the kernel does
+/// not have. A pid a dead holder wore and an unrelated program now wears read as *alive*, so
+/// the lock stood for ever. And two openers of one crashed project could **both** end up
+/// holding it: A read the stale pid, unlinked and created; B, which had read the same stale pid
+/// before A's unlink, then unlinked **A's fresh lock** and created its own. The claim that a
+/// same-instant replacement "finds the file there and refuses" was true only in the ordering
+/// where B's unlink came first. Nothing unlinks now, so there is no window.
+///
+/// **The pid in the file is a label, never a decision.** It is written so a refusal can name
+/// who to close, and it is what tells a person that the last holder *crashed*: a clean close
+/// empties the file, so a non-empty one under a lock this process has just taken is a holder
+/// that never got to `Drop` — which is ADR 0020 §5's report, kept.
 ///
 /// Not a field of [`Project`], which is `Clone` and which `record` rebuilds and reassigns on
-/// every commit — a guard living there would delete the lock file the replacement is still
-/// holding. The lock belongs to whoever opened the project and outlives every `Project` value
-/// built from it, which is the host, or one of the two server binaries.
+/// every commit — a guard living there would release the lock the replacement is still holding.
+/// The lock belongs to whoever opened the project and outlives every `Project` value built from
+/// it, which is the host, or one of the two server binaries.
 ///
-/// **Nothing is broken while its holder may be alive**, which is narrower than the "never
-/// broken automatically" this started as. The file records its holder's pid, and a pid that
-/// names no process is something a program *can* adjudicate: a lock a dead holder left is
-/// stale, and `take` replaces it and says so (ADR 0020 §5, amending ADR 0012 §3). A live pid
-/// refuses exactly as before, which is git's `index.lock` bargain where it still applies —
-/// against two interleaved commits and a patch log that no longer matches the `song.json`
-/// beside it.
+/// `ponytail:` advisory, and it assumes a local filesystem — `flock` over NFS is the kernel's
+/// emulation and a network filesystem is not something v1 is expected to run a project over. A
+/// real lock protocol is worth writing when something is (ADR 0012 §3). The file is **never
+/// removed**, which is how `cargo`'s own lock files behave and for this reason: unlinking a
+/// file another process may already have open is the window this amendment closed.
 #[derive(Debug)]
 pub struct ProjectLock {
-    path: PathBuf,
+    /// The open descriptor the advisory lock lives on. Dropping it is releasing the lock, so
+    /// this field is the whole of what the value guards; it is never read.
+    held: std::fs::File,
     replaced: Option<String>,
 }
 
@@ -231,74 +249,75 @@ impl ProjectLock {
     /// would leave one behind for every mistyped path. Two simultaneous creates are still a
     /// race, and a much smaller one — `create` refuses outright if a project is already there.
     ///
-    /// A lock left by a process that no longer exists is **replaced**, and [`replaced`] then
-    /// carries the sentence that says so. That is the whole of ADR 0020 §5, and what it is
-    /// worth is measured: 50 headless MCP sessions of 50 ended by a signal, and a signal does
-    /// not run a Rust `Drop` — so every one of them left a project no next process would open.
+    /// A lock whose last holder did not close cleanly is taken without ceremony — the kernel
+    /// released it when that process ended — and [`replaced`] then carries the sentence that
+    /// says so, naming the pid the file still held. That is the whole of ADR 0020 §5, and what
+    /// it is worth is measured: 50 headless MCP sessions of 50 ended by a signal, and a signal
+    /// does not run a Rust `Drop` — so every one of them left a project no next process would
+    /// open.
     ///
     /// [`replaced`]: Self::replaced
     pub fn take(root: impl AsRef<Path>) -> Result<Self, ProjectError> {
         let path = root.as_ref().join(HELD);
-        if let Some(lock) = Self::create(&path)? {
-            return Ok(lock);
-        }
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            // Never truncated on open: what the file holds is read *after* the lock is taken,
+            // and it is the only evidence that the last holder crashed.
+            .truncate(false)
+            .open(&path)
+            .map_err(|e| err(&path, "unwritable", e.to_string()))?;
 
-        let held = std::fs::read_to_string(&path).unwrap_or_default();
-        let owner = held.trim().to_string();
-        // Refused unless the recorded pid names no process: a live holder as before, and a
-        // lock with **no** pid as before too — one written by hand, or one whose holder took
-        // the file and failed the best-effort write below. There is nothing to ask about, so
-        // nothing is assumed (ADR 0020 §5).
-        let Some(gone) = owner.parse::<u32>().ok().filter(|pid| !running(*pid)) else {
-            let named = if owner.is_empty() { "an unnamed process" } else { &owner };
-            return Err(err(
-                &path,
-                "project_locked",
-                format!(
-                    "process {named} has this project open. Close it — a lock is replaced only \
-                     once the process that recorded it no longer exists, and nothing is broken \
-                     while its holder may be alive (ADR 0012 §3, amended by ADR 0020 §5)"
-                ),
-            ));
-        };
-
-        // Removed and re-created rather than written over, so taking a stale lock is still one
-        // `O_EXCL`: if another process replaced it in the same instant, this `create` finds the
-        // file there and refuses — to a holder that is alive.
-        std::fs::remove_file(&path).map_err(|e| err(&path, "unwritable", e.to_string()))?;
-        match Self::create(&path)? {
-            Some(mut lock) => {
-                lock.replaced = Some(format!(
-                    "replaced a lock left by process {gone}, which is gone: it ended without \
-                     removing the lock, which a crash or a signal does (ADR 0020 §5)"
+        match held.try_lock() {
+            Ok(()) => {}
+            // Somebody has this open, right now. The pid is read only to name them, and a file
+            // that names nobody refuses just the same — the refusal is the kernel's.
+            Err(std::fs::TryLockError::WouldBlock) => {
+                let owner = std::fs::read_to_string(&path).unwrap_or_default().trim().to_string();
+                let named = if owner.is_empty() {
+                    "another process".to_string()
+                } else {
+                    format!("process {owner}")
+                };
+                return Err(err(
+                    &path,
+                    "project_locked",
+                    format!(
+                        "{named} has this project open. Close it — the lock is the kernel's, \
+                         held for as long as that process has the file open and released the \
+                         moment it ends, however it ends (ADR 0012 §3, amended by ADR 0020 §5)"
+                    ),
                 ));
-                Ok(lock)
             }
-            None => Err(err(
-                &path,
-                "project_locked",
-                format!("process {gone}'s lock was stale and another process took it first"),
-            )),
+            Err(std::fs::TryLockError::Error(e)) => {
+                return Err(err(&path, "unwritable", e.to_string()))
+            }
         }
+
+        // Read under the lock, so what it says is settled: a non-empty file is a holder that
+        // never reached its `Drop`, which is a crash or a signal (ADR 0020 §5).
+        let crashed = std::fs::read_to_string(&path).unwrap_or_default().trim().to_string();
+        let mut lock = Self { held, replaced: None };
+        lock.sign();
+        if !crashed.is_empty() {
+            lock.replaced = Some(format!(
+                "replaced a lock left by process {crashed}: it ended without releasing the \
+                 lock, which a crash or a signal does (ADR 0020 §5)"
+            ));
+        }
+        Ok(lock)
     }
 
-    /// One `O_EXCL`. `Ok(None)` is "the file is already there", which is the only outcome
-    /// [`take`](Self::take) has anything further to decide about.
-    fn create(path: &Path) -> Result<Option<Self>, ProjectError> {
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(path) {
-            Ok(mut file) => {
-                // Best effort: the pid is what a refusal names and what the next opener
-                // adjudicates. A lock that was taken but not annotated is still a lock, and it
-                // is refused for ever after, because there is no number to check.
-                let _ = std::io::Write::write_all(
-                    &mut file,
-                    format!("{}\n", std::process::id()).as_bytes(),
-                );
-                Ok(Some(Self { path: path.to_path_buf(), replaced: None }))
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
-            Err(e) => Err(err(path, "unwritable", e.to_string())),
-        }
+    /// Writes this process's pid over whatever the file held. Best effort: the lock is the
+    /// kernel's and this is only the label a refusal names, so a write that fails costs a
+    /// sentence and never correctness.
+    fn sign(&mut self) {
+        use std::io::{Seek, Write};
+        let _ = self.held.set_len(0);
+        let _ = self.held.rewind();
+        let _ = self.held.write_all(format!("{}\n", std::process::id()).as_bytes());
+        let _ = self.held.flush();
     }
 
     /// What this take had to replace, if anything: one sentence naming the process whose lock
@@ -308,35 +327,13 @@ impl ProjectLock {
     }
 }
 
-/// Whether a process by this number exists — `/proc`, which is the one platform M3 claims
-/// (ADR 0014 §2) and costs no dependency (ADR 0020 §5; `kill(pid, 0)` would cost `libc`).
-///
-/// **Pid reuse cannot produce two writers.** A number a dead holder wore that some unrelated
-/// program now wears reads as *alive*, so the lock stands and a person is told to close
-/// something that is not this project — a spurious refusal, which is the direction ADR 0012 §3
-/// already chose. The other direction is closed by what the file records: a process writes its
-/// **own** pid when it takes the lock, replacement included, so the pid a later opener
-/// adjudicates always belongs to the process that is actually holding it. A zombie reads as
-/// alive for the same reason and to the same effect.
-///
-/// `ponytail:` Linux only, and it asks for the directory rather than trusting a path's absence
-/// — on a platform with no `/proc` every holder would read as gone and a live process's lock
-/// would be replaced. macOS and Windows get their own answer with the installer (M5); until
-/// then a build for either refuses exactly as before.
-#[cfg(target_os = "linux")]
-fn running(pid: u32) -> bool {
-    Path::new("/proc").join(pid.to_string()).is_dir()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn running(_pid: u32) -> bool {
-    true
-}
-
 impl Drop for ProjectLock {
     fn drop(&mut self) {
-        // A close is clean or it is a crash; there is no third case to report to.
-        let _ = std::fs::remove_file(&self.path);
+        // **Emptied, not removed.** Closing the descriptor is what releases the lock; this is
+        // the *other* thing a clean close says — that the next opener has no crash to report.
+        // Unlinking would reopen the window ADR 0020 §5's amendment closed: a file another
+        // process may already have open is not ours to take away (see the type's note).
+        let _ = self.held.set_len(0);
     }
 }
 

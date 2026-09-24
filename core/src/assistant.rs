@@ -57,7 +57,8 @@ use escribass_proto::assistant::{
     assistant_command, assistant_event, AssistantCommand, CallResult, CompletedCall, Prompt,
     ToolCall, ToolSchema as WireSchema, Turn as AssistantTurn,
 };
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use tonic::codegen::tokio_stream::wrappers::UnboundedReceiverStream;
@@ -107,15 +108,12 @@ impl Assistant {
         // health dot quotes when the sidecar dies (ADR 0020 §5).
         let said = child.stderr.take().map(drain);
 
+        // Taken out of the `Child` and held behind a lock of its own, so closing it does not
+        // need the `Sidecar` — see [`Sidecar::halt`].
+        let stdin = Arc::new(Mutex::new(child.stdin.take()));
+
         match listening(&mut child, NAMING_ITS_SOCKET, "assistant") {
-            Ok(address) => Ok(Sidecar {
-                assistant: self.clone(),
-                child,
-                said,
-                address,
-                gone: None,
-                stdin_closed: false,
-            }),
+            Ok(address) => Ok(Sidecar { assistant: self.clone(), child, said, address, gone: None, stdin }),
             Err(why) => {
                 let gone = ended(&mut child, said, &why);
                 let rule =
@@ -156,7 +154,34 @@ pub struct Sidecar {
     /// What became of it, read once. Kept because the tail of its stderr can only be taken
     /// once and the window asks again every second.
     gone: Option<String>,
-    stdin_closed: bool,
+    /// Its stdin, **outside the `Child`** and behind a lock of its own. Closing it is how a
+    /// session ends (see the module note), and a handle to it is what [`Sidecar::halt`] is.
+    stdin: Arc<Mutex<Option<ChildStdin>>>,
+}
+
+/// A handle that closes the sidecar's stdin, held by somebody who is **not** holding the
+/// [`Sidecar`].
+///
+/// A turn borrows the sidecar for its whole length, and a turn is as long as a model takes. The
+/// window's exit path took the same lock in order to stop the sidecar, so closing the window
+/// mid-turn left the process — and its `.escri/lock` — alive until the model answered: with the
+/// SDK's 600 s read timeout, four attempts and `ask`'s own retries, potentially very long
+/// (M3 review, 2026-09-24). This is the way out, and it is the mechanism ADR 0020 already
+/// names rather than a new one: the host closes our stdin to stop us, `ai` stops serving at
+/// once, and the turn ends as the transport failure it now is.
+///
+/// `ponytail:` one handle, one method, and no cancellation token anywhere — the *stream* is
+/// still what a turn is cancelled by (ADR 0013 §2); this is what closes it when the thing
+/// holding the stream cannot be reached.
+#[derive(Debug, Clone)]
+pub struct Halt(Arc<Mutex<Option<ChildStdin>>>);
+
+impl Halt {
+    /// Closes the sidecar's stdin. Idempotent, and safe to call while a turn is running —
+    /// which is the whole reason it exists.
+    pub fn halt(&self) {
+        drop(self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take());
+    }
 }
 
 impl Sidecar {
@@ -224,12 +249,15 @@ impl Sidecar {
         self.broke(rule, gone.message)
     }
 
+    /// A handle that can end this sidecar without holding it (see [`Halt`]).
+    pub fn halt(&self) -> Halt {
+        Halt(Arc::clone(&self.stdin))
+    }
+
     fn close_stdin(&mut self) {
-        // Idempotent: `stop` closes it and `Drop` runs afterwards.
-        if !self.stdin_closed {
-            drop(self.child.stdin.take());
-            self.stdin_closed = true;
-        }
+        // Idempotent, and the same operation [`Halt::halt`] performs: `stop` closes it, `Drop`
+        // runs afterwards, and the window may have closed it already.
+        self.halt().halt();
     }
 
     fn broke(&self, rule: &'static str, message: String) -> ProjectError {
@@ -498,6 +526,35 @@ async fn one_turn(
                 // Before the next response is asked for, so the panel has the call and the
                 // patch it made while the model is still thinking (ADR 0019 §2).
                 watch(&recorded, session);
+                if refused {
+                    refusals += 1;
+                    if refusals >= REFUSALS_PER_TURN {
+                        // **The budget is spent, so the stream closes before this last result
+                        // goes out** — and that ordering is the decision, not an accident
+                        // (M3 review, 2026-09-24). Feeding it back first left an exchange
+                        // nobody consumes: `turn.run` answers a result and loops straight to
+                        // `ask()`, so a host that sent the third result and *then* closed had
+                        // already asked the provider a fourth time by the time the close
+                        // arrived. Measured in-process — four provider requests for three
+                        // refusals — and against the real sidecar it did not happen, because
+                        // tonic's close won the race. A turn that costs money must not depend
+                        // on winning a race, and the fix belongs here rather than in a second
+                        // counter inside `ai`: ADR 0022 §3 puts the refusal budget in exactly
+                        // one place, which is the host, because the host is what executes a
+                        // call and therefore what sees one refused.
+                        //
+                        // Nothing is lost by not sending it. The refusal is in `recorded`, so
+                        // the person reads it, and the **next** prompt carries this turn whole
+                        // — `ai` rebuilds the tool message from the conversation (ADR 0021 §3)
+                        // — so the model reads it too, at the only point where it could still
+                        // act on it.
+                        //
+                        // Dropping the send half is closing the stream, which is cancellation
+                        // (ADR 0013 §2). The proposal stays pending with whatever the accepted
+                        // calls put in it.
+                        return Ok(Turn { recorded, model_id, end: TurnEnd::Refused });
+                    }
+                }
                 send(assistant_command::Command::Result(CallResult {
                     call_id: call.call_id,
                     result: Some(result),
@@ -506,15 +563,6 @@ async fn one_turn(
                     // second RFC 6902 applied where the validator does not run.
                     song: session.proposal().map(|p| p.song().clone()),
                 }))?;
-                if refused {
-                    refusals += 1;
-                    if refusals >= REFUSALS_PER_TURN {
-                        // Closing the stream is how a turn is cancelled (ADR 0013 §2), and
-                        // dropping the send half is closing it. The proposal stays pending with
-                        // whatever the accepted calls put in it.
-                        return Ok(Turn { recorded, model_id, end: TurnEnd::Refused });
-                    }
-                }
             }
             // A stream that says nothing is a sidecar with a defect, not a turn.
             None => {

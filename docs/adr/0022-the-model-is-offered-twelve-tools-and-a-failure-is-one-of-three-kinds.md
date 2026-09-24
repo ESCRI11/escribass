@@ -113,6 +113,20 @@ retries on a wall (plan, trap 2; M1 PR 13's engine that exited 0 having written 
   call from a new call, and per turn is the tightest of the plan's three bounds — the spike's
   worst runs were 19 and 58 refused guesses on one instruction, which is the shape "three"
   exists to cap, in money.
+
+  **Extended 2026-09-24, in M3 PR 10: the host closes its half *before* feeding back the
+  refusal that ends the turn.** The counting stays in one place, which is this decision's
+  point; what changed is the order of two lines. Feeding the third refusal back and closing
+  afterwards left an exchange nobody consumes: `turn.run` answers a result and loops straight
+  to `ask()`, reaching `anext(commands)` — where it would learn the turn is over — only after
+  the provider has already been asked a fourth time. Measured in-process: **four provider
+  requests for three refusals**. Against the real sidecar it did not happen, three runs of
+  three, because tonic's close won the race — and a turn that costs money must not depend on
+  winning a race. Nothing is lost by not sending it: the refusal is in the conversation, so
+  the person reads it and the *next* prompt carries it back to the model, which is the only
+  point at which the model could still act on it. The alternative — `ai` counting the
+  `valid=false` results it has fed back and stopping at the same three — is the same number in
+  two files, which this decision refuses.
 - **An operator error** — `Err(ProjectError)`, a project that will not write, a lock, a
   `lock_mismatch` — **ends the turn at the host** before the model sees it. The stream is
   closed, the proposal is dropped, and the panel shows the rule and message as the project's,
@@ -191,7 +205,17 @@ which is the only object in this repository that can spend money and which a scr
 never constructs:
 
 - **The ceiling** is `CEILING_USD`, a committed constant and deliberately not an environment
-  variable, since a cap an operator raises from the shell is not a cap. It is checked against a
+  variable, since a cap an operator raises from the shell is not a cap. **Amended 2026-09-24 in
+  M3 PR 10, by the user's decision: it is $0.00376174 — what the grant actually bought — and not
+  $0.25.** The grant was one recording session; it produced the transcript; it is spent.
+  Leaving $0.246 behind a constant is a standing authorisation for whatever runs next, machine-
+  wide and all-time, and CLAUDE.md #7 says a previous authorisation does not carry. Any live
+  run now fails closed until a person raises the line in code, where a reviewer sees it. The
+  `ponytail:` that noted a deleted ledger or a moved `HOME` resets the total is answered by the
+  same number rather than by a mechanism: the three recorded calls were *estimated* at
+  $0.0045, $0.0048 and $0.0052 each, every one of them above the ceiling on its own, so the
+  first call of a turn is refused against an empty ledger exactly as against a full one. The
+  enforcement point is the constant; the ledger is a record. It is checked against a
   **conservative worst case** priced from the request about to go out — its bytes floored at
   two per token, plus the whole of the completion it allows — and never against what a call
   turned out to cost, because a guard that reads the receipt has already paid. Prices are data:
@@ -203,8 +227,8 @@ never constructs:
   ends `FAILED_PRECONDITION` with the three numbers a person needs. Naming a maximum completion
   is what makes "what this call could cost" answerable at all, so the loop now sends
   `max_tokens` (`turn.MAX_COMPLETION_TOKENS`, 8,192); without it the worst case is the
-  provider's own limit of 131,072 tokens and a $0.25 ceiling refuses the fourth call of a turn
-  that really costs a fifth of a cent.
+  provider's own limit of 131,072 tokens and the ceiling refuses the fourth call of a turn that
+  really costs a fifth of a cent.
 - **The ledger** is one JSON line per call in `~/.escribass/spend.jsonl` — estimate, the
   response's own `usage.cost`, the running total, the prices and their date — outside the
   repository, because it records real money and is not a fixture. It is **read back at
@@ -213,14 +237,27 @@ never constructs:
   is charged at its worst case, which over-counts on purpose, and the row says so.
 - **The reconciliation** is `account_usage` and `generation_cost` against OpenRouter's own
   `/api/v1/key` and `/api/v1/generation`, read either side of a run and compared with the
-  ledger by hand. A ledger that only ever agrees with itself is the check that cannot fail
-  which this repository has found in every milestone (trap 1). Measured on 2026-09-24: the
-  account counter read 47.51704692 before and 47.52080866 after, a difference of
-  **$0.00376174**, against a ledger total of **$0.00376174** — and each of the three
-  generations agreed with `/api/v1/generation` to nine decimal places. One property worth
-  writing down because a future run will meet it: the account figure **lags**. Read within
-  seconds of the run it had not moved at all, and it settled minutes later; the per-generation
-  figure was right immediately.
+  ledger. A ledger that only ever agrees with itself is the check that cannot fail which this
+  repository has found in every milestone (trap 1). Measured on 2026-09-24: the account counter
+  read 47.51704692 before and 47.52080866 after, a difference of **$0.00376174**, against a
+  ledger total of **$0.00376174** — and each of the three generations agreed with
+  `/api/v1/generation` to nine decimal places. One property worth writing down because a future
+  run will meet it: the account figure **lags**. Read within seconds of the run it had not
+  moved at all, and it settled minutes later; the per-generation figure was right immediately.
+
+  **Amended the same day, in M3 PR 10: "compared with the ledger" was done by a person and by
+  no code path.** The two functions had zero callers anywhere in the repository and the live
+  run read neither, so the sentence above described a thing that had happened once rather than
+  a thing that happens. They now have one: `escribass-ai --account-usage` and
+  `--generation-cost <id>` print one number and exit, building no provider and spending
+  nothing, and `a_live_model_drives_the_loop` reads the account counter either side of the
+  turn, prints both, and asserts the difference against the rows the run appended — then
+  asserts each new row against `/api/v1/generation` by id. **The lag is handled by waiting, and
+  the wait is bounded**: the counter is polled for five minutes, every read printed, and a run
+  that has not settled by then **fails** rather than passing on a figure that never arrived. An
+  assertion that ignored the lag would be flaky; one that waited for ever would be worse; one
+  that gave up quietly would be the defect this whole amendment is about. The comparison itself
+  is a pure function with a test of its own, so it can go red without a cent being spent.
 
 `ponytail:` one ceiling, one ledger, one reconciliation, and no framework around any of them —
 no budget abstraction, no cost model, no price cache. Two known ceilings, both stated in
@@ -354,6 +391,12 @@ promise (plan, trap 5).
 - `docs/plan.md`'s ledger gains two rows: `list_params`, on the first offer of `set_param`;
   and typed tools for a mix, a deletion, a rename and a clip's bounds, on the first measurement
   in which a model gets the RFC 6902 wrong where a typed tool would not.
+- **PR 10** (`m3.10-review-fixes`, 2026-09-24) carries three of this ADR's amendments: the
+  ceiling is what the grant bought (§4), the reconciliation is performed by a code path (§4),
+  and the host closes before the third refusal goes out (§3). It also closes the two test gaps
+  the M3 review's mutation table found in this decision's own claims — no test drove a
+  `call_unreadable` or an `arguments_unreadable` refusal through the budget, and nothing
+  checked that `ai` counts no refusals of its own.
 - "What M3 will not claim": not that the model can name a plugin parameter the document does
   not already automate; ~~not a dollar cap~~ — **amended 2026-09-24: there is one**, a ceiling
   checked in code before each call, ledgered and reconciled (§4's amendment), which M3 declined
