@@ -1,0 +1,8 @@
+texture · a voice sounds when a note or an audio iteration does, and an audio iteration is one opaque event
+@1 3 voices · 8 notes over 8 onsets · mean simultaneity 1 · widest chord none
+  Lead polyphony 1 · sounding 1320 of 3840 = 11/32
+  Loop polyphony 1 · sounding 1920 of 3840 = 1/2
+  Keys polyphony 1 · sounding 960 of 3840 = 1/4
+@2 1 voice · 2 notes over 2 onsets · mean simultaneity 1 · widest chord none
+  Lead polyphony 1 · sounding 960 of 3840 = 1/4
+@3 0 voices · 0 notes over 0 onsets · mean simultaneity none · widest chord none

@@ -121,10 +121,11 @@ line breaks — is PR 6's to settle; what is carried and what is abstracted is n
 
 ```
 song 01M1FPMP000000000000000001 · 960 ticks per quarter · 3 bars · ends at tick 9600 (@3 tick 1920)
-signature 4/4 from @1 · a bar is 3840 ticks, a beat 960
+signature 4/4 from @1 tick 0 · a bar is 3840 ticks, a beat 960
 tempo 120 from @1 tick 0 · 90 from @2 tick 0
 sections: Outro 01M1FPMP00000000000000001G @3 tick 0 – @3 tick 1920 (7680–9600)
 markers: none
+generators: none
 voices (order · name · id · kind · device · fx · mix)
   0 Master 01M1FPMP000000000000000002 master · gain 0 pan 0
   1 Lead 01M1FPMP000000000000000006 instrument · 01M1FPMP000000000000000007 plugin Surge Synth Team/Surge XT 1.3.4 · fx 01M1FPMP00000000000000000G plugin Surge Synth Team/Surge XT 1.3.4 (1 param set), 01M1FPMP00000000000000000E plugin Surge Synth Team/Surge XT 1.3.4 · gain -4.5 pan 0.25
@@ -157,11 +158,26 @@ automation (id · target · points as tick:value curve)
   01M1FPMP000000000000000010 device 01M1FPMP000000000000000007 (Lead instrument) param 1945359057 · 0:0.2 linear, 1920:0.9 hold
   01M1FPMP000000000000000014 device 01M1FPMP00000000000000000G (Lead fx) param 1243907205 · 480:0.7 linear
   01M1FPMP000000000000000017 device 01M1FPMP000000000000000007 (Lead instrument) param 1945359057 · 960:0.5 linear
-  01M1FPMP00000000000000001A device 01M1FPMP00000000000000000A (Pad instrument) param 1945359057 · 0:1.0 linear
+  01M1FPMP00000000000000001A device 01M1FPMP00000000000000000A (Pad instrument) param 1945359057 · 0:1 linear
   01M1FPMP00000000000000001R track Lead gain_db · 0:-24 linear, 7680:0 hold
   01M1FPMP00000000000000001W track Lead pan · 0:-1 linear, 3840:1 linear
   01M1FPMP000000000000000020 track Master gain_db · 0:0 linear, 9600:-6 linear
 ```
+
+**Corrected 2026-09-24, in PR 6, which implemented it.** Three lines of the block above were
+the hand's and are now the code's, edited in place; the old wording survives only in git, and
+everything else in the block the implementation reproduces byte for byte. The signature line
+read `signature 4/4 from @1` and now carries its tick: the table above carries "every tempo and
+signature event, **at its tick and bar**", the tempo line four characters away already wrote
+one, and a second signature landing mid-bar — the case decision 5 constructs precisely because
+no fixture has it — would have had nowhere to say where it landed. `generators: none` was left
+out altogether, while `markers: none` was written: a view that prints one and is silent about
+the other leaves a reader unable to tell "this song has no generator" from "this view does not
+show generators", and the table carries `Generator` as a layer like any other. And the Pad
+lane's `0:1.0` is `0:1`: the hand wrote two spellings of the double 1.0 four lines apart — the
+pan lane's `3840:1` is the same number — and one number formatter cannot write both, so the
+trailing `.0` is stripped everywhere. What is *not* PR 6's to settle, and did not move: what is
+carried and what is abstracted.
 
 Ordering is the model's, never the map's: voices by `index`, clips by voice then
 `start_tick` then id, notes by `start_tick` then id, lanes by id, points by tick — which is
@@ -295,6 +311,16 @@ onset, so neither has a value. The bar sets are eight triples, two — `(Lead, 0
 `(1/9 + 0 + 0)/3 = 1/27` with `1/9 = 1/(8 + 2 − 1)`, novelty
 `((1 − 1/9) + (1 − 0))/2 = 17/18`. Lead is *different* in bar 2 and *leaves* in bar 3; Keys
 *leaves* in bar 2.
+
+**Checked 2026-09-24 in PR 6, and the hand held.** Every figure in the paragraph above — the
+seven Lead onsets and their 3/7, the three on no grid and the smallest interval of 160, the
+mass of C 1800 and E 480 and the chromaticism of 0, the six intervals and three ascending, the
+three voices, eight notes over eight onsets and a mean simultaneity of 1, the absent chord
+width, bar 2 entire, bar 3's two *none*s, `A B C`, 3/3, 1/27, 17/18 and the four variation
+classes — the implementation computes independently and reproduces exactly. Nothing in decision
+4 is corrected. Two spellings differ and no value does: a count-ratio is written with its
+counts beside the reduced fraction, so `3/3` reads `3 distinct of 3 = 1` and `8/8 = 1` reads
+`8 notes over 8 onsets · mean simultaneity 1`.
 
 **What they are for, and what they may never do.** The axes are text the model reads beside
 the view — a description of the document as it stands, and of a proposal's document if

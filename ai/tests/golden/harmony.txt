@@ -1,0 +1,7 @@
+harmony · pitch-class mass is ticks sounding, class = pitch mod 12 (0 = C); a class not named has none; no key is claimed
+@1 C 1800, E 480 · 2 classes · prominent C · chromaticism 0
+  Lead C 840, E 480 · 2 classes · prominent C, E · chromaticism 0
+  Keys C 960 · 1 class · prominent C · chromaticism 0 · sampler: its keys are whatever the SFZ maps
+@2 C 480, G 480 · 2 classes · prominent C, G · chromaticism 0
+  Lead C 480, G 480 · 2 classes · prominent C, G · chromaticism 0
+@3 no mass · 0 classes · prominent none · chromaticism none

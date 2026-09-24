@@ -1,0 +1,5 @@
+form · a bar is its set of (voice, onset in bar, pitch); length and velocity are not compared
+bars A B C · 3 distinct of 3 = 1
+self-similarity 1/27 · novelty 17/18
+consecutive overlap @1~@2 1/9 · @2~@3 0
+sections Outro @3–@3 over C

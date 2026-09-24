@@ -222,7 +222,12 @@ Before merging any change, confirm:
   through the tool API like every other. It also projects that document with every map's keys
   reversed and requires the same answer, because a ULID-keyed map iterates in creation order and
   a projection that had dropped its ordering would otherwise golden identically (ADR 0012 §5,
-  amended).
+  amended). From M3 PR 6 the claim covers the sidecar's own projections as well — the bar view
+  the model reads and the six axes beside it, seven pure functions goldened from the same
+  document and the same reversal, in `ai/tests/test_view.py` under `unittest` (ADR 0018 §5).
+  What that fixture cannot exercise is asserted against constructed values there: a second
+  time-signature event, a clip spanning a bar line, and a voice striking two notes at one tick,
+  which is the only way the paper's chord width and a simultaneity above 1 are ever non-trivial.
 - **The determinism suite in `tests/` passes.** It drives `core` through the tool API over a
   real server process and checks the claim three ways: two runs against each other, each
   against a committed golden, and one transport against the other. Two runs agreeing catches
@@ -398,6 +403,7 @@ way to ask about it (ADR 0020 §3).
 | The re-pin tool | **Not M3's.** The ledger row's trigger — the first `lock_mismatch` a person meets — has not fired, and M3 moves no plugin pin | `lock_mismatch` is raised at open, which the bundled loop never does; saying so beats a second milestone's silence reading as a second promise (ADR 0022 §5) | 2026-09-21 |
 | What keeps a second `Song` out of `proto/`'s Python | `proto/codegen.sh` deletes the model's re-emitted packages after `buf generate` and rewrites the imports that named them to `escribass_schema`, with two `grep`s that fail the run if the rewrite missed a line or matched none | `betterproto2-compiler` generates a module for **every** file in the request, imports included, and offers no `extern_path` and no `rewrite_imports` — so a run over `proto/` re-emits `song.proto` byte-identically beside the service. It compiles, and it is a different class at run time: the bar view is goldened against `escribass_schema`'s `Song` and would not take the one a `Prompt` arrives carrying. The rewrite is the Python spelling of the options the Rust and TypeScript targets already set, done by the script because the plugin has none (ADR 0020 §1, extended) | 2026-09-22 |
 | Where `grpclib` is pinned, and what checks `proto/`'s Python | **PR 3, not PR 5** — 0.4.9, in `schema/`'s dev group — and `proto/tests/test_generated_python.py`, which imports the tree and asserts a `Prompt`'s `song` is `escribass_schema`'s `Song` class | U4 pins a package where it is first added. PR 3 generates a server that imports `grpclib`, and the check that the generated tree imports at all — and carries **one** `Song` rather than the copy `betterproto2` re-emits — is what first adds it, so "first added" falls here. The deferral to PR 5 was written down first and closed by the user on 2026-09-23; the struck-through ledger row keeps why. The identity assertion is the load-bearing one: an import alone passes against a duplicate, because a duplicate imports as happily as the real thing (ADR 0020 §2, amended; §1, extended) | 2026-09-22, closed 2026-09-23 |
+| What the hand-written view got wrong | **Three lines of ADR 0018 §1's block**, corrected in place where PR 6 implemented it: the signature line carries its tick, `generators: none` is written as `markers: none` already was, and one formatter writes one spelling of the double 1.0. Decision 4's worked figures were recomputed independently and **all held** | The ADR wrote the render fixture's view out by hand and said PR 6 would name which side was wrong where they differ. Nothing about what is carried or abstracted moved, and no value in an axis did; a count-ratio is now written with its counts beside the reduced fraction (ADR 0018 §1, corrected; §4, checked) | 2026-09-24 |
 
 Remaining open items **[OPEN]**: neural runtime packaging (ONNX Runtime linked into engine vs. separate process — must be resolved before M4, ADR 0003 §7); minimum supported OS versions; symbolic model choice for v1 melody/drum generation; whether §6's analysis features and symbolic generation are v1 scope at all (ADR 0003, Still unplaced).
 
