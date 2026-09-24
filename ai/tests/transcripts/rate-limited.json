@@ -1,0 +1,73 @@
+{
+  "recorded": null,
+  "model": "deepseek/deepseek-v4.1-flash",
+  "note": "A provider failure and then an answer. The spike met this live \u2014 Gemini returned an upstream 429 mid-run \u2014 and it is neither of ADR 0006 \u00a72's two kinds: it is retried inside `ai` at the one place the provider is called, and the model is never told it happened.\n\nHand-written from the shape of `one-answer.json`, which is a real recorded exchange (M3 PR 5). Nothing here was recorded: recording a turn costs a paid call to OpenRouter, and CLAUDE.md #7 says nothing calls a paid service without the user's confirmation, which this pull request did not have. Every field but `choices` and `usage.prompt_tokens` is copied from the recorded response, so what the SDK parses is the shape a provider really sends: `provider`, `native_finish_reason`, `service_tier`, `moderation` and the rest. `usage.prompt_tokens` is set generously on purpose \u2014 the loop refuses a response whose token count says the provider dropped the prompt (ADR 0022 \u00a73), and a hand-written 68 would have tripped it. The live run behind OPENROUTER_API_KEY is what replaces a hand-written transcript with a recorded one.",
+  "exchanges": [
+    {
+      "failure": {
+        "kind": "rate_limit",
+        "message": "429 temporarily rate-limited upstream"
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": "The bass sits at -6 dB across the whole song.",
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": null
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790172308,
+        "id": "gen-1790172308-hN62wdC7ML9KwajjQSbC",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    }
+  ]
+}

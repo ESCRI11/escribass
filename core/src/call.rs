@@ -72,6 +72,41 @@ pub const IMPLEMENTED: &[&str] = &[
     "merge_branch",
 ];
 
+/// The tools the **model** is offered (ADR 0022 §1) — twelve of [`IMPLEMENTED`]'s twenty-five,
+/// in its order, and data rather than a list written a second time in Python (M3 trap 11).
+///
+/// Every one of them produces operations on the document and nothing else, and every one is
+/// executed against the proposal (ADR 0019 §1). Thirteen are withheld, each for a reason
+/// ADR 0022 §1 states: `get_song`, because a full document beside a summary is not trusted as
+/// the summary (ADR 0018 §2); `get_song_at` and `get_history`, reads of the log a model acting
+/// on the document has no use for; `set_param`, by the user's decision (question 7);
+/// `add_asset`, which takes bytes the model does not have; `render_export`, which writes a file
+/// at a path the model chose, and `render_preview`, which starts an engine it cannot hear
+/// (CLAUDE.md #6); `undo` and `redo`, which reverse a person's approved change; and the four
+/// branch tools, which move the session's `HEAD` under the window.
+///
+/// **`apply_patch` is offered**, and the spike is why: no typed tool sets a track's mix,
+/// deletes, renames, or resizes a clip, and three models reached for it unprompted within nine
+/// instructions. Its two hazards are closed elsewhere — a caller-written provenance is
+/// overwritten by core (ADR 0021 §1) and a version claim is disputed (ADR 0005 §3).
+///
+/// This is a statement about what is *offered* to one author. What is **accepted** is the same
+/// for every caller, and no rule of the validator's reads the author (M3 trap 18).
+pub const OFFERED: &[&str] = &[
+    "apply_patch",
+    "add_track",
+    "set_track_instrument",
+    "add_effect",
+    "add_clip",
+    "set_notes",
+    "transpose",
+    "quantize",
+    "add_automation",
+    "set_tempo",
+    "add_section",
+    "move_section",
+];
+
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so cross a JSON carrier as
 /// JSON rather than as base64 (ADR 0006 §6).
 ///
@@ -97,12 +132,21 @@ pub struct Answer {
     /// A call the session refused. Not a transport failure: the call arrived and was answered,
     /// and what came back is something the caller can act on (ADR 0006 §2).
     pub refused: bool,
+    /// The session's own answer, for the one carrier that needs the message rather than its
+    /// JSON: `assistant.proto` carries a `ToolResult` **by value** on every `CallResult`, whole
+    /// and with every violation, because "a model fixing one problem at a time wastes them"
+    /// (ADR 0022 §3). Rebuilding one from `structured` would be parsing our own output, and
+    /// `patch` would have to be re-serialised to the byte on the way.
+    ///
+    /// `None` for the answers that are not a `ToolResult`: the three reads, `add_asset`,
+    /// `render_export` and `render_preview` — none of which the model is offered (`OFFERED`).
+    pub result: Option<ToolResult>,
 }
 
 impl Answer {
     fn of(structured: Value, refused: bool) -> Self {
         let text = serde_json::to_string_pretty(&structured).expect("a Value serialises");
-        Answer { text, structured, refused }
+        Answer { text, structured, refused, result: None }
     }
 }
 
@@ -316,7 +360,7 @@ fn tool_answer(result: &ToolResult) -> Answer {
     } else {
         serde_json::from_slice(&result.patch).unwrap_or(Value::Null)
     };
-    Answer::of(
+    let mut answer = Answer::of(
         json!({
             "valid": result.valid,
             "errors": result.errors.iter().map(|e| json!({
@@ -327,7 +371,9 @@ fn tool_answer(result: &ToolResult) -> Answer {
             "entry_id": result.entry_id,
         }),
         !result.valid,
-    )
+    );
+    answer.result = Some(result.clone());
+    answer
 }
 
 /// A [`RenderResponse`] as a carrier carries it.
@@ -389,7 +435,7 @@ fn song_answer(song: &escribass_schema::song::Song) -> Result<Answer, CallError>
         kind: ErrorKind::Broken,
         message: e.to_string(),
     })?;
-    Ok(Answer { text, structured, refused: false })
+    Ok(Answer { text, structured, refused: false, result: None })
 }
 
 /// The log, in the shape it has on disk.

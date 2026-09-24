@@ -167,6 +167,66 @@ A **live run** against OpenRouter exists behind an environment variable and is s
 when the variable is absent, printing why — the device test's shape (M2 trap 13; ADR 0013 §4).
 No test spends money by default, and **no fixture contains a key**: a test asserts no file under
 `ai/tests/` or `tests/` carries the key's prefix, and the recorder saves nothing that could.
+
+**Amended 2026-09-24: the run has been made, and a spend is capped, ledgered and reconciled.**
+
+This section shipped with a gap it named in its own Consequences — every transcript was
+hand-written, because recording one costs a paid call and CLAUDE.md #7 gives nobody the right
+to make one. The user granted that call on **2026-09-24**, for one recording session and
+nothing else, at a ceiling of **$0.25**. What the grant changes here is two things.
+
+**The transcripts are recorded.** `tests/determinism/proposal/transcript.json` is the real
+turn: three exchanges against `deepseek/deepseek-v4.1-flash` through OpenRouter, the request
+bodies this loop built and the responses the provider gave, written by
+`a_live_model_drives_the_loop` through `escribass-ai --record` and committed byte for byte as
+the recorder left them. Both goldens are driven from that one file — `ai/`'s event stream and
+`tests/`'s project — because two copies of a recording is the twin that stops matching (trap 3).
+What stays **hand-written is named**: `rate-limited.json` and `four-refusals.json`, because a
+429 and four consecutive refusals cannot be summoned from a real provider on demand, and
+`one-answer.json`, which was recorded in PR 5 and is kept for the token floor it trips.
+
+**A paid call is capped before it is made, ledgered after, and reconciled against the
+provider's own counter** — CLAUDE.md #7's three mechanisms, all three in `provider.Live`,
+which is the only object in this repository that can spend money and which a scripted turn
+never constructs:
+
+- **The ceiling** is `CEILING_USD`, a committed constant and deliberately not an environment
+  variable, since a cap an operator raises from the shell is not a cap. It is checked against a
+  **conservative worst case** priced from the request about to go out — its bytes floored at
+  two per token, plus the whole of the completion it allows — and never against what a call
+  turned out to cost, because a guard that reads the receipt has already paid. Prices are data:
+  they are fetched from OpenRouter's own `/api/v1/models` and recorded in the ledger with their
+  date, and when they cannot be fetched the fallback is the dearest model listed, which at this
+  ceiling refuses every call rather than guessing cheaply. The refusal is `BudgetExhausted`,
+  raised at `provider.ask` — the same one place §3 puts the third kind — and it is **neither**
+  of the three: the provider did nothing wrong, no different call would succeed, and the turn
+  ends `FAILED_PRECONDITION` with the three numbers a person needs. Naming a maximum completion
+  is what makes "what this call could cost" answerable at all, so the loop now sends
+  `max_tokens` (`turn.MAX_COMPLETION_TOKENS`, 8,192); without it the worst case is the
+  provider's own limit of 131,072 tokens and a $0.25 ceiling refuses the fourth call of a turn
+  that really costs a fifth of a cent.
+- **The ledger** is one JSON line per call in `~/.escribass/spend.jsonl` — estimate, the
+  response's own `usage.cost`, the running total, the prices and their date — outside the
+  repository, because it records real money and is not a fixture. It is **read back at
+  startup**, so the ceiling holds across attempts and across processes; a per-process ceiling
+  would let every retry of a recording session spend the whole grant again. A call that failed
+  is charged at its worst case, which over-counts on purpose, and the row says so.
+- **The reconciliation** is `account_usage` and `generation_cost` against OpenRouter's own
+  `/api/v1/key` and `/api/v1/generation`, read either side of a run and compared with the
+  ledger by hand. A ledger that only ever agrees with itself is the check that cannot fail
+  which this repository has found in every milestone (trap 1). Measured on 2026-09-24: the
+  account counter read 47.51704692 before and 47.52080866 after, a difference of
+  **$0.00376174**, against a ledger total of **$0.00376174** — and each of the three
+  generations agreed with `/api/v1/generation` to nine decimal places. One property worth
+  writing down because a future run will meet it: the account figure **lags**. Read within
+  seconds of the run it had not moved at all, and it settled minutes later; the per-generation
+  figure was right immediately.
+
+`ponytail:` one ceiling, one ledger, one reconciliation, and no framework around any of them —
+no budget abstraction, no cost model, no price cache. Two known ceilings, both stated in
+`provider.py`: the ledger is appended to by one process at a time, and a second sidecar on the
+same machine would need a lock around the file; and the byte-per-token floor is an estimate, not
+a tokenizer, which is why it over-states.
 `ai/`'s tests join the `checks` job in **PR 5**, the pull request that creates the directory,
 because the path gate already lets an `ai/` change through to a job with no step for it (plan,
 trap 17) — and every one of these will be run on one machine until a job on `main` goes green
@@ -211,7 +271,7 @@ promise (plan, trap 5).
 | Treat a provider failure as `Err` and stop | A 429 is transient by definition and a retry with backoff usually succeeds; stopping on the first is the spike's Gemini run lost to one |
 | Treat a provider failure as `valid = false` | Three refusals spent on a wall that is not the caller's, and the model told its call was wrong when it was not (trap 2) |
 | Leave the SDK's `max_retries` at its default | Two retries the loop cannot see or count, which the spike set to zero to be able to see them at all |
-| A dollar budget guard in M3 | Needs prices per endpoint and a reservation ledger; the spike's guard was watched refusing before it was trusted and still counted a failed call's reservation as spend. The response cap bounds spend per turn without a price list |
+| A dollar budget guard in M3 | ~~Needs prices per endpoint and a reservation ledger; the spike's guard was watched refusing before it was trusted and still counted a failed call's reservation as spend. The response cap bounds spend per turn without a price list~~ — **reversed 2026-09-24, in §4's amendment.** The moment a real call was authorised, the response cap stopped being enough: twelve responses bound the *count* and say nothing about the bill, and CLAUDE.md #7 asks for a cap in code before each call. The two objections held and were answered rather than dodged — the prices are read from the provider's own catalogue instead of written down per endpoint, and a failed call's reservation is still counted as spend, which the reconciliation against the provider's counter now makes visible instead of silent |
 
 **Tests (question 11)**
 
@@ -234,12 +294,68 @@ promise (plan, trap 5).
 - **PR 8** (`m3.8-loop`): `OFFERED`, the subset test, the filtered schemas without `dry_run`;
   the three kinds split where decision 3 puts them, the refusal budget and the response cap,
   a test per kind watched failing first; the end-to-end golden in `tests/`, driven twice; the
-  live run behind its variable.
+  live run behind its variable. **Done 2026-09-24.** The numbers decision 3 left as the loop's
+  configuration: **three** refused calls a turn, **twelve** responses a turn, **three** provider
+  retries at 0.25 s doubling, and a token floor of one token per **twenty** bytes of messages
+  sent. Four things the decision did not have to say.
+
+  **The refusal budget is the host's and the response cap is `ai`'s**, because each is counted
+  where it is seen: the host executes a call, so it is what sees one refused, and it ends the
+  turn by closing the stream (ADR 0013 §2's "cancel is close"). `ai` sees the responses.
+  Neither number exists twice.
+
+  **An operator failure is barely reachable inside a turn, and that is a property worth
+  stating rather than a gap.** A proposal records nothing and writes nothing, so none of the
+  twelve can reach a `Project::write`, a lock or a `head_unset`; the arm is kept and
+  documented. What a turn *can* meet is the project refusing to record the model it was sent
+  to (ADR 0021 §4), which happens before the prompt goes out — zero retries, nothing fed back,
+  and the test for the second kind is exactly that.
+
+  **A provider failure and a transport failure are told apart by whether `ai` returned a
+  status.** The host maps `UNAVAILABLE` to `provider_failed` and `RESOURCE_EXHAUSTED` to
+  `turn_unfinished` — the fourth thing, a model with neither a call nor text, or one that will
+  not stop calling — and everything else, including a socket that broke and a child that died,
+  stays `assistant_failed`. A dead child overrides all of it: a provider cannot have failed
+  inside a process that is gone.
+
+  ~~**The transcripts are hand-written, and this is where that is said.**~~ **Closed
+  2026-09-24, in the same pull request**, by the user's grant of one recording session at a
+  ceiling of $0.25. The multi-call transcript is now the recording, the two goldens are driven
+  from it, and §4's amendment says what was recorded and what it cost. What the sentence said
+  while it stood: every transcript was built from the shape of
+  `ai/tests/transcripts/one-answer.json`, the one exchange M3 PR 5 really recorded, with only
+  `choices` and `usage.prompt_tokens` changed, because recording a turn costs a paid call and
+  `CLAUDE.md` #7 says nothing calls a paid service without the user's confirmation.
+
+  **What the run measured, in one attempt.** `deepseek/deepseek-v4.1-flash`, offered these
+  twelve schemas and this system prompt, answered "add a lead line over the bass" with
+  `add_track` and then `add_clip` naming `01M1FPMP000000000000000034` — the track id the
+  **first call's result returned** — and then wrote its reply: three exchanges, two calls,
+  **zero refusals, zero provider failures and no retries**, in 14.6 s for $0.00376174. The
+  spike's two live hits of the id trap (2026-09-17, a different loop) did not recur, which is
+  what ADR 0019's fork was built to prevent and is now measured rather than argued. One attempt
+  is one attempt: it is not a claim about how often a model gets this right, and nothing here
+  was run twice to find a nicer one.
+
+  **What a recorded transcript still does not make true.** A hosted model is not seedable and
+  the same prompt may return something else tomorrow (`docs/plan.md`, "What 'deterministic'
+  means with a model in the loop"); what is deterministic is the *replay*, and that is the
+  claim the two goldens check. And `rate-limited.json` and `four-refusals.json` remain
+  hand-written, so "a real 429 is retried and never fed back" and "a real model's fourth
+  refusal ends the turn" are still constructed cases.
+
+  One measured consequence of the token floor, kept because it is evidence: replaying the
+  *recorded* `one-answer.json` through the loop is refused as a provider failure. Its 68 prompt
+  tokens are a true record of the spike's 250-byte prompt, and the loop sends nine kilobytes, so
+  that response cannot honestly be an answer to it. `ai/tests/test_sidecar.py` asserts it, which
+  is the one place a real response exercises the floor.
 - `docs/specs.md` §6 names the twelve, the three kinds and where "three" counts; §6.1 gains
   the third kind's sentence.
 - `docs/plan.md`'s ledger gains two rows: `list_params`, on the first offer of `set_param`;
   and typed tools for a mix, a deletion, a rename and a clip's bounds, on the first measurement
   in which a model gets the RFC 6902 wrong where a typed tool would not.
 - "What M3 will not claim": not that the model can name a plugin parameter the document does
-  not already automate; not a dollar cap; and not that the twelve are the right twelve for M4,
+  not already automate; ~~not a dollar cap~~ — **amended 2026-09-24: there is one**, a ceiling
+  checked in code before each call, ledgered and reconciled (§4's amendment), which M3 declined
+  to build while no call was authorised — and not that the twelve are the right twelve for M4,
   which adds the compilers' tools and decides them then.

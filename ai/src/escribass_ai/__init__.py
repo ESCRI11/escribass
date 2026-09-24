@@ -1,7 +1,7 @@
 """The AI orchestrator sidecar (docs/specs.md §3 tier 1, §6; ADR 0020).
 
 ```text
-escribass-ai --transcript <transcript.json>
+escribass-ai [--transcript <transcript.json>] [--record <transcript.json>]
 ```
 
 One process, one service, one bidirectional stream per prompt. **`ai` serves and the host
@@ -24,13 +24,17 @@ Never the project path — `.escri` is the host's and "agents never read or writ
 file directly" (§5) is a property of what `ai` is given, not of what it is told not to do.
 Never a socket, since it names its own. Never a key on a flag: `OPENROUTER_API_KEY` reaches it
 from the environment, and `provider.live` is the one place that reads it (ADR 0020 §4; U3).
+`--record` names a file to write this run's exchanges to, which is how a hand-written fixture
+becomes a recorded one; it writes the request **body** and the response and nothing around
+them, so the file it leaves can carry no key (M3 trap 10).
 The model id and the offered tools arrive per prompt, on the stream.
 
-**What it does not do yet.** No loop, no view, no proposal: it answers one prompt with the
-transcript's answer and asks for nothing. Every `Prompt` field but the text is carried and
-ignored here on purpose — the Libretto view is PR 6's, the tool-calling loop and its three
-kinds of failure are PR 8's, and a panel to show any of it is PR 9's. What this pull request
-buys is a process a person can start, watch, and watch die (ADR 0020, Consequences, PR 5).
+**What it does not do.** It does not apply anything, and it does not know how: every call it
+asks for is executed by the host against a proposal in `core`, and a person approves the whole
+change once, when the turn ends (ADR 0019). It holds nothing between streams — the conversation
+arrives with each prompt (ADR 0021 §3) — and it never sees the project path, the `.escri` or a
+`SongTools` stub. The loop itself is [`escribass_ai.turn`]; this module is the process around
+it.
 
 **The host closes our stdin to stop us.** A sidecar lives for the session, so nothing on the
 gRPC stream says "we are done"; the pipe does, exactly as it does for `escribass-mcp`, whose
@@ -52,18 +56,16 @@ import tempfile
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-import grpclib
 from escribass_proto.escribass.assistant.v1 import (
     AssistantBase,
     AssistantCommand,
     AssistantEvent,
-    Done,
-    ReplyText,
 )
 from grpclib.server import Server
 from grpclib.utils import graceful_exit
 
-from .provider import Exhausted, Scripted
+from .provider import Scripted, live
+from .turn import run
 
 __all__ = ["Assistant", "main", "serve"]
 
@@ -71,62 +73,29 @@ __all__ = ["Assistant", "main", "serve"]
 class Assistant(AssistantBase):
     """The one RPC, `Assistant.Prompt` (proto/assistant.proto, ADR 0020 §3).
 
-    One prompt in, text and `done` out. The turn is over when the generator returns, which
-    ends the stream — the shape ADR 0013 §2 chose for `Preview` and for the same reasons: the
-    stream is the turn's identifier, closing it is cancellation for free, and a failure ends it
-    with a status rather than travelling as an arm a caller may forget to read.
+    A prompt in; text, the model's calls and `done` out, with the host answering each call on
+    the same stream. The turn is over when the generator returns, which ends the stream — the
+    shape ADR 0013 §2 chose for `Preview` and for the same reasons: the stream is the turn's
+    identifier, closing it is cancellation for free, and a failure ends it with a status rather
+    than travelling as an arm a caller may forget to read.
+
+    Thin on purpose. Everything the turn decides is [`escribass_ai.turn.run`], which is an
+    ordinary async generator over the same two types — so the loop's own tests drive it
+    directly, with no server and no socket, and what they golden is the event stream itself
+    (ADR 0022 §4).
     """
 
-    def __init__(self, provider: Scripted) -> None:
+    def __init__(self, provider: object) -> None:
         self._provider = provider
 
     async def prompt(
         self, messages: AsyncIterator[AssistantCommand]
     ) -> AsyncIterator[AssistantEvent]:
-        command = await anext(messages)
-        if command.prompt is None:
-            # A `CallResult` first would answer a call nothing made. Refused with a status
-            # rather than ignored: the host is the only caller, and a host that sent this has
-            # a defect worth seeing.
-            raise grpclib.GRPCError(
-                grpclib.const.Status.INVALID_ARGUMENT,
-                "the first message on a Prompt stream is the prompt (assistant.proto)",
-            )
-
-        # The song, the offered schemas and the conversation are read by nothing yet. They are
-        # on the wire because PR 3 put the milestone's whole shape there at once (M3 trap 14),
-        # and the view that would read the song is PR 6's.
-        try:
-            answer = self._provider.answer()
-        except Exhausted as ran_out:
-            # Not a refusal and not a provider failure: a transcript with nothing left is this
-            # build's own limit, and ADR 0022 §3's three kinds are about a loop that does not
-            # exist yet. It ends the stream with a status, which is where every failure ends.
-            raise grpclib.GRPCError(
-                grpclib.const.Status.FAILED_PRECONDITION, str(ran_out)
-            ) from ran_out
-
-        choice = answer.choices[0]
-        if choice.message.tool_calls:
-            # A transcript whose model asked for a tool is a transcript for the loop, and the
-            # loop is PR 8's. Refused loudly rather than dropped: a proposal silently thrown
-            # away is the failure a person would discover by wondering why nothing happened.
-            raise grpclib.GRPCError(
-                grpclib.const.Status.UNIMPLEMENTED,
-                "this build answers and proposes nothing; a transcript with tool calls needs "
-                "the loop of M3 PR 8 (ADR 0019 §1)",
-            )
-
-        text = choice.message.content or ""
-        # Both, and they carry the same text here because the recorded answer arrives whole.
-        # `ReplyText` is what a panel renders as it goes (PR 9) and `Done` is what ends the
-        # turn and names the model that **answered** — never the id that was asked for, since
-        # a router may serve one turn from another provider under the same name (ADR 0021 §2).
-        yield AssistantEvent(text=ReplyText(text=text))
-        yield AssistantEvent(done=Done(text=text, model_id=answer.model))
+        async for event in run(messages, self._provider):
+            yield event
 
 
-async def serve(provider: Scripted) -> None:
+async def serve(provider: object) -> None:
     """Serves `Assistant` on a socket of this process's own until the host lets go."""
     server = Server([Assistant(provider)])
     # `mkdtemp`, not a path a caller chose: a parent-chosen path needs entropy or a pid in
@@ -190,21 +159,41 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--transcript",
-        required=True,
         type=Path,
         help=(
-            "a recorded transcript to answer from. Required, because this build has no live "
-            "provider: the loop that calls one is M3 PR 8 (ADR 0022 §4)"
+            "a recorded transcript to answer from, instead of a provider. With it, a turn is "
+            "a pure function of a file and costs nothing; without it, the real client is used "
+            "and OPENROUTER_API_KEY must be in the environment (ADR 0022 §4)"
+        ),
+    )
+    parser.add_argument(
+        "--record",
+        type=Path,
+        help=(
+            "write every exchange of this run to a transcript file, in the format "
+            "`--transcript` reads: the request bodies and the provider's responses, with no "
+            "headers and therefore no key (ADR 0022 §4). Live only, and it spends money"
         ),
     )
     options = parser.parse_args(argv)
+    if options.record and options.transcript:
+        # A recording of a replay is a copy of the file it replayed. Refused rather than
+        # allowed, because what it would produce looks exactly like evidence.
+        parser.error("--record records a live provider; with --transcript there is nothing new")
     try:
-        provider = Scripted.read(options.transcript)
-    except Exception as unreadable:  # noqa: BLE001 — every way a file is not a transcript
+        # **The only fork between a test and a real run**, and it is one line: everything
+        # above `provider.ask` is the same code either way, which is what makes a scripted
+        # turn evidence about the live one (ADR 0022 §4).
+        provider = (
+            Scripted.read(options.transcript)
+            if options.transcript
+            else live(record_to=options.record)
+        )
+    except Exception as unreadable:  # noqa: BLE001 — a bad transcript, or no key
         # Stderr and an exit code, which is the whole of what `core` reads when a child will
         # not start (ADR 0020 §5). Nothing on stdout: a caller reading the address line must
         # not be handed an error message where a socket goes.
-        print(f"escribass-ai: {options.transcript}: {unreadable}", file=sys.stderr)
+        print(f"escribass-ai: {options.transcript or 'live'}: {unreadable}", file=sys.stderr)
         return 2
     asyncio.run(serve(provider))
     return 0

@@ -7,8 +7,10 @@
 //! out one version behind the file beside it. The bump therefore runs on the patched document
 //! *before* it is re-deserialised, which puts the resulting `replace /…/version` operations
 //! inside the entry that gets written. [`stamp_provenance`] is a second walk over the same
-//! shape, for the same reason and in the same position, and the two are here together because
-//! "core owns this field and a caller may not choose it" is one statement made twice.
+//! shape, for the same reason and in the same position, and [`restore_versions`] is a third —
+//! the one that *undoes* a bump, so a proposal's per-call scaffolding never reaches the log
+//! (ADR 0019 §2). All three are here together because "core owns this field and a caller may
+//! not choose it" is one statement made three times.
 //!
 //! It works on `serde_json::Value` rather than on `Song` because the rule is one statement
 //! about a shape — an object with an `id` and a `version` — and expressing it over the typed
@@ -71,6 +73,52 @@ pub fn bump_versions(before: &Value, patched: &mut Value, merging: bool) -> Vec<
 /// hundreds of entities in a song.
 pub fn stamp_provenance(before: &Value, patched: &mut Value, made: &Value) {
     stamp(Some(before), patched, made);
+}
+
+/// Puts every entity `version` in `proposed` back to the number `before` holds for it — 0 for
+/// an entity `before` does not have, which is what a tool builds a new one at (ADR 0019 §2).
+///
+/// The proposal's scaffolding, removed. A track the model edited three times stands at
+/// `before + 3` on the fork, because each call ran the same `prepare` and each `prepare`
+/// bumped; what a person approves is **one** change, so the log must record `before + 1`.
+/// Rather than computing that, the numbers are put back where they started and the single
+/// `prepare` that follows computes exactly what one call producing this document would have —
+/// which is the whole of decision 2's "with `version`s as one `prepare` would compute them",
+/// and is why the proposal does not commit through `prepare_merge`: `max(ours, theirs) + 1`
+/// would take that track to `before + 4` and dispute nothing (ADR 0005 §2, §3).
+///
+/// The third walk over [`is_entity`]'s shape, beside [`bump_versions`] and
+/// [`stamp_provenance`], and here for their reason: "core owns `version`" is one statement,
+/// and the place that undoes a bump belongs beside the place that makes one.
+pub fn restore_versions(before: &Value, proposed: &mut Value) {
+    restore(Some(before), proposed);
+}
+
+fn restore(before: Option<&Value>, proposed: &mut Value) {
+    let Value::Object(map) = proposed else {
+        return;
+    };
+    let before_map = before.and_then(Value::as_object);
+    // The version rule's reading of "entity", for its reason: an object that *was* one still
+    // is one, whatever arrived in its place.
+    let entity = is_entity(map) || before_map.is_some_and(is_entity);
+
+    let keys: Vec<String> = map.keys().cloned().collect();
+    for key in keys {
+        let was = before_map.and_then(|m| m.get(&key));
+        restore(was, map.get_mut(&key).expect("the key came from this map"));
+    }
+
+    if !entity {
+        return;
+    }
+    // A different `id` in the same place is a different entity, as it is for the other two
+    // walks: the number the old one had belongs to something that no longer exists.
+    let held = before_map
+        .filter(|was| was.get("id") == map.get("id"))
+        .and_then(|was| was.get("version"))
+        .cloned();
+    map.insert("version".to_string(), held.unwrap_or_else(|| Value::from(0)));
 }
 
 fn stamp(before: Option<&Value>, patched: &mut Value, made: &Value) {

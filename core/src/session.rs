@@ -18,7 +18,9 @@ use crate::engine::{Engine, Preview};
 use crate::history::{ops_of, ops_text, HistoryError};
 use crate::id::IdSource;
 use crate::patch::{diff, Op};
-use crate::project::{Prepared, Project, ProjectError};
+use crate::call::{Answer, CallError, ErrorKind, OFFERED};
+use crate::project::{Prepared, Project, ProjectError, DEFAULT_MODEL, DEFAULT_PROVIDER};
+use crate::version::restore_versions;
 use crate::validate::Violation;
 use crate::tools;
 use escribass_proto::tools::{
@@ -29,8 +31,8 @@ use escribass_proto::tools::{
     RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest,
     SongResponse, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
-use escribass_schema::song::{Author, Song};
-use serde_json::Value;
+use escribass_schema::song::{Author, Provenance, Song};
+use serde_json::{Map, Value};
 
 /// One open project, and the sources of the two things §11 forbids `core` from reaching for
 /// on its own.
@@ -60,6 +62,38 @@ pub struct Session {
     /// re-applied an edit; the log records every undo and redo, so it already answers how far
     /// back ⌘Z has walked (ADR 0005 §4, amended 2026-09-15).
     preview: Option<Preview>,
+    /// The turn in progress, if one is (ADR 0019 §1).
+    ///
+    /// Session state beside the preview and for the same reason: it is a fact about something
+    /// running, never the document and never the log. **One at most** — a second fork stacked
+    /// on the first would be a proposal nobody has read being built on top of one nobody has
+    /// approved (ADR 0019 §3). `Box` because a proposal *is* a session, on a copy of this
+    /// project, which is what lets the model's calls go through the one dispatch rather than a
+    /// second one written beside it (ADR 0006 §1).
+    proposal: Option<Box<Proposal>>,
+    /// Whose provenance the call being run writes, when it is not this session's plain author.
+    made: Made,
+}
+
+/// What a call writes into the two §4.3 fields core owns, and which of them it decides.
+///
+/// Three callers, three answers, and the reason they cannot be one: until M3 every call that
+/// reached [`Session::run`] was somebody's typed at this machine, so "the session's author,
+/// now" answered both questions at once (ADR 0006 §4).
+enum Made {
+    /// Every call that arrives with no other word — the binaries' `--author`, the window's
+    /// `Human`. Provenance is this session's author and clock.
+    Session,
+    /// A **proposal's call**, run on the fork: the three ids of ADR 0021 §2, so an entity the
+    /// model mints is stamped with the call that minted it. Nothing is recorded and nothing is
+    /// written; the prepared document is kept on the fork (ADR 0019 §1).
+    Call(Provenance),
+    /// A **proposal's patch**, committed: this is the *entry's* provenance — `AUTHOR_MODEL`,
+    /// the model the turn's last response named, the `prompt_id`, and no `tool_call_id`, since
+    /// a composed proposal has several and its entities carry theirs (ADR 0021 §2). The ops
+    /// already carry the provenance `prepare` stamped on the fork, so nothing re-decides it
+    /// ([`Project::prepare_proposal`]).
+    Proposal(Provenance),
 }
 
 impl Session {
@@ -69,7 +103,16 @@ impl Session {
         clock: Box<dyn Clock + Send>,
         author: Author,
     ) -> Self {
-        Self { project, ids, clock, author, engine: None, preview: None }
+        Self {
+            project,
+            ids,
+            clock,
+            author,
+            engine: None,
+            preview: None,
+            proposal: None,
+            made: Made::Session,
+        }
     }
 
     /// Names the engine binary this session renders with (ADR 0008 §2).
@@ -860,6 +903,142 @@ impl Session {
         Ok(ToolResult { valid: true, errors: vec![], patch, summary, entry_id })
     }
 
+    // ---- the proposal (ADR 0019) ----
+    //
+    // A turn's calls do not reach the project. They reach a copy of it, and what a person
+    // approves is the one patch from the document as it stands to the document those calls
+    // produced. The reason is measured rather than assumed: of 116 successful spike runs, not
+    // one built a multi-call edit out of dry runs, because a dry run mints its ids from a fork
+    // it then puts back — so the second call of "add a track, then a clip on it" names a track
+    // that exists in a document that was thrown away (docs/plan.md, M3 trap 8).
+
+    /// Opens the proposal one turn's calls run against (ADR 0019 §1).
+    ///
+    /// `prompt_id` is the SHA-256 of the prompt's text, computed by the host with
+    /// [`crate::asset_hash`] — content-addressed as an asset is, so the same text asked twice
+    /// names the same id and a scripted transcript replays to the same log (ADR 0021 §2).
+    ///
+    /// **One at a time.** A second prompt while one is pending is refused rather than stacking
+    /// a second fork on the first or dropping what a person has not read (ADR 0019 §3). It is
+    /// an `Err` and not a `Violation` because nothing the caller can say differently fixes it:
+    /// a person applies or rejects, and only then does the next prompt go anywhere.
+    pub fn propose(&mut self, prompt_id: &str) -> Result<(), ProjectError> {
+        if self.proposal.is_some() {
+            return Err(ProjectError {
+                path: "/".to_string(),
+                rule: "proposal_pending",
+                message: "apply or reject the pending proposal first: one turn is one proposal \
+                          (ADR 0019 §3)"
+                    .to_string(),
+            });
+        }
+        self.proposal = Some(Box::new(Proposal::forked(self, prompt_id.to_string())));
+        Ok(())
+    }
+
+    /// The proposal this session is holding, if it is holding one.
+    pub fn proposal(&self) -> Option<&Proposal> {
+        self.proposal.as_deref()
+    }
+
+    /// The same, to run a call against.
+    pub fn proposal_mut(&mut self) -> Option<&mut Proposal> {
+        self.proposal.as_deref_mut()
+    }
+
+    /// Drops the proposal. Nothing was written, so nothing is undone and the log records
+    /// nothing (ADR 0019 §3).
+    ///
+    /// Answers whether there was one, because "rejected" and "there was nothing to reject" are
+    /// different things for the panel to say.
+    pub fn reject(&mut self) -> bool {
+        self.proposal.take().is_some()
+    }
+
+    /// Commits the proposal as **one entry**, under the tool name `proposal` (ADR 0019 §2).
+    ///
+    /// `model_id` is the model the turn's **last response** named — what actually answered,
+    /// never the id that was asked for (ADR 0021 §2).
+    ///
+    /// Three things happen here and each is somebody's decision, not this function's. The
+    /// patch is the proposal's ops, which are `diff` from the document as it stood to the
+    /// document the calls produced with the fork's per-call version bumps put back
+    /// ([`Proposal::ops`]). It goes through [`Session::run`] like every other mutating tool,
+    /// so there is no second commit path and the version rule is applied by the same code to
+    /// the same shape. And the document having **moved** underneath is refused there, by
+    /// ADR 0005 §3's guard, exactly as it refuses a held drag (ADR 0012 §4) — after which the
+    /// proposal is still pending, because a refusal is something a person acts on rather than
+    /// a reason to throw their turn away.
+    pub fn apply_proposal(&mut self, model_id: &str) -> Result<ToolResult, ProjectError> {
+        let Some(proposal) = self.proposal.take() else {
+            return Ok(refused(vec![Violation {
+                path: "/".to_string(),
+                rule: "no_proposal",
+                message: "there is no proposal to apply".to_string(),
+            }]));
+        };
+        // The patch as it was computed against the document the fork was taken from, carrying
+        // version claims of `before + 1`. `run` prepares it again against the document as it
+        // stands *now*, and that second prepare is where a person's concurrent edit is refused.
+        let prepared = match proposal.patch() {
+            Ok(prepared) => prepared,
+            Err(violations) => {
+                self.proposal = Some(proposal);
+                return Ok(refused(violations));
+            }
+        };
+        let ops = prepared.ops().to_vec();
+        // The entry's own provenance: the model, the prompt, and **no** `tool_call_id` — a
+        // composed proposal has several, and the entities carry theirs (ADR 0021 §2, §4).
+        let entry = Provenance {
+            author: Author::Model as i32,
+            model_id: Some(model_id.to_string()),
+            prompt_id: Some(proposal.prompt_id.clone()),
+            tool_call_id: None,
+            created_at: Some(self.clock.now()),
+        };
+        let previously = std::mem::replace(&mut self.made, Made::Proposal(entry));
+        // **The session moves past every id the proposal minted, and this is where.**
+        // `from_tool` does the same for a single call and for the same two reasons: the entry
+        // `record` mints comes *after* the ids the call used, and the session never mints one
+        // an entity already has. Without it the entry took the number the proposal's first
+        // track had — one ULID on two things — and the session's next call would have minted
+        // the instrument's. Measured rather than reasoned: the end-to-end golden's `proposal`
+        // entry and its Lead track were the same 26 characters.
+        //
+        // `ahead` rather than "adopt the fork", because a turn is long enough for a person to
+        // edit while it runs, and their entries mint from the session's line. Taking the fork
+        // back then takes the session *backwards*, which is `entry_exists` on the next commit
+        // — which is what the test for the guard's blind spot caught when this was a swap.
+        let onwards = ahead(self.ids.fork(), proposal.fork.ids.fork());
+        let spent = std::mem::replace(&mut self.ids, onwards);
+        let result = self.run("proposal", &ops, false);
+        self.made = previously;
+        // Kept on anything but a clean commit, including a refusal: Reject is a person's
+        // decision and this is not it (ADR 0019 §3). The ids go back with it, because a
+        // proposal that did not apply has minted nothing that exists.
+        if !matches!(&result, Ok(outcome) if outcome.valid) {
+            self.ids = spent;
+            self.proposal = Some(proposal);
+        }
+        result
+    }
+
+    /// The provider and model this project records, or the baseline default when it records
+    /// none (ADR 0021 §4).
+    pub fn ai(&self) -> (&str, &str) {
+        match self.project.ai() {
+            Some(ai) => (ai.provider.as_str(), ai.model.as_str()),
+            None => (DEFAULT_PROVIDER, DEFAULT_MODEL),
+        }
+    }
+
+    /// Records the provider and model this project's prompts go to, on first use
+    /// (ADR 0021 §4). A project that already records one keeps it.
+    pub fn record_ai(&mut self, provider: &str, model: &str) -> Result<(), ProjectError> {
+        self.project.record_ai(provider, model)
+    }
+
     /// A tool that refused its arguments is refused the same way a patch that will not apply
     /// is: a result, not a failure (ADR 0006 §2). Nothing distinguishes the two for a caller,
     /// which is the point — both are things it can fix by calling differently.
@@ -905,10 +1084,19 @@ impl Session {
         // The session's author is the default for every call that arrives with no other word
         // — the binaries' `--author`, the window's `Human` — and no request message gains an
         // author field, because a field on the wire is a field a caller can lie in. The three
-        // optional ids stay `None` here and reach the log through the proposal, which is the
-        // only place a model's calls enter (ADR 0021 §1, §2; ADR 0020 §1).
-        let made = crate::project::authorship(self.author, &*self.clock);
-        let prepared = match self.project.prepare(ops, &made) {
+        // optional ids reach the log through the proposal, which is the only place a model's
+        // calls enter (ADR 0021 §1, §2; ADR 0020 §1).
+        let prepared = match &self.made {
+            // A proposal's patch carries provenance `prepare` already decided on the fork, so
+            // this is the one caller whose two §4.3 exemptions come apart: versions guarded,
+            // provenance kept (ADR 0019 §2, ADR 0021 §2).
+            Made::Proposal(_) => self.project.prepare_proposal(ops),
+            Made::Call(made) => self.project.prepare(ops, made),
+            Made::Session => self
+                .project
+                .prepare(ops, &crate::project::authorship(self.author, &*self.clock)),
+        };
+        let prepared = match prepared {
             Ok(prepared) => prepared,
             Err(violations) => return Ok(refused(violations)),
         };
@@ -925,6 +1113,23 @@ impl Session {
         let summary = summarise(prepared.ops());
 
         if dry_run {
+            return Ok(ToolResult {
+                valid: true,
+                errors: vec![],
+                patch,
+                summary,
+                entry_id: String::new(),
+            });
+        }
+
+        // **A proposal's call keeps its document and writes nothing** (ADR 0019 §1). This is
+        // the one branch here that is not a commit, and it is what makes the second call of
+        // "add a track, then a clip on it" possible: the track is in the fork, under the id the
+        // first call's result returned, and the project has not been touched. The empty
+        // `entry_id` is true rather than a placeholder — a person approves the whole, once,
+        // when the turn ends (decision 2).
+        if matches!(self.made, Made::Call(_)) {
+            self.project.keep(prepared);
             return Ok(ToolResult {
                 valid: true,
                 errors: vec![],
@@ -960,7 +1165,206 @@ impl Session {
         tool: &str,
         parents: Vec<String>,
     ) -> Result<String, ProjectError> {
-        self.project.record(prepared, tool, parents, self.author, &mut *self.ids, &*self.clock)
+        let made = match &self.made {
+            Made::Session => crate::project::authorship(self.author, &*self.clock),
+            // A proposal's entry names the model and the prompt as well (ADR 0021 §2).
+            Made::Call(made) | Made::Proposal(made) => made.clone(),
+        };
+        self.project.record(prepared, tool, parents, &made, &mut *self.ids)
+    }
+}
+
+/// The model's calls, applied to a fork of the document, writing nothing (ADR 0019 §1).
+///
+/// **A proposal is a session on a copy of the project that records nothing.** That sentence is
+/// the whole design and it is why this type is forty lines rather than four hundred: the tool
+/// functions, the validator, `prepare`, the version rule and the one dispatch
+/// [`crate::call::call`] are all the ones a person's edit goes through, run against
+/// `Project::clone` instead of the project. Nothing about what is *accepted* differs by author
+/// (docs/plan.md, M3 trap 18); what differs is where it lands, and the carrier decides that by
+/// calling this instead of the session (ADR 0019 §1).
+///
+/// Two things the fork keeps that a dry run does not, and they are the two that matter:
+///
+/// 1. **The ids**, because the fork is never put back. So the track `add_track` minted is
+///    still there, under the id its result returned, when `add_clip` names it — which is what
+///    every model in the spike did with the ids a real apply returned, and what no dry run can
+///    offer (ADR 0012 §4; M3 trap 8).
+/// 2. **The document**, because a valid call swaps the prepared song in. So the view the model
+///    reads between calls is the document as its own calls have left it, which is ADR 0018 §2's
+///    "re-read after every applied call" with "applied" meaning applied to the proposal.
+///
+/// What it does not keep is anything on disk. `Project::write` is paid once, at approval, which
+/// is ADR 0017 §1's second reason arriving unchanged and the answer to the cost a branch per
+/// proposal would have had (docs/plan.md, M3 trap 9).
+pub struct Proposal {
+    /// The session the calls run on: this project, cloned, with a fork of the id source and a
+    /// copy of the clock. Its author is `Model` and its `made` is replaced per call.
+    fork: Box<Session>,
+    /// The project as it stood when the turn began.
+    ///
+    /// The patch is computed against **this** rather than against wherever the project has got
+    /// to since, and that is the whole of how a pending proposal meets a concurrent edit: the
+    /// patch then carries version claims of `before + 1`, which are *stale* if a person has
+    /// edited an entity it touched, and a stale claim is what ADR 0005 §3's guard refuses
+    /// (ADR 0019 §2; ADR 0012 §4). Preparing against the moved document instead would compute
+    /// claims that fit, and merge over their edit in silence.
+    ///
+    /// `ponytail:` a whole `Project` clone, log included, because `prepare` is a method on one
+    /// and this is one line rather than a constructor for a project positioned at a document
+    /// with no history. It is paid once per turn, beside a `Song` clone that is paid per call.
+    /// If a long log ever makes opening a turn drag, that constructor is the thing to add.
+    base: Project,
+    /// The SHA-256 of the prompt's text (ADR 0021 §2). Every entity the turn mints carries it,
+    /// and so does the entry.
+    prompt_id: String,
+    /// The tools this turn has called, in order, accepted ones only.
+    ///
+    /// Not in the entry and never on its way there: `history.proto` gains no field for them and
+    /// a list of names would not explain itself without its arguments, which are the ops
+    /// (ADR 0019 §4). It is what the turn reports to a person while the proposal is still
+    /// pending — "three calls" — and the conversation is where the calls themselves live.
+    calls: Vec<String>,
+}
+
+impl Proposal {
+    /// Forks `from`'s project, ids and clock. Writes nothing and mints nothing.
+    fn forked(from: &Session, prompt_id: String) -> Self {
+        let fork = Session {
+            project: from.project.clone(),
+            ids: from.ids.fork(),
+            clock: from.clock.fork(),
+            // The proposal's own author, never the session's: `app` keeps `Author::Human` and
+            // the model's calls never enter through it (ADR 0021 §1, Consequences).
+            author: Author::Model,
+            // A proposal renders nothing and plays nothing: neither `render_export` nor
+            // `render_preview` is offered, and an engine the model cannot hear is the reason
+            // (ADR 0022 §1, CLAUDE.md #6).
+            engine: None,
+            preview: None,
+            // One proposal at a time, structurally: a fork has no fork (ADR 0019 §3).
+            proposal: None,
+            made: Made::Session,
+        };
+        Proposal {
+            base: from.project.clone(),
+            fork: Box::new(fork),
+            prompt_id,
+            calls: Vec::new(),
+        }
+    }
+
+    /// The document as the proposal's calls have left it. What the view is computed from, and
+    /// what crosses back on every `CallResult` (ADR 0018 §2, ADR 0020 §3).
+    pub fn song(&self) -> &Song {
+        self.fork.project.song()
+    }
+
+    /// The prompt whose turn this is (ADR 0021 §2).
+    pub fn prompt_id(&self) -> &str {
+        &self.prompt_id
+    }
+
+    /// The tools this turn has called, accepted ones only.
+    pub fn calls(&self) -> &[String] {
+        &self.calls
+    }
+
+    /// Runs one of the model's calls against the fork (ADR 0019 §1).
+    ///
+    /// `model_id` is the model the response that made this call named; `tool_call_id` is the id
+    /// the provider assigned it. Both are stamped on whatever the call mints, so an entity in
+    /// the log leads back to the line of the conversation that created it (ADR 0021 §2).
+    ///
+    /// **A tool the model was not offered is refused here**, and this is the only gate: it is a
+    /// statement about what is *offered* to one author and not about what is accepted, which is
+    /// unchanged for every caller (ADR 0022 §1; M3 trap 18). It is also what keeps the fork
+    /// harmless — `create_branch`, `switch_branch` and `add_asset` write to the project root
+    /// straight out, which on a clone of a live project would be the real one.
+    ///
+    /// A model that sends `dry_run: true` from habit gets a dry run **of the fork** — prepared
+    /// and described, with nothing swapped in — so the models that preview first get the same
+    /// answers as the ones that do not (ADR 0022 §1).
+    pub fn call(
+        &mut self,
+        name: &str,
+        arguments: &Map<String, Value>,
+        model_id: &str,
+        tool_call_id: &str,
+    ) -> Result<Answer, CallError> {
+        if !OFFERED.contains(&name) {
+            return Err(CallError {
+                kind: ErrorKind::BadRequest,
+                message: format!(
+                    "`{name}` is not one of the tools you were offered; call one of: {}",
+                    OFFERED.join(", ")
+                ),
+            });
+        }
+        self.fork.made = Made::Call(Provenance {
+            author: Author::Model as i32,
+            model_id: Some(model_id.to_string()),
+            prompt_id: Some(self.prompt_id.clone()),
+            tool_call_id: Some(tool_call_id.to_string()),
+            created_at: Some(self.fork.clock.now()),
+        });
+        let answered = crate::call::call(&mut self.fork, name, arguments);
+        self.fork.made = Made::Session;
+        if matches!(&answered, Ok(answer) if !answer.refused) {
+            self.calls.push(name.to_string());
+        }
+        answered
+    }
+
+    /// The operations that take the document as it stood to the document the model's calls
+    /// produced (ADR 0019 §2).
+    ///
+    /// The fork's per-call version bumps are scaffolding and never reach the log: a track the
+    /// model edited three times stands at `before + 3` on the fork and at `before + 1` in the
+    /// entry, because what a person approves is one change. [`restore_versions`] puts the
+    /// numbers back where they started, and the single `prepare` these ops then go through
+    /// computes exactly what one call producing this document would have recorded.
+    fn ops(&self) -> Vec<Op> {
+        let before = serde_json::to_value(self.base.song()).expect("a Song serialises");
+        let mut proposed = serde_json::to_value(self.song()).expect("a Song serialises");
+        restore_versions(&before, &mut proposed);
+        diff(&before, &proposed)
+    }
+
+    /// **The patch a person approves** (ADR 0019 §2): those operations as one `prepare` records
+    /// them, version bumps included.
+    ///
+    /// Read-only and computable after every call, which is what lets the panel draw the
+    /// proposal as it grows (PR 9). It is also exactly what Apply sends, so what a person
+    /// approved and what is committed are one value and not two computations of it.
+    pub fn patch(&self) -> Result<Prepared, Vec<Violation>> {
+        self.base.prepare_proposal(&self.ops())
+    }
+}
+
+/// Whichever of two id sources is further along.
+///
+/// Ids sort in the order they are minted (ADR 0001 §5), so "further along" is a comparison of
+/// what each would mint **next** — read from a fork of each, which burns nothing on either.
+///
+/// The two sources here share an origin: a proposal forks the session's at the start of a turn
+/// and keeps it (ADR 0019 §1), while the session goes on minting for whatever a person does
+/// meanwhile. Both are monotone, so the one that is ahead has produced a superset of the
+/// other's numbers and taking it is what keeps every id in the project distinct.
+///
+/// `ponytail:` under [`crate::id::UlidSource`] the comparison is exact within a millisecond and
+/// arbitrary across one, because a new millisecond takes fresh entropy — and across one it does
+/// not matter, since two sources that both re-seeded are 80 bits apart. Where it has to be
+/// exact is where it is: [`crate::id::SeededIds`], which is a counter and is what every golden
+/// in this repository is minted by.
+fn ahead(
+    one: Box<dyn IdSource + Send>,
+    other: Box<dyn IdSource + Send>,
+) -> Box<dyn IdSource + Send> {
+    if one.fork().next_id() >= other.fork().next_id() {
+        one
+    } else {
+        other
     }
 }
 

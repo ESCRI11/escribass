@@ -209,7 +209,31 @@ render* already keeps for sound.
   with the three ids (decision 2) without changing the signature again.
 - **PR 8** (`m3.8-loop`): the proposal carries the three ids into every entity it mints and
   the entry it commits; the `Lock` struct gains `ai`, written on first use; the loop reads the
-  project's model id and hands it to `ai` per prompt.
+  project's model id and hands it to `ai` per prompt. **Done 2026-09-24**, with three things
+  decision 2 and decision 4 did not have to say.
+
+  **`prepare`'s two §4.3 exemptions come apart here, and that took a third entry point.**
+  `prepare_merge` granted both at once — core's own versions *and* core's own provenance —
+  because the only callers that needed either needed both. A proposal's patch needs one and
+  not the other: its versions are a caller's claim about a document that may have moved, so
+  they are guarded; its provenance was already decided by `prepare` **on the fork**, with the
+  three ids of the call that minted each entity, so re-deciding it at the commit would replace
+  the call with the turn and lose the `tool_call_id` this decision says the entities carry.
+  `Project::prepare_proposal` is that combination, and `prepare_inner` now asks the two
+  questions separately.
+
+  **The default is a constant in `core` beside the row in `lock.baseline.json`**, because that
+  file is the repository's baseline document and not something a shipped binary reads. Two
+  places to say one thing, so a test asserts they agree
+  (`the_default_model_is_the_one_lock_baseline_records`).
+
+  **`lock.json` gains the block only when a prompt has been sent.** `ai` is
+  `skip_serializing_if = "Option::is_none"`, so a project that has never been prompted writes
+  no `ai` block and none of the five determinism goldens gained one by being rewritten — which
+  is what kept this pull request's diff to a new golden and no moved bytes. `record_ai` writes
+  `lock.json` alone rather than the whole project: a full `Project::write` is O(history), and
+  rewriting every entry in `patches/` to record a fact about no entry at all is trap 9 paid for
+  nothing.
 - **PR 9** (`m3.9-panel`): the conversation file, written after each turn and read on open; the
   history view shows `model_id` beside the author column and says when a `prompt_id` names a
   conversation this machine does not have; nothing in the status bar counts `ai.model`.

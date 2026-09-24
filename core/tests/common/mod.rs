@@ -329,16 +329,21 @@ impl Heard {
 /// is `ai/tests/test_sidecar.py`, which drives the real process over a real socket, and the two
 /// meet in the ignored end-to-end test at the bottom of that suite (ADR 0020 §4).
 #[cfg(unix)]
+/// `ending` is the status the stream finishes with instead of closing cleanly — which is how
+/// `ai` reports a provider failure it has already retried, and a model that ran out of room
+/// (ADR 0022 §3). `None` ends the turn the ordinary way.
+#[cfg(unix)]
 pub fn fake_assistant(
     dir: &Path,
     events: Vec<escribass_proto::assistant::AssistantEvent>,
+    ending: Option<tonic::Status>,
 ) -> AskedFor {
     use escribass_proto::assistant::assistant_server::AssistantServer;
     use escribass_proto::assistant::{AssistantCommand, AssistantEvent};
 
     let socket = dir.join("assistant.sock");
     let asked = Arc::new(Mutex::new(Vec::new()));
-    let service = Answering { events, asked: asked.clone() };
+    let service = Answering { events, ending, asked: asked.clone() };
     let bound = socket.clone();
     let (listening, ready) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -363,6 +368,7 @@ pub fn fake_assistant(
 
     struct Answering {
         events: Vec<AssistantEvent>,
+        ending: Option<tonic::Status>,
         asked: Arc<Mutex<Vec<AssistantCommand>>>,
     }
 
@@ -389,14 +395,40 @@ pub fn fake_assistant(
                 .ok_or_else(|| tonic::Status::invalid_argument("no prompt arrived"))?;
             self.asked.lock().expect("nothing else panicked").push(first);
             let events = self.events.clone();
+            let ending = self.ending.clone();
+            let asked = self.asked.clone();
             let (sent, outgoing) = tokio::sync::mpsc::unbounded_channel();
             tokio::spawn(async move {
+                // **Lock-step, as the real sidecar is**: a call goes out and the next event
+                // waits for its `CallResult`, because the model's next call is written from
+                // the previous one's answer (ADR 0020 §3). It is also what makes "the result
+                // was fed back" a fact this test can check rather than a race it can lose —
+                // event N+1 exists only because result N arrived.
+                let mut awaiting = false;
                 for event in events {
+                    if awaiting {
+                        match inbound.message().await {
+                            Ok(Some(answered)) => {
+                                asked.lock().expect("nothing else panicked").push(answered)
+                            }
+                            // The host closed its half: the turn ended without this event.
+                            _ => return,
+                        }
+                    }
+                    awaiting = matches!(
+                        event.event,
+                        Some(escribass_proto::assistant::assistant_event::Event::Call(_))
+                    );
                     let _ = sent.send(Ok(event));
+                }
+                if let Some(status) = ending {
+                    let _ = sent.send(Err(status));
                 }
                 // Dropping the sender ends the stream, which is what ends the turn.
                 drop(sent);
-                while let Ok(Some(_)) = inbound.message().await {}
+                while let Ok(Some(answered)) = inbound.message().await {
+                    asked.lock().expect("nothing else panicked").push(answered);
+                }
             });
             Ok(tonic::Response::new(Box::pin(
                 tonic::codegen::tokio_stream::wrappers::UnboundedReceiverStream::new(outgoing),

@@ -337,6 +337,22 @@ What the model is told, in one sentence the loop sends with them: these are coun
 document, not judgements; no key, genre or norm is claimed; a sampler voice's pitches may not
 be pitches; a person decides.
 
+**The conditional is settled, 2026-09-24 in PR 8 — the sentence PR 6 deliberately left.**
+Question 9's answer *does* make a proposal's document readable (ADR 0019 §1): the model's calls
+run against a fork, so from the first call on there is a proposal's document, and it is the
+only one the model has. So the loop sends the view and the six axes with the prompt, describing
+the document the turn found, and sends both again after **every applied call**, computed over
+the document the proposal now has — which is ADR 0018 §2's "re-read after every applied call"
+with "applied" meaning applied to the proposal. A refused call changes no document and re-reads
+nothing. The model therefore checks what it meant against what it did *while it is still doing
+it*, which is what decision 4 asked for and what a description of the saved document could not
+have given it. The cost is said rather than hidden: the two together are about 7 KB for the
+render fixture and are sent per call, and what bounds that is the response cap (ADR 0022 §3),
+not a rule here — `escribass_ai.turn.document` carries the `ponytail:` note and the upgrade
+path, which is the view alone after a call. Nothing else in decision 4 changes: no axis is
+compared with a threshold, none appears in a `Violation`, none crosses to `core`, and none
+decides whether a proposal is applied.
+
 ### 5. The view and the six axes are pure, and goldened as the frontend's projections are
 
 Seven functions of a `Song` — the view and one per axis — with no randomness, no clock, no

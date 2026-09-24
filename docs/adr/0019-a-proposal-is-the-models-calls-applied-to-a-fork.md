@@ -181,6 +181,58 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
   it) and assert one entry, the previewed ids in the log, and `version_not_writable` when the
   document moved under it. Trap 9's number is re-measured with a proposal of several calls
   driving `Project::write` once.
+
+  **Done 2026-09-24**, and four things the decisions did not have to say.
+
+  **A proposal is a session on a copy of the project that records nothing.** That is the whole
+  implementation of decision 1: `Project` is `Clone` and `Session` is project + ids + clock +
+  author, so the fork is a `Session` whose `run` keeps the prepared document instead of
+  committing it, and the model's calls go through `core::call` — the same dispatch the window
+  and the MCP server use — rather than a second `match` written beside it (ADR 0006 §1). The
+  one thing the fork must be stopped from doing is the one thing `run` does not gate:
+  `create_branch`, `switch_branch`, `delete_branch` and `add_asset` write to the project root
+  straight out, and the fork's root *is* the real project's. What stops them is that they are
+  not offered (ADR 0022 §1), refused at `Proposal::call` before dispatch, with a test.
+
+  **The patch is prepared against the project as it stood, not against the project as it is.**
+  Decision 2 says `diff(current, proposal.song)`, and at the turn's end those are the same
+  document; they are not the same at **Apply**, and the difference is the whole guard. The ops
+  that come out of `restore_versions` + `diff` carry *no* version claims at all — the numbers
+  were put back, so the diff has nothing to say about them — so they must be `prepare`d once
+  against the document the fork was taken from, and it is that `Prepared`'s ops, claiming
+  `before + 1`, that Apply sends. Preparing against the moved document instead would compute
+  claims that fit and merge over a person's edit in silence, which is the failure ADR 0012 §4's
+  check exists to prevent. `Proposal` therefore holds a whole `Project` clone at the turn's
+  start, which is a `ponytail:` in the code with its cost and its upgrade path.
+
+  **The guard refuses a document that moved by two entries and not by one, and that is stated
+  rather than papered over.** ADR 0005 §3 reads a claim equal to the number an entity *holds*
+  as "disputing nothing", because that is what a typed tool's own ops look like. A proposal's
+  claim of `before + 1` is exactly the number the entity holds after one intervening entry, so
+  one edit merges in silence and two are refused; and because every change bumps the `Song`'s
+  own `version`, two entries anywhere refuse the proposal at `/version` even when it touched
+  nothing in common. Both ends are measured, each by a test named for it
+  (`exactly_one_intervening_edit_is_the_guards_blind_spot`,
+  `a_second_edit_anywhere_refuses_the_proposal_at_the_song`). This is ADR 0012 §4's optimistic
+  apply as it has always been — a held drag has the same property — so nothing is widened here;
+  what changes is that the sentence "the document having moved underneath is refused" is now
+  known to mean "moved by more than one entry". Widening it is ADR 0005's to do, and the way
+  out in the meantime is decision 2's own: Reject and ask again.
+
+  **Applying takes the session past every id the proposal minted, and it is a comparison rather
+  than a swap.** `from_tool`'s rule (the fork becomes the source when a call keeps its work) has
+  to hold for a turn too, or the entry `record` mints takes a number an entity already has —
+  measured, not reasoned: the end-to-end golden's `proposal` entry and its Lead track were the
+  same 26 characters. Adopting the fork outright is wrong for the other half of the same
+  problem, because a person may edit *while* the turn runs and their entries mint from the
+  session's line: taking the fork back then takes the session backwards, which is
+  `entry_exists` on the next commit. So the session takes whichever source is **ahead**, read
+  by minting one id from a fork of each and comparing — ids sort in the order they are minted.
+  A rejected proposal burns none of them, as a dry run burns none.
+
+  Trap 9, re-measured on this machine at 21 entries: six proposed calls in **6.1 ms** with no
+  write at all, and one apply in **3.9 ms** — one `Project::write`. The branch alternative would
+  have paid the second number per model call.
 - **PR 9** (`m3.9-panel`) draws the proposal dashed as it grows and offers Apply and Reject;
   Edit lands last, with ADR 0017 §3's refusal path. `proposal` rows appear in the history view
   with the model named (ADR 0021 §2).

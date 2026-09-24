@@ -19,6 +19,13 @@ pub trait Clock {
     fn now(&self) -> Timestamp {
         timestamp_from_ms(self.now_ms())
     }
+
+    /// A copy of this clock, reading what it reads.
+    ///
+    /// [`IdSource::fork`](crate::id::IdSource::fork)'s mirror, for the one caller that needs
+    /// both: a proposal is a session on a copy of the project (ADR 0019 §1), and a session
+    /// owns a boxed clock. Not `Clone` on the trait, which would make it un-object-safe.
+    fn fork(&self) -> Box<dyn Clock + Send>;
 }
 
 /// Converts epoch milliseconds to a `Timestamp` whose `nanos` are a whole number of
@@ -35,6 +42,10 @@ pub fn timestamp_from_ms(ms: i64) -> Timestamp {
 pub struct SystemClock;
 
 impl Clock for SystemClock {
+    fn fork(&self) -> Box<dyn Clock + Send> {
+        Box::new(*self)
+    }
+
     fn now_ms(&self) -> i64 {
         use std::time::{SystemTime, UNIX_EPOCH};
         match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -51,6 +62,10 @@ impl Clock for SystemClock {
 pub struct FixedClock(pub i64);
 
 impl Clock for FixedClock {
+    fn fork(&self) -> Box<dyn Clock + Send> {
+        Box::new(*self)
+    }
+
     fn now_ms(&self) -> i64 {
         self.0
     }

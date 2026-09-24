@@ -325,6 +325,17 @@ Its test is loud, so it does not muddy that pull request's silent half.
   §5's dot. And **a failed turn does not kill a live sidecar**, which is the one place the
   engine's shape could not be copied: an engine is born with its work and dies with its answer
   (ADR 0008 §2), where this serves a session.
+- **PR 8** (`m3.8-loop`): the stream becomes a loop. `Sidecar::answer` — PR 5's collect-and-
+  half-close, whose own `ponytail:` said both would change here — is **deleted** rather than
+  kept beside `Sidecar::turn`, because two ways to take a turn is one that stops matching what
+  `core` actually does; its three tests now drive `turn` against a real `Session`. The send half
+  stays open for the whole turn, the host answers each `ToolCall` with a `CallResult` on it, and
+  closing it is how the host ends a turn whose refusal budget ran out (ADR 0013 §2). **Done
+  2026-09-24**, with one thing decision 3 did not have to say: a status the sidecar *returned*
+  and a transport that broke have to be told apart at the host, because `ai` reports a provider
+  failure it has already classified as a gRPC status and a dead socket looks the same from a
+  string. They are separate values in `core/src/assistant.rs` for that reason, and a child that
+  is gone overrides both.
 - `docs/specs.md`: §3 says which side listens and what comes back; §6 names `grpclib` where it
   said `grpcio`; §10 and ADR 0012 §3 say what a stale lock is; §13 names the four services and
   loses `Jobs`; §17 and `lock.baseline.json` gain the three packages by name, unpinned until PR
