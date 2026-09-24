@@ -237,6 +237,21 @@ impl Prepared {
 /// real lock protocol is worth writing when something is (ADR 0012 §3). The file is **never
 /// removed**, which is how `cargo`'s own lock files behave and for this reason: unlinking a
 /// file another process may already have open is the window this amendment closed.
+/// How many times [`ProjectLock::take`] re-attempts the kernel's lock before it believes a
+/// refusal, one [`FORK_WINDOW_STEP`] apart — so about 10 ms in all.
+///
+/// Sized from a measurement rather than a feeling (M3 PR 11): a child forked while the lock is
+/// held keeps it until its `execve`, and over 6,000 close-and-retake cycles against a thread
+/// doing nothing but spawning, the 13 that hit the window lasted **0.58–1.03 ms**. Ten
+/// milliseconds is an order of magnitude past the worst of those, and it is spent only by a
+/// take that is going to be refused — where a person is about to be told to close another
+/// window, and will not notice ten milliseconds of it.
+const FORK_WINDOW_ATTEMPTS: u32 = 10;
+
+/// The pause between those attempts. One millisecond, which is already longer than the window
+/// usually is.
+const FORK_WINDOW_STEP: std::time::Duration = std::time::Duration::from_millis(1);
+
 #[derive(Debug)]
 pub struct ProjectLock {
     /// The open descriptor the advisory lock lives on. Dropping it is releasing the lock, so
@@ -273,10 +288,41 @@ impl ProjectLock {
             .open(&path)
             .map_err(|e| err(&path, "unwritable", e.to_string()))?;
 
-        match held.try_lock() {
+        // Re-attempted across the `fork`→`exec` window before it is believed (ADR 0012 §3,
+        // amended 2026-09-25). A child forked while some thread holds this lock inherits the
+        // open file description the lock lives on, and `O_CLOEXEC` closes that copy at `execve`
+        // and not one instruction before — so a lock just released can still be held, by a
+        // process that will never know it held it. `core` spawns the engine per render and the
+        // sidecar per session, both while the host has the project open, so the window is a
+        // real one rather than a curiosity.
+        //
+        // **A retry cannot mask a real holder**, which is the whole reason this is safe: a real
+        // holder keeps the file open for as long as it has the project, so it never clears and
+        // the loop refuses on its last attempt exactly as a single attempt would. What clears
+        // is only the transient inheritance.
+        //
+        // `ponytail:` a fixed 1 ms step and a small count, not a backoff. Ceiling: the window
+        // was measured at M3's close at 0.58–1.03 ms over 6,000 close-and-retake cycles against
+        // a thread doing nothing but spawning, so [`FORK_WINDOW_ATTEMPTS`] is about ten times
+        // the worst of those. Upgrade path, if a loaded machine ever shows a longer one: raise
+        // the count, and re-measure rather than guessing — the cost of raising it is paid only
+        // by a refusal, which is a person being told to close another window.
+        let mut waited = 0;
+        let outcome = loop {
+            match held.try_lock() {
+                Err(std::fs::TryLockError::WouldBlock) if waited < FORK_WINDOW_ATTEMPTS => {
+                    waited += 1;
+                    std::thread::sleep(FORK_WINDOW_STEP);
+                }
+                settled => break settled,
+            }
+        };
+
+        match outcome {
             Ok(()) => {}
-            // Somebody has this open, right now. The pid is read only to name them, and a file
-            // that names nobody refuses just the same — the refusal is the kernel's.
+            // Somebody has this open, right now, and has had it for the whole retry above. The
+            // pid is read only to name them, and a file that names nobody refuses just the
+            // same — the refusal is the kernel's.
             Err(std::fs::TryLockError::WouldBlock) => {
                 let owner = std::fs::read_to_string(&path).unwrap_or_default().trim().to_string();
                 let named = if owner.is_empty() {

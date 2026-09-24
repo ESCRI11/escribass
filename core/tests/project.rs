@@ -524,6 +524,42 @@ fn a_live_holders_lock_is_refused_and_is_not_broken() {
 }
 
 #[test]
+fn a_holder_that_clears_in_a_moment_is_waited_out_rather_than_refused() {
+    // The `fork`→`exec` window, and the only property that distinguishes it from a real
+    // holder: it **clears**. A child forked while this process holds `.escri/lock` inherits the
+    // open file description, and `O_CLOEXEC` closes that copy at `execve` and not before — so
+    // for a fraction of a millisecond the lock this process has just released is still held, by
+    // a child that will never know it had it. Measured at M3's close: 13 spurious refusals in
+    // 6,000 close-and-retake cycles against a thread doing nothing but spawning, each lasting
+    // 0.58–1.03 ms. `core` spawns the engine per render and the sidecar per session, both while
+    // the host holds the project lock, so the window is not hypothetical.
+    //
+    // A transient holder that releases in 2 ms stands in for it, because what `take` has to do
+    // is the same either way: wait the short window out instead of refusing. A **real** holder
+    // never clears, which is why this cannot mask one — the two tests below hold their locks
+    // for the length of an assertion and are refused exactly as before, now 10 ms later
+    // (ADR 0012 §3, amended 2026-09-25).
+    let dir = Scratch::new();
+    std::fs::create_dir_all(&dir.0).expect("a directory to lock");
+
+    let ready = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            let held = ProjectLock::take(&dir.0).expect("the transient holder takes it");
+            ready.wait();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            drop(held);
+        });
+
+        ready.wait();
+        // Held right now, and gone well inside the retry budget.
+        let taken = ProjectLock::take(&dir.0)
+            .expect("a holder that clears in a moment is waited out, not refused");
+        drop(taken);
+    });
+}
+
+#[test]
 fn a_lock_with_no_pid_in_it_is_taken_because_nobody_is_holding_it() {
     // **Amended with ADR 0020 §5, 2026-09-24**, and this test's name changed with the answer.
     // Under the pid protocol a lock file with no number in it could not be adjudicated and was

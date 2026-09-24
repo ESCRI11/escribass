@@ -275,6 +275,18 @@ protocol and were left unrevised when the amendment above deleted it, so they sa
 amendment and read as current. The rejections still stand — neither alternative is wanted —
 but they stand for a better reason than the one they gave.)
 
+**Extended 2026-09-25: the kernel's lock needs one thing from us, and it is a retry.** `flock`
+lives on the open file description, so a child forked while the lock is held inherits a copy and
+`O_CLOEXEC` only closes it at `execve` — leaving a sub-millisecond window in which a lock just
+released is still held. `core` forks for every render, every preview and every session, always
+while the host has the project open, so this arrives in normal use; it was found by the close's
+own suite run, at 4 failures in 40 runs of `core/tests/project.rs`, and reproduced outside Rust
+at 13 refusals in 4,000 cycles, each 0.58–1.03 ms. `ProjectLock::take` now re-attempts ten
+times, a millisecond apart, before it believes a refusal. **It cannot mask a real holder** —
+a real holder never clears — and the amendment is written here *and* in ADR 0012 §3 and
+`docs/specs.md` §10 in this one commit, which is what the previous change to this decision did
+not do and what this walk caught it for (ADR 0012 §3, amended 2026-09-25).
+
 **§18.2 is narrowed as U5 decided, and this decision is what makes the narrowed promise
 true.** An external MCP client drives a project **with the window closed, one process at a
 time**; the lock refuses the second (ADR 0012 §3); and when the client's process ends by

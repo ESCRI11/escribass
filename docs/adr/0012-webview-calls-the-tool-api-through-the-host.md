@@ -155,6 +155,42 @@ Recorded here at M3's close (PR 11), walking the ADRs against the code: ADR 0020
 `docs/specs.md` §10 were amended in PR 10 and this section — the one ADR 0020 §5 amends — was
 not, which `docs/adr/AGENTS.md` requires in the same commit.
 
+**Amended 2026-09-25: `take` waits the fork window out before it believes a refusal.** Running
+the suite at the close turned up the one thing the kernel does not do for us. `flock` lives on
+the **open file description**, and a child forked while this lock is held inherits a copy of
+that description; `O_CLOEXEC` closes the copy at `execve` and not one instruction before. So for
+a fraction of a millisecond a lock this process has just released is still held — by a process
+that will never know it held it. It is not hypothetical: `core` spawns the engine per render or
+preview and the sidecar per session, both while the host has the project open, and
+`core/tests/project.rs`'s own live-holder test was failing about one run in ten because a
+sibling test spawns a real `escribass-mcp`.
+
+**Measured before it was fixed**, because a retry count nothing can distinguish from zero is the
+defect this repository keeps finding. 4 failures in 40 runs of the `project` test binary; 0 in
+12 single-threaded; 0 in 20 with the two process-spawning tests skipped; and then, with no Rust
+in it at all, **13 spurious refusals in 4,000 close-and-retake cycles** against a thread doing
+nothing but spawning `/bin/true`, each lasting **0.58–1.03 ms** over 6,000 cycles.
+
+So `take` re-attempts the kernel's lock **ten times, one millisecond apart** — about an order of
+magnitude past the worst window measured — and only then refuses. **This cannot mask a real
+holder**, which is what makes it safe rather than a papering-over: a real holder keeps the file
+open for as long as it has the project, so it never clears and the tenth attempt refuses exactly
+as the first would have. What clears is only the inheritance. After the change: **0 failures in
+40 runs** of the same binary and **0 refusals in 4,000** cycles of the same reproducer, with a
+test that was watched failing first —
+`a_holder_that_clears_in_a_moment_is_waited_out_rather_than_refused`, which is red without the
+retry and green with it.
+
+What it costs is paid only by a take that was going to be refused, where a person is about to be
+told to close another window: ten milliseconds, which nobody will see. The one place it is
+visible is `two_openers_of_one_crashed_project_do_not_both_get_it`, whose 200 losing openers now
+each wait their budget out — that binary goes from 0.1 s to about 2.6 s, and the round still
+ends with exactly one holder, which is the assertion.
+
+The alternative was to spawn the children somewhere the lock is not open, which is a change to
+how `core` starts the engine and the sidecar — more code, in two places, for a window this
+closes in one. That is the trade; it is the user's, taken 2026-09-25.
+
 ### 4. A held dry run is applied optimistically, and the frontend mints no ids
 
 The wireframes draw an unapplied edit dashed in the timeline and a pending row at the head of

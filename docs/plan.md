@@ -1842,7 +1842,8 @@ projection goldens are `app/tests/projection.test.ts` and, since M3 PR 6,
 
 On 2026-09-24, on the same machine M2's close ran on — an AMD Ryzen AI 9 HX PRO 370 under WSL2,
 Ubuntu 24.04, g++ 13.3, node 25.6.1, `uv` 0.10.2 — against `main` at `c88394a`: both codegen
-checks clean; 463 workspace tests; 17 determinism tests, and 24 with `--features ai` of which the
+checks clean; **464** workspace tests (463, plus the one this close's own lock fix was watched
+failing first with); 17 determinism tests, and 24 with `--features ai` of which the
 live run is the one `#[ignore]`d; **9 render tests and the device test ignored**; 10 schema
 TypeScript, 10 schema Python, 5 `proto` Python, 45 `ai` Python; 10 projection tests and the
 host's 8; `buf lint`, `buf format` and `buf breaking` against `main`, all clean; and **no golden
@@ -1939,15 +1940,17 @@ where a reader of this file will look:
   reconciliation that passes and means nothing. The ledger's job is to be checkable against
   OpenRouter, and it is — for the three rows it has. For what came before it, the honest record is
   this paragraph. Said plainly because the amount is irrelevant and the gap is not.
-- **The Rust suite is not reliably green, and nobody knew.** `core/tests/project.rs`'s
-  `a_live_holders_lock_is_refused_and_is_not_broken` fails about one run in ten — 4 of 40 here —
+- ~~**The Rust suite is not reliably green, and nobody knew.**~~ **Closed 2026-09-25, and kept
+  here because of what it says about every earlier number.** `core/tests/project.rs`'s
+  `a_live_holders_lock_is_refused_and_is_not_broken` failed about one run in ten — 4 of 40 —
   because a sibling test spawns a real process and the fork inherits the lock's descriptor for
-  the length of its `exec`. It is a Known gap below, with the mechanism and the measurement, and
-  it is named *here* for a second reason: every "the full suite passes" in this milestone,
-  including the first run of this pull request's own verification, was a run that could have gone
-  the other way. Nothing was hidden — the flake had simply never been rolled. The suite is green
-  on the tenth run and red on the eleventh, and the honest statement is that shape rather than
-  "all pass".
+  the length of its `exec` (the Known gap below, now closed by a bounded retry in
+  `ProjectLock::take`: 0 of 40 after). What does **not** go away is the record: **every "the full
+  suite passes" in M3 was rolled against a one-in-ten flake**, including the first run of this
+  pull request's own verification, which passed, and its second, which did not. Nothing was
+  hidden — the die had simply never come up. It is worth leaving written down, because "the
+  suite is green" is a sentence this repository leans on, and for one milestone it meant
+  something weaker than it sounded.
 - **The plugin manifest has not been rebuilt since 2026-09-09.** Dexed's build needs `jack/jack.h`,
   which is not installed on the machine every local run has been made on; `engine/build/manifest.json`
   is that day's and the engine binary is 2026-09-17's. The fixture-subset check still matches
@@ -2176,8 +2179,9 @@ section names it.
   nothing in M3 produces one. The loop adds one write a turn outside the log — `record_ai`, on
   the first prompt in a project — and it writes `lock.json` alone for exactly this reason.
 
-- **A child forked while `.escri/lock` is held keeps that lock alive past a clean close, for
-  the length of its `fork`→`exec` window** — and `core/tests/project.rs`'s
+- ~~**A child forked while `.escri/lock` is held keeps that lock alive past a clean close, for
+  the length of its `fork`→`exec` window**~~ — **closed 2026-09-25, in the pull request that
+  opened it.** — and `core/tests/project.rs`'s
   `a_live_holders_lock_is_refused_and_is_not_broken` is **flaky because of it**, at 4 runs in 40
   of its own test binary. Found at M3's close, running the suite; not filed by any review.
   `ProjectLock::take` opens the file with `O_CLOEXEC` and holds the kernel's advisory lock on the
@@ -2196,13 +2200,24 @@ section names it.
   0012 §3 chose on purpose, and the message it prints is even true — a process really does have
   the file open. What it costs the suite is worse: a gate that goes red one run in ten for no
   defect is a gate people learn to re-run.
-  **Recorded rather than fixed, because the fix is a decision and a close is reviewed as
-  documentation** (the same call M2's close made on `Preview::drop`). The two candidates are not
-  equivalent and neither is free: `take` could retry its `try_lock` for a bounded few
-  milliseconds before refusing, which makes a real refusal slower and needs a number nobody has
-  measured; or the children could be spawned somewhere the lock is not open, which is a change to
-  how `core` starts the engine and the sidecar. Whichever is chosen is an amendment to ADR 0012
-  §3 and ADR 0020 §5, whose mechanism this is.
+  **First recorded rather than fixed**, because the fix was a decision and a close is reviewed
+  as documentation — the same call M2's close made on `Preview::drop`. The user took it the next
+  day and chose the **bounded retry** over restructuring the spawn sites: `take` re-attempts the
+  kernel's lock **ten times, a millisecond apart**, and only then believes a refusal. The number
+  is the measurement's, not a guess — an order of magnitude past the worst 1.03 ms window seen
+  in 6,000 cycles. **It cannot mask a real holder**, which is what makes a retry the safe
+  answer rather than a papering-over: a real holder keeps the file open for as long as it has
+  the project, so it never clears and the tenth attempt refuses exactly as the first would.
+  Watched failing first —
+  `a_holder_that_clears_in_a_moment_is_waited_out_rather_than_refused` is red without the retry
+  and green with it — and re-measured after: **0 failures in 40 runs** of the same binary and
+  **0 refusals in 4,000 cycles** of the same reproducer. What it costs is paid only by a take
+  that was going to be refused, plus one visible place:
+  `two_openers_of_one_crashed_project_do_not_both_get_it` has 200 losing openers that now each
+  wait their budget out, taking that binary from 0.1 s to about 2.6 s. The rejected alternative
+  — spawning the children somewhere the lock is not open — is more code in two places for a
+  window this closes in one. ADR 0012 §3, ADR 0020 §5 and §10 amended, all three in the one
+  commit, which is what the previous change to this decision did not do.
 - **A refused spend reaches the panel under the generic `assistant_failed` rule.** `ai` ends the
   turn `FAILED_PRECONDITION` for `BudgetExhausted`, and the host maps every status that is
   neither `UNAVAILABLE` nor `RESOURCE_EXHAUSTED` to one rule (`core/src/assistant.rs`,
