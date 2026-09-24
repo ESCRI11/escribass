@@ -44,9 +44,9 @@ from escribass_proto.escribass.tools.v1 import ToolResult
 from escribass_schema.escribass.song.v1 import Song
 
 from . import axes, view
-from .provider import Exhausted, ProviderFailure, ask
+from .provider import BudgetExhausted, Exhausted, ProviderFailure, ask
 
-__all__ = ["RESPONSES_PER_TURN", "SYSTEM", "document", "run"]
+__all__ = ["MAX_COMPLETION_TOKENS", "RESPONSES_PER_TURN", "SYSTEM", "document", "run"]
 
 #: How many responses the model gets in one turn before the turn ends.
 #:
@@ -55,6 +55,18 @@ __all__ = ["RESPONSES_PER_TURN", "SYSTEM", "document", "run"]
 #: was offered could satisfy. A model can loop on *valid* calls too, which the three-refusal
 #: budget does not bound, and this is what bounds spend per turn without a price list.
 RESPONSES_PER_TURN = 12
+
+#: The most the model may write in one response, and the number a ceiling is priced against.
+#:
+#: Named here rather than left off the request, because "what this call could cost" has no
+#: answer while a completion is unbounded: without it the worst case is the provider's own
+#: limit — 131,072 tokens for the default model, $0.055 a call — and a $0.25 ceiling would
+#: refuse the fourth call of a turn that really costs a fraction of a cent
+#: (`provider._worst_case`). 8,192 is the spike's own ceiling on a reasoning response, which it
+#: reached exactly once and on the instruction nothing offered could satisfy; a model that
+#: reaches it here produces neither a call nor text, and the turn ends saying so (ADR 0022 §3's
+#: fourth thing).
+MAX_COMPLETION_TOKENS = 8192
 
 #: Zero, and it is not a determinism claim. A hosted model cannot be seeded, temperature 0 is
 #: not determinism, and no test in this repository pretends otherwise (docs/plan.md, "What
@@ -206,7 +218,9 @@ async def run(
       text, which is the spike's `finish_reason: length` after 8,192 tokens of reasoning, or a
       model that would not stop calling. A retry with backoff reproduces both, so neither is
       retried.
-    - `INVALID_ARGUMENT` / `FAILED_PRECONDITION` — the host or the transcript has a defect.
+    - `INVALID_ARGUMENT` / `FAILED_PRECONDITION` — the host or the transcript has a defect,
+      or the spend ceiling would have been crossed and the call was never made
+      (`provider.BudgetExhausted`; CLAUDE.md #7).
 
     A refusal is none of those. It goes back to the model as the call's result, and the **host**
     counts them: it is what executes a call, so it is what sees one refused, and it ends the
@@ -236,6 +250,7 @@ async def run(
             # or a recorder holding the live list would report every request as the last one.
             "messages": list(messages),
             "temperature": TEMPERATURE,
+            "max_tokens": MAX_COMPLETION_TOKENS,
         }
         if tools:
             body["tools"] = tools
@@ -248,6 +263,14 @@ async def run(
             raise grpclib.GRPCError(
                 grpclib.const.Status.FAILED_PRECONDITION, str(ran_out)
             ) from ran_out
+        except BudgetExhausted as unaffordable:
+            # None of ADR 0022 §3's three kinds, and not the fourth either: the call was never
+            # made. `FAILED_PRECONDITION` is what a transcript running out uses, for the same
+            # reason — this build's own limit, which no retry and no different call gets past,
+            # and which only a person deciding to spend more can lift (CLAUDE.md #7).
+            raise grpclib.GRPCError(
+                grpclib.const.Status.FAILED_PRECONDITION, str(unaffordable)
+            ) from unaffordable
         except ProviderFailure as failed:
             # Narrow on purpose. `ask` raises exactly this once its retries are spent, and a
             # bare `except Exception` here would report a defect in this file as the provider's

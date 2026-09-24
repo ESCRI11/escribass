@@ -1,7 +1,7 @@
 """The AI orchestrator sidecar (docs/specs.md §3 tier 1, §6; ADR 0020).
 
 ```text
-escribass-ai --transcript <transcript.json>
+escribass-ai [--transcript <transcript.json>] [--record <transcript.json>]
 ```
 
 One process, one service, one bidirectional stream per prompt. **`ai` serves and the host
@@ -24,6 +24,9 @@ Never the project path — `.escri` is the host's and "agents never read or writ
 file directly" (§5) is a property of what `ai` is given, not of what it is told not to do.
 Never a socket, since it names its own. Never a key on a flag: `OPENROUTER_API_KEY` reaches it
 from the environment, and `provider.live` is the one place that reads it (ADR 0020 §4; U3).
+`--record` names a file to write this run's exchanges to, which is how a hand-written fixture
+becomes a recorded one; it writes the request **body** and the response and nothing around
+them, so the file it leaves can carry no key (M3 trap 10).
 The model id and the offered tools arrive per prompt, on the stream.
 
 **What it does not do.** It does not apply anything, and it does not know how: every call it
@@ -163,12 +166,29 @@ def main(argv: list[str] | None = None) -> int:
             "and OPENROUTER_API_KEY must be in the environment (ADR 0022 §4)"
         ),
     )
+    parser.add_argument(
+        "--record",
+        type=Path,
+        help=(
+            "write every exchange of this run to a transcript file, in the format "
+            "`--transcript` reads: the request bodies and the provider's responses, with no "
+            "headers and therefore no key (ADR 0022 §4). Live only, and it spends money"
+        ),
+    )
     options = parser.parse_args(argv)
+    if options.record and options.transcript:
+        # A recording of a replay is a copy of the file it replayed. Refused rather than
+        # allowed, because what it would produce looks exactly like evidence.
+        parser.error("--record records a live provider; with --transcript there is nothing new")
     try:
         # **The only fork between a test and a real run**, and it is one line: everything
         # above `provider.ask` is the same code either way, which is what makes a scripted
         # turn evidence about the live one (ADR 0022 §4).
-        provider = Scripted.read(options.transcript) if options.transcript else live()
+        provider = (
+            Scripted.read(options.transcript)
+            if options.transcript
+            else live(record_to=options.record)
+        )
     except Exception as unreadable:  # noqa: BLE001 — a bad transcript, or no key
         # Stderr and an exit code, which is the whole of what `core` reads when a child will
         # not start (ADR 0020 §5). Nothing on stdout: a caller reading the address line must

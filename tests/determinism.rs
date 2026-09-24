@@ -835,8 +835,13 @@ mod through_the_sidecar {
             .expect("the golden has a `proposal` entry");
         assert!(entry.contains("\"AUTHOR_MODEL\""), "{entry}");
         assert!(entry.contains("deepseek/deepseek-v4.1-flash"), "{entry}");
-        assert!(entry.contains("\"tool_call_id\": \"call_1\""), "{entry}");
-        assert!(entry.contains("\"tool_call_id\": \"call_2\""), "{entry}");
+        // The ids the **model** gave its two calls on 2026-09-24, written literally as every
+        // fixture id here is: a transcript that is quietly replaced by another recording, or
+        // by a hand-written one, fails on this line rather than passing on a shape.
+        let first = "\"tool_call_id\": \"call_01a0d371167372d787b4e9cb\"";
+        let second = "\"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"";
+        assert!(entry.contains(first), "{entry}");
+        assert!(entry.contains(second), "{entry}");
 
         // 6. **The project records the model it was sent to**, on first use (ADR 0021 §4).
         let lock: Value =
@@ -860,8 +865,22 @@ mod through_the_sidecar {
     /// **Nothing else in this repository spends money**, and nothing calls a paid service
     /// without the user saying so (CLAUDE.md #7). What this run is *for* is the one thing a
     /// transcript cannot be: evidence that a real model, offered these twelve schemas, composes
-    /// a multi-call proposal through this loop. Until someone runs it, that claim is the
-    /// spike's measurement of a different loop, dated 2026-09-17, and nothing more.
+    /// a multi-call proposal through this loop.
+    ///
+    /// **It records.** Every request body the loop built and every response the provider gave
+    /// is written to `target/live-turn.json`, in the format `--transcript` reads — the body
+    /// only, so a recording cannot carry `Authorization: Bearer …` (M3 trap 10), which this
+    /// test asserts rather than assumes. `target/` and not the fixture tree, because an
+    /// attempt that fails mid-turn would otherwise overwrite a good recording with half of a
+    /// bad one: installing what it leaves is a deliberate act, and the printed path is the
+    /// invitation to make it.
+    ///
+    /// **The prompt is `drive`'s**, word for word, against the same project at the same clock
+    /// and the same seed — so what it records is a recording of the very turn the scripted
+    /// golden replays, and the two are comparable rather than merely alike.
+    ///
+    /// The spend is capped before each call and ledgered by `provider.Live`
+    /// (`~/.escribass/spend.jsonl`), which is where a person reads what this cost.
     #[test]
     #[ignore = "spends money: set OPENROUTER_API_KEY and run with --ignored"]
     fn a_live_model_drives_the_loop() {
@@ -872,9 +891,13 @@ mod through_the_sidecar {
                  here so that a person can make the run, not so that CI can (ADR 0022 §4)."
             );
         };
+        let recording = common::workspace().join("target").join("live-turn.json");
+        let _ = std::fs::remove_file(&recording);
         println!(
             "about to spend money against OpenRouter with the default model. Nothing else in \
-             this suite does (CLAUDE.md #7)."
+             this suite does (CLAUDE.md #7). The ceiling and the ledger are \
+             `escribass_ai.provider`'s; this run records to {}",
+            recording.display()
         );
 
         let session_run = run("proposal", AT);
@@ -900,12 +923,16 @@ mod through_the_sidecar {
             "--project".to_string(),
             ai.display().to_string(),
             "escribass-ai".to_string(),
+            "--record".to_string(),
+            recording.display().to_string(),
         ])
         .start()
         .expect("the real sidecar starts");
 
+        // `drive`'s own prompt, so the recording replaces the hand-written transcript rather
+        // than sitting beside it as a differently-worded near-miss.
         let turn = sidecar
-            .turn(&mut session, "add a lead line an octave above the bass", &[])
+            .turn(&mut session, "add a lead line over the bass", &[])
             .expect("the turn answers");
         println!("{:#?}", turn.recorded);
         println!("model that answered: {}", turn.model_id);
@@ -917,8 +944,37 @@ mod through_the_sidecar {
         }
         // Deliberately **not** applied: what a live run is for is watching a real model compose
         // a proposal, and a golden of a nondeterministic turn is the thing this milestone
-        // refuses to write (docs/plan.md, "What M3 will not claim").
+        // refuses to write (docs/plan.md, "What M3 will not claim"). Replaying the recording
+        // through `drive` is what applies it, and that turn *is* deterministic.
         println!("{}", sidecar.stop());
+
+        // What the recording must be before anybody considers committing it. The key check is
+        // first and is not a formality: a recorder that saved what the SDK sends rather than
+        // what it was handed would put `Authorization: Bearer …` in `git log` for ever, where
+        // it would parse, replay and pass every test that did not read it (M3 trap 10).
+        let recorded = std::fs::read_to_string(&recording).expect("the run recorded a file");
+        let key = std::env::var("OPENROUTER_API_KEY").expect("checked above");
+        assert!(!recorded.contains(&key), "the recording carries the key");
+        assert!(!recorded.contains("Authorization"), "the recording carries headers");
+        assert!(!recorded.contains("Bearer"), "the recording carries headers");
+        let parsed: Value = serde_json::from_str(&recorded).expect("a recording is JSON");
+        let exchanges = parsed["exchanges"].as_array().expect("it has exchanges");
+        assert!(!exchanges.is_empty(), "it recorded nothing");
+        for exchange in exchanges {
+            let request = exchange["request"].as_object().expect("a request is the body");
+            // The body as `turn.run` built it and nothing around it: were a client, a set of
+            // headers or an `api_key` ever to arrive here, this is where it would be seen.
+            let mut keys: Vec<&str> = request.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            assert_eq!(keys, ["max_tokens", "messages", "model", "temperature", "tools"]);
+            assert!(exchange["response"]["id"].is_string(), "a response names its generation");
+        }
+        println!(
+            "recorded {} exchange(s) to {}; note: {}",
+            exchanges.len(),
+            recording.display(),
+            parsed["note"].as_str().unwrap_or_default()
+        );
     }
 }
 

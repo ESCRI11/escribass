@@ -70,10 +70,20 @@ FIXTURE = ROOT / "tests" / "determinism" / "render" / "expected" / "song.json"
 TRANSCRIPTS = HERE / "transcripts"
 GOLDEN = HERE / "golden"
 
-#: A track id the render fixture does not have: it is what the transcript pretends `add_track`
-#: minted, and the fixture's own `…0002` is its **Master**. Colliding with that id put the
-#: constructed Lead where the master was and quietly changed six lines of the view.
-MINTED = "01M1FPMP00000000000000009Z"
+#: **The recorded turn**, and it lives in the other tree because there is one of it.
+#:
+#: `tests/determinism/proposal/transcript.json` is what `a_live_model_drives_the_loop` wrote on
+#: 2026-09-24: three real exchanges against `deepseek/deepseek-v4.1-flash` through OpenRouter,
+#: $0.00376174, the request bodies without their headers (ADR 0022 §4). Both goldens want the
+#: same bytes — this file's event stream and `tests/determinism.rs`'s project — and a second
+#: copy under `ai/tests/transcripts/` is the twin that stops matching (M3 trap 3). Reaching
+#: across is what this file already does for the song fixture above.
+RECORDED_TURN = ROOT / "tests" / "determinism" / "proposal" / "transcript.json"
+
+#: The track id the model really named in the second call, which is the id `core` really minted
+#: in the first — the whole of what a fork buys over a dry run (ADR 0019 §1). Written literally,
+#: as every fixture id here is: a change in mint order should fail loudly (tests/AGENTS.md).
+MINTED = "01M1FPMP000000000000000034"
 
 #: Two of the twelve the host offers, so the golden carries a real schema without carrying
 #: 12 KB of them. `core`'s own filter is what builds the real list (`OFFERED`), and
@@ -121,8 +131,14 @@ def fixture_song() -> Song:
 
 
 def with_a_lead(song: Song) -> Song:
-    """The fixture with the track `add_track` would have minted, so the golden shows the view
-    being re-read after an applied call (ADR 0018 §2)."""
+    """The fixture with the track `add_track` minted, so the golden shows the view being
+    re-read after an applied call (ADR 0018 §2).
+
+    The ids are the ones `core` really minted in the recorded run — `…0034` for the track and
+    `…0035` for its instrument — because the transcript's second call names `…0034` and a host
+    that answered with a different id would be answering a call nobody made. The index is this
+    fixture's own: it has five tracks where the recorded project had three, and a Song built to
+    match the wrong one is the thing this file is not."""
     grown = Song.from_dict(song.to_dict())
     grown.tracks[MINTED] = Track(
         id=MINTED,
@@ -131,7 +147,7 @@ def with_a_lead(song: Song) -> Song:
         index=5,
         mix=Mix(),
         instrument=Instrument(
-            id="01M1FPMP00000000000000009Y",
+            id="01M1FPMP000000000000000035",
             ref=DeviceRef(
                 plugin=PluginRef(plugin_id="Surge Synth Team/Surge XT", version="1.3.4")
             ),
@@ -187,6 +203,8 @@ def prompt_for(song: Song, text: str = "add a lead line", conversation=()) -> Pr
 
 
 def transcript(name: str) -> Scripted:
+    """A hand-written transcript by name; [`RECORDED_TURN`] is read by path, being the one
+    file here that was not written by hand."""
     return Scripted.read(TRANSCRIPTS / name)
 
 
@@ -210,14 +228,14 @@ class TestTheTurnGolden(unittest.TestCase):
         # call returned, and answers.
         song = fixture_song()
         grown = with_a_lead(song)
-        replayer = transcript("two-calls.json")
+        replayer = Scripted.read(RECORDED_TURN)
         events, _ = asyncio.run(
             drive(
                 prompt_for(song),
                 replayer,
                 [
                     (applied("1 op: /tracks/" + MINTED, grown), grown),
-                    (applied("1 op: /clips/01M1FPMP000000000000000004", grown), grown),
+                    (applied("1 op: /clips/01M1FPMP000000000000000036", grown), grown),
                 ],
             )
         )
@@ -375,7 +393,7 @@ class TestTheProviderFailure(unittest.TestCase):
         # the committed transcripts pass it, which is what `rate-limited.json` answering above
         # already shows, and this says so where a reader will look for it.
         song = fixture_song()
-        replayer = transcript("two-calls.json")
+        replayer = Scripted.read(RECORDED_TURN)
         events, _ = asyncio.run(
             drive(prompt_for(song), replayer, [(applied("ok", None), None)] * 2)
         )
@@ -403,7 +421,7 @@ class TestWhenTheModelExhaustsItself(unittest.TestCase):
         # A model can loop on *valid* calls too, which the refusal budget does not bound
         # (ADR 0022 §3).
         song = fixture_song()
-        recorded = json.loads((TRANSCRIPTS / "two-calls.json").read_text())
+        recorded = json.loads(RECORDED_TURN.read_text())
         one_call = ChatCompletion.model_validate(recorded["exchanges"][0]["response"])
         forever = Scripted([one_call] * (RESPONSES_PER_TURN + 2))
         with self.assertRaises(grpclib.GRPCError) as raised:
@@ -445,7 +463,7 @@ class TestTheHostsHalf(unittest.TestCase):
             yield AssistantCommand(prompt=prompt_for(song))
 
         async def turn() -> list:
-            return [event async for event in run(silent(), transcript("two-calls.json"))]
+            return [event async for event in run(silent(), Scripted.read(RECORDED_TURN))]
 
         events = asyncio.run(turn())
         self.assertEqual(len(events), 1, "the loop carried on without an answer")
