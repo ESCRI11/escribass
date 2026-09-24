@@ -1,0 +1,135 @@
+[
+  {
+    "tool": "add_track",
+    "args": {
+      "name": "Bass",
+      "kind": 1,
+      "ref": {
+        "plugin": {
+          "plugin_id": "Surge Synth Team/Surge XT",
+          "version": "1.3.4"
+        }
+      }
+    }
+  },
+  {
+    "tool": "add_clip",
+    "args": {
+      "track_id": "01M1FPMP000000000000000006",
+      "start_tick": 0,
+      "length_ticks": 69120,
+      "note_clip": {
+        "notes": {
+          "n00": {
+            "pitch": 36,
+            "start_tick": 0,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n01": {
+            "pitch": 43,
+            "start_tick": 3840,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n02": {
+            "pitch": 38,
+            "start_tick": 7680,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n03": {
+            "pitch": 45,
+            "start_tick": 11520,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n04": {
+            "pitch": 36,
+            "start_tick": 15360,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n05": {
+            "pitch": 43,
+            "start_tick": 19200,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n06": {
+            "pitch": 38,
+            "start_tick": 23040,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n07": {
+            "pitch": 45,
+            "start_tick": 26880,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n08": {
+            "pitch": 36,
+            "start_tick": 30720,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n09": {
+            "pitch": 43,
+            "start_tick": 34560,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n10": {
+            "pitch": 38,
+            "start_tick": 38400,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n11": {
+            "pitch": 45,
+            "start_tick": 42240,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n12": {
+            "pitch": 36,
+            "start_tick": 46080,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n13": {
+            "pitch": 43,
+            "start_tick": 49920,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n14": {
+            "pitch": 38,
+            "start_tick": 53760,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n15": {
+            "pitch": 45,
+            "start_tick": 57600,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n16": {
+            "pitch": 36,
+            "start_tick": 61440,
+            "length_ticks": 1920,
+            "velocity": 100
+          },
+          "n17": {
+            "pitch": 43,
+            "start_tick": 65280,
+            "length_ticks": 1920,
+            "velocity": 100
+          }
+        }
+      }
+    }
+  }
+]

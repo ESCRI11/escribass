@@ -318,17 +318,26 @@ impl Sidecar {
     /// neither a call nor text, and a model that will not stop calling, both end the stream
     /// `turn_unfinished`. That is the model exhausting itself rather than the provider failing,
     /// and a retry reproduces it.
+    ///
+    /// `watch` is called after every event the turn produces — a call executed, a fragment of
+    /// the reply — with the turn as it stands and the session the proposal is on. It is how
+    /// the panel draws the proposal **as it grows** (ADR 0019 §2): the patch below is
+    /// computable after every call, and a window that could only see the finished turn would
+    /// have nothing to draw for however long the model takes. It is called on this loop's own
+    /// thread, and it decides nothing — a watcher that panicked would take the turn with it,
+    /// which is why the one in `app` does nothing but put values in a mutex.
     pub fn turn(
         &mut self,
         session: &mut Session,
         text: &str,
         conversation: &[AssistantTurn],
+        watch: impl FnMut(&AssistantTurn, &Session) + Send,
     ) -> Result<Turn, ProjectError> {
         // Content-addressed by the store's one hasher, so the same text asked twice names the
         // same id and a scripted transcript replays to the same log (ADR 0021 §2).
         let prompt_id = crate::project::asset_hash(text.as_bytes());
         session.propose(&prompt_id)?;
-        let outcome = self.asked(session, text, conversation);
+        let outcome = self.asked(session, text, conversation, watch);
         if outcome.is_err() {
             // An operator error, or the sidecar's own: the proposal goes, because nothing a
             // person could act on came back and a half-built fork nobody has seen is not a
@@ -346,6 +355,7 @@ impl Sidecar {
         session: &mut Session,
         text: &str,
         conversation: &[AssistantTurn],
+        watch: impl FnMut(&AssistantTurn, &Session) + Send,
     ) -> Result<Turn, ProjectError> {
         // Written on first use, never rewritten by a tool (ADR 0021 §4). Before the prompt goes
         // out rather than after, because what it records is the model a prompt **was sent to**,
@@ -366,7 +376,7 @@ impl Sidecar {
             model_id: model,
             conversation: conversation.to_vec(),
         };
-        self.drive(session, prompt, text)
+        self.drive(session, prompt, text, watch)
     }
 
     fn drive(
@@ -374,6 +384,7 @@ impl Sidecar {
         session: &mut Session,
         prompt: Prompt,
         text: &str,
+        watch: impl FnMut(&AssistantTurn, &Session) + Send,
     ) -> Result<Turn, ProjectError> {
         let address = self.address.clone();
         let driven = std::thread::scope(|scope| {
@@ -383,7 +394,7 @@ impl Sidecar {
                         .enable_all()
                         .build()
                         .map_err(|e| Interrupted::Transport(e.to_string()))?;
-                    runtime.block_on(one_turn(&address, session, prompt, text))
+                    runtime.block_on(one_turn(&address, session, prompt, text, watch))
                 })
                 .join()
                 .expect("the thread that drives the assistant")
@@ -432,6 +443,7 @@ async fn one_turn(
     session: &mut Session,
     prompt: Prompt,
     text: &str,
+    mut watch: impl FnMut(&AssistantTurn, &Session) + Send,
 ) -> Result<Turn, Interrupted> {
     let channel = Endpoint::from_shared(address.to_string())
         .map_err(|e| Interrupted::Transport(e.to_string()))?
@@ -465,7 +477,10 @@ async fn one_turn(
         match event.event {
             // Streamed as the model produces it, for the panel to draw (PR 9). This build's
             // sidecar sends one fragment per turn; several would concatenate the same way.
-            Some(assistant_event::Event::Text(said)) => recorded.reply.push_str(&said.text),
+            Some(assistant_event::Event::Text(said)) => {
+                recorded.reply.push_str(&said.text);
+                watch(&recorded, session);
+            }
             Some(assistant_event::Event::Done(done)) => {
                 recorded.reply = done.text;
                 return Ok(Turn { recorded, model_id: done.model_id, end: TurnEnd::Answered });
@@ -480,6 +495,9 @@ async fn one_turn(
                     call: Some(call.clone()),
                     result: Some(result.clone()),
                 });
+                // Before the next response is asked for, so the panel has the call and the
+                // patch it made while the model is still thinking (ADR 0019 §2).
+                watch(&recorded, session);
                 send(assistant_command::Command::Result(CallResult {
                     call_id: call.call_id,
                     result: Some(result),

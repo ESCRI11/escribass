@@ -689,3 +689,182 @@ fn the_default_model_is_the_one_lock_baseline_records() {
 fn _dispatch_is_the_one_that_exists(session: &mut Session) {
     let _ = call(session, "get_song", &Map::new());
 }
+
+// ---------------------------------------------------------------------------
+// The three controls (ADR 0019 §3; docs/specs.md §9)
+// ---------------------------------------------------------------------------
+
+/// Every byte under the project directory, so "records nothing" can be asserted rather than
+/// sampled.
+///
+/// A count of entries is the check that cannot fail here (docs/plan.md, M3 trap 1): a Reject
+/// that quietly wrote `song.json`, moved a ref or touched `lock.json` leaves the entry count
+/// exactly where it was. What Reject promises is that the project did not move at all, so
+/// that is what is compared.
+fn everything_under(root: &std::path::Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    fn walk(
+        at: &std::path::Path,
+        under: &str,
+        into: &mut std::collections::BTreeMap<String, Vec<u8>>,
+    ) {
+        for entry in std::fs::read_dir(at).expect("the project directory is readable") {
+            let entry = entry.expect("a directory entry");
+            let name = format!("{under}{}", entry.file_name().to_string_lossy());
+            if entry.path().is_dir() {
+                walk(&entry.path(), &format!("{name}/"), into);
+            } else {
+                into.insert(name, std::fs::read(entry.path()).expect("a file is readable"));
+            }
+        }
+    }
+    let mut found = std::collections::BTreeMap::new();
+    walk(root, "", &mut found);
+    found
+}
+
+#[test]
+fn rejecting_leaves_the_project_byte_for_byte_where_it_was() {
+    // ADR 0019 §3: Reject drops the fork and **records nothing**. Nothing was written, so
+    // there is nothing to undo — and the way to watch that is to compare the bytes, since a
+    // Reject that wrote an entry would pass every test that only counted entries.
+    let (dir, mut session) = opened();
+    let before = everything_under(&dir.0);
+
+    session.propose("prompt-hash").expect("a proposal opens");
+    proposed(&mut session, "add_track", add_lead(), "c1");
+    proposed(&mut session, "add_clip", clip_on(MINTED), "c2");
+    proposed(&mut session, "set_tempo", json!({"tick": 3840, "bpm": 132.0}), "c3");
+    assert_eq!(session.proposal().expect("pending").calls().len(), 3);
+
+    assert!(session.reject());
+    let after = everything_under(&dir.0);
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        after.keys().collect::<Vec<_>>(),
+        "a rejected proposal added or removed a file"
+    );
+    for (name, bytes) in &before {
+        assert_eq!(bytes, &after[name], "a rejected proposal changed `{name}`");
+    }
+}
+
+#[test]
+fn editing_applies_the_persons_patch_as_the_persons_with_the_prompt_kept() {
+    // ADR 0019 §3, and ADR 0021 §1's worked example. The person edits the proposal's patch
+    // text; what lands is an `apply_patch` whose entry says `AUTHOR_HUMAN` and **no**
+    // `model_id`, with the `prompt_id` kept so the row still leads to the conversation — and
+    // whose new entities carry the person's provenance rather than the model's, because they
+    // are new and `prepare` decides a new entity's (ADR 0021 §1).
+    let (_dir, mut session) = opened();
+    session.propose("the-prompts-hash").expect("a proposal opens");
+    proposed(&mut session, "add_track", add_lead(), "call_1");
+
+    let pending = session.proposal().expect("pending").patch().expect("the patch is computable");
+    let text = escribass_core::ops_text(pending.ops());
+    // The person's own change to the model's proposal, which is the whole point of the control.
+    let edited = text.replace("\"Lead\"", "\"Lead (mine)\"");
+    assert_ne!(edited, text, "the patch does not name the track the model proposed");
+
+    let applied = session.edit_proposal(edited.as_bytes()).expect("the project writes");
+    assert!(applied.valid, "{applied:?}");
+    assert!(session.proposal().is_none(), "an applied edit left the proposal pending");
+
+    let entry = session.project().history().get(&applied.entry_id).expect("the entry").clone();
+    assert_eq!(entry.tool, "apply_patch", "an edit is the person's own apply_patch");
+    let made = entry.provenance.expect("an entry carries provenance");
+    assert_eq!(made.author, Author::Human as i32);
+    assert_eq!(made.model_id, None, "a person who changed the bytes owns the bytes");
+    assert_eq!(made.prompt_id.as_deref(), Some("the-prompts-hash"));
+    assert_eq!(made.tool_call_id, None);
+
+    let track = session.project().song().tracks[MINTED].clone();
+    assert_eq!(track.name, "Lead (mine)");
+    let stamped = track.provenance.expect("a track carries provenance");
+    assert_eq!(stamped.author, Author::Human as i32, "the entity kept the model's author");
+    assert_eq!(stamped.model_id, None);
+    assert_eq!(stamped.prompt_id.as_deref(), Some("the-prompts-hash"));
+    assert_eq!(stamped.tool_call_id, None, "the entity kept the model's call id");
+}
+
+#[test]
+fn editing_takes_the_session_past_every_id_the_proposal_minted() {
+    // `apply_proposal`'s rule, for the control beside it and for the same reason: the text a
+    // person edits names the ids the **fork** minted, so applying it puts them in the project
+    // and a session that had not moved past them would mint one of them again
+    // (`entry_exists`, or two entities under one ULID).
+    let (_dir, mut session) = opened();
+    session.propose("the-prompts-hash").expect("a proposal opens");
+    proposed(&mut session, "add_track", add_lead(), "call_1");
+    let pending = session.proposal().expect("pending").patch().expect("computable");
+    let text = escribass_core::ops_text(pending.ops());
+
+    let applied = session.edit_proposal(text.as_bytes()).expect("the project writes");
+    assert!(applied.valid, "{applied:?}");
+    // `add_track` minted a track and an instrument, so the entry is the third id.
+    assert_eq!(applied.entry_id, "01M1FPMP000000000000000004");
+    assert!(session.project().song().tracks.contains_key(MINTED));
+
+    let next = session
+        .add_track(&AddTrackRequest {
+            name: "Pad".to_string(),
+            kind: 1,
+            r#ref: Some(serde_json::from_str(SURGE).unwrap()),
+            dry_run: false,
+        })
+        .expect("a person's own call applies");
+    let patch: Value = serde_json::from_slice(&next.patch).expect("a patch is JSON");
+    assert!(
+        patch.to_string().contains("01M1FPMP000000000000000005"),
+        "the session minted over what the edit applied: {patch}"
+    );
+    assert_eq!(session.project().song().tracks.len(), 5);
+}
+
+#[test]
+fn an_edit_that_will_not_apply_is_refused_and_the_proposal_stays_pending() {
+    // ADR 0017 §3's refusal path, which ADR 0019 §3 asks for by name: a patch a person
+    // mistyped is shown refused with its rule, and the thing they were editing is still there
+    // to edit. Three ways in, because they leave by three different doors in `core`.
+    let (_dir, mut session) = opened();
+    session.propose("the-prompts-hash").expect("a proposal opens");
+    proposed(&mut session, "add_track", add_lead(), "call_1");
+
+    // 1. Not RFC 6902 at all.
+    let refused = session.edit_proposal(b"{ this is not a patch").expect("a refusal is an answer");
+    assert!(!refused.valid);
+    assert_eq!(refused.errors[0].rule, "patch_unreadable");
+    assert!(session.proposal().is_some(), "a mistyped patch threw the turn away");
+
+    // 2. A patch the document will not take.
+    let refused = session
+        .edit_proposal(br#"[{"op": "replace", "path": "/tracks/nope/name", "value": "x"}]"#)
+        .expect("a refusal is an answer");
+    assert!(!refused.valid, "{refused:?}");
+    assert!(session.proposal().is_some(), "a patch that would not apply threw the turn away");
+
+    // 3. A patch that applies to nothing. There is no entry, so there is nothing to say
+    //    happened, and the proposal in front of the person is still the thing to decide.
+    let empty = session.edit_proposal(b"[]").expect("an empty patch is an answer");
+    assert_eq!(empty.entry_id, "");
+    assert!(session.proposal().is_some(), "an empty edit threw the turn away");
+
+    // Nothing of the three wrote anything.
+    assert_eq!(session.project().history().entries().len(), 1);
+    assert!(!session.project().song().tracks.contains_key(MINTED));
+
+    // And the proposal is still applicable afterwards, which is what "still pending" means.
+    let applied = session.apply_proposal("deepseek/deepseek-v4.1-flash").expect("it applies");
+    assert!(applied.valid, "{applied:?}");
+}
+
+#[test]
+fn there_is_nothing_to_apply_or_edit_without_a_proposal() {
+    // Both controls answer the same way, as a refusal rather than as an operator error: it is
+    // a thing a caller fixes by calling when there is one (ADR 0006 §2).
+    let (_dir, mut session) = opened();
+    let applied = session.apply_proposal("deepseek/deepseek-v4.1-flash").expect("an answer");
+    assert_eq!(applied.errors[0].rule, "no_proposal");
+    let edited = session.edit_proposal(b"[]").expect("an answer");
+    assert_eq!(edited.errors[0].rule, "no_proposal");
+    assert!(!session.reject());
+}

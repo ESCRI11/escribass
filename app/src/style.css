@@ -106,12 +106,21 @@ footer .mode {
   color: var(--dim);
 }
 
-/* The arrangement and one of the three detail views share the window and both scroll, so
-   neither can push the other off it. */
+/* The song on the left, the assistant docked on the right — a panel and not a modal, because
+   what a person is deciding about is the song beside it (wireframes, plate 1, note 6). The
+   left column is the M2 window unchanged: the arrangement and one of the four detail views,
+   sharing the height, neither able to push the other off it. */
 .views {
   flex: 1;
   display: flex;
+  min-height: 0;
+}
+
+.stack {
+  flex: 1 1 0;
+  display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -574,4 +583,284 @@ button.pane.on {
    so the bar keeps its shape as the choice changes. */
 .branchbar button.pane:disabled {
   opacity: 0.4;
+}
+
+
+/* ---------------------------------------------------------------------------
+   The AI panel (§9; ADR 0019 §2, §3; wireframes plate 1, pane 6)
+   ---------------------------------------------------------------------------
+
+   Three bands in a column that never grows past its own width: the conversation, which
+   scrolls; the pending patch, which is the thing being judged and gets a fixed share; and the
+   prompt, pinned to the bottom where a person types. Nothing here is a chat framework — a
+   conversation is a list of two kinds of paragraph, and this is what that costs in CSS
+   (ADR 0016 §3). */
+.assistant {
+  flex: 0 0 340px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/* `min-width: 0`, and it is load-bearing rather than tidy. A flex item's automatic minimum
+   size is its **min-content** width, so an unbreakable token wider than the basis makes the
+   item wider than the basis however firmly `flex-grow: 0` says otherwise — and an RFC 6902
+   path is one 84-character token. Measured in the window: the panel took 622 px of a 1200 px
+   window and the arrangement and the roll drew at half their width. The two rules below are
+   the pair: one lets the column be its basis, the other lets the text inside it wrap. */
+.assistant,
+.msgs,
+.patchbox {
+  min-width: 0;
+}
+
+.assistant .pane-head strong {
+  font-weight: 600;
+}
+
+/* The model's name carries the caveat, in the accent and never dimmed — the *live preview ·
+   not the render* precedent (M2 trap 3), for the thing nothing can verify (M3 trap 15). */
+.assistant .pane-head .caveat {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.msgs {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 10px;
+}
+
+.msg {
+  margin-bottom: 10px;
+}
+
+.msg p {
+  margin: 2px 0;
+  white-space: pre-wrap;
+}
+
+.msg .who {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.msg.you p {
+  color: var(--text);
+}
+
+.msg.model p {
+  color: var(--note);
+}
+
+/* One of the model's calls: what it asked for, and what the tool API answered. The arguments
+   are the model's own text, wrapped rather than ellipsised, because a call a person cannot
+   read is a call they cannot judge. */
+.call {
+  margin: 3px 0;
+  padding: 3px 6px;
+  border-left: 2px solid var(--line);
+  background: var(--panel);
+  font-size: 11px;
+  /* A call's arguments and the paths in its verdict are single tokens as long as a ULID plus
+     a path, so nothing about them breaks on its own. Measured in the window: the verdict ran
+     off the right edge of the panel and the last operation was unreadable. */
+  overflow-wrap: anywhere;
+}
+
+.call.refused {
+  border-left-color: var(--refuse);
+}
+
+.call code {
+  display: block;
+  color: var(--dim);
+  word-break: break-all;
+}
+
+.call .verdict {
+  color: var(--audio);
+}
+
+.call.refused .verdict {
+  color: var(--refuse);
+}
+
+.msg .note {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* The pending patch — the diff §9 shows before applying, and what Apply sends byte for byte. */
+.patchbox {
+  border-top: 1px solid var(--accent);
+  background: var(--panel);
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* While the turn is still running it is a proposal growing rather than one to decide, and it
+   says so by being dashed — the wireframes' unapplied edit, on the box (ADR 0019 §2). */
+.patchbox.growing {
+  border-top-style: dashed;
+}
+
+/* The head of the patch box, and it may not wrap for ADR 0017 §3's reason one panel over: a
+   summary as long as a refusal's sentence took `Pending patch · RFC 6902` onto two lines and
+   moved the three controls down by a row. The title never wraps; the summary is the one child
+   that gives way, ellipsised, with the whole of it in the list below. */
+.pb-h {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 10px 2px;
+  font-size: 11px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.pb-h strong {
+  flex: 0 0 auto;
+}
+
+.pb-h .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff {
+  margin: 0;
+  padding: 0 10px 6px;
+  overflow: auto;
+  color: var(--dim);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
+  /* Enough to read a couple of operations in, always. `flex: 1 1 0` alone gave the patch zero
+     height the moment anything else was in the box — a refusal, say — which is the one moment
+     a person most wants to see what they are being refused. */
+  min-height: 84px;
+}
+
+/* The same box, as something a person types in: §9's third control (ADR 0019 §3). */
+textarea.diff {
+  font-family: ui-monospace, monospace;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px dashed var(--accent);
+  border-radius: 3px;
+  margin: 0 10px 6px;
+  padding: 6px;
+  resize: none;
+  min-height: 120px;
+}
+
+.refusals {
+  margin: 0;
+  padding: 0 10px 6px 26px;
+  color: var(--refuse);
+  font-size: 11px;
+}
+
+.acts {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 10px 8px;
+  flex-wrap: wrap;
+}
+
+.acts button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 10px;
+}
+
+.acts button:hover:enabled {
+  border-color: var(--accent);
+}
+
+.acts button:disabled {
+  opacity: 0.4;
+}
+
+.acts button.pri {
+  border-color: var(--accent);
+}
+
+.acts .hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Where a person types. Pinned under the patch, because what they read last is what they act
+   on next. */
+.prompt {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.prompt .field {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.prompt button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 3px 10px;
+}
+
+.prompt button:disabled {
+  opacity: 0.4;
+}
+
+/* Where the conversation is kept, said once and in full on hover: a project that travels
+   without it names prompts the next machine does not have (ADR 0021 §3). */
+.kept {
+  padding: 0 10px 6px;
+  font-size: 11px;
+  cursor: help;
+}
+
+/* The prompt a log entry came from. A hash this machine has the conversation for is shown
+   plainly; one it does not is marked, because the honest reading is "a prompt with this hash
+   existed and this is what it changed" and nothing more (ADR 0021 §3). */
+.log .prompt-id {
+  width: 92px;
+  font-size: 11px;
+  color: var(--dim);
+  cursor: help;
+}
+
+.log .prompt-id .absent {
+  color: var(--accent);
 }

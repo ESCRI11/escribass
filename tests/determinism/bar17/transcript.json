@@ -1,0 +1,137 @@
+{
+  "recorded": "hand-written 2026-09-24",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "note": "**Hand-written, and this is where that is said** (ADR 0022 \u00a74). The only recorded transcript in this repository is `determinism/proposal/transcript.json`, made under the one paid call the user granted on 2026-09-24; that grant is spent and does not carry, so the bar-17 demo replays a turn written to the shape of a real one rather than a second recording. What it is for is the panel and not the model: the proof point is that the diff is on screen and nothing is written until a person applies, and a scripted provider is what makes that a test. The one call is the edit `docs/specs.md` \u00a71 sells \u2014 one note in bar 17, an octave up \u2014 expressed as `apply_patch` because no typed tool changes a single note's pitch and three models in the spike reached for it unprompted (ADR 0022 \u00a71).",
+  "exchanges": [
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": null,
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "id": "call_bar17_0001",
+                  "type": "function",
+                  "index": 0,
+                  "function": {
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\": [{\"op\": \"replace\", \"path\": \"/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000T/pitch\", \"value\": 48}]}"
+                  }
+                }
+              ]
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790172308,
+        "id": "gen-1790172308-bar17DemoHandWritten",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 60,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 120,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 0.0,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.0,
+            "upstream_inference_cost": 0.0,
+            "upstream_inference_prompt_cost": 0.0
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12060
+        }
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": "I have proposed one change: the bass note at bar 17 moves from C2 (36) to C3 (48), an octave up. Nothing before bar 17 is touched, and nothing is applied until you apply it.",
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": null
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790172308,
+        "id": "gen-1790172308-bar17DemoHandWritten",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 60,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 120,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 0.0,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.0,
+            "upstream_inference_cost": 0.0,
+            "upstream_inference_prompt_cost": 0.0
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12060
+        }
+      }
+    }
+  ]
+}

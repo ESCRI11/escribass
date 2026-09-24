@@ -38,6 +38,16 @@
 // is, because it is not what an export writes and not what a published hash describes
 // (docs/plan.md, M2 trap 3).
 //
+// **The assistant is a view too (M3 PR 9).** A prompt starts a turn in the host, on a thread of
+// its own; what this file holds is what the `panel` command last answered — the conversation,
+// the calls so far, and the proposal's own RFC 6902 patch — polled while the turn runs, as the
+// transport is polled while it plays and for the same reason: a turn holds the session for as
+// long as a hosted model takes, so a window that asked through the session would have nothing
+// to draw until it ended (ADR 0019 §2). The proposal is **not** a second document: it is drawn
+// from the song the host answers with, projected by the same `arrangement` and `pianoRoll` the
+// project's is, with what differs dashed. Nothing of it is applied until a person presses one
+// of three buttons (ADR 0019 §3).
+//
 // Nothing below is song state. `Gesture` is a call waiting to be made, `preview` and `transport`
 // are answers the tool API gave, and `chosen`, `device` and `branch` are names the user picked.
 
@@ -57,8 +67,10 @@ import { HEAD, ROW, Roll, Timeline } from "./canvas.js";
 import type { Moved } from "./canvas.js";
 import { patchLog } from "./history.js";
 import type { HistoryAnswer, Log } from "./history.js";
-import { assistant, build, tool } from "./tool.js";
+import { ask, assistant, build, panel, settle, tool } from "./tool.js";
 import type { Assisted } from "./tool.js";
+import { assistant as aiPanel, dashed, dashedNotes } from "./assistant.js";
+import type { Assistant, PanelAnswer } from "./assistant.js";
 
 /**
  * Freezes the decoded song, so a view that writes to the model throws where it wrote.
@@ -170,6 +182,16 @@ const NOT_THE_RENDER =
   "than the song's render target. Export to hear the render.";
 
 /**
+ * What a dashed clip or note means, where a person is looking at one — the *live preview · not
+ * the render* precedent, applied to a proposal (§9; ADR 0019 §2).
+ */
+const PROPOSED_NOT_APPLIED =
+  "What is dashed is a proposal, not the song: the model's calls were applied to a copy of " +
+  "the document and nothing has been written. Outlined in red is what the proposal would " +
+  "remove. Read the RFC 6902 patch in the assistant panel and press Apply, Reject or Edit — " +
+  "until you do, the project is exactly what it was.";
+
+/**
  * An operator error as a person reads it first: its rule and its reason, which is the shape a
  * refusal is shown in, with the whole of it a hover away.
  *
@@ -230,6 +252,15 @@ export function App() {
   // model's opinion: it is the child's exit status, read, and the only thing the window does
   // with a sidecar in this milestone.
   const [ai, setAi] = useState<Assisted>({ state: "unset", said: "" });
+  /** What the `panel` command last answered: the conversation and the live turn (ADR 0021 §3).
+   *  Not song state and not a store — nothing here derives a document from it. */
+  const [conversation, setConversation] = useState<PanelAnswer | null>(null);
+  /** What is typed in the prompt box. Not a prompt until Send says so. */
+  const [typed, setTyped] = useState("");
+  /** The proposal's patch, while a person is editing it by hand — §9's third control, and the
+   *  one place in this application where RFC 6902 is typed (ADR 0019 §3). `null` when nobody
+   *  is editing, which is also what says the other two buttons are the ones on offer. */
+  const [handWritten, setHandWritten] = useState<string | null>(null);
   const playing = transport?.state === "PREVIEW_STATE_PLAYING";
 
   // Both reads, together. The log is re-read whenever the song is because every applied call
@@ -257,6 +288,20 @@ export function App() {
   const view = useMemo(() => (song ? arrangement(song) : null), [song]);
   const strips = useMemo(() => (song ? mixer(song) : null), [song]);
   const log = useMemo(() => (history ? patchLog(history) : null), [history]);
+  // The panel is a projection like every other, and of the same kind: what the host answered,
+  // plus the document a refusal has to name something in (`assistant.ts`).
+  const panelView = useMemo(
+    () => (conversation ? aiPanel(conversation, song) : null),
+    [conversation, song],
+  );
+  // The turns this machine has the conversation for. An entry's `prompt_id` that is not among
+  // them names a prompt written on another machine, or one a person deleted, and the history
+  // view says so rather than showing an id that leads nowhere (ADR 0021 §3).
+  const prompts = useMemo(() => {
+    const known = new Set((conversation?.conversation ?? []).map((turn) => turn.prompt_id));
+    if (conversation?.live) known.add(conversation.live.prompt_id);
+    return known;
+  }, [conversation]);
 
   // The clips a roll can be opened on, in the arrangement's own order — derived from the
   // projection rather than listed a second time, so the `<select>` and the timeline cannot
@@ -281,6 +326,35 @@ export function App() {
   const roll = useMemo(
     () => (song && openId !== undefined ? pianoRoll(song, openId) : null),
     [song, openId],
+  );
+
+  // The document the proposal has, decoded exactly as the project's is (ADR 0012 §2): the host
+  // answers with what `to_canonical_json` wrote, so the same generated deserializer reads both
+  // and there is no second decoding path. It is not held as a document — every view below is
+  // recomputed from it, and it goes when the proposal does.
+  const proposed = useMemo(() => {
+    const held = conversation?.live?.song ?? null;
+    return held === null ? null : freeze(fromJson(SongSchema, held as JsonValue));
+  }, [conversation]);
+
+  // The timeline draws the **proposal's** arrangement while one is pending, with the clips it
+  // added or changed dashed over it. That is the wireframes' unapplied edit: a clip the model
+  // proposes occupies real timeline space, so a person sees where it lands before taking it
+  // (plate 1, note 4). Without the proposal's own arrangement a new clip could not be drawn at
+  // all — it is not in the document, which is the whole point.
+  const proposedView = useMemo(() => (proposed ? arrangement(proposed) : null), [proposed]);
+  const pendingClips = useMemo(
+    () => dashed(view?.tracks ?? [], proposedView?.tracks ?? null),
+    [view, proposedView],
+  );
+
+  const proposedRoll = useMemo(
+    () => (proposed && openId !== undefined ? pianoRoll(proposed, openId) : null),
+    [proposed, openId],
+  );
+  const notes = useMemo(
+    () => dashedNotes(roll?.notes ?? [], proposedRoll?.notes ?? null),
+    [roll, proposedRoll],
   );
 
   const deviceId =
@@ -420,6 +494,72 @@ export function App() {
       clearTimeout(timer);
     };
   }, []);
+
+  /** What the assistant panel is drawing, asked for rather than pushed — the transport's own
+   *  shape (ADR 0013 §2's answer, one panel over), and one question at a time. */
+  const readPanel = useCallback(
+    () =>
+      panel()
+        .then(setConversation)
+        .catch((e: unknown) => setNotice(String(e))),
+    [],
+  );
+
+  useEffect(() => {
+    void readPanel();
+  }, [readPanel]);
+
+  // While a turn is running, often enough that the proposal visibly grows; not at all when
+  // none is, because the answer cannot change without something in this window asking for it.
+  // 250 ms is how often the window asks, and it is not a clock anything is measured against.
+  useEffect(() => {
+    if (conversation?.live?.running !== true) return;
+    let over = false;
+    const timer = setTimeout(() => {
+      if (!over) void readPanel();
+    }, 250);
+    return () => {
+      over = true;
+      clearTimeout(timer);
+    };
+  }, [conversation, readPanel]);
+
+  /** One prompt. The turn runs in the host; what comes back here is that it started. */
+  async function send(): Promise<void> {
+    const text = typed.trim();
+    if (text === "") return;
+    setTyped("");
+    setNotice(null);
+    try {
+      await ask(text);
+    } catch (e: unknown) {
+      setNotice(String(e));
+    }
+    await readPanel();
+  }
+
+  /** Apply, Reject or Edit (ADR 0019 §3).
+   *
+   *  All three end the same way — re-read the document and the log, because Apply and Edit
+   *  append an entry and Reject is the one that appends none, and a panel that re-read only
+   *  after the two would be showing a stale log after the third for no reason anybody could
+   *  see. */
+  async function decide(action: "apply" | "reject" | "edit", patch?: string): Promise<void> {
+    try {
+      const answer = await settle(action, patch);
+      if (answer.valid) setHandWritten(null);
+      setNotice(
+        answer.valid
+          ? null
+          : answer.errors.map((violation) => `${violation.rule}: ${violation.message}`).join("; "),
+      );
+    } catch (e: unknown) {
+      setNotice(String(e));
+      return;
+    }
+    await Promise.all([read(), readPanel()]);
+    replay();
+  }
 
   /** §9's second half: the same call without `dry_run`, then a fresh `get_song`.
    *
@@ -585,259 +725,281 @@ export function App() {
       </header>
 
       <div className="views">
-        <section className="arrangement">
-          <div className="gutter">
-            <div className="gutter-head" style={{ height: HEAD }} />
-            {view.tracks.map((track) => (
-              <div className="track" key={track.id} style={{ height: ROW }}>
-                <span className="name">{track.name}</span>
-                <span className="kind">{track.kind}</span>
-              </div>
-            ))}
-          </div>
-          <Timeline
-            view={view}
-            selected={roll?.clipId ?? null}
-            playhead={transport === null ? null : (transport.tick ?? 0)}
-          />
-        </section>
-
-        <section className="detail">
-          <div className="pane-head">
-            {/* Three buttons, not a router and not tabs from a library: what a tab strip is,
-                for three panes, is three buttons and a piece of state (ADR 0016 §3). */}
-            <span className="panes">
-              {(["roll", "mixer", "params", "history"] as const).map((name) => (
-                <button
-                  key={name}
-                  className={pane === name ? "pane on" : "pane"}
-                  onClick={() => setPane(name)}
-                  aria-pressed={pane === name}
-                >
-                  {name === "params" ? "parameters" : name === "roll" ? "piano roll" : name}
-                </button>
+        <div className="stack">
+          <section className="arrangement">
+            <div className="gutter">
+              <div className="gutter-head" style={{ height: HEAD }} />
+              {(proposedView ?? view).tracks.map((track) => (
+                <div className="track" key={track.id} style={{ height: ROW }}>
+                  <span className="name">{track.name}</span>
+                  <span className="kind">{track.kind}</span>
+                </div>
               ))}
-            </span>
+            </div>
+            <Timeline
+              view={proposedView ?? view}
+              selected={roll?.clipId ?? null}
+              playhead={transport === null ? null : (transport.tick ?? 0)}
+              pending={pendingClips}
+            />
+          </section>
 
-            {pane === "roll" && rollable.length > 0 ? (
-              // A native `<select>`, which is the whole of "choose a clip" and needs no
-              // library (ADR 0016 §3). Choosing one is not an edit: nothing is written, and
-              // the roll it opens is `pianoRoll(song, id)` recomputed from the same song.
-              <select
-                value={openId ?? ""}
-                onChange={(event) => setChosen(event.target.value)}
-                aria-label="clip"
-              >
-                {rollable.map((clip) => (
-                  <option key={clip.id} value={clip.id}>
-                    {clip.label}
-                  </option>
+          <section className="detail">
+            <div className="pane-head">
+              {/* Three buttons, not a router and not tabs from a library: what a tab strip is,
+                  for three panes, is three buttons and a piece of state (ADR 0016 §3). */}
+              <span className="panes">
+                {(["roll", "mixer", "params", "history"] as const).map((name) => (
+                  <button
+                    key={name}
+                    className={pane === name ? "pane on" : "pane"}
+                    onClick={() => setPane(name)}
+                    aria-pressed={pane === name}
+                  >
+                    {name === "params" ? "parameters" : name === "roll" ? "piano roll" : name}
+                  </button>
                 ))}
-              </select>
-            ) : null}
-            {pane === "roll" && roll ? (
-              <span className="dim">
-                bar {barOf(view, roll.startTick)} · {roll.notes.length} note
-                {roll.notes.length === 1 ? "" : "s"}
               </span>
-            ) : null}
-            {pane === "roll" && rollable.length === 0 ? (
-              <span className="dim">no note clips</span>
-            ) : null}
 
-            {pane === "params" && editable.length > 0 ? (
-              <select
-                value={deviceId ?? ""}
-                onChange={(event) => setDevice(event.target.value)}
-                aria-label="device"
-              >
-                {editable.map((held) => (
-                  <option key={held.id} value={held.id}>
-                    {held.track} · {held.label}
-                    {held.index === undefined ? "" : ` #${held.index}`}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {pane === "params" && editing ? (
-              <>
-                <input
-                  type="search"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="name or id"
-                  aria-label="filter parameters"
-                />
-                {/* Two counts because they are two maps: what the plugin declares, and what
-                    this document overrides. Opening the editor changed neither. */}
+              {pane === "roll" && rollable.length > 0 ? (
+                // A native `<select>`, which is the whole of "choose a clip" and needs no
+                // library (ADR 0016 §3). Choosing one is not an edit: nothing is written, and
+                // the roll it opens is `pianoRoll(song, id)` recomputed from the same song.
+                <select
+                  value={openId ?? ""}
+                  onChange={(event) => setChosen(event.target.value)}
+                  aria-label="clip"
+                >
+                  {rollable.map((clip) => (
+                    <option key={clip.id} value={clip.id}>
+                      {clip.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {pane === "roll" && roll ? (
                 <span className="dim">
-                  {editing.declares} declared · {editing.set} set
+                  bar {barOf(view, roll.startTick)} · {roll.notes.length} note
+                  {roll.notes.length === 1 ? "" : "s"}
                 </span>
-              </>
-            ) : null}
+              ) : null}
+              {pane === "roll" && rollable.length === 0 ? (
+                <span className="dim">no note clips</span>
+              ) : null}
+              {pane === "roll" && proposedRoll ? (
+                <span className="caveat" title={PROPOSED_NOT_APPLIED}>
+                  proposal · not applied
+                </span>
+              ) : null}
 
-            {pane === "history" && log ? (
-              <span className="dim">
-                on {log.head} · {log.entries.length} entr{log.entries.length === 1 ? "y" : "ies"}
-              </span>
-            ) : null}
+              {pane === "params" && editable.length > 0 ? (
+                <select
+                  value={deviceId ?? ""}
+                  onChange={(event) => setDevice(event.target.value)}
+                  aria-label="device"
+                >
+                  {editable.map((held) => (
+                    <option key={held.id} value={held.id}>
+                      {held.track} · {held.label}
+                      {held.index === undefined ? "" : ` #${held.index}`}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {pane === "params" && editing ? (
+                <>
+                  <input
+                    type="search"
+                    value={filter}
+                    onChange={(event) => setFilter(event.target.value)}
+                    placeholder="name or id"
+                    aria-label="filter parameters"
+                  />
+                  {/* Two counts because they are two maps: what the plugin declares, and what
+                      this document overrides. Opening the editor changed neither. */}
+                  <span className="dim">
+                    {editing.declares} declared · {editing.set} set
+                  </span>
+                </>
+              ) : null}
 
-            {/* Ellipsised so the head never wraps (ADR 0017 §3), so the whole of it is on
-                hover — an engine's reason for not playing is the longest thing that lands here. */}
-            {said !== null ? (
-              <span className="notice" title={said}>
-                {said}
-              </span>
-            ) : null}
-          </div>
+              {pane === "history" && log ? (
+                <span className="dim">
+                  on {log.head} · {log.entries.length} entr{log.entries.length === 1 ? "y" : "ies"}
+                </span>
+              ) : null}
 
-          {pane === "roll" ? (
-            roll ? (
-              <Roll
-                view={roll}
-                moved={gesture?.moved ?? null}
-                refused={preview?.valid === false}
-                onMoved={(next) => {
-                  if (next) setHeld(true);
-                  propose(
-                    next && openId !== undefined
-                      ? {
-                          tool: "set_notes",
-                          args: { clip_id: openId, notes: movedNotes(song, openId, next) },
-                          moved: next,
-                        }
-                      : null,
-                  );
+              {/* Ellipsised so the head never wraps (ADR 0017 §3), so the whole of it is on
+                  hover — an engine's reason for not playing is the longest thing that lands here. */}
+              {said !== null ? (
+                <span className="notice" title={said}>
+                  {said}
+                </span>
+              ) : null}
+            </div>
+
+            {pane === "roll" ? (
+              roll ? (
+                <Roll
+                  view={roll}
+                  moved={gesture?.moved ?? null}
+                  refused={preview?.valid === false}
+                  pending={notes.pending}
+                  gone={notes.gone}
+                  onMoved={(next) => {
+                    if (next) setHeld(true);
+                    propose(
+                      next && openId !== undefined
+                        ? {
+                            tool: "set_notes",
+                            args: { clip_id: openId, notes: movedNotes(song, openId, next) },
+                            moved: next,
+                          }
+                        : null,
+                    );
+                  }}
+                  onReleased={() => setHeld(false)}
+                />
+              ) : (
+                <p className="empty">Nothing to show here yet.</p>
+              )
+            ) : pane === "history" ? (
+              log ? (
+                <>
+                  {/* The branch controls live in the pane *body*, not the head. The head may not
+                      wrap and its children may not shrink (ADR 0017 §3, as PR 7 corrected it),
+                      which is right for a bar a drag is measured against and wrong for six
+                      controls that would then be clipped instead. Nothing in this pane is
+                      dragged, so the bar is free to wrap here. */}
+                  <div className="branchbar">
+                    <select
+                      value={picked ?? ""}
+                      onChange={(event) => setBranch(event.target.value)}
+                      aria-label="branch"
+                    >
+                      {log.branches.map((held) => (
+                        <option key={held.name} value={held.name}>
+                          {held.name}
+                          {held.head ? " (here)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {/* All three are disabled on `HEAD`, which is the one branch none of them
+                        can act on: switching to where you are answers "already here", merging a
+                        branch into itself the same, and deleting `HEAD` is `delete_head`
+                        (`core/src/history.rs`). Disabled rather than hidden, so the bar keeps
+                        its shape as the choice changes. */}
+                    <button
+                      className="pane"
+                      disabled={picked === undefined || picked === log.head}
+                      onClick={() => picked && void direct("switch_branch", { name: picked })}
+                    >
+                      Switch
+                    </button>
+                    <button
+                      className="pane"
+                      disabled={picked === undefined || picked === log.head}
+                      onClick={() =>
+                        picked && propose({ tool: "merge_branch", args: { name: picked } })
+                      }
+                    >
+                      Merge into {log.head}
+                    </button>
+                    <button
+                      className="pane"
+                      disabled={picked === undefined || picked === log.head}
+                      onClick={() => picked && void direct("delete_branch", { name: picked })}
+                    >
+                      Delete
+                    </button>
+                    {/* A new ref at the current entry, which copies no data (ADR 0001 §2). The
+                        name is the user's and its rules are the validator's — ASCII
+                        `[a-z0-9._/-]`, no `..` — so there is no pattern checked here, for
+                        ADR 0017 §3's reason one form over: a rule predicted in TypeScript is a
+                        second implementation of one that already exists. */}
+                    <input
+                      value={naming}
+                      onChange={(event) => setNaming(event.target.value)}
+                      placeholder="new branch"
+                      aria-label="new branch name"
+                    />
+                    <button
+                      className="pane"
+                      disabled={naming.trim() === ""}
+                      onClick={() => {
+                        const name = naming.trim();
+                        setNaming("");
+                        setBranch(name);
+                        void direct("create_branch", { name });
+                      }}
+                    >
+                      Branch
+                    </button>
+                  </div>
+                  <PatchLog view={log} prompts={prompts} />
+                </>
+              ) : (
+                <p className="empty">Reading the log…</p>
+              )
+            ) : pane === "mixer" ? (
+              <Strips
+                view={strips}
+                touched={gesture?.touched}
+                onWrite={written}
+                onHeld={setHeld}
+                onOpen={(id) => {
+                  setDevice(id);
+                  setPane("params");
                 }}
-                onReleased={() => setHeld(false)}
+                opened={deviceId}
+              />
+            ) : editing ? (
+              <Params
+                view={editing}
+                touched={gesture?.touched}
+                filter={filter}
+                onWrite={written}
+                onHeld={setHeld}
               />
             ) : (
-              <p className="empty">Nothing to show here yet.</p>
-            )
-          ) : pane === "history" ? (
-            log ? (
-              <>
-                {/* The branch controls live in the pane *body*, not the head. The head may not
-                    wrap and its children may not shrink (ADR 0017 §3, as PR 7 corrected it),
-                    which is right for a bar a drag is measured against and wrong for six
-                    controls that would then be clipped instead. Nothing in this pane is
-                    dragged, so the bar is free to wrap here. */}
-                <div className="branchbar">
-                  <select
-                    value={picked ?? ""}
-                    onChange={(event) => setBranch(event.target.value)}
-                    aria-label="branch"
-                  >
-                    {log.branches.map((held) => (
-                      <option key={held.name} value={held.name}>
-                        {held.name}
-                        {held.head ? " (here)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {/* All three are disabled on `HEAD`, which is the one branch none of them
-                      can act on: switching to where you are answers "already here", merging a
-                      branch into itself the same, and deleting `HEAD` is `delete_head`
-                      (`core/src/history.rs`). Disabled rather than hidden, so the bar keeps
-                      its shape as the choice changes. */}
-                  <button
-                    className="pane"
-                    disabled={picked === undefined || picked === log.head}
-                    onClick={() => picked && void direct("switch_branch", { name: picked })}
-                  >
-                    Switch
-                  </button>
-                  <button
-                    className="pane"
-                    disabled={picked === undefined || picked === log.head}
-                    onClick={() =>
-                      picked && propose({ tool: "merge_branch", args: { name: picked } })
-                    }
-                  >
-                    Merge into {log.head}
-                  </button>
-                  <button
-                    className="pane"
-                    disabled={picked === undefined || picked === log.head}
-                    onClick={() => picked && void direct("delete_branch", { name: picked })}
-                  >
-                    Delete
-                  </button>
-                  {/* A new ref at the current entry, which copies no data (ADR 0001 §2). The
-                      name is the user's and its rules are the validator's — ASCII
-                      `[a-z0-9._/-]`, no `..` — so there is no pattern checked here, for
-                      ADR 0017 §3's reason one form over: a rule predicted in TypeScript is a
-                      second implementation of one that already exists. */}
-                  <input
-                    value={naming}
-                    onChange={(event) => setNaming(event.target.value)}
-                    placeholder="new branch"
-                    aria-label="new branch name"
-                  />
-                  <button
-                    className="pane"
-                    disabled={naming.trim() === ""}
-                    onClick={() => {
-                      const name = naming.trim();
-                      setNaming("");
-                      setBranch(name);
-                      void direct("create_branch", { name });
-                    }}
-                  >
-                    Branch
-                  </button>
-                </div>
-                <PatchLog view={log} />
-              </>
-            ) : (
-              <p className="empty">Reading the log…</p>
-            )
-          ) : pane === "mixer" ? (
-            <Strips
-              view={strips}
-              touched={gesture?.touched}
-              onWrite={written}
-              onHeld={setHeld}
-              onOpen={(id) => {
-                setDevice(id);
-                setPane("params");
-              }}
-              opened={deviceId}
-            />
-          ) : editing ? (
-            <Params
-              view={editing}
-              touched={gesture?.touched}
-              filter={filter}
-              onWrite={written}
-              onHeld={setHeld}
-            />
-          ) : (
-            <p className="empty">
-              {manifest === null ? "Reading the build manifest…" : "This song has no devices."}
-            </p>
-          )}
+              <p className="empty">
+                {manifest === null ? "Reading the build manifest…" : "This song has no devices."}
+              </p>
+            )}
 
-          {!held && gesture && proposal ? (
-            <Pending
-              answer={proposal}
-              onApply={apply}
-              onDiscard={() => propose(null)}
-              // Only a merge can be resolved, so only a merge is handed the form. A conflict
-              // is a `Violation` like any other refusal; what makes it settleable is that the
-              // call it came from takes a `resolve` map (ADR 0015 §3).
-              resolution={
-                gesture.tool === "merge_branch"
-                  ? {
-                      theirs: String(gesture.args.name),
-                      picks: (gesture.args.resolve as Record<string, string> | undefined) ?? {},
-                      onPick: resolveAt,
-                    }
-                  : undefined
-              }
-            />
-          ) : null}
-        </section>
+            {!held && gesture && proposal ? (
+              <Pending
+                answer={proposal}
+                onApply={apply}
+                onDiscard={() => propose(null)}
+                // Only a merge can be resolved, so only a merge is handed the form. A conflict
+                // is a `Violation` like any other refusal; what makes it settleable is that the
+                // call it came from takes a `resolve` map (ADR 0015 §3).
+                resolution={
+                  gesture.tool === "merge_branch"
+                    ? {
+                        theirs: String(gesture.args.name),
+                        picks: (gesture.args.resolve as Record<string, string> | undefined) ?? {},
+                        onPick: resolveAt,
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+          </section>
+        </div>
+
+        {panelView ? (
+          <AiPanel
+            view={panelView}
+            typed={typed}
+            onTyped={setTyped}
+            onAsk={() => void send()}
+            onSettle={(action, patch) => void decide(action, patch)}
+            editing={handWritten}
+            onEditing={setHandWritten}
+          />
+        ) : null}
       </div>
 
       {/*
@@ -963,6 +1125,168 @@ function Pending({
 }
 
 /**
+ * The AI panel (§9; wireframes plate 1, pane 6) — the conversation, the proposal, and the three
+ * controls a person decides it with.
+ *
+ * **A docked panel and not a modal**, which is the wireframes' own note: the song stays on
+ * screen beside it, because what a person is deciding about is the song. It names the model the
+ * project records — and says, where the name is, what that name is and is not: a record of a
+ * choice, never a pin, never verified, and never a claim that anything the model does is
+ * reproducible (ADR 0021 §4; docs/plan.md, M3 trap 15). That is the *live preview · not the
+ * render* sentence, one panel over.
+ *
+ * **What it shows is `ToolResult.patch`**, as every other proposal in this window does: the RFC
+ * 6902 operations a commit would record, not a description of them and not a diff this file
+ * computed (ADR 0006 §1, §3). It is drawn while the turn is still running, because the patch is
+ * computable after every call — which is ADR 0019 §2's own sentence and is what "drawn as it
+ * grows" means.
+ *
+ * **Three controls, in the order ADR 0019 §3 puts them.** Apply commits one entry under
+ * `proposal` with the model as its author. Reject drops the fork: nothing was written, so
+ * nothing is undone and the log records nothing — which is why it has no confirmation and no ⌘Z
+ * hint. Edit is last, and is the one place a person writes RFC 6902 by hand: the patch becomes
+ * a text area, and what it applies is the person's own (`AUTHOR_HUMAN`), with the prompt's id
+ * kept so the entry still leads to this conversation. A patch that will not apply is refused in
+ * place and the proposal stays pending (ADR 0017 §3).
+ */
+function AiPanel({
+  view,
+  typed,
+  onTyped,
+  onAsk,
+  onSettle,
+  editing,
+  onEditing,
+}: {
+  view: Assistant;
+  typed: string;
+  onTyped: (text: string) => void;
+  onAsk: () => void;
+  onSettle: (action: "apply" | "reject" | "edit", patch?: string) => void;
+  /** The patch text a person is editing, or `null` when nobody is. */
+  editing: string | null;
+  onEditing: (text: string | null) => void;
+}) {
+  return (
+    <aside className="assistant">
+      <div className="pane-head">
+        <span className="panes">
+          <strong>Assistant</strong>
+        </span>
+        <span className="caveat" title={view.caveat}>
+          {view.model} · recorded, not verified
+        </span>
+      </div>
+
+      <div className="msgs">
+        {view.messages.length === 0 ? (
+          <p className="empty">Nothing asked yet.</p>
+        ) : (
+          view.messages.map((message, at) => (
+            <div className={`msg ${message.who}`} key={at}>
+              <span className="who">{message.who === "you" ? "You" : "Model"}</span>
+              {message.said === "" ? null : <p>{message.said}</p>}
+              {message.calls.map((line, which) => (
+                <div className={line.refused ? "call refused" : "call"} key={which}>
+                  <code>
+                    {line.name}({line.args})
+                  </code>
+                  <span className="verdict">{line.verdict}</span>
+                </div>
+              ))}
+              {message.note === "" ? null : <span className="note">{message.note}</span>}
+            </div>
+          ))
+        )}
+      </div>
+
+      {view.pending ? (
+        <div className={view.pending.running ? "patchbox growing" : "patchbox"}>
+          <div className="pb-h">
+            <strong>
+              {view.pending.running ? "Proposal, as it grows" : "Pending patch · RFC 6902"}
+            </strong>
+            <span className="dim">{view.pending.summary}</span>
+          </div>
+          {editing === null ? (
+            <pre className="diff">{view.pending.text}</pre>
+          ) : (
+            <textarea
+              className="diff"
+              value={editing}
+              spellCheck={false}
+              aria-label="the patch, to edit"
+              onChange={(event) => onEditing(event.target.value)}
+            />
+          )}
+          {view.pending.refusals.length > 0 ? (
+            <ul className="refusals">
+              {view.pending.refusals.map((said, at) => (
+                <li key={at}>{said}</li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="acts">
+            {editing === null ? (
+              <>
+                <button
+                  className="pri"
+                  disabled={!view.pending.applicable}
+                  onClick={() => onSettle("apply")}
+                >
+                  Apply
+                </button>
+                <button disabled={view.pending.running} onClick={() => onSettle("reject")}>
+                  Reject
+                </button>
+                {/* Last, and enabled last: Edit is the control with the most ways to be wrong
+                    (ADR 0019 §3), and there is nothing to edit while the model is still
+                    calling. */}
+                <button
+                  disabled={view.pending.running || view.pending.ops.length === 0}
+                  onClick={() => onEditing(view.pending?.text ?? "")}
+                >
+                  Edit
+                </button>
+                <span className="hint">nothing is applied until you say so</span>
+              </>
+            ) : (
+              <>
+                <button className="pri" onClick={() => onSettle("edit", editing)}>
+                  Apply as mine
+                </button>
+                <button onClick={() => onEditing(null)}>Cancel</button>
+                <span className="hint">applied as yours, with the prompt kept</span>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="prompt">
+        <input
+          className="field"
+          value={typed}
+          disabled={!view.asking}
+          aria-label="ask or instruct"
+          placeholder={view.asking ? "Ask or instruct…" : "apply or reject the proposal first"}
+          onChange={(event) => onTyped(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onAsk();
+          }}
+        />
+        <button disabled={!view.asking || typed.trim() === ""} onClick={onAsk}>
+          Send
+        </button>
+      </div>
+      <span className="kept dim" title={view.kept}>
+        the conversation is kept beside the project, not in it
+      </span>
+    </aside>
+  );
+}
+
+/**
  * The patch log, and the provenance column §5's audit trail is made of (plate 5).
  *
  * Every entry in the log, not only the current branch's: a discarded branch's entries stay
@@ -977,7 +1301,16 @@ function Pending({
  * There is no version column, deliberately: `version` counts per branch (ADR 0005 §4's
  * caveat), so a column of them would read as one sequence over what are several.
  */
-function PatchLog({ view }: { view: Log }) {
+function PatchLog({
+  view,
+  prompts,
+}: {
+  view: Log;
+  /** The turns this machine has the conversation for. An entry whose `prompt_id` is not among
+   *  them names a prompt written elsewhere, or one a person deleted: the conversation lives
+   *  beside the project and travels with nothing (ADR 0021 §3). */
+  prompts: ReadonlySet<string>;
+}) {
   return (
     <table className="log">
       <thead>
@@ -985,6 +1318,7 @@ function PatchLog({ view }: { view: Log }) {
           <th>entry</th>
           <th>tool</th>
           <th>by</th>
+          <th>prompt</th>
           <th>when</th>
           <th className="count">ops</th>
           <th>at</th>
@@ -1003,7 +1337,35 @@ function PatchLog({ view }: { view: Log }) {
               {row.tool}
               {row.merge ? <span className="dim"> ⑂ {row.parents.length}</span> : null}
             </td>
-            <td className="who">{row.author}</td>
+            {/* The author, and beside it the model that **actually answered** — never the id
+                that was asked for, and never presented as verified: it is a record of what
+                wrote the entry (ADR 0021 §2). An MCP client's entry says `model` and names
+                none, because nothing on that wire says which model is on the other side. */}
+            <td className="who">
+              {row.author}
+              {row.modelId === "" ? null : <span className="dim"> · {row.modelId}</span>}
+            </td>
+            <td className="prompt-id">
+              {row.promptId === "" ? (
+                <span className="dim">—</span>
+              ) : prompts.has(row.promptId) ? (
+                <span title={`from the prompt ${row.promptId}, in this window's conversation`}>
+                  {row.promptId.slice(0, 8)}
+                </span>
+              ) : (
+                <span
+                  className="absent"
+                  title={
+                    `from the prompt ${row.promptId}. This machine does not have that ` +
+                    "conversation: it is kept beside the project and does not travel with it " +
+                    "(ADR 0021 §3), so what is recorded here is that a prompt with this hash " +
+                    "existed and what it changed."
+                  }
+                >
+                  {row.promptId.slice(0, 8)} ?
+                </span>
+              )}
+            </td>
             <td className="when">{row.createdAt.slice(0, 19).replace("T", " ")}</td>
             <td className="count">{row.ops}</td>
             <td className="at">{row.refs.join(" · ")}</td>

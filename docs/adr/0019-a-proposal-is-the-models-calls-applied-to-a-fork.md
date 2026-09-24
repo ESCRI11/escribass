@@ -236,6 +236,38 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
 - **PR 9** (`m3.9-panel`) draws the proposal dashed as it grows and offers Apply and Reject;
   Edit lands last, with ADR 0017 §3's refusal path. `proposal` rows appear in the history view
   with the model named (ADR 0021 §2).
+
+  **Done 2026-09-24**, and four things the decisions did not have to say.
+
+  **"As it grows" needed a seam in `core`, because a turn holds the session for its whole
+  length.** Decision 2 says the patch is computable after every call and the panel may draw it;
+  what it did not have to say is that nobody is in a position to look. `Sidecar::turn` borrows
+  the session until the model stops, so a window asking through the session would see nothing
+  until the turn ended — fourteen seconds, on the one live turn this repository has measured.
+  So `turn` takes a watcher, called after every event with the turn so far and the session the
+  proposal is on; the host's watcher computes the patch and the proposal's document **on the
+  turn's own thread** and leaves them behind a lock of its own, and the `panel` command reads
+  that lock and never the session. It is one parameter and no state: the alternative, a second
+  entry point beside `turn`, is the twin trap 3 is about.
+
+  **Edit needed a fourth provenance arm, and it is decision 3's sentence made mechanical.**
+  A proposal's patch is committed with the provenance `prepare` already decided **on the
+  fork** (ADR 0021 §2), and an edited one must not be: its new entities carry the *model's* in
+  the text a person was handed, and they should get the person's — which is ADR 0021 §1's own
+  worked example. So `Made::Edit` prepares through the ordinary `prepare` with
+  `AUTHOR_HUMAN`, no `model_id` and the `prompt_id` kept, and commits; `Made::Call`, which
+  looks the same, keeps its document on a fork and records nothing.
+
+  **Edit takes the session past the proposal's ids too**, which is PR 8's own finding arriving
+  at the control beside it: the text a person edits names the ids the **fork** minted, so
+  applying it puts them in the project. Watched failing first, and the failure is the same 26
+  characters twice — the entry `record` minted and the track the edit had just applied.
+
+  **A refusal keeps the proposal, and so does a patch that applied to nothing.** ADR 0017 §3's
+  refusal path is "shown refused, and the proposal stays pending"; `run` answers a patch with
+  no operations as `valid` with an empty `entry_id`, which is neither refused nor applied. What
+  says an edit happened is the **entry**, so that is what the keep is conditioned on — and a
+  person whose patch did nothing still has the thing they were editing in front of them.
 - **No `song.proto` and no `history.proto` change**, and nothing in `proto/` for this decision:
   the proposal is `core`'s, and the stream that carries the model's calls is ADR 0020's.
 - **The M0.4 goldens do not move.** No tool's ops change and no existing path is touched; a

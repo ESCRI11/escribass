@@ -61,6 +61,15 @@ export interface LogRow {
   readonly tool: string;
   /** `AUTHOR_MODEL` as a word — the provenance column §5 asks for. */
   readonly author: string;
+  /** The model that **actually answered**, for an entry a turn produced — never the id that
+   *  was asked for (ADR 0021 §2). Empty for a person's entry, and for an MCP client's, whose
+   *  model is anonymous to this server because nothing on that wire says which one it is. */
+  readonly modelId: string;
+  /** The SHA-256 of the prompt the entry came from, which names a turn in the conversation
+   *  (ADR 0021 §3). Empty when the entry did not come from one. A conversation lives beside
+   *  the project and does not travel with it, so an id here may name a prompt this machine
+   *  does not have — which the window says rather than leaving the id looking broken. */
+  readonly promptId: string;
   /** ISO 8601, in UTC. Never a locale format: this description is goldened (ADR 0012 §5), and
    *  `toLocaleString` would make the golden a property of the machine that ran it. */
   readonly createdAt: string;
@@ -153,6 +162,8 @@ export function patchLog(answer: HistoryAnswer): Log {
         id: entry.id,
         tool: entry.tool,
         author: AUTHORS[made.author] ?? "unspecified",
+        modelId: made.modelId ?? "",
+        promptId: made.promptId ?? "",
         createdAt: made.createdAt ? timestampDate(made.createdAt).toISOString() : "",
         ops: entry.ops.length,
         parents: entry.parents,
