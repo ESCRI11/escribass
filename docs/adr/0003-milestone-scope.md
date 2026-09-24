@@ -88,6 +88,33 @@ Consequence: ONNX Runtime (pinned in §17) becomes a v1 dependency, and §15's o
 whether it links into `engine` or runs as a separate process must be resolved before M4
 starts. It remains `[OPEN]` — this ADR places the work, it does not decide the packaging.
 
+**Resolved 2026-09-25, by the user, before M4 starts — as this section asked.** The neural
+runtime is a **separate process**. It does not link into `engine`.
+
+Two reasons, and the second is the one that makes it not merely tidy. It keeps CLAUDE.md #6
+clean: the engine stays schema-agnostic and gains no machine-learning dependency, so ONNX
+Runtime never enters the binary that hosts the audio graph. And **a crash or a version clash in
+ONNX Runtime cannot take the audio thread with it** — linked in, an abort inside the runtime,
+or a symbol collision between its own vendored protobuf, BLAS or threading library and
+Tracktion's, ends the render or the preview. Out of process it ends a process whose death the
+supervisor already knows how to report, which is the bargain ADR 0008 §1 took for the engine
+itself and ADR 0020 §4 took again for `ai`.
+
+The cost is accepted rather than argued away: a transport to define and a second binary to pin.
+This repository already pays it twice — the engine over gRPC on a socket it names, and `ai`
+over its own — so the shape is known, the supervision is written, and neither was the expensive
+part of M1 or M3.
+
+**What is settled and what is not.** Settled: it does not link into `engine`. Still M4's, and
+its planning's rather than this ADR's, is the packaging *detail* — which transport it speaks,
+what exactly is pinned beside the ONNX Runtime commit §17 already carries, and whether the
+real-time CLAP wrapper §7.3 describes lives with it or with the DSP compiler. §13 owes it a
+directory, which is a top-level directory and therefore an ADR of its own (CLAUDE.md, Repo
+layout). None of that blocks M4 being planned; all of it is inside M4.
+
+The `[OPEN]` marker is removed from §15 and from `docs/plan.md`'s "Open — not ours to decide",
+because it is answered. §3's tier table said the process was `engine` and is corrected with it.
+
 ### 8. Code views are M4
 
 §9 lists them among the views, but they edit generator and DSP source, neither of which exists

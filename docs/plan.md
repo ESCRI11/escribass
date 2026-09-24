@@ -1929,9 +1929,16 @@ where a reader of this file will look:
   content of that pull request, and the ledger at `~/.escribass/spend.jsonl` begins with the
   *authorised* session of 2026-09-24, three rows and $0.00376174, because the ledger was built in
   PR 8. So the repository's total recorded spend is smaller than its actual spend by roughly nine
-  cents, and no mechanism can reconstruct the difference: the calls predate the ledger and
-  OpenRouter's counter is a running total, not a log this repository kept. Said plainly because the
-  amount is irrelevant and the gap is not.
+  cents. **That gap is permanent, and it is left that way on purpose** (the user's decision,
+  2026-09-25). Nothing can reconstruct it: the calls predate the ledger, OpenRouter's counter is a
+  running total rather than a log this repository kept, and the one figure that *is* written down
+  — $0.00008965 — is the cost of the turn the transcript names, not what the account was charged
+  across the attempts around it. **Backfilling that figure is refused**, and the reason is the
+  shape of check this milestone spent a whole review pass on: a row invented to fill a hole would
+  make the ledger agree with itself while still disagreeing with the provider, which is a
+  reconciliation that passes and means nothing. The ledger's job is to be checkable against
+  OpenRouter, and it is — for the three rows it has. For what came before it, the honest record is
+  this paragraph. Said plainly because the amount is irrelevant and the gap is not.
 - **The Rust suite is not reliably green, and nobody knew.** `core/tests/project.rs`'s
   `a_live_holders_lock_is_refused_and_is_not_broken` fails about one run in ten — 4 of 40 here —
   because a sibling test spawns a real process and the fork inherits the lock's descriptor for
@@ -2236,7 +2243,8 @@ section names it.
 ## Open — not ours to decide
 
 `docs/specs.md` §15 marks these `[OPEN]`; `CLAUDE.md` says stop and ask. None blocked M0, M1 or
-M2. **Two are in M3's path**, and M3's plan lists both as questions for the user — U1 and U2 —
+M2, and none blocked M3. **One of the four is now closed** — the neural runtime's packaging,
+answered 2026-09-25 as M4 opened, which is when ADR 0003 §7 said it was due. **Two are in M3's path**, and M3's plan lists both as questions for the user — U1 and U2 —
 and takes neither: whether §6's analysis and symbolic generation are v1 at all decides whether
 the second is reachable, and the plan is sized on the assumption that they are not in M3, an
 assumption the user confirms or reverses before the decisions PR.
@@ -2261,8 +2269,16 @@ M2's close (2026-09-17) walked past them deliberately — neither removed, rewor
 — and listed them here for the user to confirm or retract. The user confirmed all three on
 2026-09-17, so they are decisions rather than claims.
 
-- Neural runtime packaging: ONNX Runtime linked into `engine`, or a separate process. Now due
-  before M4, which is where the neural runtime lands (ADR 0003 §7).
+- ~~Neural runtime packaging: ONNX Runtime linked into `engine`, or a separate process.~~
+  **Resolved 2026-09-25 by the user: a separate process, never linked into `engine`** — on the
+  day it came due, which is the first time an item in this list has been answered by its own
+  deadline rather than past it. The engine keeps CLAUDE.md #6 and gains no machine-learning
+  dependency, and an abort or a symbol clash inside ONNX Runtime ends a supervised child
+  instead of the audio thread. The accepted cost is a transport and a second binary to pin,
+  which this repository already pays for `engine` and for `ai`. **What M4's planning still
+  owes** is the packaging detail — which transport, what else is pinned, where §7.3's CLAP
+  wrapper lives, and the §13 directory, which is a top-level directory and so an ADR of its own
+  (ADR 0003 §7, resolved).
 - Minimum supported OS versions.
 - Symbolic model choice for v1 melody and drum generation.
 - Whether §6's analysis features (key, chord and structure detection, tempo estimation, stem

@@ -26,11 +26,15 @@ compiled artefacts and model hashes (ADR 0003 §3). **M4 is not planned yet**, a
 deliberate: planning it is its own step, as M1's, M2's and M3's were, and ADR 0003's Consequences
 already say M4 grows the most and may need splitting against a real schedule.
 
-**One `[OPEN]` item is due before M4 starts, not during it.** ADR 0003 §7 places the neural
-runtime at M4 and says its packaging — ONNX Runtime linked into `engine`, or a separate process —
-"must be resolved before M4 starts". It is a person's (CLAUDE.md line 4): stop and ask. Four
-ledger rows also come due at M4's planning — `FormRule`, `SourceRef.export_hash` and the
-`Generator` compiled-source hash, `lock.json` beyond `schema_version`, and Strudel after M4.
+**The `[OPEN]` item that was due before M4 is answered.** ADR 0003 §7 said the neural runtime's
+packaging "must be resolved before M4 starts", and the user resolved it on 2026-09-25: it is a
+**separate process and never links into `engine`**, so the engine keeps CLAUDE.md #6 and a crash
+or a version clash in ONNX Runtime cannot reach the audio thread. **What M4's planning still owes
+is the detail** — which transport, what else is pinned, where §7.3's CLAP wrapper lives, and the
+§13 directory, which is a top-level directory and therefore its own ADR. Four ledger rows also
+come due at M4's planning: `FormRule`, `SourceRef.export_hash` and the `Generator`
+compiled-source hash, `lock.json` beyond `schema_version`, and Strudel after M4. Three `[OPEN]`
+items remain in §15 and none is M4's to walk into.
 
 Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §7 and
 ADR 0003 before starting a step. Read `docs/plan.md`'s "M3, closed" first: it records what M3

@@ -138,8 +138,8 @@ Internal, already flagged by the spec: M1's render turning out not bit-exact on 
 (§12), but that is a rewrite of M1. Tracktion pinned to `develop`, re-pinned monthly until a
 v3.3 tag (§17): a re-pin that moves a golden hash needs an ADR and a full golden pass. The
 four `[OPEN]` items in §15 — symbolic model (~~M3~~ **unplaced: M3 asked it as U2, and it was
-not reached because U1 was answered "not in M3"**), neural runtime packaging (**due now**, before
-M4 starts, ADR 0003 §7), minimum OS versions (M5 installer), and whether §6's analysis and
+not reached because U1 was answered "not in M3"**), neural runtime packaging (~~due now~~ — **answered 2026-09-25: a
+separate process, ADR 0003 §7, resolved**), minimum OS versions (M5 installer), and whether §6's analysis and
 symbolic generation are v1 at all — each block where they sit, and none is an agent's to decide.
 
 ## Where the risk sits
@@ -182,5 +182,7 @@ branching, merge and an MCP surface, and its scope has already grown once (`b402
 0003 then placed eight pieces of scope that sat in no milestone, and M4 took three — the
 compilers, the neural runtime and the code views — on top of what it had. Both concentrations
 are worth watching: M0 because everything blocks on it, M4 because it is now the widest
-milestone and its ONNX packaging question is still `[OPEN]`. Two gaps stay open by decision
+milestone, and its ONNX packaging question was `[OPEN]` until 2026-09-25, when it was answered
+the way the risk reads best: a separate process, so a runtime that falls over does not take the
+audio thread with it (ADR 0003 §7, resolved). Two gaps stay open by decision
 rather than oversight: whether §6's analysis features and symbolic generation are v1 at all.
