@@ -172,8 +172,12 @@ fn referenced_plugins<'a>(song: &'a Song, sampler: &'a str) -> BTreeSet<&'a str>
 
 /// What an operator can do about a `lock_mismatch`. All three are operator actions, which is
 /// why the refusal is a `ProjectError` and not a `Violation` (ADR 0006 §2, ADR 0010 §3).
+/// It named a tool as M2's until M3's close, and M2 built none: ADR 0010's Consequences
+/// promised one, no M2 pull request delivered it, and ADR 0022 §5 decided it is not M3's
+/// either because the ledger row's trigger — a plugin pin moving — has still not fired.
+/// Editing the text is the answer until it does, so that is what this says.
 const REPIN: &str = "install the build it names, rebuild, or edit lock.json deliberately \
-                     (ADR 0010 §3; the tool for it is M2's)";
+                     (ADR 0010 §3; there is no re-pin tool yet)";
 
 /// A change that has been applied, bumped and validated, but not recorded.
 ///
@@ -899,8 +903,11 @@ impl Project {
     ///
     /// Order is ADR 0004's: entries first, since an unreferenced entry is inert; `song.json`
     /// next; `refs.json` last, so advancing the ref is the moment the write becomes real. A
-    /// crash before that leaves an orphan entry, which `open` reports rather than mistaking
-    /// for history.
+    /// crash before that leaves an orphan entry, which `open` loads and leaves inert rather
+    /// than mistaking for history — no ref reaches it, so no replay walks it (ADR 0001 §2;
+    /// `an_orphan_entry_left_by_a_crash_does_not_become_history`). It is not reported: this
+    /// comment said "reports" until M3's close, where ADR 0004's Consequences said the same
+    /// and ADR 0001 §2 said the opposite. The code was always ADR 0001's.
     pub fn write(&mut self) -> Result<(), ProjectError> {
         for directory in [&self.root, &self.root.join(PATCHES), &self.root.join(ASSETS)] {
             std::fs::create_dir_all(directory)

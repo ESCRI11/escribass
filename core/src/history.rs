@@ -440,8 +440,10 @@ impl History {
     /// truth — so it is reported as `merge_base_ambiguous` instead.
     ///
     /// That is reachable: two branches that each merge a third reach it in four calls. The
-    /// answer is a recursive merge — merge the bases, use the result — which is M2's, alongside
-    /// the interactive resolution ADR 0001 §4 already defers there. Until then the pair is
+    /// answer is a recursive merge — merge the bases, use the result — deferred 2026-09-07 with a
+    /// trigger of its own (ADR 0015 §3): a real criss-cross base, which nothing has yet
+    /// produced. The interactive resolution ADR 0001 §4 deferred beside it landed in M2 PR 8.
+    /// Until then the pair is
     /// merged one branch at a time, and refusing is the honest response rather than a guess
     /// nobody could see was made.
     pub fn merge_base(&self, ours: &str, theirs: &str) -> Result<String, HistoryError> {

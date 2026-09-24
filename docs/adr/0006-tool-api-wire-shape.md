@@ -67,8 +67,10 @@ carry at all — the PCM hash and the commits of the build that made it (ADR 000
 
 The rule as it now reads: **one `ToolResult` for every tool that produces ops**, and its own
 message for a tool that produces something else. That is a narrower claim than the one this
-decision made and it is still one contract, not sixteen — the seventeen op-producing tools
-share theirs, and nothing was added to the shape they share.
+decision made and it is still one contract, not sixteen — the ~~seventeen~~ **nineteen**
+op-producing tools share theirs, and nothing was added to the shape they share. (**Counted
+again 2026-09-24, at M3's close**: `undo` and `redo` joined at M2 PR 5 and this sentence was
+edited on 2026-09-15 without being recounted. The rule is unchanged; only the number was.)
 
 Changing an RPC's response type is a wire break, and `buf breaking` said so. It was taken
 because nothing spoke this wire: the gRPC surface answered `UNIMPLEMENTED` and MCP did not
@@ -182,10 +184,18 @@ makes two windows on one project share a session rather than race inside one add
 stdio process is still not a session.
 
 The sentence "a lock file is M2's problem" is also now due. `core` takes one: `.escri/lock`,
-created with `create_new`, holding the pid, released on a clean close, reported and never broken
-automatically if it is already there. The single-writer assumption stops being structural the
-moment a host can open two projects, and ADR 0004's three renames interleaved is not a failure
-worth leaving to convention (ADR 0012 §3).
+~~created with `create_new`, holding the pid, released on a clean close, reported and never
+broken automatically if it is already there~~ — **corrected 2026-09-24, at M3's close: that
+mechanism is gone.** The lock is the kernel's: the file is opened and held under
+`std::fs::File::try_lock`, nothing in it decides anything, a second opener is refused for
+exactly as long as the first holds the descriptor, a lock nobody is holding is taken whatever
+it says, and the file is emptied rather than removed on a clean close (ADR 0020 §5, amended;
+ADR 0012 §3, amended twice). The paragraph is corrected here rather than left standing because
+`docs/adr/AGENTS.md` asks for it in the amending commit and M3 PR 10 updated ADR 0020 and
+`docs/specs.md` §10 and not the two ADRs they amend. What this sentence was written to say is
+untouched: the single-writer assumption stops being structural the moment a host can open two
+projects, and ADR 0004's three renames interleaved is not a failure worth leaving to
+convention (ADR 0012 §3).
 
 ### 6. MCP is served by `rmcp`; `patch` crosses as a JSON array, never base64
 

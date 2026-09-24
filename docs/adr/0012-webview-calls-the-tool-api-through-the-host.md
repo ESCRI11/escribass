@@ -128,6 +128,33 @@ result, a lock naming a live pid is refused exactly as before, and one with no p
 because there is nothing to check. Nothing is broken while its holder may be alive; that is the
 sentence that stands. Landed in M3 PR 4.
 
+**Amended again 2026-09-24, in M3 PR 10, and this one reverses three mechanisms named above.**
+The pid protocol lasted one pull request. Two openers of one crashed project could both read
+the same stale pid, and the second then removed the first's freshly taken lock — two writers,
+which is the thing this whole decision exists to prevent, reproduced two hundred rounds out of
+two hundred. So **no content of the lock file decides anything any more** (ADR 0020 §5,
+amended): the file is opened with `create(true).truncate(false)` — not `create_new`, no
+`O_EXCL` — and held under `std::fs::File::try_lock`, so the kernel refuses a second opener for
+exactly as long as the first holds the descriptor, and releases it when that process ends
+however it ends. Three sentences above are therefore false as of that commit, and are corrected
+here rather than left for a reader to trip over. `create_new` and the single `O_EXCL` are gone.
+The lock is **not removed on a clean close**: it is emptied and left on disk, because unlinking
+a file another process may already have open is the window this closed. And a lock with **no
+pid in it is taken, not refused** — nobody is holding it — which is the name of the test that
+says so (`a_lock_with_no_pid_in_it_is_taken_because_nobody_is_holding_it`,
+`core/tests/project.rs`). What survives untouched is this section's premise and its bargain:
+never two writers, and a refusal that names who to close. The pid inside the file is now a
+**label** for that message and never a decision, and a file that is not empty when a taker
+acquires the lock is how a taker learns its last holder crashed.
+
+The `ponytail:` above stands, narrowed: the lock is still advisory and still assumes a local
+filesystem, and `flock` over NFS is the kernel's emulation of one. What it is no longer is a
+protocol of our own — which is the part that had the race in it.
+
+Recorded here at M3's close (PR 11), walking the ADRs against the code: ADR 0020 §5 and
+`docs/specs.md` §10 were amended in PR 10 and this section — the one ADR 0020 §5 amends — was
+not, which `docs/adr/AGENTS.md` requires in the same commit.
+
 ### 4. A held dry run is applied optimistically, and the frontend mints no ids
 
 The wireframes draw an unapplied edit dashed in the timeline and a pending row at the head of

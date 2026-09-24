@@ -45,10 +45,15 @@ Linux x86-64, as M1: macOS and Windows are unclaimed rather than contradicted (A
 nothing new; differentiator 3 becomes something a person can see.
 
 **M3 — AI loop.** Ask for a change in plain language inside the app. The assistant proposes
-a patch, the panel shows the diff, you apply or reject (§9). Invalid proposals go back to the
-model as structured errors, three retries at most (§6). The model is a config value, via
-OpenRouter. *Proof:* the bar-17 demo driven by the assistant, diff on screen before apply.
-*Real:* differentiator 4's model-agnostic LLM layer.
+a patch, the panel shows the diff, and you apply, reject **or edit** it (§9) — the third
+control was added when the question was decided, and a person who changes the bytes owns them
+(ADR 0019 §3). Invalid proposals go back to the model as structured errors; "three" turned out
+to mean **three refused calls in one turn**, beside a cap of twelve model responses, because a
+loop cannot tell a retry from a new call (§6.1; ADR 0022 §3). The model is a config value, via
+OpenRouter — recorded, never pinned, since nothing verifies a hosted model. *Proof:* the
+bar-17 demo driven by the assistant, diff on screen before apply. *Real:* differentiator 4's
+model-agnostic LLM layer. **Delivered 2026-09-24**; what it does not claim is in
+`plan.md`'s "M3, closed".
 
 **M4 — Compilers.** Write, or ask for, an instrument in Cmajor; hear it at once under JIT;
 export it to a content-hashed VST3 so the render reproduces after the JIT is gone (§7.2).
@@ -132,9 +137,10 @@ Internal, already flagged by the spec: M1's render turning out not bit-exact on 
 — §8 asserts it, nothing tests it yet; the engine sits behind gRPC so it can be replaced
 (§12), but that is a rewrite of M1. Tracktion pinned to `develop`, re-pinned monthly until a
 v3.3 tag (§17): a re-pin that moves a golden hash needs an ADR and a full golden pass. The
-four `[OPEN]` items in §15 — symbolic model (M3), neural runtime packaging (now due before M4,
-ADR 0003 §7), minimum OS versions (M5 installer), and whether §6's analysis and symbolic
-generation are v1 at all — each block where they sit, and none is an agent's to decide.
+four `[OPEN]` items in §15 — symbolic model (~~M3~~ **unplaced: M3 asked it as U2, and it was
+not reached because U1 was answered "not in M3"**), neural runtime packaging (**due now**, before
+M4 starts, ADR 0003 §7), minimum OS versions (M5 installer), and whether §6's analysis and
+symbolic generation are v1 at all — each block where they sit, and none is an agent's to decide.
 
 ## Where the risk sits
 

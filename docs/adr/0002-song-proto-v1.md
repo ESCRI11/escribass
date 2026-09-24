@@ -110,8 +110,11 @@ each normalisation now sits where the value enters rather than where it leaves.
 
 ### 5. `optional` only where absent differs from zero
 
-Used on `Provenance.model_id`, `.prompt_id`, `.tool_call_id`, `Routing.output_track_id`,
-`Clip.loop_length_ticks` and `Op.from`. Not used where the zero value is the meaningful
+Used on `Provenance.model_id`, `.prompt_id`, `.tool_call_id`, `Routing.output_track_id`
+and `Clip.loop_length_ticks`. (~~`Op.from`~~ **corrected 2026-09-24, at M3's close**: §11's
+revision of 2026-09-02 removed the `Op` message altogether — `PatchEntry.ops` is `bytes` —
+and this list was not revised with it, so one ADR listed a field its own later section had
+deleted.) Not used where the zero value is the meaningful
 default — `Note.microtonal_cents` absent and `0.0` are the same statement.
 
 ### 6. Two files, two packages

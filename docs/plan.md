@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-17. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-24. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -51,7 +51,7 @@ stale.
 | M2.9 | `Render` over gRPC, the stdio path deleted, and the four goldens unmoved | done | PR #63 |
 | M2.10 | Preview: the live process, the device, the `Preview` stream, `render_preview`, and the window's transport — ADR 0013 §4's thread shape measured first | done | PR #64 |
 | M2.11 | A whole-stack review of M2: a fresh session's ⌘Z going forwards, answers lost after stdin closes, two CI holes, and the export crash reproduced and refused | done | PR #65 |
-| M2.12 | §11 walked against the code, the ledger walked a fourth time, `CLAUDE.md` to M3 — and what M2 leaves unverified written down where a reader will find it | done | this PR |
+| M2.12 | §11 walked against the code, the ledger walked a fourth time, `CLAUDE.md` to M3 — and what M2 leaves unverified written down where a reader will find it | done | PR #66 |
 | — | **M2 complete.** Tauri app, five views as projections, preview playback over gRPC — with three merges and no green run on `main` since PR 8, see "M2, closed" | done | — |
 | — | The M3 plan: five questions for the user, fourteen an agent can propose answers to, none answered | done | PR #67 |
 | — | The user's four answers, and the default model measured before it was recorded | done | PRs #68, #70 |
@@ -59,11 +59,16 @@ stale.
 | M3.1 | ADR 0018 alone: the bar view, read-only, in `ai`, six axes as counts, what was read | done | PR #71 |
 | M3.2 | The twelve remaining questions answered: ADRs 0019–0022, their §15 rows, §3/§5/§6/§9/§10/§13/§17/§18.2 amended, `lock.baseline.json`'s `ai` block, the two defects the spike found decided, the ledger rows ADR 0018 assigned here | done | PR #72 |
 | M3.3 | `proto/assistant.proto` — one service, one bidirectional stream, ADR 0020 §3's messages, no provenance and no `list_params` — and Python for `proto/`, a server and no client, with the model's re-emitted packages deleted and their imports sent to `escribass_schema`; `grpclib` 0.4.9 pinned here at the user's decision, so the check that it all imports and that there is one `Song` lands with the code | done | PR #73 |
-| M3.4 | `prepare` decides every entity's `provenance` on every path and `prepare_merge` leaves it, which closes the forgery the spike found; `ProjectLock::take` replaces a lock whose recorded pid names no process and says so, which closes the lock every signalled MCP client left behind. No golden moved | done | this PR |
+| M3.4 | `prepare` decides every entity's `provenance` on every path and `prepare_merge` leaves it, which closes the forgery the spike found; `ProjectLock::take` replaces a lock whose recorded pid names no process and says so, which closes the lock every signalled MCP client left behind (the pid half of it lasted one pull request — see M3.10). No golden moved | done | PR #74 |
 | M3.5 | `ai/`: the package, its lock and its exact Python, `grpclib`/`openai`/`httpx2` pinned, the generated `Assistant` served over a socket it names, the scripted provider and one recorded transcript, and a process `core` spawns and the window watches. `ai/`'s tests joined the `checks` job here | done | PR #75 |
+| — | **The spending rule.** `CLAUDE.md` #7: a paid call is asked for every time, a previous authorisation does not carry, and a granted one is capped in code before the call, ledgered and reconciled. Written because M3 PR 5 recorded its transcript against a real model without asking — one line of `CLAUDE.md` and no code | done | PR #76 |
 | M3.6 | The Libretto view and the six axes, pure, goldened against the render fixture and its key-reversed twin — a projection golden in a third language — with constructed cases for what that fixture cannot exercise. ADR 0018 §1's hand-written view corrected in three lines; its §4 figures recomputed and all held | done | PR #77 |
+| M3.7 | ~~The §2.2 randomness row: the denylist, its validator rule and its ADR~~ — **not needed.** PR 0 counted the work as a validator rule over values and combinations rather than a list, and the user took question 7's (c): `set_param` is withheld from the model (ADR 0022 §1). The row stays open in the ledger, retriggered on the first time `set_param` is offered | not needed | — |
 | M3.8 | The loop: `OFFERED`, the filtered schemas, a `Proposal` in `core` that is a session on a copy of the project recording nothing, the three kinds of failure each watched failing first, and the end-to-end golden. Nothing applied — a turn ends in the stream. The user granted one recording session, so the multi-call transcript is a real one and a paid call is capped, ledgered and reconciled | done | PR #78 |
-| M3.9 | The AI panel: the conversation held by the host and kept beside the project as JSON Lines, the proposal drawn dashed as it grows, the RFC 6902 diff, Apply · Reject · Edit, `proposal` rows naming the model and a prompt this machine does not have, and the bar-17 demo driven by the assistant with the diff on screen before apply | done | this PR |
+| M3.9 | The AI panel: the conversation held by the host and kept beside the project as JSON Lines, the proposal drawn dashed as it grows, the RFC 6902 diff, Apply · Reject · Edit, `proposal` rows naming the model and a prompt this machine does not have, and the bar-17 demo driven by the assistant with the diff on screen before apply | done | PR #79 |
+| M3.10 | A whole-stack review of M3: seven lanes, no blocker, six majors, seven minors, and a mutation table in which 11 of 38 survived the suite. The grant spent into `CEILING_USD`, the version guard's blind spot closed by `Proposal.base`, the pid protocol replaced by the kernel's own lock, a reconciliation given a caller, and a sidecar that really stops when the window does. No golden moved and no paid call was made | done | PR #80 |
+| M3.11 | §11 walked bullet by bullet with the enforcer named and run for each, every ADR walked against the code, the ledger walked a fifth time, `CLAUDE.md` to M4 — and what M3 leaves unverified written where a reader will find it | done | this PR |
+| — | **M3 complete.** A Python sidecar, a tool-calling loop, a proposal a person applies, the AI panel and a spend that is capped, ledgered and reconciled — with **no green CI run since M2 PR 8** and one live model turn, see "M3, closed" | done | — |
 
 ## M0.2 — `core/`
 
@@ -1780,6 +1785,185 @@ a list of generic risks.
   the transport poll, a drag, ⌘Z — waits on the session mutex `drive` holds for the turn's
   length, and nothing in the UI is disabled to say so. One live turn took fourteen seconds.
 
+## M3, closed
+
+Eleven pull requests — the plan's ten merged rows, plus one the plan never had a row for — five
+ADRs, one whole-stack review, and one paid model call that a person granted. What M3 delivers: a
+Python sidecar `core` starts the way it starts the engine, serving one bidirectional stream per
+prompt; a bar-block view of the song and six counted axes beside it, seven pure functions with a
+golden each; twelve tools offered to a model and thirteen withheld, each with a reason; a
+**proposal** — the model's calls applied in `core` to a fork that records nothing, so the second
+call's track exists and the project does not move — which a person applies, rejects or edits, as
+one entry under the tool name `proposal` naming the model and the prompt; the panel that draws
+it; and a paid call that is capped in code before it goes out, ledgered after it, and reconciled
+against the provider's own counter. The four golden WAVs are byte for byte what M1 blessed, and
+`schema/song.proto` has not changed since M0.
+
+M0's, M1's and M2's lesson held a fourth time, and the review's number was the one that shaped
+the pull request that followed it: **11 of 38 mutations survived the suite**. Not a failing test
+among them — a suite that was green against code that had been deliberately broken in eleven
+places. So every fix in PR 10 was a test watched failing first and every survivor was re-run
+against the fixed tree. The three defects that mattered most were all the same shape as M2's
+⌘Z: a mechanism that was right in the ordering somebody had imagined and wrong in the other one.
+Two openers of one crashed project both read the same stale pid and the second removed the
+first's lock — two writers, which the lock exists to prevent, two hundred rounds out of two
+hundred. A panic between a swap and its restore left every later human commit recorded as the
+model's — the forgery PR 4 had closed, reopened by a pair of lines that are only a pair while
+nothing unwinds. And closing the window mid-turn did not end the sidecar, because the mechanism
+for ending one — closing its stdin — worked only while it was idle.
+
+The milestone's other lesson is not about code. M3 PR 5 recorded its scripted provider's
+transcript against a real model, which was the right instinct and nobody was asked first; the
+exchange it disclosed cost $0.00008965 and OpenRouter's counter moved about nine cents across
+the attempts around it, none of which any ledger carried, because no ledger existed. That is
+what `CLAUDE.md` #7 was written for, in the pull request between PR 5 and PR 6, and it is why
+every spend after it was asked for, capped before the call rather than checked after the
+receipt, and reconciled to the eighth decimal.
+
+**What this close verified, and on what.** §11's bullets were walked as M1's and M2's closes
+walked theirs: for each, the enforcer named and then read or run — never from memory. Six had
+one and **one enforcer had no bullet**, which is this walk's §11 finding and is now §11's
+seventh. `a_scripted_turn_produces_the_same_project_twice_and_the_one_committed` has described
+itself as "§11's shape" in its own first comment since M3 PR 8 — one prompt driven twice through
+the real `ai` process, the two projects compared and the first against committed bytes — and §11
+had never named it. It sits behind the `ai` cargo feature for the reason `renders` sits behind
+its own, which means `cargo test` alone does not run it; §11 now says so. The other six: unseeded
+randomness and wall-clock reads are structural in `core` (`clock.rs`, `id.rs` — no `rand` at all,
+and the one `SystemTime::now` is inside `SystemClock`) and absent from `engine/src`, whose one
+`mkdtemp` names a directory; `ai` is not in that bullet's list and does not put itself there, and
+the walk checked what that costs — its four clocks are all in `provider.py`, on the paid path
+(a backoff, a price's date, a ledger row's timestamp, a recording's), and `view.py`, `axes.py`
+and `turn.py`, which are the goldened functions and the loop's decisions, have none. The lock is
+`Project::open` → `refuse_if_unpinned`, with `core/tests/project.rs`'s
+`a_referenced_plugin_this_build_cannot_match_refuses_to_open` and
+`the_engine_block_re_pins_on_open_rather_than_refusing`; the goldens are `tests/renders.rs`; the
+projection goldens are `app/tests/projection.test.ts` and, since M3 PR 6,
+`ai/tests/test_view.py`; the determinism suite is `tests/determinism.rs`.
+
+On 2026-09-24, on the same machine M2's close ran on — an AMD Ryzen AI 9 HX PRO 370 under WSL2,
+Ubuntu 24.04, g++ 13.3, node 25.6.1, `uv` 0.10.2 — against `main` at `c88394a`: both codegen
+checks clean; 463 workspace tests; 17 determinism tests, and 24 with `--features ai` of which the
+live run is the one `#[ignore]`d; **9 render tests and the device test ignored**; 10 schema
+TypeScript, 10 schema Python, 5 `proto` Python, 45 `ai` Python; 10 projection tests and the
+host's 8; `buf lint`, `buf format` and `buf breaking` against `main`, all clean; and **no golden
+moved** — not one of the seven determinism goldens (M0's five, plus `proposal` and `bar17`),
+not `app/tests/projection.golden.json`, not
+the four WAVs. The render suite matters here beyond its nine passes: **M3 PRs 9 and 10 both
+reported that it could not be run on this machine, and both were wrong.** The engine binary has
+been sitting in `engine/build/escribass_engine_artefacts/Release/` since 2026-09-17, which is
+not where `engine/build/escribass-engine` would be, and two pull requests in a row looked for it
+and concluded there was no build. They then asserted the WAVs were unmoved by comparing committed
+bytes, which was true. This close rendered them instead, and they are unmoved.
+
+**What M3 leaves unverified**, recorded here because the pull requests that carry it are not
+where a reader of this file will look:
+
+- **Nothing in M3 was ever validated on a runner. Not one job, not one step.** GitHub Actions has
+  refused every run on billing since `17356bd` (M2 PR 8, 2026-09-09, run `34392687932`, the last
+  success on `main` and the last time `renders` and `cross-cpu` ran at all). Every run since fails
+  the same way and it is worth stating exactly, because "CI is red" reads like a test failure and
+  this is not one: `checks`, `app` and `engine` each report `failure` with **zero steps executed**,
+  and `renders` and `cross-cpu` are `skipped` because they need `engine`. Twenty runs across M3,
+  every one of them that shape — the pull requests' heads (`35584623458` #71, `35605500516` #72,
+  `35837398382` #73, `35839462544` #74, `35874814540` #75, `35974308143` #76, `35980320897` #77,
+  `36002024535` #78, `36009402232` #79, `36033526504` #80) and the merge commits on `main`
+  (`35602178314`, `35770176426`, `35837560543`, `35869986747`, `35974260708`, `35974321839`,
+  `35981094821`, `36002402433`, `36024419535`, `36048104297`). That is **a milestone and a half of
+  merges no runner has seen**, and it is not softened by the fact that every one of them was run
+  locally and recorded on its pull request: every number in this file is one machine's, on one CPU
+  model, which is exactly what ADR 0009 §6 says is not evidence. `buf breaking` deserves a separate
+  sentence, because it is the one check that only CI was ever going to make against the right ref —
+  it was run locally against `main` for each pull request and passed, and `proto/` gained a whole
+  service this milestone.
+- **The live model run is n=1, and a rate is not claimed.** One turn, 2026-09-24, against
+  `deepseek/deepseek-v4.1-flash` through OpenRouter: three exchanges, two mutating calls, zero
+  refusals, no retries, 14.6 s, **$0.00376174**, reconciled against an account counter that moved
+  by exactly that (47.51704692 → 47.52080866). It composed on the **first attempt**, naming
+  `01M1FPMP000000000000000034` — the id the first call's result returned — in the second call. So
+  the repository may say that a hosted model, offered these twelve schemas, composed a multi-call
+  proposal through *this* loop. It may **not** say that it does so reliably (one turn, no repeat
+  was bought), that a live turn is reproducible (a hosted model is not seedable; only the replay
+  is), or that this loop has ever seen a real 429 or a real fourth consecutive refusal —
+  `rate-limited.json` and `four-refusals.json` are constructed cases and say so.
+- **`CEILING_USD` is now exactly the ledger's spent total, and that is the point.** $0.00376174
+  against three rows summing to $0.00376174, so `self._spent + worst > CEILING_USD` refuses any
+  call whose worst case is above zero: **every live run fails closed until a person raises the line
+  in code.** The grant was one recording session and CLAUDE.md #7 says a previous authorisation
+  does not carry, so the ceiling is the grant, spent. Deleting the ledger buys nothing back and
+  that is arithmetic rather than a mechanism — each of the three calls was *estimated* above the
+  new ceiling on its own, which `test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back`
+  measures. A future grant therefore has to raise `CEILING_USD` in a commit, which is the audit
+  trail: the number in git says what was authorised. One property of the guard is worth knowing
+  before the next grant — the ceiling is checked *after* the model's price is fetched, so a run
+  that will be refused still makes one unauthenticated GET to OpenRouter's public price catalogue.
+  It spends nothing; it is not nothing.
+- **Preview has still never played on a real audio device**, anywhere, and M3 did not change that
+  because M3 does not touch `engine/` at all — its last commit is M2 PR 11's.
+  `a_preview_plays_on_this_machines_audio_device` is `#[ignore]`d and prints why on every run; the
+  thread shape was measured against ALSA's `null` PCM, which does not pace. Sound reaching a
+  speaker, real-time pacing and underruns are measured nowhere. `Preview::drop` still discards the
+  engine's exit status, carried unchanged from M2's close and a Known gap below — deliberately not
+  repeated in M3's sibling, where `Sidecar` reads the status the moment the child is gone.
+- **The window was not driven by hand for M3 PR 10.** M2 drove every control it added, PR 9 drove
+  the panel it added, and PR 10 says in as many words that it did not: "no control changed except
+  the health-dot sentence and the two panel strings, all three covered by tests." That is a
+  reasonable argument and it is still the one place this milestone stepped back from the standard
+  the two before it held, on the pull request that changed the most code — including three
+  `app/src-tauri` paths and the sidecar's shutdown. What a person would have seen is unknown.
+- **ADR 0009 §6's cross-CPU question is unanswerable at the current sfizz pin** — M1 PR 13 read its
+  dispatcher again and found the AVX switch empty — and the `cross-cpu` job has not run since
+  2026-09-09 either way. M3 moved no plugin pin, so nothing about any CPU other than this x86-64
+  one is claimed, exactly as M1 and M2.
+- **`uv_build>=0.10.2,<0.11.0` is the one entry in `lock.baseline.json` that is not an exact
+  version**, against CLAUDE.md #4's "pinned by commit". It is the only one — checked by walking
+  every string in the file — and §17 states it as a range with its reason rather than pinning it to
+  look tidy: it is `uv`'s own build backend, versioned with `uv`, which this repository installs
+  unpinned in CI, so pinning the smaller half of that pair buys nothing. Build-time only, ships
+  nothing, reaches no render. It is written down here so the exception is counted rather than
+  discovered.
+- **One paid call in M3 was made without being asked for, and no ledger carries it.** M3 PR 5's
+  recorded transcript was a real exchange with a real model: $0.00008965 for the turn it named,
+  with about nine cents moving on OpenRouter's counter across the attempts around it. That fact
+  exists in exactly one place in this repository — the commit message of `3d5c001` — and this file,
+  which tracks state, did not have it until now. The rule it produced (CLAUDE.md #7) is the whole
+  content of that pull request, and the ledger at `~/.escribass/spend.jsonl` begins with the
+  *authorised* session of 2026-09-24, three rows and $0.00376174, because the ledger was built in
+  PR 8. So the repository's total recorded spend is smaller than its actual spend by roughly nine
+  cents, and no mechanism can reconstruct the difference: the calls predate the ledger and
+  OpenRouter's counter is a running total, not a log this repository kept. Said plainly because the
+  amount is irrelevant and the gap is not.
+- **The Rust suite is not reliably green, and nobody knew.** `core/tests/project.rs`'s
+  `a_live_holders_lock_is_refused_and_is_not_broken` fails about one run in ten — 4 of 40 here —
+  because a sibling test spawns a real process and the fork inherits the lock's descriptor for
+  the length of its `exec`. It is a Known gap below, with the mechanism and the measurement, and
+  it is named *here* for a second reason: every "the full suite passes" in this milestone,
+  including the first run of this pull request's own verification, was a run that could have gone
+  the other way. Nothing was hidden — the flake had simply never been rolled. The suite is green
+  on the tenth run and red on the eleventh, and the honest statement is that shape rather than
+  "all pass".
+- **The plugin manifest has not been rebuilt since 2026-09-09.** Dexed's build needs `jack/jack.h`,
+  which is not installed on the machine every local run has been made on; `engine/build/manifest.json`
+  is that day's and the engine binary is 2026-09-17's. The fixture-subset check still matches
+  because no pin has moved, and CI's `Build` step, which regenerates it, has not run since M2 PR 8.
+- **Six ADRs described a mechanism the code no longer has, and one had assigned scope to a
+  milestone that closed without it.** All seven were corrected in this pull request, in place and
+  dated, and none was a code defect — in every case the code was right and the record was behind
+  it. They are listed because the *rate* is the finding: ADR 0012 §3 and ADR 0006 §5 still
+  described the pid lock protocol M3 PR 10 deleted, and `docs/adr/AGENTS.md` asks for exactly that
+  to be fixed in the amending commit; ADR 0020 §5's own rejected-alternatives argued against
+  alternatives by appealing to a pid check that no longer exists, sitting *after* the amendment
+  that removed it; ADR 0004's Consequences said an orphan entry is a structured error where ADR
+  0001 §2 says it is inert and the code agrees with ADR 0001; ADR 0002 §5 listed a field its own
+  §11 had deleted; ADR 0008 §5's count of embedded submodule commits was seven and is eight; ADR
+  0006 §1's count of op-producing tools was seventeen and is nineteen. And **ADR 0007 §6** gave
+  `Routing.sends`, `Routing.sidechains`, a bus `output_track_id` and `TRACK_KIND_BUS` to "the
+  mixer, M2", where they were never M2's to build — a ledger row now carries them, and four
+  refusals in `core/src/render.rs` have stopped naming a finished milestone.
+
+What M3 does not claim is above, checked; what M1 and M2 did not claim, M3 inherits unchanged:
+Linux x86-64 on one image and one compiler, nothing about any other CPU, and no preview that has
+reached a speaker.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -1836,6 +2020,43 @@ Two rows added on 2026-09-24 by M3 PR 10, which is a review's pull request rathe
 Both are things the review named and neither is a defect to fix now: a value nothing reads, and
 a property of how a conversation is keyed. Each has a trigger something can actually produce.
 
+**Walked a fifth time at M3's close, 2026-09-24**, one row at a time as the fourth walk was, and
+this pass found what the fourth found: the rows in the table are honest, and the gap is what is
+*not* in it. No open row has a trigger that fired and was ignored. The §2.2 randomness row was
+the one M3 was supposed to reach, and the user's answer to question 7 moved it instead of
+closing it — `set_param` is withheld from the model (ADR 0022 §1), so the loop cannot reach
+those paths, and the row was retriggered on 2026-09-21 to name the event that is actually due:
+the first time `set_param` is offered. That is the right shape and it is the second time this
+row has been re-tied; a reader should know it has now outlived three milestones. The two rows
+M3 PR 2 added on triggers of its own (`list_params`; typed tools for a mix, a deletion, a
+rename and a clip's bounds) are untouched, and the second is worth one sentence because its
+trigger was live all milestone: it fires on "the first measurement in which a model gets the
+RFC 6902 wrong where a typed tool would not have let it", and the one live turn this milestone
+bought produced two calls, zero refusals and no malformed patch — so the trigger did not fire,
+on a sample of one, which is not evidence either way.
+
+**Three rows are added by this walk, and all three are the same failure**: an ADR handed work to
+a milestone, that milestone closed without it, and no row caught the fall. It is exactly what
+M2's close found in ADR 0010's Consequences, and finding three more of it one milestone later
+says the pattern is the thing to look for rather than the instance. **ADR 0007 §6** assigned
+`Routing.sends`, `Routing.sidechains`, a bus `output_track_id` and `TRACK_KIND_BUS` to "the
+mixer, M2" — and M2's mixer is a form over `Mix`, which has no routing in it at all, so four
+refusals in `core/src/render.rs` have been naming a finished milestone since 2026-09-09.
+**ADR 0014 §1** deferred a plugin's own display string with a trigger of its own — "when a
+preview session is already holding an engine process" — and that trigger fired one pull request
+later, in M2 PR 10, with no row to fire into. And **the dense-`index` row's trigger names a
+gesture**, which stopped being the only way to reorder the moment M3 offered a model
+`apply_patch`. Three rows below, each with an event a reader can check.
+
+**Four rows now have M4 in their "revisit at" column**, and M4 opens with this pull request, so
+they are stated here rather than left to be discovered: `FormRule`; `SourceRef.export_hash` and
+the `Generator` compiled-source hash; `lock.json` beyond `schema_version`, which is M4's half of
+ADR 0003 §3; and Strudel as a second `Generator.kind`, which is *after* M4. None is due today —
+they are due at M4's planning, which is its own step. Beside them sits an `[OPEN]` item that is
+not a ledger row and is more urgent than any of them: ADR 0003 §7's Consequence says the neural
+runtime's packaging "must be resolved before M4 starts", and it is still open. `CLAUDE.md`'s M4
+section names it.
+
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
 | ~~The Libretto package (MIT) as a dependency~~ | **Closed 2026-09-21, on a read made 2026-09-17 and recorded on PR #71.** Not needed after ADR 0018 §4: nothing on the package's surface would be called — its fingerprint, genre bands and `copy_risk` need the corpus and are verdicts, its encoder and decoder read MIDI `ai` never sees, and its per-song floats over its own grammar are not per-bar exact rationals over the `Song`. Its licence text carves the data out of the MIT grant, and the corpus is identifiable transcriptions of copyrighted works — `song_0001` is named, with its MusicBrainz id — with no redistribution grant in the chain; "for research reproducibility" is a stated purpose, not a licence term. Had it been wanted: thirty Python packages, 103 MB of package data, a 283 MB clone, roughly ten times the approved sidecar stack | closed unless the corpus-free decision of ADR 0018 §4 is reopened | ADR 0018 §6, Consequences; PR #71 |
@@ -1846,13 +2067,15 @@ a property of how a conversation is keyed. Each has a trigger something can actu
 | ~~The generated Python under `proto/gen/python` is imported, type-checked and run by nothing~~ | **Closed 2026-09-23, in the pull request that opened it — one day and no milestone.** It was deferred because the generated `AssistantBase` imports `grpclib`, and `grpclib` was approved by name and unpinned until PR 5, U4 pinning a package "when it is first added, not before" (ADR 0020 §2); pinning it in PR 3 looked like contradicting, one pull request later, the decision PR 2 had just recorded. **The user read it the other way and closed it**: the check *is* what first adds the package, so PR 3 is where U4 says it is pinned. `grpclib` 0.4.9, resolved by `uv`, in `schema/`'s dev group because `proto/` borrows that environment; `proto/tests/test_generated_python.py` imports the tree and asserts that a `Prompt`'s `song` is `escribass_schema`'s `Song` class — the half that matters, since an import alone passes against the duplicate `betterproto2` re-emits — watched failing first against a tree regenerated without `codegen.sh`'s rewrite. The row is kept struck through rather than deleted: the deferral happened, and a reader should see that the reasoning was sound and the decision was a person's | ~~M3 PR 5~~ — **closed in M3 PR 3** | M3 PR 3, 2026-09-22; closed by the user 2026-09-23 |
 | The conversation does not name the **provider that served** a turn | ADR 0021 §2 and §3 said it did, in three places, and the code has always written `lock.json`'s configured `ai.provider` — `"openrouter"` for every turn recorded. The serving provider *is* in the response (`"Together"`, in all three exchanges of the committed transcript) and crosses nothing: `assistant.proto`'s `ToolCall` and `Done` carry `model_id` alone. Carrying it is a field on two wire messages plus reading OpenRouter's own non-standard `provider` off a `ChatCompletion` the SDK does not model it on — for a value nothing reads. The ADR is corrected instead, and `panel.rs` already refuses to keep a field nothing reads, in as many words | The first time a turn has to be traced back to the machine that ran the weights — a bad answer blamed on a route, or a provider-specific failure that has to be told from the model's | M3 review, 2026-09-24; ADR 0021 §3, corrected |
 | A **copied `.escri` shares the original's conversation** | It is keyed by `Song.id` (ADR 0021 §3), which is what makes it survive a rename or a move of the directory — the property it was keyed that way for. A copy keeps the song's id, so it appends to the original's file and re-sends it as the model's memory of a document it is no longer looking at. Keying by path would trade this failure for the one the key was chosen to avoid; what a copy actually needs is a fresh song id, and nothing in the repository mints one — there is no "duplicate project" anywhere | The first thing that copies a project: a duplicate command, a template, or an installer's sample project (M5) | M3 review, 2026-09-24 |
+| The mixer's **routing**: `Routing.sends`, `Routing.sidechains`, an `output_track_id` naming a bus, and `TRACK_KIND_BUS` | ADR 0007 §6 refuses all four with `render_unsupported` and named the milestone that would lift them as "the mixer, M2". M2's mixer is §9's view — a form over `Mix`'s `gain_db`, `pan`, `mute` and `solo`, written through `apply_patch` — and ADR 0003 §5 placed *that*, not routing. Routing is a change to what the engine builds: a bus track to sum into, a send with a gain of its own, a sidechain input reaching a compressor. M2 never owed it, M3 adds no engine capability, and §16 gives it to no milestone, so it has been **unplaced** since 2026-09-04 — invisible rather than deferred, which is the failure ADR 0003 exists to prevent. Found at M3's close, walking ADR 0007 against the code. Not placed here because placing scope is ADR 0003's job and an ADR's, not a closing pull request's | The first song that needs a bus — which the model can now write, since `apply_patch` is offered and `TRACK_KIND_BUS` is a valid document the validator accepts and compile refuses. Until then the refusal says the truth: unplaced | ADR 0007 §6, amended; M3 PR 11 |
+| A plugin's own **display string** for a parameter value, so the editor can say “−6 dB” rather than `0.37` | ADR 0014 §1 wrote the limit down and deferred it with a trigger of its own: only a live instance can format a value, so it costs a round trip per pixel — "when a preview session is already holding an engine process (ADR 0013 §3), asking it to format a value costs a message rather than a process". **That trigger fired in M2 PR 10**, one pull request after the ADR, and there was no row for it to fire into: the session holds one live engine for the length of a `Preview` stream. Found at M3's close. It stays deferred on its merits and not on its trigger — the editor renders 2,855 rows and a message per visible row is a different cost from a message, which is the row below this one's problem arriving from the other side | The first time a normalised number is measured as the thing stopping someone using the editor, with a preview already running to ask | ADR 0014 §1; M2 PR 10; M3 PR 11 |
 
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
 | `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler | M4 | ADR 0002 §7 |
 | `Instrument.state` as a content hash instead of inline `bytes` | Plugin states are large base64 in a file §2.6 wants diffable — but adding a hash field and deprecating `state` is additive, not breaking. ~~Revisit before M1 renders a plugin~~ — that trigger passed at PR 7 and M1 re-judged it: nothing in M1 *writes* a state. ~~M2, with the first plugin editor~~ — **retriggered 2026-09-07**: M2 *has* an editor (ADR 0014 §1) and it still writes no state. A generic parameter editor writes `params`, a map from `ParamID` to a normalised double; `state` is the plugin's own opaque blob and only the plugin's own serialisation produces one. So there is still no producer, which is ADR 0002 §7's reason unchanged | The first thing that **writes** an `Instrument.state`: a plugin's own VST3 editor, or a preset import. Neither is M2's | review, 2026-09-02; re-judged M1; retriggered by ADR 0014 §3 |
 | ~~`ParamRef` reaching track mix params (gain, pan, mute)~~ | **Closed 2026-09-07 by ADR 0015 §1** — and it cost no schema change at all. Ids are already globally unique across collections (ADR 0001 §3), so a `ParamRef` whose `device_id` resolves to a track addresses `Mix.gain_db` and `Mix.pan` with no field added. `mute` and `solo` stay unaddressable on purpose: a double automating a boolean needs a threshold rule that would be ours and pinned | **closed in M2 PR 6**, 2026-09-09 | review, 2026-09-02 |
-| Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document. Deferred again at M0.3: the merge pipeline makes that failure loud (the validator refuses it) rather than silent, and closing it properly is a `song.proto` change with its own ADR. ~~M2, with the mixer~~ — **deferred again 2026-09-07** (ADR 0015 §4): the mixer is a milestone, not an event, and a mixer that draws a chain in order and adds at the end never renumbers. M2 is on record as offering no reorder gesture | The first gesture that reorders an effect chain or inserts a track mid-list | review, 2026-09-03; ADR 0015 §4 |
+| Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document. Deferred again at M0.3: the merge pipeline makes that failure loud (the validator refuses it) rather than silent, and closing it properly is a `song.proto` change with its own ADR. ~~M2, with the mixer~~ — **deferred again 2026-09-07** (ADR 0015 §4): the mixer is a milestone, not an event, and a mixer that draws a chain in order and adds at the end never renumbers. M2 is on record as offering no reorder gesture | ~~The first gesture that reorders an effect chain or inserts a track mid-list~~ — **retriggered 2026-09-24 at M3's close**: that trigger names a *gesture*, and since M3 the document has an author that makes none. `apply_patch` is one of the twelve tools the model is offered (ADR 0022 §1), and an `index` is an ordinary `uint32` a patch can write, so a model can insert a track mid-list or renumber an effect chain without anyone touching the window. The trigger is now **the first edit, by any author, that reorders an effect chain or inserts a track mid-list** — a gesture in the window, or an `apply_patch` from a model or an MCP client. The failure it guards is unchanged and is still loud: the validator refuses a duplicate `index` (`track_index_duplicate`, `effect_index_duplicate`) | review, 2026-09-03; ADR 0015 §4; retriggered by M3 PR 11 |
 | ~~Interactive merge conflict resolution~~ | **Closed 2026-09-07 by ADR 0015 §3** and **built 2026-09-09 in M2 PR 8**: one optional per-path resolution on a second `merge_branch` call. No new tool and no merge state held between calls, which is the shape ADR 0006 §5 refused for projects. What the build added to the decision is in ADR 0015 §3's extension: `resolution_unknown`, and a merge with no ops that records an entry anyway | closed — M2 PR 8, 2026-09-09 | ADR 0001 §4 |
 | Windowing the parameter editor's rows | Surge XT declares 2855 parameters and the editor renders every one: **1.65–1.79 s** to first paint on this machine, against 270–380 ms for the mixer and the roll, measured in the window. `content-visibility: auto` — a native property, not a library — took it from 2.0 s, which is a fifth and not a fix; a search box is what makes 2855 rows usable, and it is not what makes them fast. Deferred rather than solved because a virtual list is a scroll implementation with its own bugs, bought for one second on an action a person takes rarely, and because the ceiling is known: the cost is linear in what the manifest declares (ADR 0016 §3) | A plugin whose editor takes longer to open than a person will wait, or the first time the second is measured as friction rather than noticed | M2 PR 7, 2026-09-09 |
 | Garbage collection of orphaned patch entries | Entries are small and inert | only if a real project makes it a problem | ADR 0001 Deferred |
@@ -1946,6 +2169,33 @@ a property of how a conversation is keyed. Each has a trigger something can actu
   nothing in M3 produces one. The loop adds one write a turn outside the log — `record_ai`, on
   the first prompt in a project — and it writes `lock.json` alone for exactly this reason.
 
+- **A child forked while `.escri/lock` is held keeps that lock alive past a clean close, for
+  the length of its `fork`→`exec` window** — and `core/tests/project.rs`'s
+  `a_live_holders_lock_is_refused_and_is_not_broken` is **flaky because of it**, at 4 runs in 40
+  of its own test binary. Found at M3's close, running the suite; not filed by any review.
+  `ProjectLock::take` opens the file with `O_CLOEXEC` and holds the kernel's advisory lock on the
+  descriptor, and `Drop` closes it — but `flock` belongs to the *open file description*, and a
+  child forked in between inherits a copy of that description. `O_CLOEXEC` closes the copy at
+  `execve` and not before, so for the microseconds between the two the lock this process has just
+  released is still held, by a child that will never know it had it. Measured three ways: the
+  test binary fails 4 times in 40 with everything running, 0 in 12 at `--test-threads=1`, and 0
+  in 20 with the two tests that spawn a real `escribass-mcp` skipped — and then reproduced with
+  no Rust at all, 13 spurious refusals in 4,000 close-and-retake cycles against a thread doing
+  nothing but spawning `/bin/true`.
+  **What it costs the product is small and in the safe direction**: `core` spawns the engine per
+  render or preview and the sidecar per session, all while the host holds the project lock, so a
+  second opener arriving inside one of those windows is refused `project_locked` when it should
+  have been let in. It is a **spurious refusal, never two writers**, which is the direction ADR
+  0012 §3 chose on purpose, and the message it prints is even true — a process really does have
+  the file open. What it costs the suite is worse: a gate that goes red one run in ten for no
+  defect is a gate people learn to re-run.
+  **Recorded rather than fixed, because the fix is a decision and a close is reviewed as
+  documentation** (the same call M2's close made on `Preview::drop`). The two candidates are not
+  equivalent and neither is free: `take` could retry its `try_lock` for a bounded few
+  milliseconds before refusing, which makes a real refusal slower and needs a number nobody has
+  measured; or the children could be spawned somewhere the lock is not open, which is a change to
+  how `core` starts the engine and the sidecar. Whichever is chosen is an amendment to ADR 0012
+  §3 and ADR 0020 §5, whose mechanism this is.
 - **A refused spend reaches the panel under the generic `assistant_failed` rule.** `ai` ends the
   turn `FAILED_PRECONDITION` for `BudgetExhausted`, and the host maps every status that is
   neither `UNAVAILABLE` nor `RESOURCE_EXHAUSTED` to one rule (`core/src/assistant.rs`,

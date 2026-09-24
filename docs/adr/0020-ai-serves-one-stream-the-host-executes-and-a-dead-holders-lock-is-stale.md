@@ -264,10 +264,16 @@ holding the file, the next opener gets it, whatever the file says.
 
 Why not signal handlers instead, in the two binaries: they would release the lock on `SIGTERM`
 and `SIGINT` and leave it on `SIGKILL` and on a crash, which is the case ADR 0012 §3 was written
-about and the case the pid check covers. A handler is not refused — a binary may gain one so a
+about and the case ~~the pid check covers~~ **the kernel covers, since it releases the
+descriptor however the process ends**. A handler is not refused — a binary may gain one so a
 `Preview`'s child is reaped on a clean interrupt — but it is not the remedy. Why not a lease
 or a heartbeat: a clock in `core` (CLAUDE.md #3) and a second file format, to answer a question
-the pid already answers.
+~~the pid already answers~~ **the kernel answers for free**.
+
+(**Both clauses re-read 2026-09-24, at M3's close.** They were written to argue against a pid
+protocol and were left unrevised when the amendment above deleted it, so they sat after the
+amendment and read as current. The rejections still stand — neither alternative is wanted —
+but they stand for a better reason than the one they gave.)
 
 **§18.2 is narrowed as U5 decided, and this decision is what makes the narrowed promise
 true.** An external MCP client drives a project **with the window closed, one process at a
@@ -313,9 +319,9 @@ Its test is loud, so it does not muddy that pull request's silent half.
 | Alternative | Rejected because |
 |---|---|
 | Keep "never broken automatically" and document the `rm` | 50 runs of 50 through the client §18.2 sells left a project unopenable; a rule whose every trigger is a person deleting a file is a rule the product pays for daily |
-| Signal handlers in both binaries | Cover `SIGTERM` and `SIGINT`; do not cover `SIGKILL` or a crash, which the pid check does. Complementary, not the remedy |
-| A lease with a heartbeat | A clock in `core` and a second file format for a question the pid answers |
-| `kill(pid, 0)` through `libc` | A direct dependency `lock.baseline.json` does not list, for what `/proc` gives on the one platform M3 claims |
+| Signal handlers in both binaries | Cover `SIGTERM` and `SIGINT`; do not cover `SIGKILL` or a crash, which ~~the pid check~~ **the kernel's release of the descriptor** does. Complementary, not the remedy |
+| A lease with a heartbeat | A clock in `core` and a second file format for a question ~~the pid answers~~ **the kernel answers** |
+| `kill(pid, 0)` through `libc` | A direct dependency `lock.baseline.json` does not list, for what ~~`/proc` gives on the one platform M3 claims~~ **no longer needs answering at all: `File::try_lock` is stdlib and cross-platform** |
 
 ## Consequences
 
