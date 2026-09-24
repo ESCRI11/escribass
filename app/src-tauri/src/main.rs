@@ -63,7 +63,7 @@
 mod panel;
 
 use escribass_core::call::call;
-use escribass_core::{
+use escribass_core::{Halt, 
     Assistant, Clock, Engine, Health, Manifest, Project, ProjectLock, Session, Sidecar,
     SystemClock, UlidSource,
 };
@@ -104,6 +104,16 @@ struct Ai {
     /// Set when `--ai` was given and the sidecar would not start: the window opens anyway, as
     /// it does without an engine, and the dot says what happened rather than nothing.
     refused: Option<String>,
+    /// How this window ends a turn it cannot reach (`escribass_core::Halt`).
+    ///
+    /// [`drive`] holds `sidecar` for the whole of a turn, and a turn is as long as a model
+    /// takes, so [`stop`] — which takes the same lock — waited behind it: the window
+    /// disappeared and the process, its socket and `.escri/lock` stayed until the model
+    /// answered (M3 review, 2026-09-24). This handle does not take that lock, and closing the
+    /// sidecar's stdin is what it is: `ai` cancels the request it is serving and leaves, the
+    /// stream breaks under the turn, and `stop` then gets the lock and reads the exit status
+    /// as it always did (ADR 0020 §5).
+    halt: Option<Halt>,
 }
 
 /// The webview's only route to the model.
@@ -465,7 +475,8 @@ fn run() -> Result<i32, String> {
             }
         }
     });
-    let ai = Arc::new(Ai { sidecar: Mutex::new(started), refused });
+    let halt = started.as_ref().map(Sidecar::halt);
+    let ai = Arc::new(Ai { sidecar: Mutex::new(started), refused, halt });
 
     // What the panel's header names, and what a prompt goes to: the project's record, or the
     // baseline default when it records none (ADR 0021 §4). Read here, once, because the
@@ -539,6 +550,7 @@ fn run() -> Result<i32, String> {
             take(&release);
         }
     });
+
     stop(&ai);
     take(&held);
     Ok(code)
@@ -550,6 +562,12 @@ fn run() -> Result<i32, String> {
 /// not to repeat `Preview::drop`'s gap: a sidecar that crashed earlier in the session is named
 /// here even if nobody was looking at the dot when it happened.
 fn stop(ai: &Arc<Ai>) {
+    // **First, and without the lock**: a turn in flight is holding `sidecar`, and the line
+    // below would wait for the model rather than for the window (see [`Ai::halt`]). Closing
+    // the sidecar's stdin ends the turn, which releases the lock this then takes.
+    if let Some(halt) = &ai.halt {
+        halt.halt();
+    }
     let held = ai.sidecar.lock().unwrap_or_else(PoisonError::into_inner).take();
     if let Some(sidecar) = held {
         eprintln!("escribass-app: {}", sidecar.stop());

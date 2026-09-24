@@ -229,10 +229,21 @@ export function moved(song: Song | null, path: string): string {
 
 /** One refusal, as the panel reads it out. */
 export function refusalLine(song: Song | null, broken: Broken): string {
-  if (broken.rule === "version_not_writable") {
+  // The two rules that mean "somebody edited this while you were reading the proposal":
+  // `document_moved`, which is the path-by-path comparison `apply_proposal` makes against the
+  // document the patch was computed from, and `version_not_writable`, ADR 0005 §3's guard
+  // behind it (ADR 0019 §2, amended 2026-09-24).
+  if (broken.rule === "document_moved" || broken.rule === "version_not_writable") {
     return `${moved(song, broken.path)} changed while this proposal was pending`;
   }
   return `${moved(song, broken.path)}: ${broken.message}`;
+}
+
+/** The note on a turn the host ended at its refusal budget (ADR 0022 §3). */
+function refusedCount(refused: number): string {
+  return refused === 1
+    ? "the turn ended: 1 call was refused"
+    : `the turn ended: ${refused} calls were refused`;
 }
 
 function pending(live: Live, song: Song | null): Pending {
@@ -255,7 +266,13 @@ function pending(live: Live, song: Song | null): Pending {
     summary,
     // Nothing to approve is nothing to apply, which is the rule a gesture that has not moved
     // already follows (`App.tsx`): a pane offering to apply nothing is offering nothing.
-    applicable: !live.running && ops.length > 0 && live.refused.length === 0,
+    //
+    // `refused` is deliberately **not** a second condition. `panel.rs`'s `watch` sets the two
+    // exclusively — a patch, or the violations that say why there is none and a null patch —
+    // so "there are violations" already means "there are no operations". Testing both was a
+    // clause that could not fail, which is this repository's signature defect and was found as
+    // one (M3 review, 2026-09-24, mutation A2: deleting it changed nothing anywhere).
+    applicable: !live.running && ops.length > 0,
     refusals,
     // Indented, because it is text a person edits by hand and the one place in this
     // application where they write RFC 6902 (ADR 0019 §3).
@@ -290,7 +307,7 @@ export function assistant(answer: PanelAnswer, song: Song | null): Assistant {
       note: live.running
         ? "answering…"
         : live.ended === "Refused"
-          ? `the turn ended: ${live.calls.filter((call) => !call.valid).length} calls were refused`
+          ? refusedCount(live.calls.filter((call) => !call.valid).length)
           : "waiting for you",
     });
   }

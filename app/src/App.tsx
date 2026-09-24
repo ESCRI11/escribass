@@ -1380,7 +1380,7 @@ function PatchLog({
 function assisting(ai: Assisted): string {
   if (ai.state === "gone") return ai.said;
   if (ai.state === "running") {
-    return "the assistant is running. It answers no prompt yet: the loop is M3 PR 8's";
+    return "the assistant is running";
   }
   return ai.said || "no assistant: start the window with --ai <command>";
 }

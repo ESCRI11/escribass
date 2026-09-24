@@ -24,7 +24,7 @@ pub mod tools;
 pub mod validate;
 pub mod version;
 
-pub use assistant::{Assistant, Health, Sidecar, Turn, TurnEnd, REFUSALS_PER_TURN};
+pub use assistant::{Assistant, Halt, Health, Sidecar, Turn, TurnEnd, REFUSALS_PER_TURN};
 pub use call::{call, Answer, CallError, ErrorKind, IMPLEMENTED, OFFERED};
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};

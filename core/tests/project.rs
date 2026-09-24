@@ -491,10 +491,12 @@ fn a_log_missing_a_parent_is_still_refused() {
 #[test]
 fn a_live_holders_lock_is_refused_and_is_not_broken() {
     // The race `app` makes ordinary rather than hypothetical: two processes on one `.escri`,
-    // interleaving ADR 0004's three renames. What closes it is one `O_EXCL`, and what makes
-    // the choice a real one is the second half of this test — the refusal leaves the lock
-    // exactly where it was. The holder here is this test process, which is as alive as a
-    // holder gets, so ADR 0020 §5's replacement cannot fire and must not.
+    // interleaving ADR 0004's three renames. What closes it is the kernel's own advisory lock
+    // on the open file, and what makes the choice a real one is the second half of this test —
+    // the refusal leaves the lock exactly where it was. The holder here is this test process,
+    // which is as alive as a holder gets, so ADR 0020 §5's replacement cannot fire and must
+    // not. `flock` is per open file description, so a second `open` in this same process is a
+    // second holder as far as the kernel is concerned, which is what makes this testable here.
     let dir = Scratch::new();
     std::fs::create_dir_all(&dir.0).expect("a directory to lock");
 
@@ -512,22 +514,85 @@ fn a_live_holders_lock_is_refused_and_is_not_broken() {
     assert!(dir.0.join("lock").exists(), "a refused take must not remove the lock");
 
     drop(held);
-    assert!(!dir.0.join("lock").exists(), "a clean close removes it");
-    ProjectLock::take(&dir.0).expect("and the next opener gets it");
+    // **Emptied, not removed** (ADR 0020 §5, amended 2026-09-24): the file staying put is what
+    // closes the window a `remove_file` opened, and an empty one is what says the last holder
+    // left cleanly.
+    assert!(dir.0.join("lock").exists(), "a clean close removed the file");
+    assert_eq!(std::fs::read_to_string(dir.0.join("lock")).unwrap(), "");
+    let next = ProjectLock::take(&dir.0).expect("and the next opener gets it");
+    assert_eq!(next.replaced(), None, "a clean close is not a crash to report");
 }
 
 #[test]
-fn a_lock_with_no_pid_in_it_is_still_refused() {
-    // The one case the pid check cannot adjudicate, and it is left exactly as it was: a lock
-    // written by hand, or one whose holder took the file and failed the best-effort write of
-    // its number. There is nothing to ask about, so nothing is assumed (ADR 0020 §5).
+fn a_lock_with_no_pid_in_it_is_taken_because_nobody_is_holding_it() {
+    // **Amended with ADR 0020 §5, 2026-09-24**, and this test's name changed with the answer.
+    // Under the pid protocol a lock file with no number in it could not be adjudicated and was
+    // refused for ever — a file written by hand, or one whose holder failed the best-effort
+    // write, needed a person with `rm`. There is nothing to adjudicate now: the kernel says
+    // whether anybody is holding the file, and nobody is holding this one.
     let dir = Scratch::new();
     std::fs::create_dir_all(&dir.0).expect("a directory to lock");
     std::fs::write(dir.0.join("lock"), b"").expect("a lock nobody signed");
 
-    let refused = ProjectLock::take(&dir.0).expect_err("refused, as before");
+    let taken = ProjectLock::take(&dir.0).expect("nobody holds it, so it is free");
+    // Nothing to report: an empty file is a clean close, and inventing a crash from one would
+    // tell a person something that did not happen.
+    assert_eq!(taken.replaced(), None);
+    assert!(dir.0.join("lock").exists());
+}
+
+#[test]
+fn a_lock_its_holder_is_still_holding_is_refused_whatever_the_file_says() {
+    // **The two-writer race ADR 0020 §5 claimed to have closed and had not** (review of M3,
+    // 2026-09-24), in the one ordering a test can pin down without a scheduler: the number in
+    // the file and the process that is holding it disagree.
+    //
+    // Under the pid protocol this file decided. A second opener read `4294967294`, asked
+    // `/proc` and was told it names no process, unlinked the live holder's lock and created
+    // its own — and both then wrote to one project. The same reading is what pid *reuse*
+    // produces the other way round. The kernel does not read the file, so neither defect has
+    // anywhere to live.
+    //
+    // Watched failing first against the pid protocol: `expect_err` panicked with the lock
+    // taken twice.
+    let dir = Scratch::new();
+    std::fs::create_dir_all(&dir.0).expect("a directory to lock");
+    let held = ProjectLock::take(&dir.0).expect("the first opener takes it");
+    // A number no process on this machine wears: one above the highest pid Linux will issue.
+    std::fs::write(dir.0.join("lock"), b"4294967294\n").expect("a label, and only a label");
+
+    let refused = ProjectLock::take(&dir.0).expect_err("the holder has not let go");
     assert_eq!(refused.rule, "project_locked");
-    assert!(dir.0.join("lock").exists(), "and left where it was");
+    drop(held);
+}
+
+#[test]
+fn two_openers_of_one_crashed_project_do_not_both_get_it() {
+    // The race in its own shape: a project whose last holder crashed, and two processes
+    // opening it at once — double-clicking the app on the last project after a crash. Under
+    // the pid protocol both could read the stale number before either replaced the file, and
+    // the second then removed the first's fresh lock. Rounds rather than one attempt, because
+    // what is being checked is that there is no interleaving at all, not that one interleaving
+    // is safe.
+    for round in 0..200 {
+        let dir = Scratch::new();
+        std::fs::create_dir_all(&dir.0).expect("a directory to lock");
+        std::fs::write(dir.0.join("lock"), b"4294967294\n").expect("what a crash leaves");
+        let ready = std::sync::Barrier::new(2);
+        let taken = std::thread::scope(|scope| {
+            let one = scope.spawn(|| {
+                ready.wait();
+                ProjectLock::take(&dir.0).ok()
+            });
+            let other = scope.spawn(|| {
+                ready.wait();
+                ProjectLock::take(&dir.0).ok()
+            });
+            [one.join().unwrap(), other.join().unwrap()]
+        });
+        let held = taken.iter().filter(|lock| lock.is_some()).count();
+        assert_eq!(held, 1, "round {round}: {held} openers hold one project");
+    }
 }
 
 /// A real `escribass-mcp` holding the lock on `project`, for the two tests that need a holder
@@ -600,16 +665,20 @@ fn a_dead_holders_lock_is_replaced_and_the_replacement_says_so() {
     holder.sigkill();
     assert!(dir.0.join("lock").exists(), "the premise: a signal leaves the lock behind");
 
-    let taken = ProjectLock::take(&dir.0).expect("a dead holder's lock is stale");
+    let taken = ProjectLock::take(&dir.0).expect("a dead holder's lock is released by the kernel");
     let said = taken.replaced().expect("and the replacement says so");
     assert!(
         said.contains(&gone.to_string()),
         "a person learns a crash happened, and whose: {said}"
     );
-    assert!(dir.0.join("lock").exists(), "and the lock is this process's now");
+    assert_eq!(
+        std::fs::read_to_string(dir.0.join("lock")).unwrap().trim(),
+        std::process::id().to_string(),
+        "the lock is this process's now, and says so"
+    );
 
     drop(taken);
-    assert!(!dir.0.join("lock").exists());
+    assert_eq!(std::fs::read_to_string(dir.0.join("lock")).unwrap(), "");
 }
 
 #[cfg(unix)]

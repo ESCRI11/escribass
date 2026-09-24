@@ -2,7 +2,13 @@
 
 ```text
 escribass-ai [--transcript <transcript.json>] [--record <transcript.json>]
+escribass-ai --account-usage | --generation-cost <id>
 ```
+
+The second form serves nothing and builds no provider: it prints one number — what OpenRouter's
+own counter says this key, or one generation, has cost — and exits. Both endpoints are free,
+and it exists so the ledger's reconciliation is performed by a code path rather than by a person
+once (`provider`, "The ceiling, the ledger and the provider's own counter"; ADR 0022 §4).
 
 One process, one service, one bidirectional stream per prompt. **`ai` serves and the host
 dials** — the opposite direction from the engine and for a reason that is not symmetry: the
@@ -43,6 +49,13 @@ the process therefore stops at once, which is the honest reading of "nobody is h
 open"; started from a terminal, ⌃D stops it. `SIGINT` and `SIGTERM` stop it too, through
 `grpclib`'s own handler, so an operator's `kill` produces an exit status of 0 rather than a
 signal the health dot would have to explain (ADR 0020 §5).
+
+**And it stops mid-turn, which until 2026-09-24 it did not** (M3 review). `Server.close` cancels
+every request it is serving, but `Server.wait_closed` then waits for the open **connection** as
+well — and on this path the thing holding it is the host that has just let go, whose turn thread
+is parked on a call nobody will answer. So the stdin path closes and leaves rather than waiting;
+`serve` says why where it does it. Without that, closing the window while a turn ran left this
+process, its socket and the host's `.escri/lock` alive until the model answered.
 """
 
 from __future__ import annotations
@@ -64,7 +77,7 @@ from escribass_proto.escribass.assistant.v1 import (
 from grpclib.server import Server
 from grpclib.utils import graceful_exit
 
-from .provider import Scripted, live
+from .provider import Scripted, account_usage, generation_cost, live
 from .turn import run
 
 __all__ = ["Assistant", "main", "serve"]
@@ -115,12 +128,26 @@ async def serve(provider: object) -> None:
             await asyncio.wait([serving, orphaned], return_when=asyncio.FIRST_COMPLETED)
             # Cancelled rather than left pending: a task still waiting at interpreter exit is
             # a warning on stderr from a process that did nothing wrong. `serving` is never
-            # cancelled — it awaits grpclib's own future, and cancelling the wait cancels
+            # cancelled here — it awaits grpclib's own future, and cancelling the wait cancels
             # that future, so the close below would then raise instead of finishing.
             orphaned.cancel()
-            if not serving.done():
+            if serving.done():
+                # A signal: grpclib's own handler closed us and there is nothing left to wait
+                # for.
+                await serving
+            else:
+                # **The host let go of our stdin, and we do not wait for it afterwards**
+                # (M3 review, 2026-09-24). `server.close()` cancels every running request, so
+                # a turn in flight ends here; what `Server.wait_closed` *also* waits for is the
+                # open **connection**, and on this path the thing holding it is the host that
+                # has just let go — a window on its way out, whose turn thread is parked on a
+                # call nobody will answer. Awaiting it made "the host closes our stdin to stop
+                # us" true only when idle: measured at 30 s and counting, with the process, its
+                # socket and the host's `.escri/lock` all still there.
+                #
+                # `asyncio.run` cancels what is left when this returns, and the `finally` below
+                # takes the socket with it.
                 server.close()
-            await serving
     finally:
         # The socket goes with the process, so nothing is left listening on a path a later run
         # would meet.
@@ -175,7 +202,40 @@ def main(argv: list[str] | None = None) -> int:
             "headers and therefore no key (ADR 0022 §4). Live only, and it spends money"
         ),
     )
+    parser.add_argument(
+        "--account-usage",
+        action="store_true",
+        help=(
+            "print what OpenRouter says this key has spent, all time, and exit. Free: "
+            "`GET /api/v1/key` is not a paid call. It is the other half of the ledger's "
+            "reconciliation and the live run reads it either side of a turn (ADR 0022 §4)"
+        ),
+    )
+    parser.add_argument(
+        "--generation-cost",
+        metavar="ID",
+        help=(
+            "print what OpenRouter says one generation cost, and exit. Free, as "
+            "--account-usage is, and the per-call half of the same reconciliation"
+        ),
+    )
     options = parser.parse_args(argv)
+    if options.account_usage or options.generation_cost:
+        # **A one-shot query, and no provider object is built at all** — which is the point:
+        # reconciling what was spent must not be able to spend. Both endpoints are free
+        # (`provider._counter`), and what reaches stdout is one number, for the same reason the
+        # address line is one line: `tests/determinism.rs` reads it with `parse::<f64>`.
+        try:
+            spent = (
+                account_usage()
+                if options.account_usage
+                else generation_cost(options.generation_cost)
+            )
+        except Exception as unreadable:  # noqa: BLE001 — no key, no network, a shape that moved
+            print(f"escribass-ai: {unreadable}", file=sys.stderr)
+            return 2
+        print(f"{spent:.8f}", flush=True)
+        return 0
     if options.record and options.transcript:
         # A recording of a replay is a copy of the file it replayed. Refused rather than
         # allowed, because what it would produce looks exactly like evidence.

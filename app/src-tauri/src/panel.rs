@@ -607,6 +607,118 @@ mod tests {
         }
     }
 
+    // ---- what the panel shows of a running turn (ADR 0019 §2; §9's "diff before apply") ----
+
+    const FIXTURE: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/song/minimal.json");
+    const MANIFEST: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/manifest.json");
+    /// The first id a tool mints in a fresh session over the fixture, `Project::create` having
+    /// taken counter 1 for the root entry. Literal, as every fixture id in this repository is.
+    const MINTED: &str = "01M1FPMP000000000000000002";
+
+    /// A session with one of the model's calls on its proposal, and the wire turn that goes
+    /// with it — which is exactly the pair `Sidecar::turn`'s watcher hands [`Live::watch`].
+    fn a_turn_in_flight(at: &str) -> (std::path::PathBuf, Session, WireTurn) {
+        use escribass_core::{FixedClock, Manifest, Project, SeededIds};
+        use escribass_schema::song::{Author, Song};
+
+        let directory = std::env::temp_dir()
+            .join(format!("escribass-live-{}-{at}.escri", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        let song: Song =
+            serde_json::from_str(&std::fs::read_to_string(FIXTURE).expect("the fixture reads"))
+                .expect("the fixture is a song");
+        let manifest =
+            std::sync::Arc::new(Manifest::read(MANIFEST).expect("the manifest fixture reads"));
+        let mut ids = SeededIds::default();
+        let clock = FixedClock(1_788_307_200_000);
+        let project = Project::create(&directory, &song, &mut ids, &clock, Author::Human, manifest)
+            .expect("the project is created");
+        let mut session =
+            Session::new(project, Box::new(ids), Box::new(clock), Author::Human);
+        session.propose("b0a1").expect("a proposal opens");
+        let args = serde_json::json!({
+            "name": "Lead",
+            "kind": 1,
+            "ref": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}
+        });
+        let serde_json::Value::Object(args) = args else { unreachable!() };
+        let answer = session
+            .proposal_mut()
+            .expect("a proposal is open")
+            .call("add_track", &args, "deepseek/deepseek-v4.1-flash-0711", "call_01")
+            .expect("the call is answered");
+        assert!(!answer.refused, "the fixture's call was refused: {answer:?}");
+
+        let turn = WireTurn {
+            prompt: "add a lead line over the bass".to_string(),
+            calls: vec![CompletedCall {
+                call: Some(ToolCall {
+                    call_id: "call_01".to_string(),
+                    name: "add_track".to_string(),
+                    args_json: serde_json::to_string(&args).expect("arguments serialise"),
+                    model_id: "deepseek/deepseek-v4.1-flash-0711".to_string(),
+                }),
+                result: answer.result.clone(),
+            }],
+            reply: String::new(),
+        };
+        (directory, session, turn)
+    }
+
+    #[test]
+    fn watching_a_turn_leaves_the_patch_a_person_approves() {
+        // **The pure function §9's "diff before apply" is drawn from**, and until 2026-09-24
+        // nothing checked it: `watch` could leave `patch` null and both `cargo test -p
+        // escribass-app` and the projection golden stayed green, because the golden is fed a
+        // `Live` a fixture builds rather than one this function produced (M3 review,
+        // mutation A1).
+        //
+        // Watched failing first by returning early before `proposal.patch()`: `patch` was null
+        // and `ops` was empty, which the panel draws as "the model proposed no change".
+        let (directory, session, turn) = a_turn_in_flight("patch");
+        let mut live = Live::started("add a lead line over the bass", "b0a1", json!("at"));
+        live.watch(&turn, &session);
+
+        let ops = live.patch.as_array().expect("the patch is an array of operations");
+        assert!(!ops.is_empty(), "the proposal's patch did not reach the panel");
+        assert!(
+            ops.iter().any(|op| op["path"].as_str().is_some_and(|p| p.contains(MINTED))),
+            "the patch does not name the track the call minted: {}",
+            live.patch
+        );
+        assert!(live.refused.is_empty(), "{:?}", live.refused);
+        // What **answered**, read off the last call rather than off the prompt (ADR 0021 §2).
+        assert_eq!(live.model_id, "deepseek/deepseek-v4.1-flash-0711");
+        assert_eq!(live.calls.len(), 1);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn watching_a_turn_snapshots_the_proposals_document_and_not_the_projects() {
+        // The other half, and the one a mutant can take without anything going red: snapshot
+        // `session.project().song()` instead of `proposal.song()` and the panel draws the
+        // project dashed over itself — a diff of nothing, on a turn that proposed something
+        // (M3 review, mutation A1b).
+        //
+        // Watched failing first with `proposal.song()` replaced by the project's: the track was
+        // absent from `live.song` and this assertion read `false`.
+        let (directory, session, turn) = a_turn_in_flight("song");
+        let mut live = Live::started("add a lead line over the bass", "b0a1", json!("at"));
+        live.watch(&turn, &session);
+
+        let tracks = live.song["tracks"].as_object().expect("the document has tracks");
+        assert!(
+            tracks.contains_key(MINTED),
+            "the panel was given the project's document, not the proposal's: {:?}",
+            tracks.keys().collect::<Vec<_>>()
+        );
+        // And the project really has not got it, so the two are distinguishable at all.
+        assert!(!session.project().song().tracks.contains_key(MINTED));
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
     #[test]
     fn a_conversation_is_read_back_from_its_file_and_a_bad_line_is_skipped() {
         let directory = std::env::temp_dir().join(format!("escribass-panel-{}", std::process::id()));

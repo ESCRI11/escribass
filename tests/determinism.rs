@@ -651,6 +651,7 @@ mod through_the_sidecar {
     use super::*;
     use escribass_core::{Assistant, FixedClock, Project, SeededIds, Session, Sidecar};
     use escribass_schema::song::Author;
+    use std::time::{Duration, Instant};
 
     /// Where the turn's ids start.
     ///
@@ -1097,6 +1098,96 @@ mod through_the_sidecar {
         println!("{}", sidecar.stop());
     }
 
+    // -----------------------------------------------------------------------
+    // Reconciling the ledger against the provider's own counter (ADR 0022 §4)
+    // -----------------------------------------------------------------------
+
+    /// The ledger `provider.Live` writes, as a person reads it: the rows, in order.
+    ///
+    /// Outside the repository on purpose — it is a record of real money and not a fixture —
+    /// and named here rather than passed, because the ceiling is only a ceiling if every run
+    /// counts against the same total (`ai/src/escribass_ai/provider.py`, `SPEND`).
+    fn ledger() -> Vec<Value> {
+        let path = dirs_home().join(".escribass").join("spend.jsonl");
+        let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+        text.lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| serde_json::from_str(line).expect("a ledger row is JSON"))
+            .collect()
+    }
+
+    fn dirs_home() -> PathBuf {
+        PathBuf::from(std::env::var("HOME").expect("a home directory"))
+    }
+
+    fn charged(rows: &[Value]) -> f64 {
+        rows.iter().map(|row| row["charged_usd"].as_f64().unwrap_or_default()).sum()
+    }
+
+    /// One free query against OpenRouter's own metering, through `escribass-ai`.
+    ///
+    /// `--account-usage` and `--generation-cost` print one number and exit, building no
+    /// provider and spending nothing (`ai/src/escribass_ai/__init__.py`). They are here
+    /// because until 2026-09-24 the two functions behind them had **no caller at all**, while
+    /// §6.1 and ADR 0022 §4 both said the ledger is reconciled against the provider's counter.
+    /// It was, once, by hand.
+    fn counter(arguments: &[&str]) -> f64 {
+        let ai = common::workspace().join("ai");
+        let said = Command::new("uv")
+            .args(["run", "--project", &ai.display().to_string(), "escribass-ai"])
+            .args(arguments)
+            .output()
+            .expect("uv runs");
+        assert!(
+            said.status.success(),
+            "escribass-ai {arguments:?} failed: {}",
+            String::from_utf8_lossy(&said.stderr)
+        );
+        String::from_utf8_lossy(&said.stdout)
+            .trim()
+            .parse()
+            .unwrap_or_else(|e| panic!("{arguments:?} printed something that is not a number: {e}"))
+    }
+
+    /// Whether the provider's own counter agrees with what the ledger recorded.
+    ///
+    /// Pure, so the comparison is testable without a run and without a cent — which is the
+    /// point of it existing as a function at all. The slack is a hundredth of what was spent,
+    /// floored at a ten-millionth of a dollar: the ledger records `usage.cost` per call as the
+    /// provider stated it, and the account counter sums the provider's own numbers, so the two
+    /// differ only by rounding. A difference bigger than that is either a call this repository
+    /// made and did not ledger, or a ledger row for a call that was never billed — and both are
+    /// things a person must be told about (CLAUDE.md #7).
+    fn reconciled(moved: f64, ledgered: f64) -> Result<String, String> {
+        let slack = (ledgered.abs() * 0.01).max(1e-7);
+        let said = format!(
+            "OpenRouter's own counter moved by ${moved:.8}; the ledger recorded \
+             ${ledgered:.8} (slack ${slack:.8})"
+        );
+        if (moved - ledgered).abs() <= slack {
+            Ok(said)
+        } else {
+            Err(format!("{said} — they differ by ${:.8}", moved - ledgered))
+        }
+    }
+
+    #[test]
+    fn the_reconciliation_notices_a_counter_that_disagrees() {
+        // The half of ADR 0022 §4's reconciliation that can be checked without spending:
+        // the comparison itself. Watched failing first with the comparison written as
+        // `moved >= ledgered`, which passes for every overcharge there is.
+        assert!(reconciled(0.00376174, 0.00376174).is_ok());
+        // Rounding either way is not a disagreement.
+        assert!(reconciled(0.003762, 0.00376174).is_ok());
+        // A call that was made and not ledgered is, and so is a row for a call nobody billed.
+        let over = reconciled(0.0075, 0.00376174).expect_err("twice the spend agreed");
+        assert!(over.contains("they differ by $0.003738"), "{over}");
+        assert!(reconciled(0.0, 0.00376174).is_err(), "a counter that did not move agreed");
+        // And a run that spent nothing reconciles against a counter that did not move, rather
+        // than dividing by it.
+        assert!(reconciled(0.0, 0.0).is_ok());
+    }
+
     /// The live run (ADR 0022 §4), **skipped loudly**.
     ///
     /// `#[ignore]`d rather than conditional, for `renders.rs`'s device test's reason: a test
@@ -1144,6 +1235,17 @@ mod through_the_sidecar {
              this suite does (CLAUDE.md #7). The ceiling and the ledger are \
              `escribass_ai.provider`'s; this run records to {}",
             recording.display()
+        );
+
+        // **Either side of the run** (ADR 0022 §4). Read before anything is spent, so the
+        // difference afterwards is this run's and nobody else's.
+        let ledgered_before = ledger();
+        let account_before = counter(&["--account-usage"]);
+        println!(
+            "before: OpenRouter says ${account_before:.8} all time; the ledger has {} row(s) \
+             totalling ${:.8}",
+            ledgered_before.len(),
+            charged(&ledgered_before)
         );
 
         let session_run = run("proposal", AT);
@@ -1221,6 +1323,61 @@ mod through_the_sidecar {
             recording.display(),
             parsed["note"].as_str().unwrap_or_default()
         );
+
+        // -------------------------------------------------------------------
+        // The reconciliation (ADR 0022 §4; CLAUDE.md #7)
+        // -------------------------------------------------------------------
+        //
+        // **Performed here, by this code path**, which until 2026-09-24 nothing was: the two
+        // functions that read OpenRouter's counter had no caller, and the sentence in §6.1 and
+        // in the ADR described something a person had done once by hand (M3 review).
+        let ledgered_after = ledger();
+        let rows = &ledgered_after[ledgered_before.len()..];
+        let ledgered = charged(rows);
+        assert!(!rows.is_empty(), "the run spent nothing and wrote no ledger row");
+        println!(
+            "the ledger gained {} row(s) totalling ${ledgered:.8}; running total ${:.8}",
+            rows.len(),
+            charged(&ledgered_after)
+        );
+
+        // **The account figure lags.** Seconds after the recorded run of 2026-09-24 it had not
+        // moved; minutes later it had, by exactly the ledger's total. So it is polled, and
+        // every read is printed — a person watching this test watches it arrive. It is
+        // **bounded**: an assertion that ignored the lag would be flaky and one that waited
+        // for ever would be worse, so if it has not settled inside the bound this fails and
+        // says so, with both numbers and the command to check it by hand. A reconciliation
+        // that gave up quietly is the check that cannot fail this whole PR is about.
+        let deadline = Instant::now() + Duration::from_secs(300);
+        let moved = loop {
+            let now = counter(&["--account-usage"]) - account_before;
+            println!("  OpenRouter has moved by ${now:.8} of ${ledgered:.8} so far");
+            if reconciled(now, ledgered).is_ok() || Instant::now() >= deadline {
+                break now;
+            }
+            std::thread::sleep(Duration::from_secs(10));
+        };
+        match reconciled(moved, ledgered) {
+            Ok(said) => println!("reconciled: {said}"),
+            Err(why) => panic!(
+                "{why}. The counter had five minutes to settle. Check it by hand with \
+                 `uv run --project ai escribass-ai --account-usage` before believing either \
+                 number (ADR 0022 §4)"
+            ),
+        }
+
+        // And per call, for the rows whose response carried a generation id: the provider's
+        // own per-generation figure against what the ledger charged. This is what explains a
+        // difference above rather than leaving it as one number disagreeing with another.
+        for row in rows {
+            let Some(id) = row["generation_id"].as_str() else { continue };
+            let theirs = counter(&["--generation-cost", id]);
+            let ours = row["charged_usd"].as_f64().expect("a row is charged something");
+            println!("  {id}: OpenRouter ${theirs:.8}, ledger ${ours:.8}");
+            if let Err(why) = reconciled(theirs, ours) {
+                panic!("generation {id} does not reconcile: {why}");
+            }
+        }
     }
 }
 

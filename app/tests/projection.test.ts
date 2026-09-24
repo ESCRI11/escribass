@@ -307,6 +307,96 @@ test("every view is a pure function of the model", () => {
   );
 });
 
+// A turn that ended on its refusal budget, which no fixture in this tree has: the recorded run
+// composed on the first attempt with **zero** refusals (ADR 0022 §4), so every claim the panel
+// makes about a refused turn went unchecked until the M3 review found it (2026-09-24,
+// mutations A2 and A3). It is the recorded turn with the two things a refused one differs by:
+// the calls came back `valid: false`, carrying the tool API's own violation, and the host
+// ended it `Refused` rather than `Answered` (`core::TurnEnd`).
+//
+// Asserted rather than goldened. What the golden is for is a whole projection of a whole
+// fixture; what these are is two sentences about one function, and a second recorded turn is
+// not something this repository can buy with a hand-written one.
+function aRefusedTurn(live: Partial<PanelAnswer["live"] & object> = {}): PanelAnswer {
+  const answered = turns.pending;
+  const was = answered.live!;
+  return {
+    ...answered,
+    live: {
+      ...was,
+      ended: "Refused",
+      // The **last** call refused and the ones before it accepted, which is the shape a turn
+      // that ran out of budget really has — and the shape that tells a count of refusals apart
+      // from a count of calls.
+      calls: was.calls.map((call, at) =>
+        at < was.calls.length - 1
+          ? call
+          : {
+              ...call,
+              valid: false,
+              summary: "",
+              errors: [
+                {
+                  path: "/clips/01M1FPMP000000000000000036/track_id",
+                  rule: "track_unknown",
+                  message: "no track `01M1FPMP00NOSUCHTRACK00000`",
+                },
+              ],
+            },
+      ),
+      ...live,
+    },
+  };
+}
+
+test("a turn that ended on its refusal budget says how many, and offers nothing to apply", () => {
+  // The panel's note for `ended === "Refused"`, and `pending.applicable`. Watched failing
+  // first: with the note's `filter` dropped the count read `0 calls`, and with `applicable`
+  // read off `running` alone the empty proposal below still offered Apply.
+  assert.equal(
+    aiPanel(aRefusedTurn(), song).messages.at(-1)!.note,
+    "the turn ended: 1 call was refused",
+  );
+
+  // Nothing to apply, because there is nothing to approve: a refused turn leaves the proposal
+  // pending with whatever the accepted calls put in it, and here that is nothing.
+  const nothing = aiPanel(aRefusedTurn({ patch: [] }), song);
+  assert.equal(nothing.pending!.applicable, false);
+  assert.equal(nothing.pending!.summary, "the model proposed no change");
+
+  // A turn still running is never applicable either, whatever it has proposed so far.
+  const running = aiPanel(aRefusedTurn({ running: true, ended: "" }), song);
+  assert.equal(running.pending!.applicable, false);
+  assert.equal(running.messages.at(-1)!.note, "answering…");
+});
+
+test("a proposal whose patch will not prepare offers nothing and says what moved", () => {
+  // The other shape `panel.rs` leaves behind: `patch` null and `refused` carrying the
+  // violations (`Live::watch`). The two are exclusive, which is why `applicable` does not test
+  // both — see the comment on it. `document_moved` is the rule `apply_proposal` refuses a
+  // moved document with, and the panel names the thing rather than the path (ADR 0019 §2,
+  // amended 2026-09-24).
+  const panel = aiPanel(
+    aRefusedTurn({
+      patch: null,
+      refused: [
+        {
+          // A clip the fixture really has, so the panel can name the track it sits on
+          // rather than echoing a path back at a person.
+          path: "/clips/01M1FPMP00000000000000000K/note_clip/notes/x/pitch",
+          rule: "document_moved",
+          message: "this changed after the proposal was composed",
+        },
+      ],
+    }),
+    song,
+  );
+  assert.equal(panel.pending!.applicable, false);
+  assert.deepEqual(panel.pending!.refusals, [
+    "the clip on Lead changed while this proposal was pending",
+  ]);
+});
+
 test("a view is a function of the document, not of how its maps iterated", () => {
   const backwards = fromJson(SongSchema, reversed(document) as never);
   assert.deepStrictEqual(

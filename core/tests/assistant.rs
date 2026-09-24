@@ -51,13 +51,23 @@ fn opened(dir: &Scratch) -> Session {
     Session::new(project, Box::new(ids), Box::new(clock), Author::Human)
 }
 
+/// The model the fake sidecar's responses **name**, and it is deliberately not the one the
+/// prompt asked for ([`escribass_core::DEFAULT_MODEL`]).
+///
+/// ADR 0021 §2's whole claim is that what is recorded is what *answered*: a router serves one
+/// turn from a dated snapshot, or from another provider, under the name a person chose. While
+/// every fixture answered with the id it was asked for, that claim was untestable — replacing
+/// `call.model_id` with the prompt's own id left every suite green (M3 review, 2026-09-24,
+/// mutations C5 and C5b). This constant is what makes the two distinguishable.
+const ANSWERED_BY: &str = "deepseek/deepseek-v4.1-flash-0711";
+
 fn call_event(id: &str, name: &str, args: &str) -> AssistantEvent {
     AssistantEvent {
         event: Some(assistant_event::Event::Call(ToolCall {
             call_id: id.to_string(),
             name: name.to_string(),
             args_json: args.to_string(),
-            model_id: "deepseek/deepseek-v4.1-flash".to_string(),
+            model_id: ANSWERED_BY.to_string(),
         })),
     }
 }
@@ -66,7 +76,7 @@ fn done_event(text: &str) -> AssistantEvent {
     AssistantEvent {
         event: Some(assistant_event::Event::Done(Done {
             text: text.to_string(),
-            model_id: "deepseek/deepseek-v4.1-flash".to_string(),
+            model_id: ANSWERED_BY.to_string(),
         })),
     }
 }
@@ -92,6 +102,35 @@ fn answered(served: &common::AskedFor, count: usize) -> Vec<escribass_proto::too
         assert!(Instant::now() < deadline, "only {} of {count} results arrived", results.len());
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+/// Every `CallResult` the sidecar received, once no more are arriving.
+///
+/// [`answered`] waits for a count to be *reached*; this waits for it to stop moving, which is
+/// what a claim about a result that must **never** be sent needs. Quiescence rather than a
+/// tuned sleep: the count is read until it has held still for a fifth of a second, bounded.
+fn settled(served: &common::AskedFor) -> Vec<escribass_proto::tools::ToolResult> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let results = |()| -> Vec<escribass_proto::tools::ToolResult> {
+        served
+            .commands()
+            .into_iter()
+            .filter_map(|command| match command.command {
+                Some(assistant_command::Command::Result(answered)) => answered.result,
+                _ => None,
+            })
+            .collect()
+    };
+    let mut held = results(());
+    let mut still = 0;
+    while still < 20 {
+        std::thread::sleep(Duration::from_millis(10));
+        let now = results(());
+        still = if now.len() == held.len() { still + 1 } else { 0 };
+        held = now;
+        assert!(Instant::now() < deadline, "the results never stopped arriving");
+    }
+    held
 }
 
 struct Scratch(PathBuf);
@@ -177,7 +216,11 @@ fn it_reads_the_one_line_and_answers_on_the_socket_the_sidecar_named() {
 
     assert_eq!(turn.end, TurnEnd::Answered);
     assert_eq!(turn.recorded.reply, "raising it");
-    assert_eq!(turn.model_id, "deepseek/deepseek-v4.1-flash");
+    // **What answered, never what was asked for** (ADR 0021 §2). The prompt named
+    // `DEFAULT_MODEL` — asserted below — and the response named a dated snapshot of it, which
+    // is what a router really returns.
+    assert_eq!(turn.model_id, ANSWERED_BY);
+    assert_ne!(turn.model_id, escribass_core::DEFAULT_MODEL, "the two are the same id again");
     let asked = served.commands();
     assert_eq!(asked.len(), 1, "one prompt per turn: {asked:?}");
     // The stream carries the prompt the caller wrote, and no key, no project path and no
@@ -378,6 +421,32 @@ fn the_models_calls_land_on_the_proposal_and_nothing_is_applied() {
         })
         .collect();
     assert_eq!(songs, [true, true], "the proposal's document did not cross back");
+
+    // **And what answered is on every entity the calls minted, and on the entry** (ADR 0021
+    // §2). `Proposal::call` is handed `ToolCall.model_id` — the model the response that made
+    // *this* call named — and `apply_proposal` is handed `Done.model_id`, the turn's last.
+    // Both were the id the prompt asked for in every fixture until 2026-09-24, so replacing
+    // either with the prompt's own left the whole suite green (mutations C5 and C5b).
+    let minted = session.proposal().expect("a proposal").song().tracks[MINTED]
+        .provenance
+        .clone()
+        .expect("a track the model minted carries provenance");
+    assert_eq!(minted.model_id.as_deref(), Some(ANSWERED_BY), "the entity names the asked-for id");
+    let applied = session.apply_proposal(&turn.model_id).expect("it applies");
+    assert!(applied.valid, "{applied:?}");
+    let entry = session
+        .project()
+        .history()
+        .get(&applied.entry_id)
+        .expect("the entry")
+        .clone();
+    let made = entry.provenance.expect("an entry carries provenance");
+    assert_eq!(made.model_id.as_deref(), Some(ANSWERED_BY), "the entry names the asked-for id");
+    assert_eq!(
+        session.project().song().tracks[MINTED].provenance.as_ref().unwrap().model_id.as_deref(),
+        Some(ANSWERED_BY),
+        "the committed entity names the asked-for id"
+    );
 }
 
 #[cfg(unix)]
@@ -417,14 +486,75 @@ fn three_refused_calls_end_the_turn_and_the_fourth_is_never_made() {
     assert!(rules.contains(&"track_unknown"), "{rules:?}");
     // Fed back, and provably: the sidecar sends its next call only once the previous call's
     // result has arrived, so the third refusal exists because the first two were fed back.
-    // The last one is not asserted — the host closed the stream the moment the budget ran out,
-    // and what is still in flight at a close is not a claim worth making.
-    let results = answered(&served, REFUSALS_PER_TURN - 1);
+    //
+    // **Exactly two, on a count that has stopped moving** rather than one that has been
+    // reached — so a budget that let a fourth call through, as `> REFUSALS_PER_TURN` once did,
+    // is three results here and fails.
+    //
+    // What this cannot tell, and does not claim: the host now closes its half *before* feeding
+    // back the refusal that ended the turn (M3 review, 2026-09-24), and a result sent into a
+    // stream that is closing is discarded by the transport anyway — which is precisely why the
+    // old order passed against the real sidecar 3 runs of 3 and still cost a provider request
+    // in-process. The order is asserted where its cost is: `ai/tests/test_turn.py`,
+    // `test_a_host_that_stops_at_its_budget_costs_no_further_request`.
+    let results = settled(&served);
+    assert_eq!(
+        results.len(),
+        REFUSALS_PER_TURN - 1,
+        "the refusal that ended the turn was fed back to a model that is not listening"
+    );
     assert!(results.iter().all(|r| !r.valid), "{results:?}");
 
     // The proposal stays: a person is told which calls were refused and why, and whatever the
     // accepted calls put in it — here, nothing — is still theirs to reject (ADR 0022 §3).
     assert!(session.proposal().is_some());
+    assert_eq!(session.project().history().entries().len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_call_the_host_cannot_even_read_is_counted_against_the_same_budget() {
+    // The two refusals the *host* shapes rather than the tool API: a tool name the model
+    // invented and arguments that are not a JSON object (`execute`, `refused_call`). They are
+    // ADR 0006 §2 caller errors like any other and ADR 0022 §3 counts them like any other —
+    // but until 2026-09-24 no test drove one through the budget, so the counting line could be
+    // deleted for these two and every suite stayed green (M3 review, mutation C4).
+    //
+    // Watched failing first by returning these from `execute` as `valid: true`: the turn ran
+    // on to `done` and ended `Answered`.
+    let dir = Scratch::new();
+    let mut session = opened(&dir);
+    let served = fake_assistant(
+        &dir.0,
+        vec![
+            // Not one of the twelve: refused at `Proposal::call`, before dispatch.
+            call_event("c1", "delete_the_song", r#"{"why": "not"}"#),
+            // An object is what a tool takes; this is a string.
+            call_event("c2", "add_track", r#""Lead""#),
+            call_event("c3", "not_a_tool_either", "{}"),
+            done_event("gave up"),
+        ],
+        None,
+    );
+    let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
+    let mut sidecar = told(&script, &[]).start().expect("it starts");
+
+    let turn = sidecar
+        .turn(&mut session, "do something I did not offer you", &[], |_, _| {})
+        .expect("a turn");
+
+    assert_eq!(turn.end, TurnEnd::Refused, "unreadable calls did not spend the budget");
+    assert_eq!(turn.recorded.calls.len(), REFUSALS_PER_TURN);
+    let rules: Vec<&str> = turn
+        .recorded
+        .calls
+        .iter()
+        .filter_map(|done| done.result.as_ref())
+        .flat_map(|result| result.errors.iter().map(|e| e.rule.as_str()))
+        .collect();
+    assert_eq!(rules, ["call_unreadable", "arguments_unreadable", "call_unreadable"], "{rules:?}");
+    // Nothing reached the fork: a call that never became one changed nothing.
+    assert!(session.proposal().expect("still pending").calls().is_empty());
     assert_eq!(session.project().history().entries().len(), 1);
 }
 
@@ -594,4 +724,50 @@ fn wait_until_gone(sidecar: &mut escribass_core::Sidecar) -> String {
         assert!(Instant::now() < deadline, "the sidecar never left");
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_sidecar_can_be_ended_by_somebody_who_is_not_holding_it() {
+    // **Closing the window mid-turn did not end the process with the turn** (M3 review,
+    // 2026-09-24). `Sidecar::turn` borrows the sidecar for the whole of a turn, and the
+    // window's exit path took the same lock to stop it — so the window disappeared and the
+    // process, and its `.escri/lock`, stayed until the model answered.
+    //
+    // `Halt` is a handle to the one thing that ends a sidecar, taken **before** the turn and
+    // usable while the `Sidecar` is exclusively borrowed elsewhere. That property is the
+    // compiler's here: the scoped thread below holds `&mut sidecar` while this thread calls
+    // `halt`, and before `Halt` existed there was no way to write it.
+    //
+    // What this does not claim: that the *stream* breaks. It does, because the real sidecar
+    // stops serving when its stdin closes — which `ai/tests/test_sidecar.py` drives against
+    // the real process, mid-turn. Here the sidecar is a script, so what is asserted is that
+    // the script is gone.
+    let dir = Scratch::new();
+    let served = fake_assistant(&dir.0, vec![done_event("nothing to do")], None);
+    // `cat` holds the pipe open until it is closed, which is what makes the halt observable.
+    let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
+    let mut sidecar = told(&script, &[]).start().expect("it starts");
+    assert_eq!(sidecar.health(), Health::Running);
+
+    let halt = sidecar.halt();
+    let gone = std::thread::scope(|scope| {
+        let watching = scope.spawn(|| {
+            // `&mut sidecar`, held here for as long as a turn would hold it.
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                if let Health::Gone(said) = sidecar.health() {
+                    return said;
+                }
+                assert!(Instant::now() < deadline, "the sidecar outlived the halt");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        halt.halt();
+        watching.join().expect("the watching thread")
+    });
+    assert!(gone.contains("exited 0"), "{gone}");
+    // Idempotent, and `stop` still reads the status on this path (ADR 0020 §5).
+    halt.halt();
+    assert!(sidecar.stop().contains("exited 0"));
 }

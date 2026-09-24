@@ -126,6 +126,35 @@ person's held drag and a pending proposal never see each other before one of the
 the drag's dry runs are against the document, the proposal's calls against the fork (plan,
 trap 13).
 
+**Amended 2026-09-24, in M3 PR 10: the version guard is no longer the only guard, because it
+was never a sufficient one.** The paragraph above and its Consequences below both said, in as
+many words, that one intervening entry merges in silence and two are refused — measured and
+written down honestly by the test named for it. What the M3 review established is that the
+honest footnote had not reached the sentences a reader meets first: `docs/specs.md` §5 and its
+§15 row still said "the document having moved underneath is refused by §4.3's `version`
+check", flatly. And a proposal is not a drag: a drag is refused or applied inside a few
+hundred milliseconds, while a proposal sits pending for as long as a person takes to read a
+diff. **Exactly one intervening edit is therefore the likeliest concurrent edit there is, not
+the rarest**, and it silently overwrote the person's.
+
+The fix is not a change to the version rule, which is ADR 0005's and which a drag shares. It
+is that a proposal **has something a drag does not**: `Proposal::base`, the document the patch
+was computed against, which it already held for the reason two paragraphs up. So
+`apply_proposal` now compares, before it prepares anything, the value at **each path its own
+operations touch** in `base` against the value at that path in the document as it stands. Any
+that differ refuse the apply with rule `document_moved`, one violation per path, and the
+proposal stays pending — the refusal path every other refusal here takes.
+
+That answers the question the version number was standing in for, *did what I am about to
+overwrite move?*, at the granularity the patch writes at, and it answers ADR 0012 §4's old debt
+in passing: the violations name the notes, the clip or the track, so the panel says "the clip
+on Lead changed while this proposal was pending" rather than quoting a number. An edit
+**elsewhere** is still not a dispute and still merges: a path no operation touches is never
+compared. A path neither document has — the id of a track the proposal is adding — compares
+equal, which is the right answer rather than a special case. ADR 0005 §3's guard stays where it
+is, behind this one, and still refuses at `/version` when two entries have moved the song and
+nothing more specific is in dispute.
+
 ### 3. Reject drops it, Edit is the person's, and there is one proposal at a time
 
 **Reject** discards the proposal. Nothing was written, so nothing is undone and the log records
@@ -206,7 +235,9 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
   start, which is a `ponytail:` in the code with its cost and its upgrade path.
 
   **The guard refuses a document that moved by two entries and not by one, and that is stated
-  rather than papered over.** ADR 0005 §3 reads a claim equal to the number an entity *holds*
+  rather than papered over.** *(Amended 2026-09-24: it refuses one too — see decision 2's own
+  amendment. What follows is what M3 PR 8 found and why, kept because the reasoning is still
+  the reasoning and the limit was real.)* ADR 0005 §3 reads a claim equal to the number an entity *holds*
   as "disputing nothing", because that is what a typed tool's own ops look like. A proposal's
   claim of `before + 1` is exactly the number the entity holds after one intervening entry, so
   one edit merges in silence and two are refused; and because every change bumps the `Song`'s
@@ -218,6 +249,14 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
   what changes is that the sentence "the document having moved underneath is refused" is now
   known to mean "moved by more than one entry". Widening it is ADR 0005's to do, and the way
   out in the meantime is decision 2's own: Reject and ask again.
+
+  **And on 2026-09-24 it was widened, without touching ADR 0005.** The last sentence was
+  right that the *version rule* is ADR 0005's; it was wrong to conclude that the blind spot
+  had to wait for one. `Proposal::base` is a comparison a proposal can make and a drag cannot,
+  and making it is `document_moved`. `exactly_one_intervening_edit_is_the_guards_blind_spot`
+  is now `exactly_one_intervening_edit_is_refused_and_the_refusal_names_what_moved`, and it
+  asserts the refusal, the paths it names, and that the person's own five semitones are still
+  in the document afterwards.
 
   **Applying takes the session past every id the proposal minted, and it is a comparison rather
   than a swap.** `from_tool`'s rule (the fork becomes the source when a call keeps its work) has
@@ -273,7 +312,14 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
 - **The M0.4 goldens do not move.** No tool's ops change and no existing path is touched; a
   proposal driven end to end is a new script (ADR 0022 §4), not a change to the five.
 - `docs/specs.md` §5 gains the sentence that says what a proposal is and what a person approves;
-  §9's AI panel bullet says what its three controls do.
+  §9's AI panel bullet says what its three controls do. **Amended 2026-09-24**: §5's clause
+  about a document that moved, and its §15 row, say `document_moved` and what it compares,
+  because what they said before was true of neither guard on its own.
+- **PR 10** (`m3.10-review-fixes`, 2026-09-24) carries decision 2's amendment: `document_moved`
+  in `Session::apply_proposal`, `Proposal::moved_under` beside `ops` and `patch`, the rule read
+  out by the panel as a move rather than as a path, and the blind-spot test inverted. One test
+  changed meaning and says so in its own comment; no golden moved, because nothing a tool
+  produces changed.
 - ADR 0017's Consequences asked for this ADR and are satisfied by it; ADR 0017 itself is
   unchanged, because every gesture the window makes still follows its decisions 1–3.
 - "What M3 will not claim" gains a line: not per-call approval, and not that a person sees the

@@ -319,6 +319,18 @@ class TestWhatIsFedBack(unittest.TestCase):
         roles = [message["role"] for message in replayer.asked[0]["messages"]]
         self.assertEqual(roles[:5], ["system", "user", "assistant", "tool", "assistant"])
         self.assertEqual(replayer.asked[0]["messages"][1]["content"], "make it louder")
+        # And the tool message carries **what the call was answered**, not a placeholder: a
+        # model reading its own past has to see which of its earlier calls landed and with what
+        # summary, which is the id the next call names (ADR 0019 §1). Watched failing first
+        # with `_history`'s `answered(done.result)` replaced by `"no result"`.
+        self.assertEqual(
+            replayer.asked[0]["messages"][3],
+            {
+                "role": "tool",
+                "tool_call_id": "old_1",
+                "content": "applied to the proposal: 1 op: /tracks/x",
+            },
+        )
         self.assertEqual(replayer.asked[0]["messages"][-1]["content"].split("\n")[0], "add a lead line")
 
     def test_the_schemas_cross_verbatim(self) -> None:
@@ -453,6 +465,61 @@ class TestTheHostsHalf(unittest.TestCase):
         with self.assertRaises(grpclib.GRPCError) as raised:
             asyncio.run(turn())
         self.assertEqual(raised.exception.status, grpclib.const.Status.INVALID_ARGUMENT)
+
+    def test_the_sidecar_counts_no_refusals_of_its_own(self) -> None:
+        # ADR 0022 §3 puts the refusal budget in **one** place, which is the host: it is what
+        # executes a call and therefore what sees one refused, and a second counter here would
+        # be the same number in two files. This is what that costs, measured rather than
+        # argued — and it is why the host's order matters (see the test below).
+        #
+        # A host that feeds back all three refusals and *then* closes has already been asked a
+        # fourth time: `run` appends the tool message and loops straight to `ask()`, and only
+        # then does it reach `anext(commands)` and learn the turn is over. Four requests for
+        # three refusals, one of them answered to nobody.
+        #
+        # If this ever reads three, somebody has put a refusal counter in `ai`. That is a
+        # decision ADR 0022 §3 took the other way; take it again before changing this number.
+        song = fixture_song()
+        replayer = transcript("four-refusals.json")
+        asyncio.run(self.closing_after(3, song, replayer))
+        self.assertEqual(len(replayer.asked), 4)
+
+    def test_a_host_that_stops_at_its_budget_costs_no_further_request(self) -> None:
+        # **The host closes before feeding back the refusal that ended the turn**
+        # (`core/src/assistant.rs`, M3 review 2026-09-24). Two results and then the close, and
+        # the fourth request is not made — a decision rather than a race won by tonic's
+        # teardown, which is what kept a live turn from paying for it before.
+        #
+        # Watched failing first as the test above: with three results fed back, four.
+        song = fixture_song()
+        replayer = transcript("four-refusals.json")
+        events = asyncio.run(self.closing_after(2, song, replayer))
+        self.assertEqual(len(replayer.asked), 3)
+        # Three calls went out and the third was never answered, which is the shape the host
+        # leaves behind: it executed the call, counted the refusal and closed.
+        self.assertEqual(len([event for event in events if event.call is not None]), 3)
+
+    @staticmethod
+    async def closing_after(results: int, song: Song, replayer: Scripted) -> list:
+        """A host that answers `results` calls with a refusal and then closes its half."""
+        seen: list[ToolCall] = []
+
+        async def commands() -> AsyncIterator[AssistantCommand]:
+            yield AssistantCommand(prompt=prompt_for(song))
+            for _ in range(results):
+                yield AssistantCommand(
+                    result=CallResult(
+                        call_id=seen[-1].call_id,
+                        result=refused("track_unknown", "no such track"),
+                    )
+                )
+
+        events = []
+        async for event in run(commands(), replayer):
+            events.append(event)
+            if event.call is not None:
+                seen.append(event.call)
+        return events
 
     def test_a_host_that_closes_mid_turn_ends_it(self) -> None:
         # Three refused calls end the turn at the **host**, and closing the stream is how it

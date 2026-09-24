@@ -220,6 +220,48 @@ build for either refuses as today. A recycled pid can only refuse — a new proc
 dead holder's number is alive — so the check errs on the side the old rule chose. It still
 assumes a local filesystem, as the lock always has.
 
+**Amended 2026-09-24, in M3 PR 10, and the amendment removes the mechanism the two paragraphs
+above describe.** Two things the decision got wrong, both found by the M3 review.
+
+The first is a claim in the paragraph below this one and in the Consequences: that removing the
+stale file and re-creating it is still one `O_EXCL`, so "if another process replaced it in the
+same instant, this `create` finds the file there and refuses". That is true in one ordering
+only. A and B both open a crashed project; both read the same stale pid; A unlinks, creates and
+holds; B — which read before A's unlink — then unlinks **A's fresh lock** and creates its own.
+Both hold, both write, and the case is ordinary rather than exotic: double-clicking the app on
+the last project after a crash. Watched failing first, in
+`core/tests/project.rs::two_openers_of_one_crashed_project_do_not_both_get_it`.
+
+The second is pid reuse, which the paragraph above says "can only refuse". It can, in the
+direction it names. What it cannot do is stop the *other* direction from being wrong for a
+different reason: the file is what decides, and the file is not the holder. A lock file whose
+contents no longer match the process holding it — overwritten by hand, or by a build that
+wrote a number and died — sent a second opener straight past a live holder.
+
+**The lock is the kernel's from now on.** `ProjectLock::take` opens `.escri/lock` and takes an
+advisory lock on the open file with `std::fs::File::try_lock` — stable since Rust 1.89, so
+still no dependency (CLAUDE.md #4) — and holds the descriptor for as long as it has the project
+open. The kernel releases the lock when that descriptor closes, which happens when the process
+ends however it ends: cleanly, by `SIGKILL`, or by a crash. So the whole of what §5 set out to
+do is done by something that cannot be raced and has no number to adjudicate, and the thing it
+set out to do is unchanged: *a lock a dead holder left no longer stops the next process from
+opening the project*.
+
+What the pid becomes is a **label**. It is written into the file under the lock, and it is read
+for exactly two purposes, neither of them a decision: a refusal names who to close, and a file
+that is **not empty** when a taker acquires the lock says its last holder never reached its
+`Drop` — which is the crash report this decision asked for, kept word for word. A clean close
+empties the file.
+
+**Nothing unlinks it.** That is the other half of closing the race: a file another process may
+already have open is not ours to take away, and a `remove_file` in `Drop` is the same window in
+the other direction. `.escri/lock` now stays on disk, empty, between sessions, which is how
+`cargo`'s own lock files behave.
+
+**One claim this reverses**: "not that a lock with no pid in it is replaced" (`docs/plan.md`,
+"What M3 will not claim"). There is nothing to replace and nothing to adjudicate — if nobody is
+holding the file, the next opener gets it, whatever the file says.
+
 Why not signal handlers instead, in the two binaries: they would release the lock on `SIGTERM`
 and `SIGINT` and leave it on `SIGKILL` and on a crash, which is the case ADR 0012 §3 was written
 about and the case the pid check covers. A handler is not refused — a binary may gain one so a
@@ -304,6 +346,17 @@ Its test is loud, so it does not muddy that pull request's silent half.
   `/proc/<pid>` exists for a zombie — so the test reaps before it takes the lock, and in
   production a zombie holder reads as alive and refuses, which is the side this errs on
   anyway.
+
+  **Undone 2026-09-24 in M3 PR 10**, by decision 5's own amendment: the two `O_EXCL` attempts
+  are gone with the rest of the pid protocol, and the sentence above — "a second process that
+  replaced it in the same instant wins and this one is refused" — was the claim the review
+  disproved. It holds only when the second process's *unlink* precedes the first's *create*,
+  and the opposite ordering had both of them holding. The tests stay: the killed `escribass-mcp`
+  still leaves its lock behind, and the next opener still names it — what changed is that the
+  kernel released the lock when the process died, so nothing has to be adjudicated to find that
+  out. Two tests joined them, both watched failing first against the pid protocol: a live
+  holder whose lock file has been overwritten with a dead pid, and two threads opening one
+  crashed project two hundred times over.
 - **PR 5** (`m3.5-ai-shell`): `ai/` with `grpclib`, `openai` and `httpx2` pinned by exact
   version in `pyproject.toml`, `uv.lock`, `lock.baseline.json` and §17 in the same change;
   `.python-version` with the exact patch §17 asks for; the generated `Assistant` server on a
@@ -341,5 +394,20 @@ Its test is loud, so it does not muddy that pull request's silent half.
   loses `Jobs`; §17 and `lock.baseline.json` gain the three packages by name, unpinned until PR
   5; §18.2 is narrowed as U5 decided, with the lock's sentence.
 - "What M3 will not claim": not that an MCP client and the window edit one project at once —
-  the lock refuses it — and not that a lock left by an older build, with no pid in it, is
-  replaced.
+  the lock refuses it — and ~~not that a lock left by an older build, with no pid in it, is
+  replaced~~, **struck 2026-09-24 by decision 5's amendment**: with the kernel holding the
+  lock there is nothing in the file to adjudicate, so a lock nobody is holding is taken
+  whatever it says.
+- **PR 10** (`m3.10-review-fixes`, 2026-09-24) carries two amendments of this ADR's, both from
+  the M3 review and both written into the decisions above. Decision 5's lock is the kernel's
+  rather than the file's. And decision 4's "the host closes our stdin to stop us" turned out to
+  be true only when the sidecar was **idle**: `grpclib`'s `Server.close` cancels the request it
+  is serving, but `Server.wait_closed` then waits for the open connection as well, and the
+  thing holding that connection is the host that has just let go — a window on its way out,
+  whose turn thread is parked on a call nobody will answer. Measured at 30 s and counting, with
+  the process, its socket and the project's `.escri/lock` all still alive. `serve` now closes
+  and leaves on that path rather than waiting. `core` gains `Halt`, a handle to that pipe held
+  by somebody who is *not* holding the `Sidecar` — because a turn borrows it for the whole of
+  a turn, and the window's exit path took the same lock — and `app` calls it before it stops
+  the sidecar, so closing the window ends the turn with the window.
+
