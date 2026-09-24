@@ -10,6 +10,7 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 4. Every external dependency is pinned by commit in `lock.baseline.json`. JUCE is never upgraded independently of Tracktion Engine.
 5. Schema changes require an ADR in `docs/adr/` before code.
 6. The engine is schema-agnostic; the AI process is audio-agnostic.
+7. **Spending money needs the user's confirmation, every time.** A call to an external paid service — a hosted model API, any metered endpoint, anything billed to the user's account — is asked for and granted before it is made. A previous authorisation does not carry to the next task. When it is granted, the spend is capped in code *before* each call against a conservative worst case, ledgered, and reconciled against the provider's own counter.
 
 ## Repo layout
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
