@@ -94,6 +94,17 @@ enum Made {
     /// already carry the provenance `prepare` stamped on the fork, so nothing re-decides it
     /// ([`Project::prepare_proposal`]).
     Proposal(Provenance),
+    /// **Edit**: a proposal's patch that a person rewrote and applied as their own
+    /// (ADR 0019 §3). `AUTHOR_HUMAN`, no `model_id`, and the `prompt_id` kept so the entry
+    /// still leads to the conversation the patch was made from.
+    ///
+    /// It is not [`Made::Proposal`], and the difference is the whole of why it is a fourth
+    /// arm rather than a flag. A proposal's patch keeps the provenance `prepare` decided on
+    /// the fork; an edited one must **not**, because its new entities carry the model's and
+    /// should get the person's — which is ADR 0021 §1's own worked example, and is what the
+    /// ordinary `prepare` does. It is not [`Made::Call`] either: a call keeps its document on
+    /// a fork and records nothing, and an edit commits.
+    Edit(Provenance),
 }
 
 impl Session {
@@ -1024,6 +1035,70 @@ impl Session {
         result
     }
 
+    /// **Edit**: the proposal's patch, rewritten by a person and applied as the person's
+    /// (ADR 0019 §3).
+    ///
+    /// §9's third control, and the one place in the application where a person writes RFC 6902
+    /// by hand. It is an ordinary `apply_patch` — the entry's `tool` says so — with two things
+    /// the raw pipeline cannot know on its own: the provenance is `AUTHOR_HUMAN` with **no**
+    /// `model_id`, because a person who changed the bytes owns the bytes; and the `prompt_id`
+    /// is kept, so the entry still leads to the conversation the patch was made from.
+    ///
+    /// **The refusal path is ADR 0017 §3's**: a patch that will not apply comes back as a
+    /// refusal with its rules and the proposal is **still pending**, because a patch a person
+    /// mistyped is not a reason to throw their turn away. The same is true of a patch that
+    /// applies to nothing — `run` answers "no change" and records no entry, and there is still
+    /// a proposal to decide.
+    ///
+    /// The session takes the proposal's ids when the edit commits, for [`Session::apply_proposal`]'s
+    /// reason and by the same comparison: the text a person edited names ids the **fork**
+    /// minted, so applying it puts them in the project, and a session that had not moved past
+    /// them would mint one of them again.
+    pub fn edit_proposal(&mut self, patch: &[u8]) -> Result<ToolResult, ProjectError> {
+        let Some(proposal) = self.proposal.take() else {
+            return Ok(refused(vec![Violation {
+                path: "/".to_string(),
+                rule: "no_proposal",
+                message: "there is no proposal to edit".to_string(),
+            }]));
+        };
+        // Parsed here rather than through `apply_patch`, because this is the one call that has
+        // to keep the proposal when it is refused and `apply_patch` knows nothing about one.
+        let ops: Vec<Op> = match serde_json::from_slice(patch) {
+            Ok(ops) => ops,
+            Err(e) => {
+                self.proposal = Some(proposal);
+                return Ok(refused(vec![Violation {
+                    path: String::new(),
+                    rule: "patch_unreadable",
+                    message: format!("the edited patch is not an RFC 6902 array: {e}"),
+                }]));
+            }
+        };
+        let previously = std::mem::replace(
+            &mut self.made,
+            Made::Edit(Provenance {
+                author: Author::Human as i32,
+                model_id: None,
+                prompt_id: Some(proposal.prompt_id.clone()),
+                tool_call_id: None,
+                created_at: Some(self.clock.now()),
+            }),
+        );
+        let onwards = ahead(self.ids.fork(), proposal.fork.ids.fork());
+        let spent = std::mem::replace(&mut self.ids, onwards);
+        let result = self.run("apply_patch", &ops, false);
+        self.made = previously;
+        // An entry is what says the edit happened. A refusal keeps the proposal for the reason
+        // above; so does "no change", where a person's patch applied to nothing at all and the
+        // proposal they were editing is still the thing in front of them.
+        if !matches!(&result, Ok(outcome) if outcome.valid && !outcome.entry_id.is_empty()) {
+            self.ids = spent;
+            self.proposal = Some(proposal);
+        }
+        result
+    }
+
     /// The provider and model this project records, or the baseline default when it records
     /// none (ADR 0021 §4).
     pub fn ai(&self) -> (&str, &str) {
@@ -1091,7 +1166,11 @@ impl Session {
             // this is the one caller whose two §4.3 exemptions come apart: versions guarded,
             // provenance kept (ADR 0019 §2, ADR 0021 §2).
             Made::Proposal(_) => self.project.prepare_proposal(ops),
-            Made::Call(made) => self.project.prepare(ops, made),
+            // An edited patch goes through the ordinary `prepare`, which is the point of the
+            // arm: the entities the model minted carry its provenance in the text a person
+            // was handed, and the walk replaces a *new* entity's with the call's — which is
+            // this person's (ADR 0021 §1, ADR 0019 §3).
+            Made::Call(made) | Made::Edit(made) => self.project.prepare(ops, made),
             Made::Session => self
                 .project
                 .prepare(ops, &crate::project::authorship(self.author, &*self.clock)),
@@ -1167,8 +1246,9 @@ impl Session {
     ) -> Result<String, ProjectError> {
         let made = match &self.made {
             Made::Session => crate::project::authorship(self.author, &*self.clock),
-            // A proposal's entry names the model and the prompt as well (ADR 0021 §2).
-            Made::Call(made) | Made::Proposal(made) => made.clone(),
+            // A proposal's entry names the model and the prompt as well (ADR 0021 §2); an
+            // edited one names the person and the prompt (ADR 0019 §3).
+            Made::Call(made) | Made::Proposal(made) | Made::Edit(made) => made.clone(),
         };
         self.project.record(prepared, tool, parents, &made, &mut *self.ids)
     }

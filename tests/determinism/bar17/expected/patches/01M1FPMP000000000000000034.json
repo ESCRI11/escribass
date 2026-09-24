@@ -1,0 +1,36 @@
+{
+  "id": "01M1FPMP000000000000000034",
+  "parents": [
+    "01M1FPMP00000000000000000W"
+  ],
+  "tool": "proposal",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000T/pitch",
+      "value": 48
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000000T/version",
+      "value": 2
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/version",
+      "value": 2
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 4
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "model_id": "deepseek/deepseek-v4.1-flash",
+    "prompt_id": "a575cc09fd30357e541a6e3e1ffb7689c16c47d01f0c5ca566681fc85829dbaa",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

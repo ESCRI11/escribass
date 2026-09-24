@@ -237,6 +237,34 @@ render* already keeps for sound.
 - **PR 9** (`m3.9-panel`): the conversation file, written after each turn and read on open; the
   history view shows `model_id` beside the author column and says when a `prompt_id` names a
   conversation this machine does not have; nothing in the status bar counts `ai.model`.
+
+  **Done 2026-09-24**, with three things decision 3 did not have to say.
+
+  **A line is written when the turn's outcome is known, not when the turn ends.** Decision 3
+  says a line carries "the outcome — applied as which entry, rejected, edited into which entry,
+  or failed how", and an outcome exists only once a person has decided. So a turn that failed
+  is recorded at once and a turn that left a proposal is recorded by Apply, Reject or Edit.
+  `ponytail:` a window closed on a pending proposal therefore records nothing — which is true
+  of the project as well, since nothing was applied, so the log names no prompt the file does
+  not have. The upgrade path is a second line kind, and today there is one.
+
+  **The wire `Turn` is built from the record on both paths, and that is what makes "sent whole"
+  the same sentence before and after a restart.** A conversation read back from the file and
+  one held since the window opened would otherwise be two shapes somebody has to keep in step,
+  and the drift would be invisible: the model would simply be told slightly less after a
+  restart. So the host holds records, `Recorded::wire` is the one function that makes a `Turn`
+  out of one, and a test asserts the round trip. What a line carries is therefore exactly what
+  `ai` rebuilds a past turn from (`turn.py`, `answered`) — the call's id, name, **verbatim**
+  arguments, and whether it was refused with every violation — and not the per-call `patch` or
+  `entry_id`, which nothing reads.
+
+  **The panel names the model where the name is, and says what it is not.** Decision 4's two
+  rules land as one sentence on hover beside `openrouter · deepseek/deepseek-v4.1-flash ·
+  recorded, not verified`: a choice rather than a pin, nothing here verifies it, what actually
+  answered is recorded per entry, and the model is never told it is deterministic — what is
+  reproducible is the song, from its log. That is the *live preview · not the render*
+  precedent (M2 trap 3) applied to the thing trap 15 is about, and the status bar still counts
+  nothing.
 - **`app` keeps `Author::Human`.** The plan's PR 4 row said the host "stops hardcoding
   `Author::Human` where a model can call"; under ADR 0020 §1 the model's calls never enter
   through the window's own author, so the hardcode is correct and stays. The row is amended.

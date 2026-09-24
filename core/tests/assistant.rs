@@ -172,7 +172,7 @@ fn it_reads_the_one_line_and_answers_on_the_socket_the_sidecar_named() {
     );
 
     let turn = sidecar
-        .turn(&mut session, "raise the bass in bar 17", &[])
+        .turn(&mut session, "raise the bass in bar 17", &[], |_, _| {})
         .expect("the turn answers");
 
     assert_eq!(turn.end, TurnEnd::Answered);
@@ -281,7 +281,7 @@ fn a_turn_that_fails_leaves_a_living_sidecar_alone() {
 
     let mut session = opened(&dir);
     let failed =
-        sidecar.turn(&mut session, "anything", &[]).expect_err("nothing is listening");
+        sidecar.turn(&mut session, "anything", &[], |_, _| {}).expect_err("nothing is listening");
     assert_eq!(failed.rule, "assistant_failed", "{}", failed.message);
     assert_eq!(sidecar.health(), Health::Running, "a failed turn killed the sidecar");
     // The fork goes with it: a half-built proposal nobody saw is not a thing to leave pending
@@ -341,7 +341,7 @@ fn the_models_calls_land_on_the_proposal_and_nothing_is_applied() {
     let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
     let mut sidecar = told(&script, &[]).start().expect("it starts");
 
-    let turn = sidecar.turn(&mut session, "add a lead", &[]).expect("the turn answers");
+    let turn = sidecar.turn(&mut session, "add a lead", &[], |_, _| {}).expect("the turn answers");
 
     assert_eq!(turn.end, TurnEnd::Answered);
     assert_eq!(turn.recorded.calls.len(), 2, "{:?}", turn.recorded.calls);
@@ -401,7 +401,7 @@ fn three_refused_calls_end_the_turn_and_the_fourth_is_never_made() {
     let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
     let mut sidecar = told(&script, &[]).start().expect("it starts");
 
-    let turn = sidecar.turn(&mut session, "put a clip on a track I made up", &[]).expect("a turn");
+    let turn = sidecar.turn(&mut session, "put a clip on a track I made up", &[], |_, _| {}).expect("a turn");
 
     assert_eq!(turn.end, TurnEnd::Refused);
     assert_eq!(turn.recorded.calls.len(), REFUSALS_PER_TURN);
@@ -446,7 +446,7 @@ fn a_provider_failure_is_neither_a_refusal_nor_the_projects() {
     let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
     let mut sidecar = told(&script, &[]).start().expect("it starts");
 
-    let failed = sidecar.turn(&mut session, "anything", &[]).expect_err("the provider failed");
+    let failed = sidecar.turn(&mut session, "anything", &[], |_, _| {}).expect_err("the provider failed");
     assert_eq!(failed.rule, "provider_failed", "{}", failed.message);
     assert!(failed.message.contains("rate-limited"), "{}", failed.message);
     // The sidecar is alive and was not blamed for it, and the turn left nothing pending.
@@ -473,7 +473,7 @@ fn a_model_that_ran_out_of_room_is_not_a_provider_failure() {
     let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
     let mut sidecar = told(&script, &[]).start().expect("it starts");
 
-    let failed = sidecar.turn(&mut session, "anything", &[]).expect_err("the model gave up");
+    let failed = sidecar.turn(&mut session, "anything", &[], |_, _| {}).expect_err("the model gave up");
     assert_eq!(failed.rule, "turn_unfinished", "{}", failed.message);
 }
 
@@ -498,7 +498,7 @@ fn a_project_that_will_not_write_ends_the_turn_before_the_model_sees_it() {
     std::os::unix::fs::PermissionsExt::set_mode(&mut locked, 0o555);
     std::fs::set_permissions(&project, locked).expect("the mode is settable");
 
-    let failed = sidecar.turn(&mut session, "raise the bass", &[]).expect_err("it cannot write");
+    let failed = sidecar.turn(&mut session, "raise the bass", &[], |_, _| {}).expect_err("it cannot write");
     std::fs::set_permissions(&project, permissions).expect("put it back for the cleanup");
 
     assert_eq!(failed.rule, "unwritable", "{}", failed.message);
@@ -518,14 +518,14 @@ fn a_second_prompt_waits_for_the_pending_proposal() {
     let script = fake_sidecar(&dir, &format!("{}\ncat > /dev/null", served.address()));
     let mut sidecar = told(&script, &[]).start().expect("it starts");
 
-    sidecar.turn(&mut session, "first", &[]).expect("the first turn answers");
-    let refused = sidecar.turn(&mut session, "second", &[]).expect_err("one at a time");
+    sidecar.turn(&mut session, "first", &[], |_, _| {}).expect("the first turn answers");
+    let refused = sidecar.turn(&mut session, "second", &[], |_, _| {}).expect_err("one at a time");
     assert_eq!(refused.rule, "proposal_pending", "{}", refused.message);
 
     // Rejecting it is what unblocks the next prompt, and nothing is undone because nothing was
     // written (ADR 0019 §3).
     assert!(session.reject());
-    sidecar.turn(&mut session, "second", &[]).expect("the next turn answers");
+    sidecar.turn(&mut session, "second", &[], |_, _| {}).expect("the next turn answers");
 }
 
 // ---- the two halves, meeting (ADR 0020 §4) ----
@@ -565,7 +565,7 @@ fn the_real_sidecar_answers_the_transcript() {
     let dir = Scratch::new();
     let mut session = opened(&dir);
     let turn = sidecar
-        .turn(&mut session, "What can you change about this song?", &[])
+        .turn(&mut session, "What can you change about this song?", &[], |_, _| {})
         .expect("the real sidecar answers");
     println!("{:#?}", turn.recorded);
 

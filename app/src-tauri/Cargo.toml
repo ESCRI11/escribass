@@ -21,6 +21,11 @@ escribass-core = { path = "../../core" }
 # For `Author` alone: the host says whose edits a window's are. Model types are generated and
 # never redefined (§4.1).
 escribass-schema = { path = "../../schema" }
+# The wire types a conversation is rebuilt into — `Turn`, `ToolCall`, `CompletedCall` — because
+# the conversation is the host's and is sent whole with every prompt (ADR 0021 §3). A workspace
+# path crate and not a dependency `lock.baseline.json` pins: it is this repository's own
+# generated code, and `core` already carries it.
+escribass-proto = { path = "../../proto" }
 # Pinned in lock.baseline.json under `app.tauri` (ADR 0016 §2). No feature is enabled: no tray,
 # no dialog plugin, no updater — this step opens one window and reads one project.
 tauri = "2.11.5"

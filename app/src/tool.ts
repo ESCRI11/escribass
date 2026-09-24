@@ -12,8 +12,14 @@
 // [`build`] and [`assistant`] are the other two commands, and neither is a second route to the
 // model: one is what the running process can host, the other is whether the process it started
 // is still running.
+//
+// [`panel`], [`ask`] and [`settle`] are M3 PR 9's, and none of them is a second route either:
+// a prompt's calls come back over the sidecar's stream and the host executes each one through
+// the same `escribass_core::call` (ADR 0019 §1, ADR 0020 §1), so what the model reaches is the
+// dispatch above, with a proposal in place of the project.
 
 import { invoke } from "@tauri-apps/api/core";
+import type { PanelAnswer } from "./assistant.js";
 
 /**
  * Calls one tool and returns the document it answered with.
@@ -61,4 +67,42 @@ export type Assisted = {
  */
 export function assistant(): Promise<Assisted> {
   return invoke<Assisted>("assistant");
+}
+
+/**
+ * What the AI panel is drawing: the conversation, and the turn in flight or pending.
+ *
+ * The **fourth** command. It reads nothing of the song and takes no session lock in the host,
+ * which is what lets it be asked while a turn is running — a turn holds the session for as
+ * long as the model takes, and the proposal is drawn as it grows from what the host's watcher
+ * left behind (ADR 0019 §2).
+ */
+export function panel(): Promise<PanelAnswer> {
+  return invoke<PanelAnswer>("panel");
+}
+
+/**
+ * Sends one prompt, and returns as soon as the turn has started (ADR 0020 §3).
+ *
+ * Not when the model has answered: a command that waited would hold a host thread for the
+ * length of a hosted model's turn with nothing on screen until it returned. What comes back
+ * is a rejection when there is nothing to ask or when this window already has a turn — one
+ * proposal at a time (ADR 0019 §3).
+ */
+export function ask(text: string): Promise<void> {
+  return invoke<void>("prompt", { text });
+}
+
+/**
+ * Apply, Reject or Edit — §9's three controls (ADR 0019 §3).
+ *
+ * A refusal is an answer, as it is for [`tool`]: Apply meets §4.3's `version` check when the
+ * document moved under the proposal, Edit meets the validator, and both leave the proposal
+ * **pending** so a person can decide again (ADR 0017 §3).
+ */
+export function settle(
+  action: "apply" | "reject" | "edit",
+  patch?: string,
+): Promise<{ valid: boolean; errors: readonly { path: string; rule: string; message: string }[] }> {
+  return invoke("settle", { action, patch });
 }

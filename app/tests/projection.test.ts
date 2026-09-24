@@ -33,6 +33,8 @@ import { devices, editor } from "../src/params.js";
 import type { Manifest } from "../src/params.js";
 import { patchLog } from "../src/history.js";
 import type { HistoryAnswer, LogEntry } from "../src/history.js";
+import { assistant as aiPanel, dashed, dashedNotes, moved, refusalLine } from "../src/assistant.js";
+import type { Called, PanelAnswer } from "../src/assistant.js";
 import { bars, seconds } from "../src/time.js";
 
 // The fixture is a determinism golden, which means it was built **through the tool API** and
@@ -66,6 +68,19 @@ const MANIFEST = new URL("../../tests/fixtures/manifest.json", import.meta.url);
 // shape and the file shape from one function — the files *are* the answer.
 const LOG = new URL("../../tests/determinism/branches/expected/", import.meta.url);
 
+// The AI panel needs a **turn**, and a model's log row needs an entry a model wrote. Both come
+// from the `proposal` determinism golden, which is the end-to-end run of M3 PR 8: a real
+// recorded transcript replayed through the real `ai` process, its two calls executed against a
+// proposal, and the proposal applied as one entry. So the panel is goldened over the turn this
+// repository actually produced rather than over a conversation written here — and if that run
+// changes, this golden moves with it and says so.
+const TURN = new URL("../../tests/determinism/proposal/expected/", import.meta.url);
+
+/** The prompt that turn answered, as `tests/determinism.rs` sends it. Written literally, as
+ *  every fixture id here is: a golden that read it from somewhere would agree with whatever it
+ *  found. */
+const ASKED = "add a lead line over the bass";
+
 const read = (at: URL) => readFileSync(at, "utf8");
 const document: unknown = JSON.parse(read(FIXTURE));
 const song: Song = fromJson(SongSchema, document as never);
@@ -93,6 +108,98 @@ function readLog(): HistoryAnswer {
 
 const logged: unknown = readLog();
 
+/** The `proposal` golden's own log: three entries a person wrote and one a model did. */
+function readModelLog(): HistoryAnswer {
+  const at = new URL("patches/", TURN);
+  const entries = Object.fromEntries(
+    readdirSync(at)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+      .map((name) => {
+        const entry = JSON.parse(read(new URL(name, at))) as LogEntry;
+        return [entry.id, entry];
+      }),
+  );
+  const refs = JSON.parse(read(new URL("refs.json", TURN))) as {
+    head: string;
+    refs: Record<string, string>;
+  };
+  return { entries, head: refs.head, refs: refs.refs };
+}
+
+const modelLogged: unknown = readModelLog();
+
+/**
+ * What the host answered while that turn was pending, and after it was applied.
+ *
+ * Built from the golden's `responses.json`, which records the turn as `Sidecar::turn` produced
+ * it and the patch as `Proposal::patch` computed it — the same two values `panel.rs` puts on
+ * `Live`. Nothing here is invented: the call ids are the ones the model was given on
+ * 2026-09-24, the summaries are the tool API's own, and the operations are the patch Apply
+ * sent.
+ */
+function readTurn(): { pending: PanelAnswer; settled: PanelAnswer } {
+  const answers = JSON.parse(read(new URL("responses.json", TURN))) as Record<string, any>[];
+  const turn = answers.find((answer) => answer.turn !== undefined)!.turn;
+  const waiting = answers.find((answer) => answer.pending !== undefined)!.pending;
+  const applied = answers.find((answer) => answer.applied !== undefined)!.applied;
+  const calls: Called[] = turn.calls.map((call: Record<string, unknown>) => ({
+    call_id: call.call_id as string,
+    name: call.name as string,
+    args: call.args as string,
+    model_id: turn.model_id as string,
+    valid: call.valid as boolean,
+    summary: call.summary as string,
+    errors: call.errors as never,
+  }));
+  return {
+    // What the window drew **before apply**, which is the proof point §18.2 leads with: the
+    // diff on screen, nothing written, three controls.
+    pending: {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4.1-flash",
+      at: "/home/a/.local/share/dev.escribass.app/conversations/01M1FPMPSONG.jsonl",
+      conversation: [],
+      live: {
+        prompt: ASKED,
+        prompt_id: waiting.prompt_id,
+        at: "2026-09-24T12:00:00Z",
+        model_id: turn.model_id,
+        calls,
+        reply: turn.reply,
+        running: false,
+        ended: turn.end,
+        patch: waiting.ops,
+        refused: [],
+        song: null,
+        refusal: null,
+      },
+    },
+    // And after: the turn is in the conversation with what became of it, and nothing is
+    // pending (ADR 0021 §3).
+    settled: {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4.1-flash",
+      at: "",
+      conversation: [
+        {
+          prompt_id: waiting.prompt_id,
+          prompt: ASKED,
+          at: "2026-09-24T12:00:00Z",
+          provider: "openrouter",
+          model_id: turn.model_id,
+          calls,
+          reply: turn.reply,
+          outcome: { applied: applied.entry_id },
+        },
+      ],
+      live: null,
+    },
+  };
+}
+
+const turns = readTurn();
+
 /**
  * The same document with every object's keys in the opposite order.
  *
@@ -118,7 +225,12 @@ function reversed(value: unknown): unknown {
 
 /** Every view, from the one song, the one manifest and the one log, in the order the window
  *  builds them. */
-function project(from: Song, hosts: Manifest, history: HistoryAnswer) {
+function project(
+  from: Song,
+  hosts: Manifest,
+  history: HistoryAnswer,
+  modelHistory: HistoryAnswer,
+) {
   const view = arrangement(from);
   return {
     arrangement: view,
@@ -143,6 +255,19 @@ function project(from: Song, hosts: Manifest, history: HistoryAnswer) {
     // because what §11's fifth bullet claims is about *every* view, and a second file would
     // be a second place to forget one (ADR 0012 §5).
     log: patchLog(history),
+    // A log with a **model's** entry in it: `proposal`, the model that answered beside the
+    // author, and the `prompt_id` that leads to the conversation (ADR 0021 §2). The
+    // `branches` log above has none, and a column nothing in a fixture fills is a column a
+    // golden cannot see.
+    modelLog: patchLog(modelHistory),
+    // The AI panel, before the proposal is applied and after (§9; ADR 0019 §2, §3). It is a
+    // projection of the host's answer rather than of the song — but it is the same claim:
+    // what the window draws is a function of what it was given, and the one place it reads
+    // the document is to name what moved.
+    assistant: {
+      pending: aiPanel(turns.pending, from),
+      settled: aiPanel(turns.settled, from),
+    },
   };
 }
 
@@ -150,7 +275,12 @@ test("every view is a pure function of the model", () => {
   const before = toJson(SongSchema, song);
   const manifestBefore = JSON.stringify(declared);
   const logBefore = JSON.stringify(logged);
-  const actual = `${JSON.stringify(project(song, build, logged as HistoryAnswer), null, 2)}\n`;
+  const modelLogBefore = JSON.stringify(modelLogged);
+  const actual = `${JSON.stringify(
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
+    null,
+    2,
+  )}\n`;
 
   if (process.env.UPDATE_FIXTURES === "1") {
     writeFileSync(GOLDEN, actual);
@@ -169,9 +299,10 @@ test("every view is a pure function of the model", () => {
   assert.deepStrictEqual(toJson(SongSchema, song), before, "a projection wrote to the model");
   assert.equal(JSON.stringify(declared), manifestBefore, "a projection wrote to the manifest");
   assert.equal(JSON.stringify(logged), logBefore, "a projection wrote to the log");
+  assert.equal(JSON.stringify(modelLogged), modelLogBefore, "a projection wrote to the log");
   assert.deepStrictEqual(
-    project(song, build, logged as HistoryAnswer),
-    project(song, build, logged as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
     "two projections of one song differ",
   );
 });
@@ -179,8 +310,13 @@ test("every view is a pure function of the model", () => {
 test("a view is a function of the document, not of how its maps iterated", () => {
   const backwards = fromJson(SongSchema, reversed(document) as never);
   assert.deepStrictEqual(
-    project(backwards, reversed(declared) as Manifest, reversed(logged) as HistoryAnswer),
-    project(song, build, logged as HistoryAnswer),
+    project(
+      backwards,
+      reversed(declared) as Manifest,
+      reversed(logged) as HistoryAnswer,
+      reversed(modelLogged) as HistoryAnswer,
+    ),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
     "an order came from the map's iteration rather than from the model (ADR 0001 §3)",
   );
 });
@@ -369,4 +505,93 @@ test("a duration integrates the tempo map rather than sampling it", () => {
   // at tick 0 would say 5, a whole second short of a six-second song.
   assert.equal(seconds(song, 9600), 6);
   assert.equal(arrangement(song).seconds, 6);
+});
+
+// The case no turn in this repository produces, asserted against constructed values — the
+// distinction `tests/AGENTS.md` draws and the one the bar grid above already uses. A proposal
+// is refused when the document moved under it (ADR 0005 §3), and ADR 0012 §4 asks that the
+// refusal **name what moved** rather than quoting a number. Nothing in the `proposal` golden
+// is refused, so nothing in the golden above can carry this claim.
+test("a refused proposal names what moved, from the document rather than a number", () => {
+  const track = Object.values(song.tracks).find((held) => held.name === "Lead")!;
+  const clip = Object.values(song.clips).find((held) => held.trackId === track.id)!;
+  const section = Object.values(song.sections)[0];
+
+  assert.equal(
+    refusalLine(song, {
+      path: `/tracks/${track.id}/version`,
+      rule: "version_not_writable",
+      message: "`version` is maintained by core and is never written by a tool op",
+    }),
+    "the Lead track changed while this proposal was pending",
+  );
+  // The song's own version, which is what refuses a proposal when two entries landed anywhere
+  // at all (ADR 0019, Consequences).
+  assert.equal(
+    refusalLine(song, { path: "/version", rule: "version_not_writable", message: "…" }),
+    "the song changed while this proposal was pending",
+  );
+  assert.equal(moved(song, `/clips/${clip.id}/start_tick`), "the clip on Lead");
+  assert.equal(moved(song, `/sections/${section.id}/name`), `the ${section.name} section`);
+  assert.equal(moved(song, `/tracks/${track.id}/instrument/params/9`), "the Lead track");
+  assert.equal(moved(song, "/tempo_map/events/0/bpm"), "the tempo map");
+  // A rule that is not the version guard keeps the validator's own sentence, which is the
+  // half a person acts on; what is added is the name, never a rule invented here (ADR 0017 §3).
+  assert.equal(
+    refusalLine(song, {
+      path: `/clips/${clip.id}/length_ticks`,
+      rule: "clip_overlap",
+      message: "clips overlap on a track that does not allow it",
+    }),
+    "the clip on Lead: clips overlap on a track that does not allow it",
+  );
+  // A path nothing in the document answers to is left as it is rather than guessed at.
+  assert.equal(moved(song, "/clips/nope/start_tick"), "/clips/nope/start_tick");
+  assert.equal(moved(null, "/tracks/x/version"), "/tracks/x/version");
+});
+
+// What the timeline and the roll draw dashed while a proposal is pending (ADR 0019 §2).
+// Constructed values, because the shape they compare is a *projection's* and what has to be
+// right about them is which of four cases each falls in — and the `proposal` golden's turn
+// produces only one of the four.
+test("a pending proposal is drawn over the model, never instead of it", () => {
+  const note = (id: string, pitch: number) => ({ id, pitch, startTick: 0, lengthTicks: 480 });
+  const clip = (id: string, startTick: number) => ({ id, startTick, lengthTicks: 960 });
+  // A note moved, a note added, a note removed, and a note untouched.
+  const before = [note("a", 60), note("b", 62), note("c", 64)];
+  const after = [note("a", 72), note("b", 62), note("d", 67)];
+  const { pending, gone } = dashedNotes(before, after);
+  assert.deepStrictEqual(
+    pending.map((held) => [held.id, held.pitch]),
+    [
+      ["a", 72],
+      ["d", 67],
+    ],
+    "the moved note and the added one are what a proposal asks for",
+  );
+  assert.deepStrictEqual(gone.map((held) => held.id), ["c"], "only a removed note is gone");
+  // The document's own notes are never touched: the roll goes on drawing all three solid, so
+  // the moved one is visible in both places and Reject puts back something visible.
+  assert.deepStrictEqual(before.map((held) => held.pitch), [60, 62, 64]);
+  assert.deepStrictEqual(dashedNotes(before, before).pending, []);
+  assert.deepStrictEqual(dashedNotes(before, before).gone, []);
+
+  // **No proposal is not an empty proposal**, and the difference is a defect this had: with
+  // `[]` every note in the document is one the proposal does not have, so the roll outlined
+  // all of them in the refusal colour a second after Apply. Watched in the window.
+  assert.deepStrictEqual(dashedNotes(before, null), { pending: [], gone: [] });
+  assert.deepStrictEqual([...dashed([{ id: "t", clips: [clip("one", 0)] }], null)], []);
+
+  // And the timeline: a clip the proposal added or changed is dashed, one it left alone is
+  // not. The comparison is over what the projection describes, so a clip that moved, grew,
+  // changed content or started looping is caught and one whose track's mix changed is not.
+  assert.deepStrictEqual(
+    [
+      ...dashed(
+        [{ id: "t", clips: [clip("one", 0), clip("two", 960)] }],
+        [{ id: "t", clips: [clip("one", 0), clip("two", 1920), clip("three", 0)] }],
+      ),
+    ],
+    ["two", "three"],
+  );
 });

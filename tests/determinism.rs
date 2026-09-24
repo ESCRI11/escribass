@@ -660,6 +660,15 @@ mod through_the_sidecar {
     /// `01M1FPMP000000000000000034` — 100 in Crockford base32 — a number a reader can check.
     const TURN_SEED: u64 = 100;
 
+    /// The prompt `proposal`'s transcript was recorded against, on 2026-09-24.
+    const ASKED: &str = "add a lead line over the bass";
+
+    /// The demo §1 states the product claim with and §18.2 leads every demo with: *"Change the
+    /// bass line in bar 17 and re-render, everything else identical"*. `roadmap.md` makes M3's
+    /// proof point that demo **driven by the assistant, with the diff on screen before apply**,
+    /// and that is what the `bar17` script and its transcript are.
+    const BAR_17_PROMPT: &str = "move the bass note in bar 17 up an octave";
+
     fn ai_command(transcript: &Path) -> Vec<String> {
         let ai = common::workspace().join("ai");
         vec![
@@ -673,13 +682,26 @@ mod through_the_sidecar {
         ]
     }
 
+    /// What one turn left behind: the project the script built, the session it ran on, the
+    /// sidecar, and the turn itself — everything a person's decision is made against.
+    ///
+    /// Split out from [`drive`] in PR 9, because Apply is no longer the only thing that
+    /// happens next: Reject and Edit are the other two controls §9 names, and each needs the
+    /// same turn driven to the same point and then decided differently (ADR 0019 §3).
+    struct Turned {
+        run: Run,
+        session: Session,
+        sidecar: Sidecar,
+        turn: escribass_core::Turn,
+    }
+
     /// One prompt, driven to its end against a project the script built.
     ///
     /// The project is created and edited by a **real `escribass-mcp` process** first, exactly
     /// as every other script is, so nothing here writes `song.json` and every mutation before
     /// the turn came through the tool API (CLAUDE.md #2). The turn's own mutations come through
     /// `core::call`, which is the same dispatch.
-    fn drive(name: &str, clock: &str) -> Run {
+    fn turned(name: &str, clock: &str, prompt: &str) -> Turned {
         let mut session_run = run(name, clock);
         let at: i64 = clock.parse().expect("the clock is milliseconds");
 
@@ -702,9 +724,23 @@ mod through_the_sidecar {
             .start()
             .expect("the real sidecar starts; run `cd ai && uv sync --locked` if it does not");
 
+        // What the panel draws **as it grows** (ADR 0019 §2): the watcher `core` calls after
+        // every event, here counting how many times the patch was computable before the turn
+        // ended. A loop that only produced a proposal at the end would leave this at zero,
+        // which is what the assertion downstream reads.
+        let mut watched: Vec<usize> = Vec::new();
         let turn = sidecar
-            .turn(&mut session, "add a lead line over the bass", &[])
+            .turn(&mut session, prompt, &[], |growing, session| {
+                let ops = session
+                    .proposal()
+                    .and_then(|proposal| proposal.patch().ok())
+                    .map(|prepared| prepared.ops().len())
+                    .unwrap_or(0);
+                let _ = growing;
+                watched.push(ops);
+            })
             .expect("the turn answers");
+        session_run.results.push(json!({ "watched": watched }));
         session_run.results.push(json!({
             "turn": {
                 "end": format!("{:?}", turn.end),
@@ -727,11 +763,18 @@ mod through_the_sidecar {
             }
         }));
 
+        Turned { run: session_run, session, sidecar, turn }
+    }
+
+    /// The same turn, applied — the golden path, and what a person pressing **Apply** does.
+    fn drive(name: &str, clock: &str, prompt: &str) -> Run {
+        let Turned { mut run, mut session, sidecar, turn } = turned(name, clock, prompt);
+
         // Nothing is applied by the loop: a proposal ends in the stream and waits for a person
         // (ADR 0019 §2). This test is that person.
         let proposal = session.proposal().expect("the turn left a proposal");
         let pending = proposal.patch().expect("the patch is computable after every call");
-        session_run.results.push(json!({
+        run.results.push(json!({
             "pending": {
                 "ops": serde_json::from_str::<Value>(&escribass_core::ops_text(pending.ops()))
                     .expect("a patch is JSON"),
@@ -742,7 +785,7 @@ mod through_the_sidecar {
 
         let applied = session.apply_proposal(&turn.model_id).expect("the project writes");
         assert!(applied.valid, "the proposal was refused: {applied:?}");
-        session_run.results.push(json!({
+        run.results.push(json!({
             "applied": {
                 "entry_id": applied.entry_id,
                 "summary": applied.summary,
@@ -751,7 +794,7 @@ mod through_the_sidecar {
         }));
 
         println!("{}", sidecar.stop());
-        session_run
+        run
     }
 
     #[test]
@@ -759,8 +802,8 @@ mod through_the_sidecar {
         // §11's shape, with a model above the tool API. Two runs against each other catch a
         // clock or an unseeded source; the committed golden catches drift, which two runs in
         // one job cannot, because both produce the same wrong bytes (docs/plan.md, M0.4).
-        let first = drive("proposal", AT);
-        let second = drive("proposal", AT);
+        let first = drive("proposal", AT, ASKED);
+        let second = drive("proposal", AT, ASKED);
         assert_same(
             "the same transcript produced different projects",
             &Snapshot::of(&first),
@@ -851,6 +894,209 @@ mod through_the_sidecar {
         assert_eq!(lock["ai"]["provider"], json!("openrouter"));
     }
 
+    // -----------------------------------------------------------------------
+    // The bar-17 demo, driven by the assistant (roadmap.md's M3 proof point)
+    // -----------------------------------------------------------------------
+    //
+    // §1's product claim is "change the bass line in bar 17 and re-render, everything else
+    // identical", §18.2 makes it the canonical demo, and M1 PR 12 made it a render test. What
+    // `roadmap.md` asks of M3 is the same demo **driven by the assistant, diff on screen
+    // before apply** — so what is asserted below is the panel's claim rather than the
+    // engine's: the diff exists before anything is written, the project has not moved while it
+    // is on screen, and each of §9's three controls does what ADR 0019 §3 says it does.
+    //
+    // It renders nothing. M1 PR 12 already measured what an edit to bar 17 does to audio, down
+    // to the sample; repeating that here would be a second engine test wearing a panel's
+    // clothes, and this suite has no engine.
+
+    /// The clip the `bar17` script builds and the note in its seventeenth bar.
+    ///
+    /// Written literally, as every determinism script's ids are: under `--seed-ids` an id is a
+    /// pure function of how many were minted before it, so a change in mint order fails here
+    /// rather than quietly editing a different note (`tests/AGENTS.md`). They are the same two
+    /// ids `tests/renders.rs` names, because that script has the same shape.
+    const BAR_17_CLIP: &str = "01M1FPMP000000000000000009";
+    const BAR_17_NOTE: &str = "01M1FPMP00000000000000000T";
+    /// 960 PPQ, 4/4: bar 17 starts after sixteen whole bars.
+    const BAR_17_TICK: i64 = 16 * 4 * 960;
+
+    /// The pitches of the clip's eighteen notes, in bar order.
+    fn bass_line(session: &Session) -> Vec<(i64, i64)> {
+        let clip = &session.project().song().clips[BAR_17_CLIP];
+        let escribass_schema::song::clip::Content::NoteClip(notes) =
+            clip.content.as_ref().expect("a note clip")
+        else {
+            panic!("the bar-17 clip is not a note clip")
+        };
+        let mut line: Vec<(i64, i64)> = notes
+            .notes
+            .values()
+            .map(|note| (i64::from(note.start_tick), i64::from(note.pitch)))
+            .collect();
+        line.sort();
+        line
+    }
+
+    #[test]
+    fn the_bar_17_demo_shows_the_diff_before_anything_is_applied() {
+        let Turned { mut run, mut session, sidecar, turn } =
+            turned("bar17", AT, BAR_17_PROMPT);
+
+        // **The diff is on screen and the project has not moved.** This is the whole of the
+        // proof point, and it is two assertions: there is a patch to read, and reading it has
+        // cost the document nothing (ADR 0019 §1).
+        let before = bass_line(&session);
+        let entries_before = session.project().history().entries().len();
+        let proposal = session.proposal().expect("the turn left a proposal");
+        let pending = proposal.patch().expect("the patch is computable after every call");
+        let ops: Value = serde_json::from_str(&escribass_core::ops_text(pending.ops()))
+            .expect("a patch is JSON");
+        let paths: Vec<&str> = ops
+            .as_array()
+            .expect("a patch is an array")
+            .iter()
+            .map(|op| op["path"].as_str().unwrap_or_default())
+            .collect();
+        assert!(
+            paths.iter().any(|path| path
+                == &format!("/clips/{BAR_17_CLIP}/note_clip/notes/{BAR_17_NOTE}/pitch")),
+            "the proposal does not move bar 17's note: {paths:?}"
+        );
+        // Nothing before bar 17, and nothing after it: the *document* claim §1 makes, at the
+        // level this suite can make it. Only the one note, its clip's version and the song's.
+        for path in &paths {
+            assert!(
+                path.starts_with(&format!("/clips/{BAR_17_CLIP}/note_clip/notes/{BAR_17_NOTE}/"))
+                    || path == &format!("/clips/{BAR_17_CLIP}/version")
+                    || path == &"/version",
+                "the proposal reached past bar 17's note: {path}"
+            );
+        }
+        assert_eq!(bass_line(&session), before, "reading the diff changed the document");
+        assert_eq!(session.project().history().entries().len(), entries_before);
+
+        // **Drawn as it grows** (ADR 0019 §2): the watcher fired while the turn was still
+        // running, and the patch was already computable then. Without it a panel could only
+        // show a proposal once the model had stopped, which for the one live turn this
+        // repository has measured would have been fourteen seconds of nothing.
+        let watched = run
+            .results
+            .iter()
+            .find_map(|answer| answer.get("watched"))
+            .and_then(Value::as_array)
+            .expect("the turn was watched")
+            .clone();
+        assert!(!watched.is_empty(), "the watcher never fired: nothing could be drawn");
+        assert!(
+            watched.iter().any(|ops| ops.as_u64().unwrap_or(0) > 0),
+            "every event of the turn had an empty patch: {watched:?}"
+        );
+
+        run.results.push(json!({
+            "pending": {
+                "ops": ops,
+                "calls": proposal.calls(),
+                "prompt_id": proposal.prompt_id(),
+            }
+        }));
+
+        // And then a person applies. One entry, whatever the number of calls (ADR 0017 §1).
+        let applied = session.apply_proposal(&turn.model_id).expect("the project writes");
+        assert!(applied.valid, "{applied:?}");
+        run.results.push(json!({
+            "applied": {
+                "entry_id": applied.entry_id,
+                "summary": applied.summary,
+                "patch": serde_json::from_slice::<Value>(&applied.patch).expect("a patch is JSON"),
+            }
+        }));
+        assert_eq!(session.project().history().entries().len(), entries_before + 1);
+        let entry =
+            session.project().history().get(&applied.entry_id).expect("the entry").clone();
+        assert_eq!(entry.tool, "proposal");
+
+        // The one note moved an octave, and the seventeen others are where they were.
+        let after = bass_line(&session);
+        let moved: Vec<_> = before
+            .iter()
+            .zip(&after)
+            .filter(|(was, now)| was != now)
+            .map(|(was, now)| (was.0, was.1, now.1))
+            .collect();
+        assert_eq!(moved, vec![(BAR_17_TICK, 36, 48)], "more than bar 17's note moved");
+
+        println!("{}", sidecar.stop());
+        assert_matches_golden("bar17", &run);
+    }
+
+    #[test]
+    fn rejecting_the_bar_17_proposal_leaves_the_project_byte_for_byte_where_it_was() {
+        // ADR 0019 §3: Reject drops the fork and **records nothing**. Counting entries is the
+        // check that cannot fail here (docs/plan.md, M3 trap 1) — a Reject that quietly wrote
+        // `song.json`, moved a ref or rewrote `lock.json` would pass it — so what is compared
+        // is every byte under the project directory, through the same `files` the goldens use.
+        let Turned { run, mut session, sidecar, .. } = turned("bar17", AT, BAR_17_PROMPT);
+        assert!(session.proposal().is_some(), "the turn left no proposal");
+        let before = files(&run.directory.0);
+
+        assert!(session.reject(), "there was nothing to reject");
+        assert!(session.proposal().is_none());
+        let after = files(&run.directory.0);
+        assert_eq!(
+            before.keys().collect::<Vec<_>>(),
+            after.keys().collect::<Vec<_>>(),
+            "a rejected proposal added or removed a file"
+        );
+        for (name, bytes) in &before {
+            assert_eq!(bytes, &after[name], "a rejected proposal changed `{name}`");
+        }
+        println!("{}", sidecar.stop());
+    }
+
+    #[test]
+    fn editing_the_bar_17_proposal_applies_the_persons_own_patch() {
+        // §9's third control, end to end (ADR 0019 §3). The person takes the proposal's patch
+        // text, changes the number in it, and applies it as **theirs**: the entry says
+        // `apply_patch`, `AUTHOR_HUMAN` and no `model_id`, and the `prompt_id` is kept so the
+        // row still leads to this conversation.
+        let Turned { run, mut session, sidecar, .. } = turned("bar17", AT, BAR_17_PROMPT);
+        let proposal = session.proposal().expect("the turn left a proposal");
+        let prompt_id = proposal.prompt_id().to_string();
+        let text = escribass_core::ops_text(
+            proposal.patch().expect("the patch is computable").ops(),
+        );
+
+        // A patch a person mistyped is refused **in place**, and the proposal is still there
+        // to edit — ADR 0017 §3's refusal path, which ADR 0019 §3 asks for by name.
+        let refused = session
+            .edit_proposal(b"[{\"op\": \"replace\", \"path\": \"/clips/nope/x\", \"value\": 1}]")
+            .expect("a refusal is an answer");
+        assert!(!refused.valid, "{refused:?}");
+        assert!(session.proposal().is_some(), "a mistyped patch threw the turn away");
+        assert_eq!(files(&run.directory.0).len(), files(&run.directory.0).len());
+
+        // The person's own number: 43, not the model's 48.
+        let mine = text.replace("48", "43");
+        assert_ne!(mine, text, "the proposal does not carry the model's pitch");
+        let applied = session.edit_proposal(mine.as_bytes()).expect("the project writes");
+        assert!(applied.valid, "{applied:?}");
+        assert!(session.proposal().is_none(), "an applied edit left the proposal pending");
+
+        let entry =
+            session.project().history().get(&applied.entry_id).expect("the entry").clone();
+        assert_eq!(entry.tool, "apply_patch", "an edit is the person's own apply_patch");
+        let made = entry.provenance.expect("an entry carries provenance");
+        assert_eq!(made.author, Author::Human as i32, "a person owns the bytes they wrote");
+        assert_eq!(made.model_id, None);
+        assert_eq!(made.prompt_id.as_deref(), Some(prompt_id.as_str()));
+        assert_eq!(
+            bass_line(&session).iter().find(|(tick, _)| *tick == BAR_17_TICK),
+            Some(&(BAR_17_TICK, 43)),
+            "the edit did not land on bar 17's note"
+        );
+        println!("{}", sidecar.stop());
+    }
+
     /// The live run (ADR 0022 §4), **skipped loudly**.
     ///
     /// `#[ignore]`d rather than conditional, for `renders.rs`'s device test's reason: a test
@@ -932,7 +1178,7 @@ mod through_the_sidecar {
         // `drive`'s own prompt, so the recording replaces the hand-written transcript rather
         // than sitting beside it as a differently-worded near-miss.
         let turn = sidecar
-            .turn(&mut session, "add a lead line over the bass", &[])
+            .turn(&mut session, "add a lead line over the bass", &[], |_, _| {})
             .expect("the turn answers");
         println!("{:#?}", turn.recorded);
         println!("model that answered: {}", turn.model_id);

@@ -60,16 +60,26 @@
 // somewhere a developer can see it.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod panel;
+
 use escribass_core::call::call;
 use escribass_core::{
-    Assistant, Engine, Health, Manifest, Project, ProjectLock, Session, Sidecar, SystemClock,
-    UlidSource,
+    Assistant, Clock, Engine, Health, Manifest, Project, ProjectLock, Session, Sidecar,
+    SystemClock, UlidSource,
 };
 use escribass_schema::song::Author;
+use panel::{Live, Outcome, Panel};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
+
+/// The session, behind the one lock that makes a window a single writer (ADR 0001 §2).
+///
+/// An `Arc` and not plain managed state, because a turn is driven on a thread of its own: the
+/// model decides how long it takes, and a `#[tauri::command]` that held the event loop for a
+/// hosted model's answer would be a window that stops repainting for fifteen seconds.
+type Held = Arc<Mutex<Session>>;
 
 /// The `.escri` lock, held where the exit path can let go of it (ADR 0012 §3).
 ///
@@ -81,7 +91,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 /// someone deleted a file by hand, *for having been closed properly*. That is the one failure
 /// a lock which is never broken automatically cannot afford. So the guard is held here, in an
 /// `Option` [`run`] empties on the way out.
-type Held = Arc<Mutex<Option<ProjectLock>>>;
+type Locked = Arc<Mutex<Option<ProjectLock>>>;
 
 /// The sidecar this window started, or why it has none (ADR 0020 §4).
 ///
@@ -110,7 +120,7 @@ struct Ai {
 /// both then.
 #[tauri::command]
 fn tool(
-    session: tauri::State<'_, Mutex<Session>>,
+    session: tauri::State<'_, Held>,
     name: String,
     args: Map<String, Value>,
 ) -> Result<Value, String> {
@@ -161,8 +171,215 @@ fn manifest(held: tauri::State<'_, Arc<Manifest>>) -> Result<Value, String> {
 /// right, and is the precedent.
 #[tauri::command]
 fn assistant(ai: tauri::State<'_, Arc<Ai>>) -> Value {
-    let mut held = ai.sidecar.lock().unwrap_or_else(PoisonError::into_inner);
-    dot(held.as_mut().map(Sidecar::health), ai.refused.as_deref())
+    // `try_lock`, and the reason is a turn: driving one holds the sidecar for as long as the
+    // model takes, and a poll that waited for it would block one of Tauri's command threads a
+    // second at a time for the length of the turn. A lock that is held is held by something
+    // using the sidecar, which took it while the child was there — so `running` is what this
+    // window knows, and the moment the turn ends the next poll reads the status for real. A
+    // sidecar that died mid-turn is reported by the turn itself, which is where a person is
+    // looking (ADR 0020 §5).
+    match ai.sidecar.try_lock() {
+        Ok(mut held) => dot(held.as_mut().map(Sidecar::health), ai.refused.as_deref()),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+            dot(poisoned.into_inner().as_mut().map(Sidecar::health), ai.refused.as_deref())
+        }
+        Err(std::sync::TryLockError::WouldBlock) => dot(Some(Health::Running), None),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The AI panel (docs/specs.md §9; ADR 0019 §2, §3; ADR 0021 §3)
+// ---------------------------------------------------------------------------
+//
+// Three commands, and they are the fourth, fifth and sixth things the webview can reach. None
+// of them is a second route to the model: [`prompt`] starts a turn whose calls go to
+// `core::call` like every other call in this process (ADR 0019 §1), [`panel`] reads what that
+// turn has produced, and [`settle`] is the person's decision about it.
+//
+// **A turn runs on a thread of its own and holds the session for its whole length.** That is
+// what one writer means with a model in the loop (ADR 0001 §2): while a turn is running the
+// window cannot edit, because the thing it would edit is what the turn is proposing against.
+// What it *can* do is draw, and that is why [`panel`] takes no session lock — everything it
+// answers with was computed by the watcher `core` calls after every event, on the turn's own
+// thread (`panel::Live::watch`).
+//
+// `ponytail:` a turn is unbounded and there is no Cancel. Dropping what holds the stream is
+// how a turn is cancelled (ADR 0013 §2) and the thread holds it, so cancelling means a flag
+// the watcher reads and an error out of `one_turn`; the trigger is the first turn somebody
+// wants to stop, and until then closing the window ends it with the process.
+
+/// What the panel is drawing: the conversation, and the turn in flight or pending.
+#[tauri::command]
+fn panel(held: tauri::State<'_, Arc<Mutex<Panel>>>) -> Value {
+    held.lock().unwrap_or_else(PoisonError::into_inner).to_json()
+}
+
+/// Sends one prompt, and answers as soon as the turn has started.
+///
+/// It does not wait for the model. A command that did would hold a Tauri worker for however
+/// long a hosted model takes — fifteen seconds in the one live run this repository has made —
+/// with nothing on screen until it returned, which is the opposite of drawing the proposal as
+/// it grows (ADR 0019 §2).
+#[tauri::command]
+fn prompt(
+    text: String,
+    session: tauri::State<'_, Held>,
+    ai: tauri::State<'_, Arc<Ai>>,
+    held: tauri::State<'_, Arc<Mutex<Panel>>>,
+) -> Result<(), String> {
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err("there is nothing to ask".to_string());
+    }
+    let (session, ai, panel) =
+        (Arc::clone(session.inner()), Arc::clone(ai.inner()), Arc::clone(held.inner()));
+    {
+        let mut panel = panel.lock().unwrap_or_else(PoisonError::into_inner);
+        // A window fact, not a validator rule: this window draws one turn, so it starts one.
+        // The structural guard is `Session::propose`, which refuses a second proposal whatever
+        // asks for it (ADR 0019 §3) — including an MCP client on this project, which this
+        // check cannot see.
+        if panel.live.is_some() {
+            return Err("apply or reject the pending proposal first: one turn is one proposal                         (ADR 0019 §3)"
+                .to_string());
+        }
+        // The same hasher `core` uses inside the turn, so the id this window shows and the id
+        // the log records are one value computed by one function (ADR 0021 §2).
+        let prompt_id = escribass_core::asset_hash(text.as_bytes());
+        panel.live = Some(Live::started(&text, &prompt_id, now()));
+    }
+    std::thread::spawn(move || drive(text, session, ai, panel));
+    Ok(())
+}
+
+/// One turn, driven to its end on a thread of its own.
+fn drive(text: String, session: Held, ai: Arc<Ai>, panel: Arc<Mutex<Panel>>) {
+    // Read before the session is taken, and sent whole: `ai` holds nothing between streams,
+    // so what a turn knows of its own past is what this window sends it (ADR 0021 §3).
+    let conversation = {
+        let panel = panel.lock().unwrap_or_else(PoisonError::into_inner);
+        panel.conversation.wire()
+    };
+    let mut session = session.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut sidecar = ai.sidecar.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(sidecar) = sidecar.as_mut() else {
+        return failed(
+            &panel,
+            "assistant_missing: this window has no assistant. Start it with              `--ai <command>` (ADR 0020 §4)",
+        );
+    };
+
+    let watching = Arc::clone(&panel);
+    let watch = move |turn: &escribass_proto::assistant::Turn, session: &Session| {
+        let mut panel = watching.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(live) = panel.live.as_mut() {
+            live.watch(turn, session);
+        }
+    };
+
+    match sidecar.turn(&mut session, &text, &conversation, watch) {
+        Ok(turn) => {
+            let (provider, model) = session.ai();
+            let mut panel = panel.lock().unwrap_or_else(PoisonError::into_inner);
+            // The project may have recorded the model on this very prompt (ADR 0021 §4), so
+            // the panel's header is refreshed from what the session now says.
+            panel.provider = provider.to_string();
+            panel.model = model.to_string();
+            if let Some(live) = panel.live.as_mut() {
+                live.finished(&turn, &session);
+            }
+        }
+        // Nothing is pending: `core` drops the proposal when a turn fails, because a half-built
+        // fork nobody has seen is not a thing to leave for a person to decide (ADR 0022 §3).
+        // So the turn is settled here and now, with how it failed, and the panel goes idle.
+        Err(e) => failed(&panel, &format!("{} [{}]: {}", e.path, e.rule, e.message)),
+    }
+}
+
+/// A turn that never reached a proposal: recorded with how it failed, and the panel is idle.
+fn failed(panel: &Arc<Mutex<Panel>>, why: &str) {
+    let mut panel = panel.lock().unwrap_or_else(PoisonError::into_inner);
+    let provider = panel.provider.clone();
+    if let Some(live) = panel.live.take() {
+        let turn = live.settled(&provider, Outcome::Failed(why.to_string()));
+        panel.conversation.append(turn);
+    }
+}
+
+/// Apply, Reject or Edit — §9's three controls, in the order ADR 0019 §3 puts them.
+///
+/// **Apply** commits the proposal's patch as one entry under `proposal`, with the model as its
+/// author. **Reject** drops the fork: nothing was written, so nothing is undone and the log
+/// records nothing. **Edit** applies the person's own patch text as the person's, with the
+/// prompt's id kept — and when it will not apply it is refused in place and the proposal stays
+/// pending (ADR 0017 §3).
+///
+/// A refusal comes back as the `ToolResult` shape every other refusal in this window arrives
+/// in, and is kept on the live turn so the panel can draw it beside the patch it refused.
+#[tauri::command]
+fn settle(
+    action: String,
+    patch: Option<String>,
+    session: tauri::State<'_, Held>,
+    held: tauri::State<'_, Arc<Mutex<Panel>>>,
+) -> Result<Value, String> {
+    // Read before the session is taken. A running turn holds the session, so a `settle` that
+    // took it first would queue behind the turn and then apply a proposal the person decided
+    // about before it existed.
+    let live = {
+        let panel = held.lock().unwrap_or_else(PoisonError::into_inner);
+        match &panel.live {
+            None => return Err("there is no proposal to decide".to_string()),
+            Some(live) if live.running => {
+                return Err("the model is still answering".to_string())
+            }
+            Some(live) => live.clone(),
+        }
+    };
+    let mut session = session.lock().unwrap_or_else(PoisonError::into_inner);
+    let (settled, answer) = match action.as_str() {
+        "apply" => {
+            let result =
+                session.apply_proposal(&live.model_id).map_err(|e| e.message)?;
+            let entry = result.entry_id.clone();
+            (result.valid.then_some(Outcome::Applied(entry)), panel::result_json(&result))
+        }
+        "reject" => {
+            session.reject();
+            (Some(Outcome::Rejected), serde_json::json!({ "valid": true, "errors": [] }))
+        }
+        "edit" => {
+            let text = patch.unwrap_or_default();
+            let result = session.edit_proposal(text.as_bytes()).map_err(|e| e.message)?;
+            let entry = result.entry_id.clone();
+            let kept = result.valid && !entry.is_empty();
+            (kept.then_some(Outcome::Edited(entry)), panel::result_json(&result))
+        }
+        other => return Err(format!("`{other}` is not one of apply, reject, edit")),
+    };
+
+    let mut panel = held.lock().unwrap_or_else(PoisonError::into_inner);
+    let provider = panel.provider.clone();
+    match settled {
+        Some(outcome) => {
+            if let Some(live) = panel.live.take() {
+                let turn = live.settled(&provider, outcome);
+                panel.conversation.append(turn);
+            }
+        }
+        // Refused, so the proposal is still pending and the window says why (ADR 0017 §3).
+        None => {
+            if let Some(live) = panel.live.as_mut() {
+                live.refusal = answer.clone();
+            }
+        }
+    }
+    Ok(answer)
+}
+
+/// Now, as the log renders an instant — the one clock this host reads.
+fn now() -> Value {
+    serde_json::to_value(SystemClock.now()).unwrap_or(Value::Null)
 }
 
 /// The two fields the webview reads (`app/src/tool.ts`, `Assisted`), from what `core` said.
@@ -214,7 +431,7 @@ fn run() -> Result<i32, String> {
     if let Some(said) = lock.replaced() {
         eprintln!("{said}");
     }
-    let held: Held = Arc::new(Mutex::new(Some(lock)));
+    let held: Locked = Arc::new(Mutex::new(Some(lock)));
     let project = Project::open(&options.project, Arc::clone(&hosts))
         .map_err(|e| format!("cannot open {}: {e}", options.project.display()))?;
 
@@ -250,6 +467,17 @@ fn run() -> Result<i32, String> {
     });
     let ai = Arc::new(Ai { sidecar: Mutex::new(started), refused });
 
+    // What the panel's header names, and what a prompt goes to: the project's record, or the
+    // baseline default when it records none (ADR 0021 §4). Read here, once, because the
+    // session is held for as long as a turn takes and the panel is drawn while one runs.
+    let (provider, model) = {
+        let (provider, model) = session.ai();
+        (provider.to_string(), model.to_string())
+    };
+    // The conversation is keyed by the **song's** id, which survives a rename or a move of the
+    // project directory (ADR 0021 §3).
+    let song_id = session.project().song().id.clone();
+
     let title = format!(
         "{} — escribass",
         options
@@ -260,10 +488,12 @@ fn run() -> Result<i32, String> {
     );
 
     let app = tauri::Builder::default()
-        .manage(Mutex::new(session))
+        .manage(Arc::new(Mutex::new(session)) as Held)
         .manage(hosts)
         .manage(Arc::clone(&ai))
-        .invoke_handler(tauri::generate_handler![tool, manifest, assistant])
+        .invoke_handler(tauri::generate_handler![
+            tool, manifest, assistant, panel, prompt, settle
+        ])
         .setup(move |app| {
             use tauri::Manager;
             // The project this window is looking at, named where a person can see it. The
@@ -271,6 +501,16 @@ fn run() -> Result<i32, String> {
             if let Some(window) = app.get_webview_window("main") {
                 window.set_title(&title)?;
             }
+            // The conversation, read back beside the project and outside it (ADR 0021 §3).
+            // Here rather than above, because the application data directory is Tauri's to
+            // name and there is no handle to ask until now.
+            let data = app.path().app_data_dir().ok();
+            app.manage(Arc::new(Mutex::new(Panel {
+                provider,
+                model,
+                conversation: panel::Conversation::read(data, &song_id),
+                live: None,
+            })));
             Ok(())
         })
         .build(tauri::generate_context!());
@@ -317,7 +557,7 @@ fn stop(ai: &Arc<Ai>) {
 }
 
 /// Drops the lock guard, which removes `.escri/lock`. Idempotent.
-fn take(held: &Held) {
+fn take(held: &Locked) {
     held.lock().unwrap_or_else(PoisonError::into_inner).take();
 }
 

@@ -493,6 +493,8 @@
         "id": "01M1FPMP00000000000000000H",
         "tool": "merge_branch",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -509,6 +511,8 @@
         "id": "01M1FPMP00000000000000000G",
         "tool": "set_tempo",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -522,6 +526,8 @@
         "id": "01M1FPMP00000000000000000F",
         "tool": "set_tempo",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -535,6 +541,8 @@
         "id": "01M1FPMP00000000000000000E",
         "tool": "merge_branch",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 7,
         "parents": [
@@ -549,6 +557,8 @@
         "id": "01M1FPMP00000000000000000D",
         "tool": "set_track_instrument",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 5,
         "parents": [
@@ -564,6 +574,8 @@
         "id": "01M1FPMP00000000000000000B",
         "tool": "set_tempo",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -577,6 +589,8 @@
         "id": "01M1FPMP00000000000000000A",
         "tool": "add_section",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -590,6 +604,8 @@
         "id": "01M1FPMP000000000000000008",
         "tool": "add_track",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 2,
         "parents": [
@@ -603,6 +619,8 @@
         "id": "01M1FPMP000000000000000005",
         "tool": "create",
         "author": "model",
+        "modelId": "",
+        "promptId": "",
         "createdAt": "2026-09-02T00:00:00.000Z",
         "ops": 8,
         "parents": [],
@@ -611,5 +629,299 @@
         "refs": []
       }
     ]
+  },
+  "modelLog": {
+    "head": "main",
+    "branches": [
+      {
+        "name": "main",
+        "entryId": "01M1FPMP00000000000000003B",
+        "head": true
+      }
+    ],
+    "entries": [
+      {
+        "id": "01M1FPMP00000000000000003B",
+        "tool": "proposal",
+        "author": "model",
+        "modelId": "deepseek/deepseek-v4.1-flash",
+        "promptId": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 3,
+        "parents": [
+          "01M1FPMP00000000000000000B"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": [
+          "main"
+        ]
+      },
+      {
+        "id": "01M1FPMP00000000000000000B",
+        "tool": "add_clip",
+        "author": "model",
+        "modelId": "",
+        "promptId": "",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP000000000000000008"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP000000000000000008",
+        "tool": "add_track",
+        "author": "model",
+        "modelId": "",
+        "promptId": "",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 2,
+        "parents": [
+          "01M1FPMP000000000000000005"
+        ],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      },
+      {
+        "id": "01M1FPMP000000000000000005",
+        "tool": "create",
+        "author": "model",
+        "modelId": "",
+        "promptId": "",
+        "createdAt": "2026-09-02T00:00:00.000Z",
+        "ops": 8,
+        "parents": [],
+        "merge": false,
+        "onBranch": true,
+        "refs": []
+      }
+    ]
+  },
+  "assistant": {
+    "pending": {
+      "model": "openrouter · deepseek/deepseek-v4.1-flash",
+      "caveat": "This is the model this project records in `lock.json` and the id a prompt is sent to — a choice, not a pin. Nothing here verifies it: a hosted model changes under its own name, no commit or hash describes one, and what actually answered is recorded per entry in the log. The model is not deterministic and is never told it is; what is reproducible is the song, from its patch log, whoever wrote it.",
+      "messages": [
+        {
+          "who": "you",
+          "said": "add a lead line over the bass",
+          "calls": [],
+          "note": ""
+        },
+        {
+          "who": "model",
+          "said": "The proposal adds a **Lead** track and one 4-bar-length clip of four notes over the bass.\n\n- **Track**: `Lead` (id `…0034`), instrument track with a Surge XT plugin device (`…0035`), same as the Bass.\n- **Clip**: `…0036` on Lead, start tick 0, length 3840, four notes, one per beat:\n  - C4 (60) at 0, E4 (64) at 960, G4 (67) at 1920, C5 (72) at 2880 — each 960 ticks long, velocities 96/92/98/104.\n\nWhat the axes now read: the song goes from 1 onset to 5, all still on beats, syncopation 0, smallest gap 960. Harmony gains E and G alongside the bass's C (C 2880, E 960, G 960 ticks of mass, chromaticism 0). The Lead line is range 60–72, 4 distinct pitches, intervals +4 +3 +5, all ascending, no steps. Texture is 2 voices, mean simultaneity 1, Lead sounding the full 3840. Form is still one distinct bar; both voices now enter at bar 1.\n\nTwo things worth your eye before applying: the lead sits entirely in the upper register with no rests, so it's a continuous quarter-note line rather than a phrase with breathing room; and the pitches are a plain C-major arpeggio, which is a choice I made, not one the bass forced — the bass only gives C.",
+          "calls": [
+            {
+              "name": "add_track",
+              "args": "{\"kind\":\"TRACK_KIND_INSTRUMENT\",\"name\":\"Lead\",\"ref\":{\"plugin\":{\"plugin_id\":\"Surge Synth Team/Surge XT\",\"version\":\"1.3.4\"}}}",
+              "verdict": "valid · 2 ops: /tracks/01M1FPMP000000000000000034, /version",
+              "refused": false
+            },
+            {
+              "name": "add_clip",
+              "args": "{\"track_id\":\"01M1FPMP000000000000000034\",\"start_tick\":0,\"length_ticks\":3840,\"note_clip\":{\"notes\":{\"n1\":{\"pitch\":60,\"start_tick\":0,\"length_ticks\":960,\"velocity\":96},\"n2\":{\"pitch\":64,\"start_tick\":960,\"length_ticks\":960,\"velocity\":92},\"n3\":{\"pitch\":67,\"start_tick\":1920,\"length_ticks\":960,\"velocity\":98},\"n4\":{\"pitch\":72,\"start_tick\":2880,\"length_ticks\":960,\"velocity\":104}}}}",
+              "verdict": "valid · 2 ops: /clips/01M1FPMP000000000000000036, /version",
+              "refused": false
+            }
+          ],
+          "note": "waiting for you"
+        }
+      ],
+      "pending": {
+        "running": false,
+        "ops": [
+          {
+            "op": "add",
+            "path": "/clips/01M1FPMP000000000000000036",
+            "value": {
+              "id": "01M1FPMP000000000000000036",
+              "length_ticks": 3840,
+              "note_clip": {
+                "notes": {
+                  "01M1FPMP000000000000000037": {
+                    "expression": {},
+                    "id": "01M1FPMP000000000000000037",
+                    "length_ticks": 960,
+                    "microtonal_cents": 0,
+                    "pitch": 60,
+                    "provenance": {
+                      "author": "AUTHOR_MODEL",
+                      "created_at": "2026-09-02T00:00:00+00:00",
+                      "model_id": "deepseek/deepseek-v4.1-flash",
+                      "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                      "tool_call_id": "call_01a0d3711db47618a6f3fac2"
+                    },
+                    "start_tick": 0,
+                    "velocity": 96,
+                    "version": 1
+                  },
+                  "01M1FPMP000000000000000038": {
+                    "expression": {},
+                    "id": "01M1FPMP000000000000000038",
+                    "length_ticks": 960,
+                    "microtonal_cents": 0,
+                    "pitch": 64,
+                    "provenance": {
+                      "author": "AUTHOR_MODEL",
+                      "created_at": "2026-09-02T00:00:00+00:00",
+                      "model_id": "deepseek/deepseek-v4.1-flash",
+                      "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                      "tool_call_id": "call_01a0d3711db47618a6f3fac2"
+                    },
+                    "start_tick": 960,
+                    "velocity": 92,
+                    "version": 1
+                  },
+                  "01M1FPMP000000000000000039": {
+                    "expression": {},
+                    "id": "01M1FPMP000000000000000039",
+                    "length_ticks": 960,
+                    "microtonal_cents": 0,
+                    "pitch": 67,
+                    "provenance": {
+                      "author": "AUTHOR_MODEL",
+                      "created_at": "2026-09-02T00:00:00+00:00",
+                      "model_id": "deepseek/deepseek-v4.1-flash",
+                      "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                      "tool_call_id": "call_01a0d3711db47618a6f3fac2"
+                    },
+                    "start_tick": 1920,
+                    "velocity": 98,
+                    "version": 1
+                  },
+                  "01M1FPMP00000000000000003A": {
+                    "expression": {},
+                    "id": "01M1FPMP00000000000000003A",
+                    "length_ticks": 960,
+                    "microtonal_cents": 0,
+                    "pitch": 72,
+                    "provenance": {
+                      "author": "AUTHOR_MODEL",
+                      "created_at": "2026-09-02T00:00:00+00:00",
+                      "model_id": "deepseek/deepseek-v4.1-flash",
+                      "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                      "tool_call_id": "call_01a0d3711db47618a6f3fac2"
+                    },
+                    "start_tick": 2880,
+                    "velocity": 104,
+                    "version": 1
+                  }
+                }
+              },
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00",
+                "model_id": "deepseek/deepseek-v4.1-flash",
+                "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                "tool_call_id": "call_01a0d3711db47618a6f3fac2"
+              },
+              "start_tick": 0,
+              "track_id": "01M1FPMP000000000000000034",
+              "version": 1
+            }
+          },
+          {
+            "op": "add",
+            "path": "/tracks/01M1FPMP000000000000000034",
+            "value": {
+              "allow_overlap": false,
+              "fx_chain": {},
+              "id": "01M1FPMP000000000000000034",
+              "index": 2,
+              "instrument": {
+                "id": "01M1FPMP000000000000000035",
+                "params": {},
+                "provenance": {
+                  "author": "AUTHOR_MODEL",
+                  "created_at": "2026-09-02T00:00:00+00:00",
+                  "model_id": "deepseek/deepseek-v4.1-flash",
+                  "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                  "tool_call_id": "call_01a0d371167372d787b4e9cb"
+                },
+                "ref": {
+                  "plugin": {
+                    "plugin_id": "Surge Synth Team/Surge XT",
+                    "version": "1.3.4"
+                  }
+                },
+                "state": "",
+                "version": 1
+              },
+              "kind": "TRACK_KIND_INSTRUMENT",
+              "mix": {
+                "gain_db": 0,
+                "mute": false,
+                "pan": 0,
+                "solo": false
+              },
+              "name": "Lead",
+              "provenance": {
+                "author": "AUTHOR_MODEL",
+                "created_at": "2026-09-02T00:00:00+00:00",
+                "model_id": "deepseek/deepseek-v4.1-flash",
+                "prompt_id": "b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a",
+                "tool_call_id": "call_01a0d371167372d787b4e9cb"
+              },
+              "routing": {
+                "sends": {},
+                "sidechains": {}
+              },
+              "version": 1
+            }
+          },
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 4
+          }
+        ],
+        "summary": "3 operations",
+        "applicable": true,
+        "refusals": [],
+        "text": "[\n {\n  \"op\": \"add\",\n  \"path\": \"/clips/01M1FPMP000000000000000036\",\n  \"value\": {\n   \"id\": \"01M1FPMP000000000000000036\",\n   \"length_ticks\": 3840,\n   \"note_clip\": {\n    \"notes\": {\n     \"01M1FPMP000000000000000037\": {\n      \"expression\": {},\n      \"id\": \"01M1FPMP000000000000000037\",\n      \"length_ticks\": 960,\n      \"microtonal_cents\": 0,\n      \"pitch\": 60,\n      \"provenance\": {\n       \"author\": \"AUTHOR_MODEL\",\n       \"created_at\": \"2026-09-02T00:00:00+00:00\",\n       \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n       \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n       \"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"\n      },\n      \"start_tick\": 0,\n      \"velocity\": 96,\n      \"version\": 1\n     },\n     \"01M1FPMP000000000000000038\": {\n      \"expression\": {},\n      \"id\": \"01M1FPMP000000000000000038\",\n      \"length_ticks\": 960,\n      \"microtonal_cents\": 0,\n      \"pitch\": 64,\n      \"provenance\": {\n       \"author\": \"AUTHOR_MODEL\",\n       \"created_at\": \"2026-09-02T00:00:00+00:00\",\n       \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n       \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n       \"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"\n      },\n      \"start_tick\": 960,\n      \"velocity\": 92,\n      \"version\": 1\n     },\n     \"01M1FPMP000000000000000039\": {\n      \"expression\": {},\n      \"id\": \"01M1FPMP000000000000000039\",\n      \"length_ticks\": 960,\n      \"microtonal_cents\": 0,\n      \"pitch\": 67,\n      \"provenance\": {\n       \"author\": \"AUTHOR_MODEL\",\n       \"created_at\": \"2026-09-02T00:00:00+00:00\",\n       \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n       \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n       \"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"\n      },\n      \"start_tick\": 1920,\n      \"velocity\": 98,\n      \"version\": 1\n     },\n     \"01M1FPMP00000000000000003A\": {\n      \"expression\": {},\n      \"id\": \"01M1FPMP00000000000000003A\",\n      \"length_ticks\": 960,\n      \"microtonal_cents\": 0,\n      \"pitch\": 72,\n      \"provenance\": {\n       \"author\": \"AUTHOR_MODEL\",\n       \"created_at\": \"2026-09-02T00:00:00+00:00\",\n       \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n       \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n       \"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"\n      },\n      \"start_tick\": 2880,\n      \"velocity\": 104,\n      \"version\": 1\n     }\n    }\n   },\n   \"provenance\": {\n    \"author\": \"AUTHOR_MODEL\",\n    \"created_at\": \"2026-09-02T00:00:00+00:00\",\n    \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n    \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n    \"tool_call_id\": \"call_01a0d3711db47618a6f3fac2\"\n   },\n   \"start_tick\": 0,\n   \"track_id\": \"01M1FPMP000000000000000034\",\n   \"version\": 1\n  }\n },\n {\n  \"op\": \"add\",\n  \"path\": \"/tracks/01M1FPMP000000000000000034\",\n  \"value\": {\n   \"allow_overlap\": false,\n   \"fx_chain\": {},\n   \"id\": \"01M1FPMP000000000000000034\",\n   \"index\": 2,\n   \"instrument\": {\n    \"id\": \"01M1FPMP000000000000000035\",\n    \"params\": {},\n    \"provenance\": {\n     \"author\": \"AUTHOR_MODEL\",\n     \"created_at\": \"2026-09-02T00:00:00+00:00\",\n     \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n     \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n     \"tool_call_id\": \"call_01a0d371167372d787b4e9cb\"\n    },\n    \"ref\": {\n     \"plugin\": {\n      \"plugin_id\": \"Surge Synth Team/Surge XT\",\n      \"version\": \"1.3.4\"\n     }\n    },\n    \"state\": \"\",\n    \"version\": 1\n   },\n   \"kind\": \"TRACK_KIND_INSTRUMENT\",\n   \"mix\": {\n    \"gain_db\": 0,\n    \"mute\": false,\n    \"pan\": 0,\n    \"solo\": false\n   },\n   \"name\": \"Lead\",\n   \"provenance\": {\n    \"author\": \"AUTHOR_MODEL\",\n    \"created_at\": \"2026-09-02T00:00:00+00:00\",\n    \"model_id\": \"deepseek/deepseek-v4.1-flash\",\n    \"prompt_id\": \"b365e3b15d4570a3093d0111e4d187499cc8b8db20616a42aa4edb7e5a12067a\",\n    \"tool_call_id\": \"call_01a0d371167372d787b4e9cb\"\n   },\n   \"routing\": {\n    \"sends\": {},\n    \"sidechains\": {}\n   },\n   \"version\": 1\n  }\n },\n {\n  \"op\": \"replace\",\n  \"path\": \"/version\",\n  \"value\": 4\n }\n]"
+      },
+      "asking": false,
+      "kept": "The conversation is kept beside the project and outside it, at /home/a/.local/share/dev.escribass.app/conversations/01M1FPMPSONG.jsonl — one line per turn, keyed by the song's id. It is not part of the project and does not travel with it: a project opened on another machine names prompts that machine does not have."
+    },
+    "settled": {
+      "model": "openrouter · deepseek/deepseek-v4.1-flash",
+      "caveat": "This is the model this project records in `lock.json` and the id a prompt is sent to — a choice, not a pin. Nothing here verifies it: a hosted model changes under its own name, no commit or hash describes one, and what actually answered is recorded per entry in the log. The model is not deterministic and is never told it is; what is reproducible is the song, from its patch log, whoever wrote it.",
+      "messages": [
+        {
+          "who": "you",
+          "said": "add a lead line over the bass",
+          "calls": [],
+          "note": ""
+        },
+        {
+          "who": "model",
+          "said": "The proposal adds a **Lead** track and one 4-bar-length clip of four notes over the bass.\n\n- **Track**: `Lead` (id `…0034`), instrument track with a Surge XT plugin device (`…0035`), same as the Bass.\n- **Clip**: `…0036` on Lead, start tick 0, length 3840, four notes, one per beat:\n  - C4 (60) at 0, E4 (64) at 960, G4 (67) at 1920, C5 (72) at 2880 — each 960 ticks long, velocities 96/92/98/104.\n\nWhat the axes now read: the song goes from 1 onset to 5, all still on beats, syncopation 0, smallest gap 960. Harmony gains E and G alongside the bass's C (C 2880, E 960, G 960 ticks of mass, chromaticism 0). The Lead line is range 60–72, 4 distinct pitches, intervals +4 +3 +5, all ascending, no steps. Texture is 2 voices, mean simultaneity 1, Lead sounding the full 3840. Form is still one distinct bar; both voices now enter at bar 1.\n\nTwo things worth your eye before applying: the lead sits entirely in the upper register with no rests, so it's a continuous quarter-note line rather than a phrase with breathing room; and the pitches are a plain C-major arpeggio, which is a choice I made, not one the bass forced — the bass only gives C.",
+          "calls": [
+            {
+              "name": "add_track",
+              "args": "{\"kind\":\"TRACK_KIND_INSTRUMENT\",\"name\":\"Lead\",\"ref\":{\"plugin\":{\"plugin_id\":\"Surge Synth Team/Surge XT\",\"version\":\"1.3.4\"}}}",
+              "verdict": "valid · 2 ops: /tracks/01M1FPMP000000000000000034, /version",
+              "refused": false
+            },
+            {
+              "name": "add_clip",
+              "args": "{\"track_id\":\"01M1FPMP000000000000000034\",\"start_tick\":0,\"length_ticks\":3840,\"note_clip\":{\"notes\":{\"n1\":{\"pitch\":60,\"start_tick\":0,\"length_ticks\":960,\"velocity\":96},\"n2\":{\"pitch\":64,\"start_tick\":960,\"length_ticks\":960,\"velocity\":92},\"n3\":{\"pitch\":67,\"start_tick\":1920,\"length_ticks\":960,\"velocity\":98},\"n4\":{\"pitch\":72,\"start_tick\":2880,\"length_ticks\":960,\"velocity\":104}}}}",
+              "verdict": "valid · 2 ops: /clips/01M1FPMP000000000000000036, /version",
+              "refused": false
+            }
+          ],
+          "note": "applied as 01M1FPMP00000000000000003B, by deepseek/deepseek-v4.1-flash"
+        }
+      ],
+      "pending": null,
+      "asking": true,
+      "kept": "This conversation is this window's only: no application data directory could be named, so nothing is written down and the log's prompt ids will name prompts this machine does not have."
+    }
   }
 }

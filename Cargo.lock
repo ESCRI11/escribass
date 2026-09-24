@@ -830,6 +830,7 @@ name = "escribass-app"
 version = "0.1.0"
 dependencies = [
  "escribass-core",
+ "escribass-proto",
  "escribass-schema",
  "serde_json",
  "tauri",

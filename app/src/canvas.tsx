@@ -106,12 +106,19 @@ export function Timeline({
   view,
   selected,
   playhead,
+  pending,
 }: {
   view: Arrangement;
   selected: string | null;
   /** The tick the engine's transport last reported, or null with no preview. Not a
    *  projection of the song — it is the engine's answer, drawn over one (`App.tsx`). */
   playhead: number | null;
+  /** The clips a pending proposal has added or changed, drawn dashed in the accent — the
+   *  wireframes' unapplied edit, occupying real timeline space so a person can see where it
+   *  lands before taking it (plate 1, note 4; ADR 0019 §2). `view` is the **proposal's**
+   *  arrangement while one is pending, which is what puts a clip the model added on screen at
+   *  all; the dashing is what says it is not in the document yet. */
+  pending: ReadonlySet<string>;
 }) {
   const height = HEAD + view.tracks.length * ROW;
 
@@ -210,10 +217,25 @@ export function Timeline({
           wide - 2,
           ROW - 2 * GAP,
         ];
+        const proposed = pending.has(clip.id);
         context.fillStyle = clip.kind === "audio" ? audio : block;
+        // Faint where it is a proposal, so the dashed outline reads as an outline rather than
+        // as a solid block with a border — the wireframes' `pend-soft` fill.
+        context.globalAlpha = proposed ? 0.28 : 1;
         context.beginPath();
         context.roundRect(box[0], box[1], box[2], box[3], 3);
         context.fill();
+        context.globalAlpha = 1;
+        if (proposed) {
+          context.strokeStyle = accent;
+          context.lineWidth = 2;
+          context.setLineDash([4, 3]);
+          context.beginPath();
+          context.roundRect(box[0], box[1], box[2], box[3], 3);
+          context.stroke();
+          context.setLineDash([]);
+          context.lineWidth = 1;
+        }
 
         // A looping clip repeats its first `loopLengthTicks`; the repeats are drawn as the
         // seams they are, so a 4-bar clip looping a bar does not read as four bars of content.
@@ -282,12 +304,23 @@ export function Roll({
   view,
   moved,
   refused,
+  pending,
+  gone,
   onMoved,
   onReleased,
 }: {
   view: PianoRoll;
   /** The position the gesture is proposing, drawn dashed over the model's own note. */
   moved: Moved | null;
+  /** What a pending proposal would have instead: the notes it adds or moves, drawn dashed
+   *  **over** the document's own rather than in place of them, which is what the dashed drag
+   *  above already does for a person's gesture (ADR 0019 §2; ADR 0017 §3). */
+  pending: readonly RollNote[];
+  /** The notes the proposal **removes**, drawn as outlines in the refusal colour rather than
+   *  simply vanishing: the roll shows the proposal, not the post-state, because a note that
+   *  disappeared before anybody approved anything makes Reject look like data loss
+   *  (wireframes, plate 2). */
+  gone: readonly RollNote[];
   /** True when the tool API has refused that position — drawn, so the boundary is visible
    *  while it is being crossed rather than only when the pointer is let go. */
   refused: boolean;
@@ -309,8 +342,16 @@ export function Roll({
   //
   // Clamped to MIDI's own range, because beyond it the position is refused anyway and
   // following the pointer to pitch 300 is 300 rows of flickering canvas rather than a view.
-  const low = Math.max(0, Math.min(view.lowPitch, moved?.pitch ?? view.lowPitch));
-  const high = Math.min(127, Math.max(view.highPitch, moved?.pitch ?? view.highPitch));
+  // Widened for what the proposal takes away as well, for the same reason: a note the model
+  // deleted from the top of the clip is outside the projection's band and would be drawn off
+  // the canvas.
+  const reach = [
+    ...(moved === null ? [] : [moved.pitch]),
+    ...pending.map((note) => note.pitch),
+    ...gone.map((note) => note.pitch),
+  ];
+  const low = Math.max(0, Math.min(view.lowPitch, ...reach));
+  const high = Math.min(127, Math.max(view.highPitch, ...reach));
   const rows = high - low + 1;
   const height = ROLL_HEAD + rows * NOTE_ROW;
 
@@ -440,6 +481,20 @@ export function Roll({
       context.setLineDash([]);
     }
 
+    // What the proposal takes away, under what it leaves: outlined where it is, so Reject
+    // puts back something a person could see was going (wireframes, plate 2).
+    for (const item of gone) {
+      const left = KEYS + x(item.startTick);
+      const wide = Math.max(2, x(item.lengthTicks));
+      const top = y(item.pitch) - (item.microtonalCents / 100) * NOTE_ROW;
+      context.strokeStyle = ink(element, "--refuse");
+      context.setLineDash([3, 3]);
+      context.beginPath();
+      context.roundRect(left, top + 1, wide, NOTE_ROW - 2, 2);
+      context.stroke();
+      context.setLineDash([]);
+    }
+
     for (const item of view.notes) {
       const left = KEYS + x(item.startTick);
       const wide = Math.max(2, x(item.lengthTicks));
@@ -462,6 +517,22 @@ export function Roll({
           NOTE_ROW,
         ]);
       }
+    }
+
+    // What a pending proposal asks for, dashed over the document's own notes — the same
+    // picture the drag below draws, with a model's turn in place of a pointer (ADR 0019 §2).
+    for (const item of pending) {
+      const left = KEYS + x(item.startTick);
+      const wide = Math.max(2, x(item.lengthTicks));
+      const top = y(item.pitch) - (item.microtonalCents / 100) * NOTE_ROW;
+      context.strokeStyle = accent;
+      context.lineWidth = 2;
+      context.setLineDash([4, 3]);
+      context.beginPath();
+      context.roundRect(left, top + 1, wide, NOTE_ROW - 2, 2);
+      context.stroke();
+      context.setLineDash([]);
+      context.lineWidth = 1;
     }
 
     // The proposal, over the model rather than instead of it. Both are drawn: the solid note is
