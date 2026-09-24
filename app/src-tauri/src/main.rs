@@ -20,7 +20,16 @@
 //! Beside it, [`manifest`], which answers a question about the running build rather than about
 //! the song: what plugins it hosts and what parameters each declares. §9's seventh view is a
 //! form over that map (ADR 0014 §1) and there is no tool that reads it, so this is the second
-//! and last command — see its own note for why it is not one.
+//! command — see its own note for why it is not one.
+//!
+//! And, from M3 PR 5, [`assistant`]: whether the AI sidecar this window started is still
+//! running (ADR 0020 §5). A third command of the same kind as the second — a question about
+//! this process, not about the song — and it is not a route to the model either: nothing can
+//! be *asked* of `ai` from here yet, because the loop and the panel are PR 8's and PR 9's.
+//! What the window shows is a dot, and what the dot is made of is the child's **exit status,
+//! read**: a sidecar that dies says so, with its status and the tail of its stderr, and the
+//! window goes on editing — the session, the engine and every view are untouched by its
+//! absence.
 //!
 //! Flags:
 //!
@@ -33,6 +42,12 @@
 //!                          the window still edits, and pressing play says `engine_unset`. An
 //!                          engine plays the plugins at the paths this manifest names, so it
 //!                          wants the manifest a build wrote, not the test fixture
+//! --ai <command>           the command that starts the AI sidecar — on a build tree
+//!                          `"uv run --project ai escribass-ai --transcript <t>"` — told and
+//!                          never searched for, as the engine is (ADR 0020 §4). Absent, the
+//!                          window still edits and the dot says there is none. The key is
+//!                          **not** here: `OPENROUTER_API_KEY` is inherited from this
+//!                          process's environment, because `ps` shows flags (U3)
 //! ```
 //!
 //! No `--create`, and no File · Open yet. The project is a launch argument, as it is for both
@@ -46,7 +61,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use escribass_core::call::call;
-use escribass_core::{Engine, Manifest, Project, ProjectLock, Session, SystemClock, UlidSource};
+use escribass_core::{
+    Assistant, Engine, Health, Manifest, Project, ProjectLock, Session, Sidecar, SystemClock,
+    UlidSource,
+};
 use escribass_schema::song::Author;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -64,6 +82,19 @@ use std::sync::{Arc, Mutex, PoisonError};
 /// a lock which is never broken automatically cannot afford. So the guard is held here, in an
 /// `Option` [`run`] empties on the way out.
 type Held = Arc<Mutex<Option<ProjectLock>>>;
+
+/// The sidecar this window started, or why it has none (ADR 0020 §4).
+///
+/// Held here for the same reason the lock is not managed state — [`run`] empties it on the way
+/// out, and dropping a [`Sidecar`] closes the sidecar's stdin and waits for it to leave, which
+/// is a thing that must happen while this process still exists. A window that ended without it
+/// would leave a Python process holding a socket nobody will ever dial.
+struct Ai {
+    sidecar: Mutex<Option<Sidecar>>,
+    /// Set when `--ai` was given and the sidecar would not start: the window opens anyway, as
+    /// it does without an engine, and the dot says what happened rather than nothing.
+    refused: Option<String>,
+}
 
 /// The webview's only route to the model.
 ///
@@ -110,6 +141,42 @@ fn tool(
 #[tauri::command]
 fn manifest(held: tauri::State<'_, Arc<Manifest>>) -> Result<Value, String> {
     serde_json::to_value(held.inner().as_ref()).map_err(|e| e.to_string())
+}
+
+/// The AI sidecar this window started, and whether it is still there (ADR 0020 §5).
+///
+/// **The dot is the child's exit status, read** — and nothing more. There is no "healthy",
+/// because a hosted model verifies nothing and a readout that counted it would be M3 trap 15
+/// in a second place; there is no "busy", because nothing can ask it for a turn yet. Three
+/// states: none was started, one is running, or one is gone and here is how.
+///
+/// Polled rather than pushed, as the transport is: one question at a time, asked again when
+/// the last has landed. An event would need a channel from a thread watching a child, which is
+/// a second mechanism for a fact `try_wait` already states.
+///
+/// `State<'_, Arc<Ai>>` and not `State<'_, Ai>`: Tauri resolves managed state by the type it
+/// was handed, and `manage` below is handed the `Arc` the exit path also holds. The two must
+/// name the same type or this command fails at run time in a window while compiling perfectly
+/// — which is exactly how it was written the first time. [`manifest`] above has the pair
+/// right, and is the precedent.
+#[tauri::command]
+fn assistant(ai: tauri::State<'_, Arc<Ai>>) -> Value {
+    let mut held = ai.sidecar.lock().unwrap_or_else(PoisonError::into_inner);
+    dot(held.as_mut().map(Sidecar::health), ai.refused.as_deref())
+}
+
+/// The two fields the webview reads (`app/src/tool.ts`, `Assisted`), from what `core` said.
+///
+/// Split out from the command because a command cannot be called without a window, and these
+/// three strings are a contract with TypeScript: a `state` renamed here is a dot with no colour
+/// there, and nothing would say so.
+fn dot(health: Option<Health>, refused: Option<&str>) -> Value {
+    let (state, said) = match health {
+        None => ("unset", refused.unwrap_or_default().to_string()),
+        Some(Health::Running) => ("running", String::new()),
+        Some(Health::Gone(said)) => ("gone", said),
+    };
+    serde_json::json!({ "state": state, "said": said })
 }
 
 fn main() -> ExitCode {
@@ -165,6 +232,24 @@ fn run() -> Result<i32, String> {
         session.set_engine(Engine::new(engine, &options.manifest));
     }
 
+    // The sidecar, started as the engine is and by the same code in `core` (ADR 0020 §4). A
+    // failure to start is **not** a failure to open: the window edits, renders and previews
+    // without an assistant exactly as it does without an engine, and what a person gets instead
+    // is a dot that says why. Nothing here is asked of it — the loop is PR 8's — so this
+    // pull request's whole claim is that the process is started, watched, and let go of.
+    let mut refused = None;
+    let started = options.ai.as_ref().and_then(|command| {
+        match Assistant::new(command.clone()).start() {
+            Ok(sidecar) => Some(sidecar),
+            Err(e) => {
+                eprintln!("escribass-app: the assistant did not start: {}", e.message);
+                refused = Some(e.message);
+                None
+            }
+        }
+    });
+    let ai = Arc::new(Ai { sidecar: Mutex::new(started), refused });
+
     let title = format!(
         "{} — escribass",
         options
@@ -177,7 +262,8 @@ fn run() -> Result<i32, String> {
     let app = tauri::Builder::default()
         .manage(Mutex::new(session))
         .manage(hosts)
-        .invoke_handler(tauri::generate_handler![tool, manifest])
+        .manage(Arc::clone(&ai))
+        .invoke_handler(tauri::generate_handler![tool, manifest, assistant])
         .setup(move |app| {
             use tauri::Manager;
             // The project this window is looking at, named where a person can see it. The
@@ -187,8 +273,18 @@ fn run() -> Result<i32, String> {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
-        .map_err(|e| format!("the window could not start: {e}"))?;
+        .build(tauri::generate_context!());
+    // Not `?`: the sidecar is already running by now, and a window that will not open is the
+    // one path where nobody is watching the dot. Stopping it here reads its status and says
+    // so, which is the rule ADR 0020 §5 sets for every path rather than for the happy one.
+    let app = match app {
+        Ok(app) => app,
+        Err(e) => {
+            stop(&ai);
+            take(&held);
+            return Err(format!("the window could not start: {e}"));
+        }
+    };
 
     // `run_return` and not `run`, for the same reason the lock is not managed state:
     // `Builder::run` gives the event loop to `tao`, which ends the process with
@@ -196,13 +292,28 @@ fn run() -> Result<i32, String> {
     // two releases below are reached — the first when the loop says it is exiting, the second
     // if it never said so. Releasing twice is free: the `Option` is empty the second time.
     let release = Arc::clone(&held);
+    let sidecar = Arc::clone(&ai);
     let code = app.run_return(move |_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            stop(&sidecar);
             take(&release);
         }
     });
+    stop(&ai);
     take(&held);
     Ok(code)
+}
+
+/// Stops the sidecar and says how it went, on stderr. Idempotent, as [`take`] is.
+///
+/// **The status is read on this path too**, which is the whole of ADR 0020 §5's instruction
+/// not to repeat `Preview::drop`'s gap: a sidecar that crashed earlier in the session is named
+/// here even if nobody was looking at the dot when it happened.
+fn stop(ai: &Arc<Ai>) {
+    let held = ai.sidecar.lock().unwrap_or_else(PoisonError::into_inner).take();
+    if let Some(sidecar) = held {
+        eprintln!("escribass-app: {}", sidecar.stop());
+    }
 }
 
 /// Drops the lock guard, which removes `.escri/lock`. Idempotent.
@@ -214,6 +325,9 @@ struct Options {
     project: PathBuf,
     manifest: PathBuf,
     engine: Option<PathBuf>,
+    /// The sidecar's command, as argv. `core` is told a command and does not inspect it
+    /// (ADR 0020 §4).
+    ai: Option<Vec<String>>,
 }
 
 impl Options {
@@ -221,6 +335,7 @@ impl Options {
         let mut project = None;
         let mut manifest = None;
         let mut engine = None;
+        let mut ai = None;
         let mut arguments = arguments.peekable();
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
@@ -232,6 +347,19 @@ impl Options {
                 "--engine" => {
                     engine =
                         Some(PathBuf::from(arguments.next().ok_or("--engine needs a value")?))
+                }
+                // `ponytail:` one string, split on whitespace, so a command whose program or
+                // arguments contain a space cannot be expressed. The upgrade path is the flag
+                // repeated once per word, or an installer that knows where the sidecar lives
+                // (M5) — and until one of those, the build-tree command has no space in it.
+                "--ai" => {
+                    let command = arguments.next().ok_or("--ai needs a value")?;
+                    let words: Vec<String> =
+                        command.split_whitespace().map(str::to_string).collect();
+                    if words.is_empty() {
+                        return Err("--ai needs a command to run".to_string());
+                    }
+                    ai = Some(words);
                 }
                 "--help" | "-h" => return Err(USAGE.to_string()),
                 flag if flag.starts_with('-') => return Err(format!("unknown flag `{flag}`")),
@@ -252,12 +380,13 @@ impl Options {
                 )
             })?,
             engine,
+            ai,
         })
     }
 }
 
-const USAGE: &str =
-    "usage: escribass-app --manifest <manifest.json> [--engine <escribass_engine>] <project.escri>";
+const USAGE: &str = "usage: escribass-app --manifest <manifest.json> \
+[--engine <escribass_engine>] [--ai <command>] <project.escri>";
 
 #[cfg(test)]
 mod tests {
@@ -278,5 +407,34 @@ mod tests {
         assert_eq!(told.engine.as_deref(), Some(std::path::Path::new("e")));
         assert!(parse(&["--manifest", "m.json", "p.escri"]).unwrap().engine.is_none());
         assert!(parse(&["--manifest", "m.json", "p.escri", "--engine"]).is_err());
+        // The sidecar is a whole command, not a path, and it is optional in the same way: a
+        // window with none still edits, and the dot says there is none (ADR 0020 §4, §5).
+        let assisted =
+            parse(&["--manifest", "m.json", "--ai", "uv run -p ai escribass-ai", "p.escri"])
+                .unwrap();
+        assert_eq!(
+            assisted.ai.as_deref(),
+            Some(["uv", "run", "-p", "ai", "escribass-ai"].map(String::from).as_slice())
+        );
+        assert!(parse(&["--manifest", "m.json", "p.escri"]).unwrap().ai.is_none());
+        assert!(parse(&["--manifest", "m.json", "p.escri", "--ai"]).is_err());
+        assert!(parse(&["--manifest", "m.json", "--ai", "  ", "p.escri"]).is_err());
+    }
+
+    #[test]
+    fn the_dot_has_three_states_and_the_frontend_knows_all_three() {
+        use super::dot;
+        use escribass_core::Health;
+
+        // `app/src/tool.ts` declares exactly these three, and `App.tsx` gives each a colour.
+        assert_eq!(dot(None, None)["state"], "unset");
+        let refused = dot(None, Some("cannot start the assistant"));
+        assert_eq!(refused["said"], "cannot start the assistant");
+        assert_eq!(dot(Some(Health::Running), None)["state"], "running");
+        let gone = dot(Some(Health::Gone("the assistant exited 2: no transcript".into())), None);
+        assert_eq!(gone["state"], "gone");
+        // The status and the last words travel to the window, because that is what a person
+        // acts on — not "the assistant is unavailable" (ADR 0020 §5).
+        assert_eq!(gone["said"], "the assistant exited 2: no transcript");
     }
 }

@@ -65,6 +65,28 @@ footer .mode {
   margin-left: auto;
 }
 
+/* The AI sidecar's health (ADR 0020 §5). Three states and no fourth: the dot is the child's
+   exit status read, never a judgement about the model, which nothing can verify (M3 trap 15).
+   Dimmed when there is none, because a window without an assistant is a window that works. */
+.ai {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  cursor: help;
+}
+
+.ai .unset {
+  color: var(--line);
+}
+
+.ai .running {
+  color: var(--audio);
+}
+
+.ai .gone {
+  color: var(--refuse);
+}
+
 /* The preview's controls, at the far end of the header. */
 .transport {
   display: flex;

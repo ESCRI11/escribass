@@ -1,0 +1,25 @@
+[project]
+name = "escribass-ai"
+version = "0.1.0"
+description = "The AI orchestrator sidecar: serves Assistant, one stream per prompt"
+license = "AGPL-3.0-only"
+requires-python = "==3.12.*"
+dependencies = [
+    "escribass-proto",
+    "escribass-schema",
+    "betterproto2[pydantic,grpclib]==0.10.0",
+    "grpclib==0.4.9",
+    "openai==3.19.0",
+    "httpx2==2.13.1",
+]
+
+[project.scripts]
+escribass-ai = "escribass_ai:main"
+
+[tool.uv.sources]
+escribass-proto = { path = "../proto", editable = true }
+escribass-schema = { path = "../schema", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"

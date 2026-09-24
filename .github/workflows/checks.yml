@@ -75,10 +75,15 @@ jobs:
       # is a Rust or codegen change merging untested, and that is worth far more than the
       # three minutes this job costs.
       #
-      # The four sub-checks and `Wire compatibility` have different inputs, but they share the
+      # The five sub-checks and `Wire compatibility` have different inputs, but they share the
       # setup above and below — three `cargo install`s, `npm ci`, `uv sync` — which is most of
       # the job's cost. Gating them apart would still pay all of it, so the whole job is one
       # gate.
+      #
+      # `ai/` is in none of the exclusions, so a change under it has run this job since the
+      # directory existed — which is exactly why step 5/5 exists from the pull request that
+      # created it: a job that runs and tests nothing of what changed is a green tick nobody
+      # earned (docs/plan.md, M3 trap 17).
       - name: Does this pull request touch anything these checks read?
         if: github.event_name == 'pull_request'
         run: |
@@ -136,7 +141,7 @@ jobs:
           npm --prefix ../proto ci
           uv sync --locked
 
-      # 1/4 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
+      # 1/5 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
       # both generate Rust, TypeScript and Python (ADR 0006 §7, carried out). This step
       # compares bytes; whether `proto`'s Python *imports* is step 4's, which is a different
       # claim and is made separately.
@@ -146,12 +151,12 @@ jobs:
           ./schema/codegen.sh --check
           ./proto/codegen.sh --check
 
-      # 2/4
+      # 2/5
       - name: Rust
         if: env.SKIP != '1'
         run: cargo test
 
-      # 3/4 — the model's round trip, and that the service's generated TypeScript compiles
+      # 3/5 — the model's round trip, and that the service's generated TypeScript compiles
       # against it. The second is not a formality: `proto/gen/ts` reaches the model through
       # `@escribass/schema/song_pb.js`, an exports subpath that exists for the rewrite in
       # `proto/buf.gen.yaml` and for nothing else, and a resolution that quietly fails degrades
@@ -165,7 +170,7 @@ jobs:
           node --import tsx --test tests/*.test.ts
           npx tsc --noEmit --project ../proto
 
-      # 4/4 — the model's round trip, and that the service's generated Python imports and
+      # 4/5 — the model's round trip, and that the service's generated Python imports and
       # reaches *the* model. The second is not a formality either: `betterproto2-compiler`
       # re-emits `song.proto` beside the service and `codegen.sh` deletes it, so without this
       # a second `Song` would be committed, import cleanly, and be a different class from the
@@ -178,6 +183,24 @@ jobs:
         run: |
           uv run python -m unittest discover -s tests
           uv run python -m unittest discover -s ../proto/tests
+
+      # 5/5 — the AI sidecar. Its own environment, not schema's: `ai/` is a project with a
+      # lock of its own and an exact Python patch in `.python-version`, which `uv` installs
+      # (§17). `--locked` rather than `sync`, so a lock that disagrees with `pyproject.toml`
+      # fails here instead of being quietly re-resolved on a runner.
+      #
+      # What it runs is the sidecar as a **real subprocess over a real socket** — the address
+      # line, one turn from the recorded transcript, a clean exit when its stdin closes — plus
+      # the check that no fixture under `ai/tests/` carries a key, which is the one test in
+      # this repository that is about what must *not* be in git (docs/plan.md, M3 trap 10).
+      # No test here spends money or needs one: the live run arrives with the loop, behind an
+      # environment variable and skipped loudly (ADR 0022 §4).
+      - name: The AI sidecar
+        if: env.SKIP != '1'
+        working-directory: ai
+        run: |
+          uv sync --locked
+          uv run python -m unittest discover -s tests
 
       # song.proto has consumers from M0.2; a field renumbered by accident is a silent
       # wire break. Only meaningful against a different ref, so pull requests only.

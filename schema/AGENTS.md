@@ -13,7 +13,7 @@ The song model, in every language. `schema/` is one package three times: a Cargo
 | `gen/rust/`, `gen/ts/`, `gen/python/` | Generated output, committed for review (specs §4.1). **`codegen.sh` deletes `gen/` whole on every run.** Never edit, never add a file under it. | generated |
 | `Cargo.toml`, `src/lib.rs` | Crate `escribass-schema`. `lib.rs` is the module tree only; it `include!`s `gen/rust/**` by `CARGO_MANIFEST_DIR`. | hand |
 | `package.json`, `package-lock.json`, `tsconfig.json` | Package `@escribass/schema`, `private`. Also installs the codegen toolchain: `buf`, `protoc-gen-es`. | hand |
-| `pyproject.toml`, `uv.lock`, `.python-version` | Project `escribass-schema`: `betterproto2` runtime, `betterproto2-compiler` for codegen. No `[build-system]` (see Consumers). | hand |
+| `pyproject.toml`, `uv.lock`, `.python-version` | Project `escribass-schema`: `betterproto2` runtime, `betterproto2-compiler` and `grpclib` for codegen and its checks. A `[build-system]` since M3 PR 5 — `uv_build` over `gen/python` — because `ai/` depends on this package (see Consumers). | hand |
 | `tests/` | One round-trip test per language, all reading `/tests/fixtures/song/minimal.json`. | hand |
 
 Never here: the validator, patch application or canonical writer (`core/`, M0.2); service definitions (`/proto`, specs §13); a project file.
@@ -37,7 +37,7 @@ schema/node_modules/.bin/buf breaking --against '.git#branch=main'   # wire comp
 | A Rust crate (`core/`, M0.2) | `escribass-schema = { path = "../schema" }`; types at `escribass_schema::song` and `::history`; `pbjson_types` is re-exported for the well-known types | `Cargo.toml`; `src/lib.rs` |
 | TypeScript (`app/`) | A path dependency, `"@escribass/schema": "file:../schema"` — the package is `private`, so never a registry one — importing `@escribass/schema/song` and `/history` | `package.json` `exports`, `private` |
 | TypeScript (`proto/`) | The same link, but importing `@escribass/schema/song_pb.js` and `/history_pb.js`. Those are the third `exports` entry, `"./*_pb.js"`, and it exists for one caller: `protoc-gen-es` writes the model's *file* name into `proto/gen/ts`, and `proto/buf.gen.yaml`'s `rewrite_imports` can only redirect it to a package, never rename it. Generating the model a second time there instead would put a second `Song` in the tree (CLAUDE.md #1) | `package.json` `exports`; `proto/buf.gen.yaml` |
-| Python (`ai/`) | `schema/gen/python` on `sys.path`, then `escribass_schema.escribass.song.v1`, as `tests/test_roundtrip.py` does, until `pyproject.toml` gains a `[build-system]`. The extra `escribass_schema` level exists because betterproto2 emits `from ....message_pool import …`, which needs a package above `escribass` | `pyproject.toml` comment; `buf.gen.yaml` comment |
+| Python (`ai/`) | `escribass-schema = { path = "../schema", editable = true }` in `ai/pyproject.toml`, then `escribass_schema.escribass.song.v1` — a package since M3 PR 5, where the deferred `[build-system]` row's trigger fired. **Editable**, because `codegen.sh` deletes `gen/` whole on every run and a built copy in a consumer's environment would be a stale second `Song`. `schema/tests/` and `proto/tests/` still use `sys.path`, which is what a test in this repository may do and a shipped process may not. The extra `escribass_schema` level exists because betterproto2 emits `from ....message_pool import …`, which needs a package above `escribass` | `pyproject.toml` comment; `buf.gen.yaml` comment |
 
 ## Rules
 

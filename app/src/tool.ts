@@ -9,8 +9,9 @@
 // It is not a wire. `app` is one process with `core` linked into it and opens no network port
 // (§3); this is a function call with a JSON round trip in the middle.
 //
-// [`build`] is the one other command, added in PR 7, and it is not a second route to the
-// model: the build manifest is what the running process says about itself.
+// [`build`] and [`assistant`] are the other two commands, and neither is a second route to the
+// model: one is what the running process can host, the other is whether the process it started
+// is still running.
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -39,4 +40,25 @@ export function tool(name: string, args: Record<string, unknown>): Promise<unkno
  */
 export function build(): Promise<unknown> {
   return invoke<unknown>("manifest");
+}
+
+/** What the AI sidecar is doing, as the host reads it (ADR 0020 §5). */
+export type Assisted = {
+  /** `unset` — none was started; `running`; `gone` — it exited, and `said` is how. */
+  state: "unset" | "running" | "gone";
+  /** The child's exit status and the tail of its stderr, or why it never started. */
+  said: string;
+};
+
+/**
+ * Whether the sidecar this window started is still running.
+ *
+ * The **third** command, and of the second's kind: a question about this process, not about
+ * the song. It asks nothing *of* the assistant — there is nothing to ask until the loop lands
+ * (M3 PR 8) — and what comes back is the child's exit status, read. Never a claim about the
+ * model: a hosted model verifies nothing, and a readout that said otherwise would be the
+ * "14/14 verified" this window already refuses to draw (docs/plan.md, M3 trap 15).
+ */
+export function assistant(): Promise<Assisted> {
+  return invoke<Assisted>("assistant");
 }

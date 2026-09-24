@@ -57,7 +57,8 @@ import { HEAD, ROW, Roll, Timeline } from "./canvas.js";
 import type { Moved } from "./canvas.js";
 import { patchLog } from "./history.js";
 import type { HistoryAnswer, Log } from "./history.js";
-import { build, tool } from "./tool.js";
+import { assistant, build, tool } from "./tool.js";
+import type { Assisted } from "./tool.js";
 
 /**
  * Freezes the decoded song, so a view that writes to the model throws where it wrote.
@@ -224,6 +225,11 @@ export function App() {
   /** The engine's last word about the preview, or null when none is playing. An answer, never
    *  an estimate: see the header of this file. */
   const [transport, setTransport] = useState<Transport | null>(null);
+
+  // The AI sidecar's health, asked for on a timer (ADR 0020 §5). Not song state and not a
+  // model's opinion: it is the child's exit status, read, and the only thing the window does
+  // with a sidecar in this milestone.
+  const [ai, setAi] = useState<Assisted>({ state: "unset", said: "" });
   const playing = transport?.state === "PREVIEW_STATE_PLAYING";
 
   // Both reads, together. The log is re-read whenever the song is because every applied call
@@ -390,6 +396,30 @@ export function App() {
       clearTimeout(timer);
     };
   }, [playing]);
+
+  // Whether the sidecar is still there, asked once a second for as long as the window lives.
+  // One question at a time, the next asked when the last has landed — the transport's shape
+  // above, and for its reason: a window that piled up requests would be measuring itself.
+  // A second is right for a fact that changes at most once a session.
+  useEffect(() => {
+    let over = false;
+    const ask = async () => {
+      try {
+        const health = await assistant();
+        if (!over) setAi(health);
+      } catch (e: unknown) {
+        // The host could not answer, which is not the sidecar's death — say so as the
+        // sidecar's absence rather than as the model's failure.
+        if (!over) setAi({ state: "gone", said: String(e) });
+      }
+      if (!over) timer = setTimeout(ask, 1000);
+    };
+    let timer = setTimeout(ask, 0);
+    return () => {
+      over = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   /** §9's second half: the same call without `dry_run`, then a fresh `get_song`.
    *
@@ -829,6 +859,15 @@ export function App() {
           {view.sections.length} section{view.sections.length === 1 ? "" : "s"}
         </span>
         <span className="dim">⌘Z undo · ⇧⌘Z redo</span>
+        {/* The sidecar, as a dot. It says running or gone and nothing else — "ready" would be
+            a claim about a hosted model, and a status bar that counted one is M3 trap 15. The
+            sentence behind it is the child's exit status and its last words. */}
+        <span className="ai" title={assisting(ai)}>
+          <span className={ai.state} aria-hidden="true">
+            ●
+          </span>
+          {ai.state === "gone" ? "ai stopped" : "ai"}
+        </span>
         <span className="mode">
           {pane === "roll"
             ? "drag a note"
@@ -973,6 +1012,15 @@ function PatchLog({ view }: { view: Log }) {
       </tbody>
     </table>
   );
+}
+
+/** What the dot means, in a sentence — the child's exit status where there is one. */
+function assisting(ai: Assisted): string {
+  if (ai.state === "gone") return ai.said;
+  if (ai.state === "running") {
+    return "the assistant is running. It answers no prompt yet: the loop is M3 PR 8's";
+  }
+  return ai.said || "no assistant: start the window with --ai <command>";
 }
 
 /** Which bar a tick falls in, read off the grid the arrangement already computed rather than

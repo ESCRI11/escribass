@@ -20,5 +20,23 @@ dev = [
     "grpclib==0.4.9",
 ]
 
-# No [build-system]: this is not built as a wheel yet. The generated tree is imported
-# from gen/python by path (see tests). Add packaging when ai/ needs to depend on it.
+# `ai/` depends on it, so the deferred row's trigger fired (docs/plan.md, "Deferred, on
+# purpose"; schema/AGENTS.md, Consumers). Until M3 PR 5 the one consumer was this project's own
+# tests, which put `gen/python` on `sys.path`; a sidecar that did the same in its `__init__`
+# would carry the repository's layout inside the product, and an installer (M5) is where that
+# stops being true. So the generated tree is a package now, and `ai/` depends on it by path the
+# way `core` depends on the crate and `app` on the npm package.
+#
+# `uv_build` because `uv` is already what §17 pins for Python and the backend ships with it:
+# nothing is added to the runtime, and the alternative backends are a package each for the same
+# two lines of configuration. The module lives under `gen/`, which `codegen.sh` deletes whole on
+# every run, so consumers install it **editable** — a built copy would be a second, stale
+# `escribass_schema` the moment the protos changed, which is CLAUDE.md #1's failure by way of
+# packaging.
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "gen/python"
+module-name = "escribass_schema"

@@ -1,0 +1,88 @@
+{
+  "recorded": "2026-09-23",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "note": "One real exchange with OpenRouter, recorded in M3 PR 5 with the key from the environment and the request body saved without its headers (ADR 0022 §4; docs/plan.md, M3 trap 10). Recorded rather than written by hand for the reason tests/AGENTS.md gives about plugin ids — an invented fixture is one nothing ever checked — and a real one carries what a hand-written copy would have got wrong: `provider`, `native_finish_reason`, a `reasoning` field beside the content, and the `model` the response itself names, which is what `Done.model_id` records (ADR 0021 §2). It cost $0.00008965, recorded in the `usage` block below. No tools were offered, so there are no tool calls: this build proposes nothing, and a transcript with tool calls is M3 PR 8's.",
+  "exchanges": [
+    {
+      "request": {
+        "messages": [
+          {
+            "content": "You are the assistant inside escribass, a code-defined music editor. This build offers you no tools and applies nothing. Answer in one short sentence.",
+            "role": "system"
+          },
+          {
+            "content": "What can you change about this song?",
+            "role": "user"
+          }
+        ],
+        "model": "deepseek/deepseek-v4.1-flash",
+        "temperature": 0
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": "I can’t change anything in this build, but I can suggest edits you could make.",
+              "function_call": null,
+              "reasoning": "We need answer short sentence. User asks \"What can you change about this song?\" We are assistant inside escribass, code-defined music editor. This build offers no tools and applies nothing. Answer in one short sentence. Need likely say I can't change anything in this build; I can only suggest edits. Must be one short sentence. Ensure no tools. \"I can't change anything in this build, but I can suggest edits you could make.\" That's one sentence.",
+              "reasoning_details": [
+                {
+                  "format": "unknown",
+                  "index": 0,
+                  "text": "We need answer short sentence. User asks \"What can you change about this song?\" We are assistant inside escribass, code-defined music editor. This build offers no tools and applies nothing. Answer in one short sentence. Need likely say I can't change anything in this build; I can only suggest edits. Must be one short sentence. Ensure no tools. \"I can't change anything in this build, but I can suggest edits you could make.\" That's one sentence.",
+                  "type": "reasoning.text"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": null
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790172308,
+        "id": "gen-1790172308-hN62wdC7ML9KwajjQSbC",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 117,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 68,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 185
+        }
+      }
+    }
+  ]
+}

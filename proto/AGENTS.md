@@ -22,6 +22,7 @@ project file directly (§5), so what is not here cannot be done to a song.
 | `src/lib.rs` | The hand-written module tree that `include!`s the generated file. Nothing else. | hand |
 | `tests/contract.rs` | The five things about this file a change could break silently. | hand |
 | `tests/test_generated_python.py` | That `gen/python` imports, that its `Assistant` server maps the one RPC, and that there is **one** `Song` — `escribass_schema`'s. Runs in `schema`'s environment (M3 PR 3). | hand |
+| `pyproject.toml` | Package `escribass-proto`: metadata only, the Python half of the `package.json` above. No `uv.lock` and no `.venv` — this module still has no Python *environment*, and `codegen.sh` still borrows `schema`'s. It exists so `ai/` can depend on `gen/python` by path instead of inserting it on `sys.path` at import (M3 PR 5; ADR 0020 §4). | hand |
 
 The workspace `buf.yaml` is at the repository root, not here: buf v2 wants one at the common
 ancestor of every module, and `song_tools.proto` imports `schema/song.proto`.

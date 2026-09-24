@@ -139,10 +139,10 @@
     }
   },
   "ai": {
-    "_note": "The Python sidecar (docs/specs.md §6, §17). Written 2026-09-21 in M3 PR 2 from the user's decisions of 2026-09-17: U3 (the model is recorded, not pinned) and U4 (the packages, by name). Three packages are approved and carry `version: null` on purpose — U4 pins each 'by exact version when it is first added, not before', and nothing is installed until M3 PR 5, which writes the exact versions here, in §17 and in ai/uv.lock in one change; the file's own idiom for a pin that is owed is `null` with a note, as clap_sdk and faust below. No package here can reach a render (§17's last rule, ADR 0016 §4): the sidecar is audio-agnostic (CLAUDE.md #6) and everything it does to a song is a tool call.",
+    "_note": "The Python sidecar (docs/specs.md §6, §17). Written 2026-09-21 in M3 PR 2 from the user's decisions of 2026-09-17: U3 (the model is recorded, not pinned) and U4 (the packages, by name). Three packages were approved and carried `version: null` until each was first installed — U4 pins 'by exact version when it is first added, not before'. All three are now pinned: grpclib in M3 PR 3, which generated the server that imports it, and openai and httpx2 in M3 PR 5, which created ai/ and ran `uv lock` there. The build backend below is the one row here that is a range, and says so. No package here can reach a render (§17's last rule, ADR 0016 §4): the sidecar is audio-agnostic (CLAUDE.md #6) and everything it does to a song is a tool call.",
     "python": {
-      "version": "3.12",
-      "note": "exact patch in ai/.python-version from M3 PR 5 (§17)"
+      "version": "3.12.12",
+      "note": "The exact patch §17 asks for, in ai/.python-version and written 2026-09-23 in M3 PR 5. `uv` installs and manages it, so a machine with another 3.12 on its path still runs the sidecar on this one; `ai/pyproject.toml` says `requires-python = \"==3.12.*\"`. schema/'s own .python-version stays at 3.12, because it is a codegen environment and §17 pins the patch for the sidecar."
     },
     "provider": "openrouter",
     "model": "deepseek/deepseek-v4.1-flash",
@@ -152,12 +152,16 @@
       "note": "The Python gRPC stack, decided by what the pinned betterproto2-compiler 0.10.1 generates: an async grpclib client AND server under client_generation=async, server_generation=async; a synchronous grpcio client and no server otherwise. `ai` serves (ADR 0020 §1), so grpclib it is, as betterproto2's `grpclib` extra plus the package (ADR 0020 §2). No grpcio, no grpcio-tools. PINNED 2026-09-23 in M3 PR 3, not PR 5: the user closed that deferral so the check that proto/gen/python imports — and that its Song is escribass_schema's class and not the copy betterproto2 re-emits — lands in the pull request that generates the code rather than one later. Resolved by `uv add --dev grpclib` in schema/, which is also the version the spike measured with. It is installed in schema/'s dev group, because proto/ has no Python environment of its own on purpose and borrows that one for its codegen; M3 PR 5 declares it again in ai/pyproject.toml at this version, and this row is what both mean. It brings h2, hpack, hyperframe and multidict transitively, hashed in schema/uv.lock and not listed here, as pydantic's own transitive set is not. Reaches no render."
     },
     "openai": {
-      "version": null,
-      "note": "The OpenRouter client — §6's 'OpenAI-compatible client', literally. Approved 2026-09-17 (U4). The sidecar passes the key and base_url explicitly, because the SDK otherwise reads OPENAI_API_KEY. The spike ran 3.14.1; the pin is PR 5's."
+      "version": "3.19.0",
+      "note": "The OpenRouter client — §6's 'OpenAI-compatible client', literally. Approved 2026-09-17 (U4); PINNED 2026-09-23 in M3 PR 5, where it is first installed, resolved by `uv lock` in ai/ and hashed in ai/uv.lock. Not the 3.14.1 the spike ran: a version written down in prose in PR 2 would have been re-resolved here and drifted in silence, which is why U4 pins on first install (ADR 0020 §2). What imports it today is `escribass_ai.provider`: the scripted provider parses each recorded response with the SDK's own `ChatCompletion`, so a transcript is the type the loop will consume from the network in PR 8, and `live()` is the one place the key and base_url are passed explicitly — the SDK reads OPENAI_API_KEY otherwise, which the spike found set on this machine (ADR 0020 §4). It brings anyio, jiter, sniffio, truststore and httpx2 transitively. Reaches no render."
     },
     "httpx2": {
-      "version": null,
-      "note": "What the openai SDK carries today: a differently named package from httpx, which the first approval named and the spike corrected; approved by name 2026-09-17 (U4). The spike saw 2.13.0; the pin is PR 5's."
+      "version": "2.13.1",
+      "note": "What the openai SDK carries today: a differently named package from httpx, which the first approval named and the spike corrected. Approved by name 2026-09-17 (U4); PINNED 2026-09-23 in M3 PR 5 beside openai, at what `uv` resolved under `openai==3.19.0` (which requires httpx2>=2.12,<3). Declared in ai/pyproject.toml by name as well as arriving transitively, because U4 approved it by name and a transitive pin is one nobody is asked about. It brings httpcore2, h11, idna and httpx2-jsfetch. Reaches no render."
+    },
+    "build_backend": {
+      "version": "uv_build>=0.10.2,<0.11.0",
+      "note": "NOT AN EXACT PIN, and the only row here that is not — said out loud rather than left to be noticed. `ai/`, `proto/` and `schema/` are Python packages from M3 PR 5, because the sidecar depends on the generated trees by path instead of inserting them on sys.path at import, and a package needs a build backend. uv's own backend is the one that costs nothing: it is versioned with uv and uv uses its built-in copy when the requirement matches, so an ordinary `uv sync` downloads no backend at all. The range is uv's documented form, and pinning it exactly would pin the smaller half of a pair whose larger half — `uv` itself — CI installs unpinned (`.github/workflows/checks.yml`, 'Install uv'). Build-time only: nothing it produces ships, and it reaches no render. If a person wants it exact, the pin belongs on `uv` first."
     }
   },
   "notes": [
