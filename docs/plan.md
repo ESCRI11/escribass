@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-09-24. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-09-25. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -67,8 +67,9 @@ stale.
 | M3.8 | The loop: `OFFERED`, the filtered schemas, a `Proposal` in `core` that is a session on a copy of the project recording nothing, the three kinds of failure each watched failing first, and the end-to-end golden. Nothing applied — a turn ends in the stream. The user granted one recording session, so the multi-call transcript is a real one and a paid call is capped, ledgered and reconciled | done | PR #78 |
 | M3.9 | The AI panel: the conversation held by the host and kept beside the project as JSON Lines, the proposal drawn dashed as it grows, the RFC 6902 diff, Apply · Reject · Edit, `proposal` rows naming the model and a prompt this machine does not have, and the bar-17 demo driven by the assistant with the diff on screen before apply | done | PR #79 |
 | M3.10 | A whole-stack review of M3: seven lanes, no blocker, six majors, seven minors, and a mutation table in which 11 of 38 survived the suite. The grant spent into `CEILING_USD`, the version guard's blind spot closed by `Proposal.base`, the pid protocol replaced by the kernel's own lock, a reconciliation given a caller, and a sidecar that really stops when the window does. No golden moved and no paid call was made | done | PR #80 |
-| M3.11 | §11 walked bullet by bullet with the enforcer named and run for each, every ADR walked against the code, the ledger walked a fifth time, `CLAUDE.md` to M4 — and what M3 leaves unverified written where a reader will find it | done | this PR |
+| M3.11 | §11 walked bullet by bullet with the enforcer named and run for each, every ADR walked against the code, the ledger walked a fifth time, `CLAUDE.md` to M4 — and what M3 leaves unverified written where a reader will find it | done | PR #81 |
 | — | **M3 complete.** A Python sidecar, a tool-calling loop, a proposal a person applies, the AI panel and a spend that is capped, ledgered and reconciled — with **no green CI run since M2 PR 8** and one live model turn, see "M3, closed" | done | — |
+| — | The M4 plan: ten questions for the user, seventeen an agent can propose answers to, none answered — and a recommendation, with its seam and its reasons, that M4 is two milestones | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -1974,6 +1975,492 @@ What M3 does not claim is above, checked; what M1 and M2 did not claim, M3 inher
 Linux x86-64 on one image and one compiler, nothing about any other CPU, and no preview that has
 reached a speaker.
 
+## M4 — Compilers
+
+Planned 2026-09-25 against `main` at `2dcabb2`. Same reason as the M0.4, M1, M2 and M3 plans: the
+reasoning is the expensive part, none of it is in code yet, and a conversation is not where it
+should live. M1's planning PR raised eight questions and a second PR answered them; M2's raised
+twelve, M3's nineteen, and each time a second PR decided. This is the first half only, and the
+separation is the point — an ADR written before its question is settled is what that separation
+exists to prevent. **Nothing below is decided.** Where a question has a default an agent would
+propose, the default is written beside it and the question stays open; where a question is a
+person's, `CLAUDE.md` says so and it is listed apart.
+
+Two things are different about this milestone and both shape the whole plan. **The hard part is
+ours again.** M1 staked determinism on code this repository does not own and M3 put a model it
+cannot seed above the tool API; M4 is the first milestone since M0 where CLAUDE.md #3 names the
+thing being built — `compilers` — and where "same input, same output" is a property to be
+*designed*, not measured in somebody else's plugin. And **it is the widest milestone by a
+distance**, which ADR 0003's Consequences said in as many words on the day it was written: "M4
+grows the most … if M4 needs splitting, that is a later ADR against a real schedule, not a guess
+now." This is that later day, and the plan's first recommendation is that it should be split, at
+a seam it names, for reasons it gives — and that the user decides (U1).
+
+### What was already decided, so M4 does not re-decide it
+
+| Decided | Where | Consequence |
+|---|---|---|
+| **Cmajor** is the DSP language; Faust is an import path, never authored in the UI | §7.2; §15 (DSP language) | What M4 decides is the pin *strategy* for a tool whose tree vendors a prebuilt LLVM (U4), and how the JIT is hosted (U3) — not the language |
+| **CLAP → VST3 through clap-wrapper**; native CLAP hosting "is a later optimisation, never a dependency" | §8; §15 (CLAP hosting) | §15's rationale was "native CLAP hosting in Tracktion unverified". **Verified 2026-09-25 by reading the vendored tree at `0e02f70`**: Tracktion has no CLAP host at all — the one `Clap` in `modules/tracktion_engine` is a string constant in its DAWproject mapping. The row stands on a fact now, and clap-wrapper stays |
+| **JIT for editing, exported CLAP→VST3 for persistence**; "exported binaries are what `lock.json` pins and what golden tests render" | §7.2; §15 (Cmajor placement) | The JIT never reaches a golden. That sentence decides more than it looks: it is what makes a JIT-only instrument *live preview · not the render* by construction (below), and it is what U3 weighs the JIT's cost against |
+| The generative compiler is a **Python DSL**, "sandboxed subprocess, no network, no filesystem, wall-clock disabled", pure; **Strudel deferred** | §7.1; §15 (Generative language) | The language is decided; its surface, its sandbox and where the subprocess runs are not. §7.1 says "inside the `ai` process", written before ADR 0020 made `ai` a server that holds no session — question 1 |
+| **The neural runtime is v1, at M4, and a separate process** that never links into `engine` | ADR 0003 §7, resolved 2026-09-25 | Not reopened. What M4's planning owes is the transport, the pins beside ONNX Runtime's commit, where §7.3's CLAP wrapper lives, and the §13 directory — and one fact read this week changes what "the runtime" has to be in v1 (U6) |
+| **Code views are M4's** (generator source, DSP source); CodeMirror 6.0.2 is pinned with no consumer | ADR 0003 §8; ADR 0016 §2 | The generator view lands with its compiler; the DSP view lands with its compiler, and under the split those are different milestones |
+| **`lock.json` is completed at M4**: the compiled artefacts and model hashes | ADR 0003 §3; §17 | And nothing else: ADR 0010 §1's rules — no paths, no parameter lists, written on first reference, never removed, `lock.json` is not a proto — carry over unchanged |
+| **Airwindows** is deferred to M4 "with clap-wrapper", because its pinned repo "may not build a Linux VST3" | ADR 0003 §4, amended; ADR 0010 §5 | Half of that premise was wrong, and the half that was right leads somewhere else (U7): the maintained consolidated build is a **JUCE** plugin, which is Dexed's shape and needs no clap-wrapper at all |
+| **`FormRule`** is deferred to M4, "when the generative compiler gives it a consumer"; `set_form` waits on it | ADR 0002 §7; `proto/song_tools.proto` | The consumer has to be named or the row re-deferred with an event (question 7) |
+| **`SourceRef.export_hash`** and a **`Generator` compiled-source hash** are M4's, "both additive and both surfaced by the wireframes" | ADR 0002 Consequences; Plate 3 | A `song.proto` change, so an ADR before the `.proto` (CLAUDE.md #5). M2 and M3 changed `schema/` not at all; M4 will, and the plan gives it a PR of its own as M1 PR 2 did |
+| CLAUDE.md #3 names **`core`, `compilers` and `engine`**; M3's plan said of `ai`: "not exempt from the rule for ever, only for the model" | CLAUDE.md #3; §11; M3 plan | The DSL and the export pipeline are held to §11's first bullet as `core` is. That is the whole of what "What 'deterministic' means for a compiler" below has to deliver |
+| The engine is **schema-agnostic**, the AI process **audio-agnostic** | CLAUDE.md #6; §14.6 | A compiler tier is neither: it reads the model (a generator's source, a device's source hash) and produces either layer-2 events or an artefact the engine is handed **as a path**, exactly as it is handed an asset or an SFZ (ADR 0007 §2). The engine never learns that a plugin was compiled from anything, and `ai` never runs a compiler |
+| **Validity and renderability are different questions**: the validator accepts `cmajor`, `faust` and `neural` refs, and compile refuses them | ADR 0007 §6; `core/src/render.rs` | Today a project with a Cmajor track exports the rest of itself by muting that track. M4 lifts refusals one at a time, each with a golden, and leaves the ones it does not lift naming what lifts them |
+| **`set_param` is withheld from the model**; the §2.2 randomness row is retriggered on offering it | ADR 0022 §1; ledger | A compiled instrument's parameters are declared by its source, which is the one case `core/src/validate.rs`'s `ponytail:` at the parameter check names as M4's |
+| **Linux x86-64 only**, on the image and compiler §17 pins | ADR 0009 §1; ADR 0014 §2 | M4 inherits the claim and does not widen it — with one exception it can honestly make and does not yet (question 3): integer arithmetic has no platform |
+| The `[OPEN]` items in §15 are a person's | CLAUDE.md, line 4; §15 | **None of the three remaining is in M4's path** — see "The three `[OPEN]` items" below |
+
+**The deferred ledger, the known gaps and "M3, closed" send four rows and four carried items
+here.** The four rows are the ones "M3, closed" said would come due at M4's planning — `FormRule`;
+`SourceRef.export_hash` and the `Generator` compiled-source hash; `lock.json` beyond
+`schema_version`; Strudel after M4 — and each is walked below ("The four ledger rows, walked")
+and in the ledger itself. The carried items are not M4's to fix and are M4's to state, and this
+time one of them is first-class rather than a footnote: **no runner has executed a single step
+since 2026-09-09** (U2); **preview has never played on a device**, which M4 does not change;
+**the plugin manifest has not been rebuilt since 2026-09-09** because Dexed's build wants
+`jack/jack.h` on the one machine everything runs on, which any pull request that touches the
+engine's plugin set (Airwindows) meets first; and **`Preview::drop` discards the engine's exit
+status**, unchanged. Two more rows are touched by M4's scope and neither is M4's: the re-pin tool
+waits on a plugin pin moving, and M4 as split moves none; the `Instrument.state` row waits on
+something that *writes* a state, and a compiled instrument's parameters are `params`, not
+`state`.
+
+### What "deterministic" means for a compiler
+
+§2.2 promises "same project file + same pinned versions → bit-identical rendered audio", and
+§11's first bullet names `compilers` beside `core` and `engine`. M4 is the first milestone that
+has to say what those two sentences mean for three different things a compiler can produce —
+and the answers are different, which is why they are worked out before the questions.
+
+**One rule covers all three: the compiler tier produces artefacts, and the engine renders
+artefacts.** What a compiler produces is *derived* (CLAUDE.md #1) in the same sense a WAV is:
+computed from the model, never edited, and never a second place the song's state lives. Where it
+lives decides what the claim can be.
+
+1. **A generator's output is layer 2, and the claim is exact.** `compile_generator` writes the
+   target clip's notes — `song.proto` has said since M0.1 that "compiled output is the target
+   clip's notes … §4.2's 'stored alongside the source' is satisfied by layer 2 itself" — so the
+   output is the document and not a cache of it, and deleting the generator leaves the notes
+   where they are (§2.4: flat events are primary). What is claimed: **the same source, seed,
+   params, toolchain version, tempo map, signature map and target produce the same notes, byte
+   for byte** — and unlike a render, this claim can honestly be platform-free, because the DSL's
+   numeric domain is the model's own: integer ticks (§4.2), integer pitch and velocity, and
+   `Fraction` for anything in between, with no `float`, no `math` and no `libm` anywhere a
+   golden can see, for the reason ADR 0018 §4 refused transcendental functions in the axes. Its
+   one source of randomness is a generator seeded from `Generator.seed`, whose sequence CPython
+   specifies and the pinned interpreter fixes. The enforcer is the determinism suite — a
+   `generators` script driven over both transports and compared against committed bytes — beside
+   the sandbox's own tests. "Stale" is a hash (question 6), never a timestamp.
+2. **An exported DSP artefact is an asset the engine is handed as a path, and the claim is about
+   the render, not the build.** `cmaj generate --target=clap` writes a *C++ project* — "converts
+   a patch to a self-contained CLAP plugin project", in the tool's own help text at the pinned
+   commit — whose performer is generated C++ (`cmaj_GeneratedCppEngine.h`), with no LLVM in it
+   at run time. An export is therefore *generate, compile, wrap, hash*: the C++ is compiled under
+   the engine's own pinned flags (ADR 0009 §3), wrapped to VST3, content-hashed into `assets/`
+   and referenced by `SourceRef.export_hash`. The hash is an **identity, not a reproducibility
+   promise**: rebuilding the same source may not reproduce the bytes — compilers embed paths and
+   dates unless told not to — and the project does not need it to, because the artefact travels
+   in `assets/` and "the project renders without re-running the compiler" (§4.2). What *is*
+   claimed is ADR 0009 §1's sentence over the artefact: same `.escri` (the artefact included),
+   same engine, same OS and CPU → identical PCM, proved by the same golden shape the four bundled
+   plugins have. What `lock.json` records for it is what the document cannot: the toolchain that
+   made it — `cmaj`'s commit, the CLAP SDK, clap-wrapper, the VST3 SDK, the compiler — keyed by
+   the artefact's hash, so "what a render was made with travels with the render" (ADR 0010).
+3. **The JIT is a preview, and "the same input" has no honest answer for it.** LLVM's JIT
+   compiles for the CPU it is running on; two machines produce two programs from one source, and
+   the JIT and the exported C++ are two compilers over one source with no reason to agree to the
+   bit. So a JIT-only device is *live preview · not the render* by construction — the wireframes
+   drew exactly this state, "export pending: a JIT-only instrument renders now but doesn't
+   reproduce later — the UI has to distinguish those, since §11 depends on it" (Plate 3) — and
+   `render_export` refuses it (`export_pending`) rather than rendering something no golden could
+   hold. Whether the JIT is worth its cost at all is U3; whichever way that goes, nothing the JIT
+   plays is ever hashed.
+4. **A neural model is the JIT's case with a certainty instead of a suspicion.** ONNX Runtime's
+   CPU kernels choose an implementation by instruction set at run time, which is M1 trap 1 no
+   longer waiting to be measured; and a model's own sampling is a wall-clock seed unless the
+   graph carries one. So the rule is the second item's: whatever a neural process produces that
+   reaches a render is an artefact with a hash, and live inference is a preview. What that makes
+   the v1 runtime is U6.
+
+Two corollaries the ADRs should say outright. **A project renders without any compiler
+present.** No compiler pin is checked at open — `lock_mismatch` at open stays what ADR 0010 §3
+made it, about the engine and the plugins — and a toolchain is compared when a *compile* is asked
+for, because that is when it matters and the only time it can be wrong. This is what keeps every
+M0.4 golden's `lock.json` unmoved by a milestone that adds a block to it. And **the model is
+never told a compile is deterministic in any sense wider than the one above**: a generator
+compiles to the same notes; an instrument renders to the same bytes from its artefact; the JIT
+promises nothing.
+
+### The split, and where the seam is
+
+§16's M4 line names six things. ADR 0003 then placed three more into it — the neural runtime
+(§7), the code views (§8) and Airwindows (§4, amended) — and the ledger sends `FormRule`, two
+schema hashes and Faust's import path. Read as one milestone that is: a compiler in Python; a
+compiler toolchain in C++ with a JIT in the audio process; a plugin-export pipeline with a compile
+step on the user's machine; a second native runtime with its own process, transport and pins; two
+code views; an effects set; a schema change; and `lock.json`'s last block. Every milestone so far
+has been ten to fourteen pull requests and one whole-stack review; this would be twenty-odd and
+two reviews, and its two halves have almost nothing in common.
+
+**The seam is native against not.** One half is ours end to end: the DSL, its sandbox, the two
+`compile_*` tools, `Generator.compiled_hash`, the generator code view, `lock.json`'s toolchain
+block. It adds **no external dependency** — not one package — runs under the `checks` job with
+no engine build, and is integer arithmetic a golden can hold on any platform. The other half is
+everything native: Cmajor (thirty-two submodules, a prebuilt LLVM of 361 MiB for Linux x64 alone,
+a JIT), clap-wrapper, a CLAP SDK that is currently three different commits depending on who is
+asked, a VST3 SDK §17 has never listed, a compile step on the user's machine, ONNX Runtime and
+five packages beside it, and a fourth supervised process — into an engine build **no runner has
+executed since 2026-09-09**. And the first half is not merely the cheaper one: it is the one that
+exercises every seam the native half needs from `core` before any of the native risk is taken —
+the compile-tool contract, compiled output beside its source, stale detection, diagnostics fed to
+the model, a code view over a source field, a toolchain pin that is checked at compile and not at
+open. The native half then has only native questions left.
+
+So the recommendation is: **M4 is the generators; M5 is the DSP compilers and the neural runtime,
+with Airwindows; interop and polish become M6.** The alternative seam — JIT now, export later —
+puts LLVM into the audio process first, with CI dead, and delivers an instrument that previews and
+never renders, which is the weaker proof point of the two the roadmap names. Not splitting is the
+other alternative, and its cost is a milestone that cannot close for a long time with nothing
+shipped in between — the exact thing ADR 0003 warned of. What the split costs is honest and small:
+§16 is authoritative (ADR 0003 §1), so renumbering it is an ADR and the user's decision; the
+roadmap's dependency spine moves one row; and the installer waits one milestone more.
+
+The plan below is written for the split — questions, ADRs, a PR table, traps and what M4 will not
+claim all belong to the generators half — and **the second half is sketched afterwards** with the
+questions its own plan will have to answer, so that if U1 says "one milestone" the two tables
+concatenate and nothing is lost. The spike (PR 0) measures the native half's unknowns *now* either
+way, because U1, U3, U4 and U5 cannot be answered honestly without its numbers.
+
+### The open questions — for the user
+
+`CLAUDE.md` line 4: "Sections marked [OPEN] are not yours to decide: stop and ask." None of the
+three `[OPEN]` items is in M4's path, so every question below is a person's for a different reason
+that is named in its row: it reverses or renumbers a recorded decision, it spends money, it adds a
+dependency (CLAUDE.md #4, #7), it publishes the repository, or it is a licence reading. An agent
+may lay out the options and their costs, which is what each row does, and may not take one. **A
+recommended default is written beside each, and what it costs to be wrong.**
+
+| # | Question | What bears on it | Recommended default, and the cost of getting it wrong |
+|---|---|---|---|
+| U1 | **Is M4 one milestone or two?** | "The split, and where the seam is" above. §16 is authoritative and renumbering it is an ADR (0023); `roadmap.md`'s spine and `CLAUDE.md`'s milestone sections move with it | **Two, at the native seam**: M4 generators, M5 DSP compilers and the neural runtime with Airwindows, M6 interop. Wrong one way: an unsplit M4 is the widest milestone with the least CI and no close for months. Wrong the other way — JIT first — is LLVM in the audio process before a runner exists |
+| U2 | **How does a runner execute a step again?** | Every job has reported `failure` with **zero steps executed** since M2 PR 8 — twenty M3 runs and this morning's on `main` (`36115437620`, 2026-09-25 08:54) included; `renders` and `cross-cpu` are `skipped` behind them. The repository is **private**, and the billing endpoint answers this token 404, so the cause is read off the runs and not off the account. Four ways out, none an agent's: (a) **fix the billing** — at GitHub's Linux rate for private repositories of $0.008 a minute (from memory, not read today — a person checks the price before relying on it) a warm run of all five jobs is about 45 minutes, so about $0.36 a push and roughly $7 for a milestone of M3's twenty runs, plus $0.50–0.70 for each cold engine build after a pin moves — and M5 moves many; (b) **make the repository public** — public repositories' Actions minutes are free and the `cross-cpu` matrix needs GitHub's own pool, which nothing else provides; the code is AGPL-3.0, §18.2 wants the schema published, and every document in the tree addresses "LLM coding agents and human contributors"; (c) **a self-hosted runner on this machine** — free, executes steps, runs `buf breaking` against the right ref, and validates nothing ADR 0009 §6 cares about, because it *is* the one machine; (d) wait for the billing cycle | **(b) if the repository is going public anyway, else (a) with a spending limit.** Spending is CLAUDE.md #7's and is asked here, once, with the number. Cost of wrong: a third milestone of one-machine numbers, and this time the numbers are about native compilation — the work where one machine is least sufficient. **Until this is answered, every check named in this plan is one machine's, and each PR says so** |
+| U3 | **Is the JIT in v1, and where does it run?** §7.2 and §15 decided "JIT for editing"; what they did not decide is how it is hosted, and what it costs turned out to be the question | Three options, read from the Cmajor tree at `024a208`. (a) **`libCmajPerformer.so` inside the engine** — `tools/CmajDLL` builds a shared library with `ENABLE_PERFORMER_LLVM`, exports stripped to a list, meant for "your own native app which embeds the Cmajor JIT engine"; the engine grows a Tracktion plugin class of its own and LLVM enters the audio process, which is ADR 0003 §7's reason for moving ONNX Runtime *out*, one dependency over. (b) **Cmajor's own `CmajPlugin`**, a JUCE VST3 (`FORMATS AU VST3 Standalone`) that loads a `.cmajorpatch` and JITs it — hosted as a fourth bundled plugin through the path the three synths use, so the engine changes least; it needs a fourth JUCE, GTK3 and WebKit2GTK on Linux (its CMake requires both), and how a patch is loaded headlessly — by state, presumably — is a spike question. (c) **No JIT in v1**: an edit is *export and load* — generate, compile, wrap, load into the live preview — with the compile latency measured, and the JIT a ledger row triggered by that latency being measured as friction. (c) buys a stronger claim than M2's *live preview · not the render*: for a Cmajor device the preview and the export are **the same binary** | **(c) first, and the spike measures the latency the decision turns on.** This reverses §15's "JIT for editing" row and is therefore not an agent's to take. Cost of wrong: (c) with a thirty-second compile is an editing loop no person will use (a model will); (a) with a JIT that aborts is the audio thread gone, and a prebuilt LLVM this repository cannot rebuild under `-ffp-contract=off` |
+| U4 | **How is Cmajor pinned — source at `024a208`, or the 1.0.3177 release binary?** | Read 2026-09-25. Cmajor is dual **GPLv3 / commercial** (`docs/Cmaj Licensing.md`), compatible with AGPL-3.0 the way Tracktion is (§12). Its tree has **thirty-two submodules, every one declared with an SSH URL** (`git@github.com:`), which is M1's JUCE trap thirty-two times over on a keyless runner. `3rdParty/llvm` is `cmajor-lang/llvm` at `c6380f9`: **not LLVM's source but prebuilt static libraries per platform**, built by upstream's `build.pl` — `release/linux/x64` is 361 MiB in 2,275 files, and the repository is 4.6 GiB across eight platforms, so a checkout must be sparse. Building `cmaj` therefore *links* LLVM rather than building it, which is a vendor binary under a commit — the standing a PyPI wheel has under §17's registry rule, not the standing a source pin has. The release page for 1.0.3177 reports two assets and the API refuses to list them, so the binary route's hashes were not read | **Source at the pinned commit, `cmaj` and its plugin helpers only, with `3rdParty/llvm` checked out sparsely to `release/linux/x64`**; §17's Cmajor row gains the LLVM submodule's commit beside it, as JUCE's row records what Tracktion pins. Cost of wrong: a release binary's asset can be re-uploaded under the same tag, which a recorded sha256 detects and a commit does not need to |
+| U5 | **What is the pin set for the CLAP→VST3 path?** §17 lists Cmajor, clap-wrapper v0.16.0 and CLAP SDK 1.2.10 | Read 2026-09-25, and it is not one pin each. **Three CLAP SDKs**: §17's 1.2.10 is `195b42a`; Cmajor's `3rdParty/clap` submodule is `df8f16c`; clap-wrapper's own CMake downloads `1.2.6` when told to. **Two clap-wrappers**: §17's v0.16.0 (`1cca996`, 2026-08-08), and Cmajor's `3rdParty/clap-wrapper` — a fork pinned at `fd24bbe`, an upstream commit of 2024-08-19, two years older — while the generated CLAP project accepts a `CLAP_WRAPPER_PATH` of the caller's choosing. **One VST3 SDK that §17 does not list at all**: clap-wrapper's `base_sdks.cmake` fetches `steinbergmedia/vst3sdk` at `v3.8.0_build_66` from GitHub *at configure time* under `CLAP_WRAPPER_DOWNLOAD_DEPENDENCIES`, which Cmajor's generated project sets `TRUE`. A configure that reaches the network is ADR 0009 §4's Rubber Band hazard exactly — the build machine deciding a pin — and the engine's own VST3 hosting uses the SDK copy JUCE embeds, so this would be a second one | **One CLAP SDK, one clap-wrapper, one VST3 SDK, all three vendored as submodules and passed as `*_SDK_ROOT` with every download flag off.** Which CLAP commit is the spike's to say (the generated project's helpers are written against Cmajor's); clap-wrapper is ours at v0.16.0 passed explicitly, and the spike checks the 2026 wrapper still matches what the generated CMake calls; the VST3 SDK at the tag clap-wrapper pins, as a **new §17 row for sign-off**. Cost of wrong: two pins that must agree, silent when they do not — ADR 0008 §4's argument, and a header mismatch that compiles |
+| U6 | **What is the neural runtime in v1, and which model, if any, ships?** The packaging decision of 2026-09-25 stands: when the runtime exists it is a separate process | Read 2026-09-25 and not in any document here: **Cmajor's tree ships `tools/onnx/onnxToCmajor.py`**, which converts an ONNX model into *pure Cmajor* — `model.cmajor`, `onnx.cmajor`, a `.cmajorpatch` — for sixteen operators (`Tanh`, `Reshape`, `MatMul`, `Gemm`, `Add`, `Unsqueeze`, `Squeeze`, `Conv`, `GRU`, `Pad`, `Transpose`, `Constant`, `LSTM`, `Slice`, `Gather`, `Concat`), and an RTNeural twin. A DDSP-class model (`GRU` + `Dense`) rides the DSP path whole — exported, wrapped, hashed, rendered under our compiler with no runtime and no fourth process — and a model outside the subset (RAVE) is refused with the operator named. Three shapes for what is left: (a) **the real-time bridge** §7.3 reads as — a CLAP shim in the engine exchanging audio blocks with the ONNX process over shared memory every callback, which is the largest native item in the whole milestone; (b) **the runtime as an offline compiler**: a fresh process per render (ADR 0008's shape) that takes a track's notes and automation and writes a stem *asset* the engine plays as an audio clip, so the output is hashed and the runtime's cross-CPU dispatch is contained at compile time, exactly as an export is; (c) **v1 is the converter alone**, and the runtime — as (b) — waits for the first model somebody wants that the converter refuses. And **no model is chosen**: §17 pins a runtime and no weights, §14.5 wants a golden per model, and ADR 0003 §7 placed the runtime without naming what runs in it | **(c), with (b) as the runtime's shape when it comes; no model ships in v1, the golden is a synthetic ONNX graph, and a real model is a person's asset.** The 2026-09-25 decision is untouched by either. Cost of wrong: (a) is a plugin bridge built for a model nobody has named; (c) is one sentence in "will not claim" if it turns out a person's first model is a RAVE |
+| U7 | **Airwindows: now, later, or not?** | ADR 0010 §5 deferred it "with clap-wrapper" because the pinned `airwindows/airwindows` "may not build a Linux VST3". Read 2026-09-25: it does not — upstream builds VST2 and AU — and the maintained consolidated build, **`baconpaul/airwin2rack`** (MIT, pushed 2026-09-19), vendors `airwindows/airwindows` as its `libs/airwindows` submodule and builds a **JUCE plugin** (`BUILD_JUCE_PLUGIN`, `src-juce`): Dexed's shape, an `ExternalProject` with its own JUCE, no clap-wrapper anywhere. It would be the product's **first bundled effect** — the engine builds `surge-xt_VST3` and not Surge's FX plugin, so `add_effect` has had nothing to add since M1 — and it re-pins Airwindows to a different repository | **M5, with the DSP work**, re-pinned to airwin2rack at a commit the user approves. Not M4: the generators half has no effect-chain consumer, and the first pull request to touch the plugin set meets the manifest that has not been rebuilt since 2026-09-09 and the `jack/jack.h` Dexed wants. Cost of wrong: small either way; it is one plugin PR of M1 PR 6's shape whenever it lands |
+| U8 | **Every new dependency, for sign-off before any is installed** (CLAUDE.md #4) | **M4, the generators half: none.** Zero packages — `pydantic`, `grpclib` and `uv_build` are pinned, `unittest` and `ast` and `fractions` and `resource` are stdlib. **M5, the native half**, each returning to a person before it is vendored: Cmajor at `024a208` with `cmajor-lang/llvm` `c6380f9`, `include/choc` `a08bfd8`, its CLAP and clap-wrapper submodules or ours (U5), and twenty-eight boost submodules; **the VST3 SDK** (new, U5); airwin2rack and its JUCE (U7); for U3(b) a fourth JUCE, GTK3 and WebKit2GTK; for the neural converter the **`onnx`** PyPI package (`onnxToCmajor.py` imports `onnx.numpy_helper` and `onnx.shape_inference`) with the `numpy` and `protobuf` it carries; and for the runtime, when U6 says it exists, **`onnxruntime` 1.29.0** — the `cp312 manylinux_2_28 x86_64` wheel is 23 MB, sha256 `2b80d8c7…`, and its tag `v1.29.0` resolves to exactly the `2e2543f…` §17 pins — bringing `flatbuffers`, `numpy`, `packaging` and `protobuf` | **Listed for a person; none is added by this plan, and M4 adds none.** Cost of wrong: a dependency approved by name that arrives as five (M3's `httpx2` lesson) |
+| U9 | **Does §12's "Cmajor … generated code carr[ies] no copyleft" hold for an export?** | Cmajor is GPLv3 or commercial. An exported plugin is generated C++ *plus* the plugin helpers `cmaj generate` unzips beside it (`cmaj_CLAPPlugin.h`, `cmaj_plugin_helpers`), which come from the GPL tree. Whether a person's exported instrument is therefore GPL-derived is a licence reading §12 asserts and nobody in this repository has checked | **A person reads Cmajor's licence page before M5's first export lands**; the plan takes no position. Cost of wrong: a sentence in §12 that is false about what users ship |
+| U10 | **Is a paid measurement wanted — does the default model write the DSL?** | M3's spike measured a model on the tool API; nothing has measured one writing a generator. Without a number the DSL is designed for a human author and the model retries against the diagnostics it is fed (question 8), which is §6.1's loop doing its job. With one, the ADR cites it, dated, as M3's did. `CEILING_USD` equals the ledger's spent total, so nothing runs without a person raising the line in a commit; a session is capped in code before each call, ledgered and reconciled (CLAUDE.md #7) | **Not before the DSL exists**; offered once, after PR 6, if the user wants the number, at a stated cap. Cost of wrong: one design decided against a guess about one model on one day — which the retry loop already tolerates |
+
+### The open questions — an agent can propose an answer
+
+Seventeen. Each changes what gets built rather than how, which is the test M1, M2 and M3 used
+for what had to be answered before code. A **default** is stated where this plan has one; the
+question is open regardless, and the ADRs (PR 1) decide them after the user's ten.
+
+| # | Question | Options, and what each costs |
+|---|---|---|
+| 1 | **Where does the DSL sandbox run, and who spawns it?** §7.1 says "sandboxed subprocess … running inside the `ai` process" | Written before ADR 0020 §1 made `ai` a server that holds no session and no project. `compile_generator` is a `SongTools` tool (§5), served by `core` over gRPC, MCP and the Tauri command — and an MCP client drives a project with the window closed and no `ai` running at all (U5 of M3). So (a) inside `ai`, and a compile over MCP has nothing to call; (b) **a subprocess `core` spawns per compile**, told a command (`--generator <cmd>`) exactly as it is told `--engine` and `--ai`, a fresh process per call for ADR 0008 §2's reason and the sandbox's — nothing survives between compiles. **Default: (b); §7.1 is amended to say so.** Its cost is nothing new: `core/src/engine.rs`'s `listening` and `ended` already serve two children and gain a third |
+| 2 | **What transport, for one call?** | gRPC over a Unix socket the child names and prints (ADR 0013 §3), one `Compile` call, exit — the engine's `--render` shape; stdio with EOF framing, which M2 PR 9 deleted rather than keep a second transport; or argv and files. **Default: gRPC**, because the client exists, `tonic` and `grpclib` are pinned on both sides, and the messages need a `.proto` under `buf breaking` whichever way they cross — so the transport is the cheaper diff, not the cheaper idea |
+| 3 | **What is the DSL, concretely?** | A Python **subset** rather than Python: the source is parsed with `ast` and refused before execution unless every node and every name is on an allowlist — no `import`, no attribute whose name begins with `_`, no name outside the DSL's namespace, no `float` literal — then executed with a `builtins` that holds the DSL alone. The API is small and the ADR writes it out with a worked example, as ADR 0018 §1 wrote the view: `note(pitch, start, length, velocity)`, `bar(n)`, `beat(n)`, `ticks`, `rng` (a `random.Random(seed)`), `params`, `sections`, `tempo_at`, `signature_at`, the target clip's bounds. Output: the clip's whole note set, `set_notes` semantics (M0.3). Numbers: `int` and `Fraction`; a note that lands on a fraction of a tick is a refusal, not a rounding. **Default: as stated.** Cost: a model that knows Python will reach for `import random` and `math.sin` and be refused with the line named — which is the loop's job (question 8) and cheaper than a `libm` in a golden |
+| 4 | **What does "sandbox" claim?** | Purity by construction — no clock, no filesystem, no network, because the names do not exist in the namespace — plus a CPU-second and memory limit through `resource` and a timeout `core` imposes, so a loop that never ends is a refusal and not a hang (M0.4's rule: a hang is not a failure unless one is imposed). **Not a security boundary against a hostile author**, and "What M4 will not claim" says so: an AST allowlist has been escaped before, the threat here is a sloppy author rather than an adversary, and the process boundary is what a real sandbox would be built on later. **Default: as stated**, with `PYTHONHASHSEED=0` set on the child and `set` kept out of the language (trap 2) |
+| 5 | **What does a compile write, and what does its entry say?** | One entry under the tool name `compile_generator`: the target clip's notes replaced, and `Generator.compiled_hash` set. Every note's `provenance` is the call's (ADR 0021 §1), which is the proto comment's "carrying this generator's compile call in their provenance". A dry run compiles and shows the diff; the code view's Compile is a dry run and its Apply is the commit (ADR 0017 §4). Note ids are minted by `core`'s source, never by the sandbox (trap 9). **Default: as stated.** The alternative — the sandbox returning a patch — puts RFC 6902 in a fourth language, which ADR 0012 §2 refused for the frontend |
+| 6 | **What is "stale", and where is the hash computed?** | `compiled_hash` is the store's one hasher (`sha2`, in `core`) over the canonical JSON of the compile's inputs — `kind`, `source`, `seed`, `params`, `toolchain_version`, the tempo and signature maps, the target's bounds — written by the compile and recomputed by whoever asks; unequal is *stale*, empty is *never compiled*. Computed in `core` and nowhere else, or the view's "stale" and the compile's disagree (trap 3). A hand edit to the notes after a compile is **allowed** (§2.4) and is the log's to show, not the hash's. **Default: as stated**; this is the schema ADR's one field |
+| 7 | **`FormRule` and `set_form`** — the ledger row due now | The consumer ADR 0002 §7 waited for is the generative compiler, and the compiler does not need it: a generator reads the layer-2 `sections` it is handed (question 13), which already carry order and length. What a `FormRule` would add is a rule to re-lay sections from when `target_length` changes — a second compiler, for which nothing has asked. And `set_form` without a rule is `add_section` × N, which the model has, and one `apply_patch`, which it also has. **Default: both re-deferred, each with an event**: `FormRule` on the first time a person wants a form re-laid rather than re-typed; `set_form` on the first measurement in which a model fails to lay a form out with the tools it holds — the typed-mix-tools row's trigger, one entity over. Recorded in ADR 0023, amending ADR 0002 §7's "M4" |
+| 8 | **Which tools does the model get, and what does a diagnostic look like to it?** | `define_generator` (kind, source, seed, params, target) and `compile_generator` (id) join `OFFERED` — fourteen of twenty-seven — and editing a source is `apply_patch` on `/generators/{id}/source`, as the mixer writes `Mix`. A compile that fails is caller-fixable: `valid = false`, rule `generator_error`, the sandbox's own message with its line — "the same text the user reads is what the LLM retries against" (Plate 3) — fed back whole and counted against the three (ADR 0022 §3). A timeout is the author's too (`generator_timeout`). A sandbox that cannot start is an operator error and ends the turn. **Default: as stated**; ADR 0022 §1 and §3 amended in place |
+| 9 | **What is the code view, and what is a keystroke?** | CodeMirror over `Generator.source` — ADR 0016 §2's pin finally has a consumer — with seed and toolchain version in the title bar "where you can't miss them" (Plate 3), diagnostics in the editor, and one status word from `compiled_hash`: never · compiled · stale. A keystroke is **not a gesture**: nothing is sent per keystroke, the buffer is a draft, and Save is one `apply_patch`; Compile is one dry run and Apply one entry (ADR 0017 §1). The projection golden gains the view's description, and cannot see a buffer (trap 7). **Default: as stated, and no ADR of its own** — ADR 0012 §5 and ADR 0017 already decide everything in it |
+| 10 | **`lock.json` v3, the generators half** — the ledger row due now | A `toolchains` block: `generator: { dsl: "<the DSL's own version>", python: "3.12.12" }`, written on the first compile and never removed (ADR 0010 §2), compared **at compile** — `toolchain_mismatch`, an operator error, this build lacks that toolchain — and **not at open** ("a project renders without any compiler present"). The M0.4 goldens gain nothing, since no script compiles; the new `generators` script's golden carries the block. The artefact and model blocks (`artefacts[<hash>]`, `models[<hash>]`, keyed by content hash, each recording the toolchain that made it) are M5's, and ADR 0027 reserves their shape so M5's ADR extends rather than reopens. **Default: as stated** |
+| 11 | **Where does the compiler live?** | `/compilers/generative/` — §13 already names `/compilers` and this subdirectory, so no directory ADR — a Python package under `uv` with its own `pyproject.toml`, depending on `escribass-schema` and `escribass-proto` editable as `ai/` does, with a `.python-version` at §17's patch. Its tests join the `checks` job **in the PR that creates the directory** (M3 trap 17), and the `engine` and `app` gates learn to exclude it (trap 6). **Default: as stated** |
+| 12 | **What does the bar view say about generators?** | Today `generators: none`. The model that is offered `compile_generator` has to see what exists: one line per generator — id, kind, target, seed, and never · compiled · stale. ADR 0018 §1's table gains a row, the golden moves by that line, and nothing else. **Default: yes, the smallest addition** |
+| 13 | **What crosses to the sandbox?** | `CompileRequest { kind, source, seed, params, toolchain_version, tempo events, signature events, sections, target clip start and length }` and `CompileResponse { notes, or diagnostic { line, column, message } }`, in `proto/generate.proto`, reusing `Note`, `TempoEvent`, `TimeSignatureEvent` and `Section` by value with §4.3 blanked (ADR 0007 §2's rule for a plan). Never the `Song`: the sandbox is a compiler and is handed what it compiles. **Default: as stated**, and the file lands whole in one PR (trap 4) |
+| 14 | **Is a spike needed for the generators half?** | No native unknown in it. What it cannot reason its way to is one sentence in question 3's claim — that `random.Random` and `Fraction` arithmetic produce the same bytes under the pinned Python and one other patch — and the spike takes that measurement beside the DSP ones. **Default: PR 0 is the DSP spike, run now, because U1, U3, U4 and U5 need its numbers; the DSL borrows one afternoon of it** |
+| 15 | **Faust** | §7.2 keeps it as an import path and §17 says "pin hash when vendored". Nothing has asked to import one, and a second DSP toolchain (Faust → C++ → CLAP) doubles U5's pin set for no consumer. **Default: not M4's, not M5's without a consumer**; `DeviceRef.faust` stays validator-accepted and compile-refused, and a ledger row carries it on the first source somebody wants imported. Recorded in ADR 0023 |
+| 16 | **The re-pin tool row** | Its trigger is a plugin pin moving. M4 as split moves none; M5's Airwindows (U7) is the first that would. **Default: retriggered to M5's Airwindows PR**, and said in ADR 0023 rather than by silence — ADR 0022 §5's own precedent |
+| 17 | **What does the second half's plan owe, that this one names and does not answer?** | Listed so they are not discovered late (ADR 0003's lesson): how the engine loads a VST3 from an asset path when an asset has no extension and JUCE's loader picks by extension (M1 trap 16's neighbour — staged into a `mkdtemp` as `<hash>.vst3/Contents/x86_64-linux/<hash>.so`); the **export record** — a small JSON asset naming the binary's hash and the parameters the source declares, so `param_unknown` resolves without instantiating anything and `SourceRef.export_hash` names one thing; a `plugin_unknown` arm for artefact plugins the build manifest cannot list; `render_unsupported` on a Cmajor device becoming `export_pending`; the export pipeline as a subprocess `core` spawns with a timeout and diagnostics to the caller (§7.2); the neural process's directory, `compilers/neural/`, which is under a §13 line and so not a top-level directory after all — ADR 0003 §7's "an ADR of its own" is satisfied by the neural ADR rather than a directory ADR; `lock.json`'s `artefacts` and `models` blocks; and whether the golden for an exported instrument commits the artefact or builds it in the `renders` job (trap 14). **Not answered here, and said so** |
+
+### The spike (PR 0), and what each measurement unblocks
+
+M1's spike found the `bext` chunk, M2's never took its measurement and PR 10 paid for it, M3's
+changed the whole design. This one is chartered with the native half's unknowns, run *now*
+because four of the user's questions turn on its numbers, and told to record each number with the
+commit it was measured against and the machine it was measured on — one machine, until U2.
+
+| Measure | Unblocks |
+|---|---|
+| **What building `cmaj` at `024a208` costs on the pinned image** — thirty-two submodules with SSH URLs rewritten, `3rdParty/llvm` checked out sparsely to `release/linux/x64` (361 MiB), whether the tool and its plugin helpers build with g++ 13.3 under `-march=x86-64 -mtune=generic`, and the wall-clock and disk cost on two cores | U4 (pin strategy), U2's cost estimate, and whether M5's engine job is the hour it is today or two |
+| **What `cmaj generate --target=clap` writes** for a two-oscillator patch, what its CMake needs (`CLAP_INCLUDE_PATH`, `CLAP_WRAPPER_PATH`, the VST3 SDK), whether it configures with every download flag off and the SDKs vendored, and whether the 2026 clap-wrapper v0.16.0 still matches the generated project's calls or only Cmajor's 2024 fork does | U5 (the pin set) — the three-CLAP, two-wrapper, one-unlisted-VST3-SDK question, answered by building rather than by reading |
+| **Whether the wrapped VST3 loads headlessly** through the engine's `--scan` with `DISPLAY` unset, what it reports as parameters, and whether the CLAP helper drags GTK or WebKit in (read: `cmaj_clap` needs CLAP headers only; the JUCE template and `CmajPlugin` need GTK3 and WebKit2GTK) | M5's engine PR, and U3(b)'s cost |
+| **Whether an exported instrument renders the same bytes twice in two fresh processes, and again from a second build of the same source** — M1 PR 11's test, one device kind over | "What 'deterministic' means", item 2: whether the render-given-the-artefact claim holds before an ADR states it |
+| **What the JIT and the export make of one source**: the same patch rendered through `cmaj render` (JIT) and through the exported VST3, PCM compared — expected to differ, and by how much is the number | U3: whether "the JIT is a preview" is a design or an observation |
+| **Export-and-load latency**: generate + compile + wrap for the same patch, wall-clock on this machine, and what a live preview does when a plugin is replaced under it | U3(c) against (a) and (b) — the number the decision turns on |
+| **The ONNX-to-Cmajor path**: a GRU-plus-Dense model through `onnxToCmajor.py`, exported and rendered; and a graph using an operator outside the sixteen, refused with its name | U6: whether (c) is a v1 or a hope |
+| **`onnxruntime` 1.29.0 from the wheel**, a synthetic graph run twice in two processes with intra-op threads at one, and once more after pinning the CPU's feature mask down (if the runtime allows it) — whether item 4's dispatch hazard is measurable here or only certain in principle | U6(b)'s shape, if the runtime is wanted; nothing is pinned by a spike |
+| **The DSL's one number**: `random.Random(2**63+1)` and a `Fraction` chain, bytes compared across the pinned 3.12.12 and one other 3.12 patch | Question 3's platform-free sentence |
+| **airwin2rack** configured as an `ExternalProject` under the engine's flags, `--scan`ned | U7's size |
+
+Nothing in the spike is merged, and nothing in it pins anything: `lock.baseline.json` moves in PR
+1 or not at all. Every measurement that touches a render is one machine's and is written down as
+such, which is M3 trap 16 applied to a compiler.
+
+### ADRs, before code
+
+| ADR | Records |
+|---|---|
+| 0023 | **Scope**: M4 is split at the native seam (U1) and §16 is renumbered — M4 generators, M5 DSP compilers and the neural runtime, M6 interop and polish; the placements this plan makes — `FormRule` and `set_form` re-deferred on events (question 7), Faust on a consumer (15), Airwindows to M5 via airwin2rack (U7), Strudel after M5, the re-pin row to M5 (16), the neural runtime's directory under `/compilers` and its v1 shape (U6), the code views split with their compilers; and which §11 bullet each half answers. Amends ADR 0003 §3, §4, §7 and §8 and ADR 0002 §7 in place, dated |
+| 0024 | **The generative compiler**: what the DSL is (question 3), the sandbox as a subprocess `core` spawns per compile and what it claims (1, 4), the numeric domain and the seed, what a compile writes (5), what stale is (6), the three failure kinds for a compile (8). Amends §7.1's "inside the `ai` process" |
+| 0025 | **Schema**: `Generator.compiled_hash`, additive, `schema_version` stays 1 (ADR 0011 §4's precedent), the replay hazard recorded; `SourceRef.export_hash` **not** added here, against ADR 0002 §7's own rule — nothing produces one until M5, and the field waits for its producer. **The schema ADR, before the `.proto`** (CLAUDE.md #5) |
+| 0026 | **The compile wire**: `proto/generate.proto` (13) and the two tools on `SongTools` (8); `OFFERED` gains two (ADR 0022 §1, amended); the bar view's generator line (12) |
+| 0027 | **`lock.json` v3**: the `toolchains` block, checked at compile and never at open (10); the `artefacts` and `models` blocks' shape reserved for M5 |
+
+Five, for the reason M1, M2 and M3 each had five: each answers a different reviewer question —
+what the milestone is, what the compiler is, what the schema gains, what crosses, what is pinned
+— and a PR mixing them is reviewed for the loud one. **0025 precedes PR 2** as 0011 preceded M1
+PR 2.
+
+### PRs
+
+| # | Branch | Adds |
+|---|---|---|
+| 0 | `m4.0-spike` (**never merged**) | The measurements above. Run on this machine against `main`, numbers recorded in this file under "What the spike found" with the commit and the date beside each, before PR 1 is written |
+| 1 | `m4.1-adrs` | ADRs 0023–0027, their §15 rows, §7.1, §13, §16 and §17 amended, `roadmap.md`'s spine and `CLAUDE.md`'s milestone sections moved to the split, `lock.baseline.json`'s `toolchains.generator` row — the DSL's own version, **no external pin** — and the U2 answer recorded whichever it is. **No code.** The user's ten questions are answered here or the rows that need them wait. If U2 is answered before this PR opens, it is the first pull request a runner sees, and it says so |
+| 2 | `m4.2-schema` | `Generator.compiled_hash`; codegen for Rust, TypeScript and Python; `tests/fixtures/song/minimal.json` and its three round-trip suites. **A schema change, alone** (M1 PR 2's precedent). No determinism golden carries a generator, so none should move; the fixture is the one file expected to, and any other byte is named |
+| 3 | `m4.3-proto` | `proto/generate.proto` whole — `Compile`, its request and response — and `DefineGenerator` and `CompileGenerator` on `SongTools`, with `proto/`'s Rust, TypeScript and Python regenerated, in one change so `buf breaking` compares it once against a `main` that has not moved (trap 4). The generated Python server is what `compilers/generative` will implement, so the identity check `proto/tests/test_generated_python.py` already makes covers it |
+| 4 | `m4.4-generator` | `compilers/generative/`: the package, its lock and `.python-version`, the AST allowlist, the DSL's namespace, the seeded `rng`, the `Compile` server over a socket it names, and its tests — every forbidden construct fed and watched refused, a loop that never ends refused by the limit, the same seed twice, a changed seed changing the notes, and the cross-patch bytes. The `checks` step lands here, in the PR that creates the directory (trap 6). **No `core` change**: this is a process that can be driven from a shell |
+| 5 | `m4.5-compile-tools` | `core`: the two tools; the sandbox spawned per compile, told `--generator`; compile → the clip's notes and `compiled_hash`, one entry under `compile_generator`; the refusals (`generator_unknown`, `target_not_note_clip`, `generator_error`, `generator_timeout`, and `toolchain_mismatch` at compile); `lock.json`'s `toolchains` block written on first compile; and the determinism suite's `generators` script driven over both transports and goldened, with the staleness guard extended to the sandbox (trap 5). **The silent PR**: no existing golden moves, and any byte that does is named |
+| 6 | `m4.6-model` | `ai`: `OFFERED` gains two; the bar view's generator line and its golden; a diagnostic fed back as a refusal and counted; a scripted transcript in which the model defines and compiles a generator — **hand-written**, unless U10 grants a recording, and saying so in its own file as `four-refusals.json` does; `tests/`'s end-to-end golden gains the turn |
+| 7 | `m4.7-code-view` | `app`: the generator editor over `Generator.source` — CodeMirror's first consumer — seed and toolchain in the title bar, Compile as dry run → diff → Apply, diagnostics in the editor, never · compiled · stale; the projection golden extended; driven by hand in the window and reported, as every M2 control was and M3 PR 10 was not |
+| 8 | `m4.8-review-fixes` | A whole-stack review's findings. M0 averaged four to sixteen a milestone, M1 eighteen, M2 a blocker and a heap corruption, M3 eleven surviving mutants; budgeting a PR for it is cheaper than discovering it. Every fix a test watched failing first |
+| 9 | `m4.9-close` | §11 walked bullet by bullet with the enforcer named and run for each — the first bullet now has a `compilers` half to walk — the ledger walked a sixth time, `CLAUDE.md` to M5, and what M4 leaves unverified written where a reader will find it. **The M5 plan is its own step after this**, as this one was after M3's close |
+
+**Which rows can be sized now, and which cannot.** PRs 0, 1, 2, 3, 8 and 9 are the size they
+look. PR 4 is question 3's: a subset with an allowlist is a few hundred lines and a real language
+is a milestone, and the default is the first. PR 5 is questions 1 and 5's — a child process spawned
+by the shape `engine.rs` already has, and a tool that ends in `Session::run` as every tool does —
+and its silent half is the one to review. PR 6 is sized by whether U10 grants a recording; without
+one it is `OFFERED`, one view line and a hand-written transcript. PR 7 is the size it looks only
+if question 9 keeps a keystroke out of the tool API.
+
+The split follows M0.2's lesson, confirmed three times since: PR 4 is the loud concern (does a
+generator compile to notes, purely), PR 5 the silent one (did anything about the log, the lock or
+the goldens change when a compiler started writing entries). Mixing them gets the silent half
+reviewed as plumbing — and this time the silent half is `lock.json`, which every M0.4 golden
+carries.
+
+### The second half, sketched from here
+
+Not a plan — M5's plan is written at M4's close, against a `main` that has the compiler tier in
+it — but the rows a reader would otherwise have to rediscover, so that U1's "one milestone"
+answer has something to concatenate and its "two" answer has a shape to expect. Sizes are unknown
+until the spike, and every row is native.
+
+| # | Adds |
+|---|---|
+| 0 | The spike's native measurements re-run against the M4 tree, if the pins moved between |
+| 1 | ADRs: `SourceRef.export_hash` and the export record (schema, before the `.proto`); the export pipeline as a subprocess with a timeout and diagnostics (§7.2); the engine loading an artefact from a path (question 17's staging); `lock.json`'s `artefacts` and `models` blocks (extending 0027); the neural process's shape under U6 and its directory; Airwindows re-pinned; U9's licence reading recorded |
+| 2 | The schema change, alone |
+| 3 | `proto/` whole: `Export` for the DSP pipeline, `DefineInstrumentSource` and `CompileInstrument` on `SongTools`, `render.proto`'s artefact path beside `sfz_path` |
+| 4 | `compilers/dsp/`: Cmajor vendored (U4), the CLAP SDK, clap-wrapper and the VST3 SDK vendored (U5), every download flag off and a check that a configure touches no network; `cmaj` built in the engine job under the pinned flags; the export pipeline; the engine job grows by what the spike measured |
+| 5 | `engine`: hosting a VST3 from an asset path, staged with an extension; `--scan` of an artefact into an export record; the flag check over the exported project's compile lines |
+| 6 | `core`: the two tools, `export_pending`, `plugin_unknown`'s artefact arm, `param_unknown` over the export record, the `artefacts` block; the render suite's **fifth golden** — an exported instrument, rendered twice and against committed bytes, with trap 14's answer on whether the artefact is committed or built |
+| 7 | The DSP code view: CodeMirror over the source asset, Export as the one button that hashes (Plate 3), *export pending* drawn as a state |
+| 8 | The JIT, if U3 says so, in whichever host U3 chose; or the ledger row that says why not |
+| 9 | Airwindows via airwin2rack as a fourth bundled plugin, with its golden (U7), and the manifest rebuilt for the first time since 2026-09-09 |
+| 10 | The neural path under U6: `compilers/neural/` with `onnxToCmajor.py` driven behind the DSP pipeline, a synthetic-graph golden, a refused operator named; the runtime process only if (b) was chosen |
+| 11 | Review fixes |
+| 12 | Close: §11 walked with a golden per compiled device kind; `lock.json` complete (ADR 0003 §3 closed); `CLAUDE.md` to M6 |
+
+### Traps
+
+Written from what actually went wrong in M0, M1, M2 and M3, applied one milestone over — and
+this time the list is longer than before because half of it is written for a milestone that has
+not been planned yet, so that its plan inherits a list rather than rediscovering one.
+
+1. **A check that cannot fail, compiler edition.** A compile golden over a source that works
+   proves that working sources compile, which nothing doubted. PR 4's tests feed every construct
+   the allowlist forbids and watch each refused with its line named, feed a loop that never ends
+   and watch the limit refuse it, and feed a source that reads `rng` and watch the seed change
+   the notes — each failing first against an allowlist with that arm removed. M2 PR 11's rule
+   applies before there is a fix, to every arm of question 3.
+2. **A sandbox that is impure by accident.** CPython randomises string hashing per process
+   unless `PYTHONHASHSEED` is set, so a `set` of strings iterates in a different order in two
+   runs of one source — a generator that iterates a set of section names compiles to different
+   notes on two runs with no clock and no `random` anywhere. `PYTHONHASHSEED=0` on the child
+   *and* no `set` in the language, because a default nobody can see is exactly how Surge XT's
+   `A Osc 1 Retrigger` hid for two pull requests. `float` is out for the same family of reason:
+   its formatting belongs to a dependency (M0.4 trap).
+3. **Two hashers.** `compiled_hash` is written by the compile and read by the view to say
+   *stale*; if the compile hashes in Python and the view compares against `core`'s, they disagree
+   the first time one canonicalises a double or a key order differently — M0.1's serialisation
+   boundary, with a status word as the symptom. One hasher, `core`'s, over the canonical JSON it
+   already writes.
+4. **`buf breaking` is the only guard on `proto/` and runs on pull requests only.** The
+   `Compile` service and the two tools land together in PR 3, for M2 trap 12's reason — and
+   until U2 is answered `buf breaking` has been run locally against `main` for every PR since M2
+   PR 8, which is a check run by the person it is meant to check.
+5. **The suite validates a stale sandbox.** M0.4 found the suite could validate a stale binary;
+   M1 PR 13 found the render suite had never compared the engine against `engine/src`. The
+   determinism suite will now drive `escribass-mcp`, which spawns a Python process from
+   `compilers/generative/` — a `uv sync` that was not run, or an environment from before the
+   change, passes every golden. The staleness guard learns the third child, and the `checks` job
+   syncs it `--locked`.
+6. **The path gate, both ways.** `compilers/` is in none of the exclusion lists, so a change to
+   it runs every job — including an hour of Tracktion for a Python file that cannot reach a
+   sample. And the `checks` job has no step for it until PR 4 adds one, which is M3 trap 17 with
+   a new directory. PR 4 adds `compilers/generative/` to the `engine` and `app` gates' exclusions
+   and the step to `checks`, in one change, and `tests/determinism.rs`'s gate test learns the
+   new line.
+7. **The editor buffer that becomes a second representation.** A CodeMirror state is a draft; the
+   moment it survives a `get_song` re-read, is compiled from directly, or is written back on
+   blur without a tool call, it is M2 trap 1 in a text box — and the projection golden cannot
+   see it, because a buffer is not a projection. Save is `apply_patch`; a re-read replaces the
+   buffer or asks; nothing compiles what the document does not hold.
+8. **A dry run that spawns a process per keystroke.** A drag's dry run costs 1–3 ms and writes
+   nothing (ADR 0017 §5); a compile's dry run spawns a Python interpreter. Wired to the editor's
+   change event it is a process fork per keystroke, presenting as a laggy editor and living in
+   `core`. One compile per click, and the plan says so before the wiring exists.
+9. **Ids from the wrong side.** The sandbox returns notes and must return them **without ids**:
+   ULIDs come from `core`'s injectable source (ADR 0001 §5), which is what makes `--seed-ids`
+   a pure function of the script and every golden reproducible. A compile replaces the clip's
+   notes whole, so every note id changes on every compile — nothing references a note id today,
+   and the day something does (per-note expression on the wire, a selection held across a
+   compile) this is where it breaks.
+10. **`Generator.seed` is a `uint64` that crosses JSON as a string** (ADR 0002 §1) and reaches
+    the sandbox as an integer. A model writing `seed` through `apply_patch` writes a string;
+    `random.Random` takes the integer whole. The three round-trip suites already hold
+    `9007199254740993` — the fixture's seed is above 2⁵³ on purpose — and PR 4's cross-patch
+    check uses a seed above 2⁶³.
+11. **`toolchain_version` has never meant anything.** The validator checks it is non-empty and
+    the fixture says `0.4.1`, a made-up string. From PR 5 it is a real value the sandbox reports
+    and `core` compares, so the schema fixture's generator becomes uncompilable by design — a
+    constructed value, not a project, and `tests/AGENTS.md` says so.
+12. **A compile writes N notes and `Project::write` is O(history).** One entry per compile
+    (ADR 0017 §1), but a four-minute generator at a sixteenth-note grid is thousands of notes in
+    one `set_notes`-shaped op, and the known gap has a number only for a five-track project.
+    Measured in PR 5 at 1,000 and 10,000 notes rather than assumed, and written into the gap.
+13. **LLVM in the audio process** — if U3 takes (a). An abort inside the JIT is an abort on the
+    audio thread, which is ADR 0003 §7's exact reason for moving ONNX Runtime out, one
+    dependency over; and `cmajor-lang/llvm` is prebuilt by upstream's `build.pl`, so the
+    engine's `-ffp-contract=off` and `-march=x86-64` reach none of it and the flag check cannot
+    see inside an archive. Named now so U3 is decided knowing it.
+14. **Two clap-wrappers, three CLAP SDKs, one VST3 SDK nobody listed, and a configure that
+    downloads.** Read in U5. The failure is silent: two SDK versions that both compile and one
+    plugin that misbehaves in a host. Every SDK vendored at one commit, every download flag off,
+    and — the check that can fail — a configure run with the network unreachable that must
+    succeed. And whether the render golden for an exported instrument **commits the artefact**
+    (a platform-specific `.so` in `tests/`, which no golden here has ever been) or **builds it in
+    the `renders` job** (the job gains `cmaj`, a compiler and the pipeline, and the golden is only
+    as reproducible as the build) is M5's first decision.
+15. **Thirty-two SSH submodule URLs and a 4.6 GiB repository of which 361 MiB is wanted.** M1's
+    spike found one SSH URL in Tracktion and rewrote it; Cmajor has thirty-two, and its LLVM is
+    every platform's static libraries in one tree. The engine job's checkout step grows a sparse
+    checkout and a loop, and a runner that clones it whole runs out of disk before it runs out
+    of time.
+16. **An artefact has no extension, and JUCE's VST3 loader picks by extension.** M1 PR 11 found
+    the WAV reader half of this — no audio clip could be played until the engine read the
+    header instead of the name. The plugin half is the same: `assets/<hash>` will not load as a
+    VST3 until it is staged as `<hash>.vst3/Contents/x86_64-linux/<hash>.so` in a `mkdtemp`.
+    Named now so M5's engine PR does not find it in a golden that renders silence and exits 0.
+17. **The validator cannot see an artefact's parameters without instantiating it.** `param_unknown`
+    resolves against the build manifest, which describes bundled plugins; an exported instrument
+    is not in it. The export record (question 17) is the manifest's row for one artefact, written
+    by the export from what the source declares — and a JIT-only device has no record at all,
+    which `validate.rs`'s `ponytail:` at the parameter check already names as the case it skips.
+18. **The neural output's dispatch, and its seed.** ONNX Runtime's kernels choose by instruction
+    set at run time, which makes M1 trap 1 certain rather than suspected for anything it renders;
+    and an ONNX graph can carry a `RandomNormal` whose seed is the clock unless the attribute is
+    set. Whatever reaches a render is an asset with a hash; the spike measures the first half and
+    the ADR refuses the second.
+19. **A "measured" number from one machine.** Every measurement in PR 0 is one CPU's until U2 is
+    answered, and the numbers that most need a second machine — the exported instrument's
+    reproducibility, the JIT's difference from the export, the runtime's dispatch — are exactly
+    the ones this milestone is about. Each is written down as one machine's, cited as evidence,
+    never as the claim (M3 trap 16).
+20. **Money, and the quiet skip in the other direction.** `CEILING_USD` equals the ledger's spent
+    total, so a test that unknowingly needs the key fails closed — the safe direction — but a test
+    that *catches* that refusal and returns is M0.4's quiet skip with a dollar sign on it. The
+    live run stays `#[ignore]`d and loud; U10's measurement, if granted, is a new ceiling in a
+    commit, a cap in code before each call, and one ledger line per call, reconciled — nothing
+    less than M3 PR 8 built.
+21. **A promise only an ADR keeps.** ADR 0010 promised M2 a re-pin tool; ADR 0007 §6 handed
+    routing to a mixer that never owed it; ADR 0014 §1's trigger fired into no row. This plan
+    makes promises in question 17 and in the second-half sketch, and each is a row somewhere —
+    the ledger or the sketch — with an event a reader can check, because the ones that were not
+    written down are the ones that survived two milestones.
+
+### What M4 will not claim
+
+Written for the split; if U1 says one milestone, the first six lines move to "what M5 will not
+claim" and the rest stand.
+
+- **Not the DSP compilers, not the neural runtime, not `lock.json`'s artefact and model blocks,
+  not Airwindows, not Faust, not the DSP code view.** Under U1's recommended answer they are
+  M5's, and `render_unsupported` keeps naming what lifts each refusal.
+- **Not the JIT, either way.** Whether it is in v1 is U3, and nothing in the generators half
+  touches `engine/` at all — its last commit stays M2 PR 11's.
+- **Not that the sandbox is a security boundary.** It is a purity boundary — the names for a
+  clock, a file and a socket do not exist in it — with a limit on time and memory. A hostile
+  author is not the threat it was built against, and the ADR says so in as many words.
+- **Not that a model writes the DSL reliably, or at all.** No measurement exists unless U10
+  grants one, and one session is n=1. What is claimed is that a model's compile that fails is fed
+  back with its line and counted against the three.
+- **Not `FormRule` and not `set_form`.** Re-deferred on events (question 7); `Song` gains no
+  map, and `proto/song_tools.proto`'s comment moves its milestone rather than losing its sentence.
+- **Not Strudel** — after M5, unchanged.
+- **Not that a compiled clip's notes are protected from a hand edit.** §2.4: flat events are
+  primary. A person may drag a generated note, the log records that they did, and the next compile
+  replaces it. *Stale* describes the source, never the notes.
+- **Not platform-free, yet.** The arithmetic allows the claim — integers, `Fraction`, a specified
+  PRNG — and a second platform running the `generators` golden is what would make it. Until then
+  it is Linux x86-64 like everything else, and the sentence in the ADR says the wider claim is
+  *permitted* by the design and *unmade* by the evidence.
+- **Not anything a runner has verified**, until U2 is answered. As "M2, closed" and "M3, closed"
+  say of theirs: every number is one machine's, and each PR says so.
+- **Not macOS or Windows; not a preview on a device; not the cross-CPU answer.** Inherited
+  unchanged from M1, M2 and M3.
+- **Not a resolution of any `[OPEN]` item.** None of the three is M4's (below).
+- **Not typed tools for editing a source.** A source is edited by `apply_patch` on its path, as
+  a mix is; a `set_generator_source` waits for a measurement in which that fails, the typed-tools
+  row's trigger.
+- **Not that `toolchain_version` is checked at open.** It is checked at compile, on purpose: a
+  project renders without any compiler present, and the M0.4 goldens' `lock.json` proves it by
+  not moving.
+
+### The four ledger rows, walked
+
+The ledger said on 2026-09-24: "Four rows now have M4 in their 'revisit at' column, and M4
+opens with this pull request … None is due today — they are due at M4's planning, which is its
+own step." This is that step, and each row is decided or re-deferred with a reason here and in
+the table.
+
+| Row | Disposition |
+|---|---|
+| **`FormRule`** (ADR 0002 §7, "M4") | **Re-deferred, on an event.** The consumer the deferral waited for — the generative compiler — reads layer-2 `sections` and needs no rule; a rule to re-lay a form is a second compiler nothing has asked for. Trigger: the first time a person wants a form re-laid rather than re-typed. `set_form` goes with it, on the typed-tools row's trigger (question 7). Recorded in ADR 0023, amending ADR 0002 §7 |
+| **`SourceRef.export_hash` and the `Generator` compiled-source hash** (ADR 0002 Consequences, "M4") | **Split.** `Generator.compiled_hash` lands in M4 PR 2 under ADR 0025, with a producer (PR 5) and a consumer (PR 7). `SourceRef.export_hash` waits for its producer, the export pipeline, and lands in M5's schema ADR — ADR 0002 §7's own rule against a field defined against no consumer, applied to the half of the row whose consumer is a milestone away |
+| **`lock.json` beyond `schema_version`** (ADR 0003 §3, "M4") | **Split.** The `toolchains` block lands in M4 PR 5 under ADR 0027, checked at compile and not at open; the `artefacts` and `models` blocks are M5's, their shape reserved by 0027 so M5 extends rather than reopens. ADR 0003 §3's "completed at M4" becomes "completed at M5" under U1 |
+| **Strudel as a second `Generator.kind`** (§15, "after M4") | **Re-deferred, unchanged**: after M5. The reason is §15's — a JS runtime and AGPL Strudel in the core — and nothing this milestone learns changes it; the enum leaves room, as it has since M0.1 |
+
+### The three `[OPEN]` items, and whether any is M4's
+
+§15's closing paragraph lists three, since the neural runtime's packaging left it on 2026-09-25.
+**None is M4's, and this plan walks into none of them.** *Minimum supported OS versions* belongs
+with the installer, which under U1 is M6's; M4 targets Linux x86-64 as every milestone has (ADR
+0014 §2). *Symbolic model choice for melody and drums* is reachable only if the third item says
+yes, and it did not in M3 (U1 and U2 of M3's plan). *Whether §6's analysis and symbolic generation
+are v1 at all* is §6.2 and §6.3, which live in `ai`; M4's compilers are §6.4 — "code generation
+for compilers … always submitted through `compile_*` tools" — which is placed, not open, and is
+exactly what PR 6 offers the model. One tension is worth one sentence for whoever reopens the
+third item: §7.3's "non-real-time models live in `ai`" and CLAUDE.md #6's "the AI process is
+audio-agnostic" cannot both hold for a model that produces audio, and U6's neural process is
+where such a model would run — not `ai`.
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -2067,6 +2554,18 @@ not a ledger row and is more urgent than any of them: ADR 0003 §7's Consequence
 runtime's packaging "must be resolved before M4 starts", and it is still open. `CLAUDE.md`'s M4
 section names it.
 
+**Walked a sixth time at M4's planning, 2026-09-25**, for the four rows the fifth walk said were
+due here and for nothing else — a planning pass, not a close, so no other row's trigger was
+re-judged. The `[OPEN]` item beside them was answered by the user on the day the fifth walk was
+written (ADR 0003 §7, resolved). Two of the four are **split**: `Generator.compiled_hash` lands in
+M4 and `SourceRef.export_hash` waits for the export pipeline that would produce one; `lock.json`'s
+`toolchains` block lands in M4 and its `artefacts` and `models` blocks wait for the artefacts. Two
+are **re-deferred on events** rather than on milestones: `FormRule`, because the compiler it waited
+for turns out not to consume it, and Strudel, because nothing learned here touches §15's reason.
+Each row says so in its own text; the reasoning is in the M4 section, "The four ledger rows,
+walked". One row is **retriggered** by the plan without being due — the re-pin tool's, whose
+trigger is a plugin pin moving, which M4 as split does not do and M5's Airwindows would.
+
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
 | ~~The Libretto package (MIT) as a dependency~~ | **Closed 2026-09-21, on a read made 2026-09-17 and recorded on PR #71.** Not needed after ADR 0018 §4: nothing on the package's surface would be called — its fingerprint, genre bands and `copy_risk` need the corpus and are verdicts, its encoder and decoder read MIDI `ai` never sees, and its per-song floats over its own grammar are not per-bar exact rationals over the `Song`. Its licence text carves the data out of the MIT grant, and the corpus is identifiable transcriptions of copyrighted works — `song_0001` is named, with its MusicBrainz id — with no redistribution grant in the chain; "for research reproducibility" is a stated purpose, not a licence term. Had it been wanted: thirty Python packages, 103 MB of package data, a 283 MB clone, roughly ten times the approved sidecar stack | closed unless the corpus-free decision of ADR 0018 §4 is reopened | ADR 0018 §6, Consequences; PR #71 |
@@ -2082,15 +2581,15 @@ section names it.
 
 | Item | Why deferred | Revisit at | Source |
 |---|---|---|---|
-| `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler | M4 | ADR 0002 §7 |
+| `FormRule` | Least-specified entity in §4; nothing consumes it before the generative compiler. **Walked 2026-09-25 at M4's planning, and re-deferred on an event**: the consumer the deferral waited for reads the layer-2 `sections` it is handed and needs no rule, and a rule to re-lay a form from `target_length` is a second compiler nothing has asked for. `set_form` goes with it — without a rule it is `add_section` × N and one `apply_patch`, both of which the model holds (M4 plan, question 7; ADR 0023 will amend ADR 0002 §7) | ~~M4~~ — the first time a person wants a form re-laid rather than re-typed; `set_form` on the first measurement in which a model fails to lay a form out with the tools it holds | ADR 0002 §7; M4 planning, 2026-09-25 |
 | `Instrument.state` as a content hash instead of inline `bytes` | Plugin states are large base64 in a file §2.6 wants diffable — but adding a hash field and deprecating `state` is additive, not breaking. ~~Revisit before M1 renders a plugin~~ — that trigger passed at PR 7 and M1 re-judged it: nothing in M1 *writes* a state. ~~M2, with the first plugin editor~~ — **retriggered 2026-09-07**: M2 *has* an editor (ADR 0014 §1) and it still writes no state. A generic parameter editor writes `params`, a map from `ParamID` to a normalised double; `state` is the plugin's own opaque blob and only the plugin's own serialisation produces one. So there is still no producer, which is ADR 0002 §7's reason unchanged | The first thing that **writes** an `Instrument.state`: a plugin's own VST3 editor, or a preset import. Neither is M2's | review, 2026-09-02; re-judged M1; retriggered by ADR 0014 §3 |
 | ~~`ParamRef` reaching track mix params (gain, pan, mute)~~ | **Closed 2026-09-07 by ADR 0015 §1** — and it cost no schema change at all. Ids are already globally unique across collections (ADR 0001 §3), so a `ParamRef` whose `device_id` resolves to a track addresses `Mix.gain_db` and `Mix.pan` with no field added. `mute` and `solo` stay unaddressable on purpose: a double automating a boolean needs a threshold rule that would be ours and pinned | **closed in M2 PR 6**, 2026-09-09 | review, 2026-09-02 |
 | Dense unique `index` on tracks and effects | Inserting mid-list renumbers everything, and two branches inserting at one index auto-merge into an invalid document. Deferred again at M0.3: the merge pipeline makes that failure loud (the validator refuses it) rather than silent, and closing it properly is a `song.proto` change with its own ADR. ~~M2, with the mixer~~ — **deferred again 2026-09-07** (ADR 0015 §4): the mixer is a milestone, not an event, and a mixer that draws a chain in order and adds at the end never renumbers. M2 is on record as offering no reorder gesture | ~~The first gesture that reorders an effect chain or inserts a track mid-list~~ — **retriggered 2026-09-24 at M3's close**: that trigger names a *gesture*, and since M3 the document has an author that makes none. `apply_patch` is one of the twelve tools the model is offered (ADR 0022 §1), and an `index` is an ordinary `uint32` a patch can write, so a model can insert a track mid-list or renumber an effect chain without anyone touching the window. The trigger is now **the first edit, by any author, that reorders an effect chain or inserts a track mid-list** — a gesture in the window, or an `apply_patch` from a model or an MCP client. The failure it guards is unchanged and is still loud: the validator refuses a duplicate `index` (`track_index_duplicate`, `effect_index_duplicate`) | review, 2026-09-03; ADR 0015 §4; retriggered by M3 PR 11 |
 | ~~Interactive merge conflict resolution~~ | **Closed 2026-09-07 by ADR 0015 §3** and **built 2026-09-09 in M2 PR 8**: one optional per-path resolution on a second `merge_branch` call. No new tool and no merge state held between calls, which is the shape ADR 0006 §5 refused for projects. What the build added to the decision is in ADR 0015 §3's extension: `resolution_unknown`, and a merge with no ops that records an entry anyway | closed — M2 PR 8, 2026-09-09 | ADR 0001 §4 |
 | Windowing the parameter editor's rows | Surge XT declares 2855 parameters and the editor renders every one: **1.65–1.79 s** to first paint on this machine, against 270–380 ms for the mixer and the roll, measured in the window. `content-visibility: auto` — a native property, not a library — took it from 2.0 s, which is a fifth and not a fix; a search box is what makes 2855 rows usable, and it is not what makes them fast. Deferred rather than solved because a virtual list is a scroll implementation with its own bugs, bought for one second on an action a person takes rarely, and because the ceiling is known: the cost is linear in what the manifest declares (ADR 0016 §3) | A plugin whose editor takes longer to open than a person will wait, or the first time the second is measured as friction rather than noticed | M2 PR 7, 2026-09-09 |
 | Garbage collection of orphaned patch entries | Entries are small and inert | only if a real project makes it a problem | ADR 0001 Deferred |
-| `SourceRef.export_hash`, `Generator` compiled-source hash | Needed for "export pending" and "compiled · stale"; nothing produces either yet | M4 | ADR 0002 Consequences |
-| Strudel as a second `Generator.kind` | Python DSL is the v1 target | after M4 | §15 |
+| `SourceRef.export_hash`, `Generator` compiled-source hash | Needed for "export pending" and "compiled · stale"; nothing produces either yet. **Walked 2026-09-25 at M4's planning, and split**: `Generator.compiled_hash` has a producer (`compile_generator`) and a consumer (the generator code view) in M4 and lands in its schema PR under ADR 0025; `SourceRef.export_hash` has neither until the export pipeline exists, and ADR 0002 §7's own rule — no field against no consumer — holds it for the milestone that builds one (M4 plan, "The four ledger rows, walked") | `Generator.compiled_hash`: M4 PR 2. `SourceRef.export_hash`: the DSP milestone's schema ADR — M5 under the split | ADR 0002 Consequences; M4 planning, 2026-09-25 |
+| Strudel as a second `Generator.kind` | Python DSL is the v1 target. **Walked 2026-09-25 at M4's planning, re-deferred unchanged**: §15's reason — a JS runtime and AGPL Strudel in the core — is untouched by anything M4 learns, and the enum has left room since M0.1 | after the DSP milestone — M5 under the split | §15; M4 planning, 2026-09-25 |
 | ~~`schema/pyproject.toml` `[build-system]`~~ | **Closed 2026-09-23 in M3 PR 5**, by the trigger firing exactly as written: `ai/` depends on it. The sidecar imports `escribass_schema` and `escribass_proto`, and the alternative — `sys.path.insert` in the package's `__init__`, which is what the tests do — would carry this repository's directory layout inside the product, where an installer (M5) is the first thing to make it false. So `schema/` and `proto/` are packages, `ai/` depends on both by path and **editable**, because `codegen.sh` deletes `gen/` whole on every run and a built copy would be a stale second `Song`. What it cost is one row in §17 that is a range rather than a pin, said out loud there: `uv`'s own build backend | closed — M3 PR 5, 2026-09-23 | `schema/AGENTS.md` |
 | Native CLAP hosting | VST3 via clap-wrapper is the mature path | never a dependency | §8 |
 | User VST3 plugins | §8 says "VST3 host" and §16 never says user plugins, so nothing places them. M1 refuses a plugin outside the bundled manifest, which makes the gap loud rather than silent. ~~M2, when `app` could show a plugin browser~~ — **retriggered 2026-09-07**: M2's editor is a *view over* the build manifest, and the manifest describes what this build hosts. A browser is not a view over one; it is a scanner that puts things into one, and it drags `lock.json` with it, since a user's plugin has no submodule commit to pin | When the build manifest can describe a plugin this build did not bundle | M1 planning, 2026-09-04; retriggered by ADR 0014 §3 |
@@ -2098,8 +2597,8 @@ section names it.
 | Recursive merge, for a criss-cross base | Two branches that each merge a third leave `merge_base` with no single answer, and it refuses rather than guessing which history is the truth. The fix is to merge the bases and use the result. ~~M2~~ — **deferred 2026-09-07** (ADR 0015 §3): refusing is the current behaviour and it is loud, and *nothing in the repository produces a criss-cross history yet*. M2's history view is what makes branch merging ordinary enough for one to appear. **The trigger is now genuinely reachable** (M2 PR 8): merging two branches that have each merged a third is four clicks in the window. Nothing has produced one yet, and `merge_base_ambiguous` is what would say so | A real criss-cross base | review, 2026-09-03; ADR 0015 §3; reachable from M2 PR 8 |
 | ~~Undo/redo **tools**~~ | **Closed 2026-09-09 in M2 PR 5.** `undo` and `redo` are RPCs with `dry_run` and the shared `ToolResult`, and the one thing ADR 0005 §4 named without specifying — the session-held stack — is a cursor into the log's first-parent chain that **skips the log's own undo and redo entries**, cleared by any other commit and by a branch switch. Both halves were found by pressing the key: reading `HEAD` again undoes the undo, and walking the mechanism's own entries takes the document forwards (ADR 0005 §4, extended). **Amended 2026-09-15 in M2 PR 11**: the session-held cursor is gone, because it was empty in every fresh session — two edits, two undos, a relaunch and one more undo re-applied the first edit. The chain is replayed as an editor's undo stack on every press instead (ADR 0005 §4, amended) | closed — M2 PR 5; amended M2 PR 11 | ADR 0005 §4 |
 | Committing a direct-manipulation gesture on release, without a separate approval | ADR 0017 §4 gives the first control §9's flow whole — release proposes, a person applies — because it is the first control that has a diff to show and the flow should be reviewed where it can be seen. Whether *every* gesture should keep asking is a different question: undo is what would make committing on release safe, and it exists now | The first time per-gesture approval is measured as friction rather than argued about — a session where the Apply click is counted | ADR 0017 §4 |
-| `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes | M4 | ADR 0003 §3; §17 |
-| A re-pin tool, and a window that recovers from `lock_mismatch` | ADR 0010's Consequences said "**M2** gains a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text editor", and M2 delivered neither: no PR row named it, no M2 ADR placed it, and the only way to re-pin is still ADR 0010 §3's — an operator deletes the entry and the next write pins it. Found at M2's close, walking ADR 0010 against the code. Not built there and then because a tool is a `song_tools.proto` change and a re-pin is a `lock.json` write outside the patch log, which is a decision and not a closing PR's | The first `lock_mismatch` a person meets, which needs a plugin pin to have moved — and no bundled pin has moved since M1 | ADR 0010 Consequences; M2 PR 12 |
+| `lock.json` beyond `schema_version` | ~~Nothing to pin until compiled artefacts and models exist~~ — the M1 half is **closed** in PR 9: the engine's submodule commits and one entry per referenced plugin. What is left is M4's, the compiled artefacts and model hashes. **Walked 2026-09-25 at M4's planning, and split**: a `toolchains` block — the DSL's version and the Python patch, written on the first compile, compared **at compile** and never at open, so a project renders without any compiler present and no M0.4 golden's `lock.json` moves — lands in M4 under ADR 0027; the `artefacts` and `models` blocks, keyed by content hash and recording the toolchain that made each, wait for the artefacts, with their shape reserved by the same ADR (M4 plan, question 10) | `toolchains`: M4 PR 5. `artefacts` and `models`: the DSP milestone — M5 under the split, which is where ADR 0003 §3's "completed" then falls | ADR 0003 §3; §17; M4 planning, 2026-09-25 |
+| A re-pin tool, and a window that recovers from `lock_mismatch` | ADR 0010's Consequences said "**M2** gains a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text editor", and M2 delivered neither: no PR row named it, no M2 ADR placed it, and the only way to re-pin is still ADR 0010 §3's — an operator deletes the entry and the next write pins it. Found at M2's close, walking ADR 0010 against the code. Not built there and then because a tool is a `song_tools.proto` change and a re-pin is a `lock.json` write outside the patch log, which is a decision and not a closing PR's | The first `lock_mismatch` a person meets, which needs a plugin pin to have moved — and no bundled pin has moved since M1. **Retriggered 2026-09-25 at M4's planning**: M4 as split moves none, and the first pin that would is Airwindows re-pinned to airwin2rack in the DSP milestone, so the row is due with that pull request (M4 plan, U7 and question 16) | ADR 0010 Consequences; M2 PR 12; M4 planning, 2026-09-25 |
 | Loop and seek controls in the window | `render_preview` takes a loop and a seek, and the window offers play, stop and back-to-start: one control per thing a person has asked for, and a loop needs a range gesture on the timeline, which is a second hit region ADR 0017 would have to be applied to | The first time someone wants to hear a bar loop while editing it — the tool already does it, and a loop survives the replacement plan an edit sends | M2 PR 10 |
 | Choosing the audio device, its rate and its buffer | A preview plays on ALSA's default output at whatever the device offers, and nothing in the window or on the command line chooses another. A device list is a view over the machine, and the one this repository has measured on had none | A machine whose default ALSA output is not the one wanted, or a buffer the default underruns on | M2 PR 10 |
 | Refusing a plugin parameter that reaches an RNG nothing can seed | §8 forbids Surge XT's `rand_pm1`, Dexed's LFO waveform 5 and sfizz's `*_random` **in a fixture**, and nothing refuses them in a user's song. §11's first bullet is about our own code and holds; §2.2's promise — "every source of randomness carries an explicit seed stored in the project" — is wider, and neither of those two RNGs can be seeded at all (Surge's is the wall clock with `seed_rand` commented out; Dexed's `randstate_` is indeterminate memory). Closing it is a validator rule and therefore an ADR — and the rule has no producer: something must say which parameter values reach an unseedable RNG, and today that is prose in §8 for three plugins vetted by hand. Deferred rather than opened as an M2 question because M2 adds no plugin and no randomness: the gap is M1's, unchanged, and an ADR now would design a denylist against a build manifest that carries none, which is ADR 0002 §7's reason ~~The first milestone that lets a user *choose* a patch or supply a plugin~~ — **retriggered 2026-09-07** (ADR 0014 §3). That trigger has now fired: M2 places a parameter editor and choosing a patch is exactly how a user reaches those RNGs. It fired and the work still cannot be done, and the blocker is the second fact, not the first: closing it needs a **denylist of `ParamID`s per plugin in the build manifest**, and §8's prose names the paths in English — "oscillator random start phase, unison detune, the sample-and-hold LFO shape, and the effects that call `rand_pm1`" — which becomes `ParamID`s only by auditing Surge XT's 2855 parameters against its source. That is a source audit, and no user interface produces one. Half a denylist is worse than none, because it looks complete. ~~A build manifest that can say which parameters reach an unseedable RNG~~ — **retriggered 2026-09-15 in M2 PR 11**: that trigger named a capability, and nothing in §16 or this plan is scheduled to produce it, so it could never fire and the row could only wait for ever. What does arrive on a schedule is the reason to close it: M3's loop calls `set_param` with values a model chose, so the RNG paths stop needing a person to wander into them, and a model told only "valid" will not avoid what nothing refuses | ~~**M3**, before its tool-calling loop can call `set_param`~~ — **retriggered 2026-09-21**: the user took question 7's (c), so M3's loop never calls `set_param` (ADR 0022 §1 withholds it), and PR 0's count sized the work as a validator rule over values and combinations with a required default and a `state` escape, not a list — 194 `ParamID`s by one rule, 24 to 2,283 by others. The trigger is **the first time `set_param` is offered to the model**, which is when the audit is due; a person can still set any parameter in the window, and "What M3 will not claim" says a hand-chosen patch on those paths is not claimed reproducible | §8's per-plugin notes; M2 planning, 2026-09-07; retriggered by ADR 0014 §3; retriggered by M2 PR 11's review; retriggered by ADR 0022 §1 |
@@ -2262,7 +2761,11 @@ M2, and none blocked M3. **One of the four is now closed** — the neural runtim
 answered 2026-09-25 as M4 opened, which is when ADR 0003 §7 said it was due. **Two are in M3's path**, and M3's plan lists both as questions for the user — U1 and U2 —
 and takes neither: whether §6's analysis and symbolic generation are v1 at all decides whether
 the second is reachable, and the plan is sized on the assumption that they are not in M3, an
-assumption the user confirms or reverses before the decisions PR.
+assumption the user confirms or reverses before the decisions PR. **None of the three is in M4's
+path**, and M4's plan says so and why ("The three `[OPEN]` items, and whether any is M4's"): the
+installer's item follows the installer, which is M6's under the split M4's plan recommends, and
+the two about §6's analysis and symbolic generation are `ai`'s, where M4's compilers are §6.4's —
+placed, not open.
 
 Minimum supported OS versions is the one M2 walks into, and it is **still open**. ADR 0014 §2
 answers a different question — which platform M2 *targets*, which is Linux x86-64, as M1 — and
