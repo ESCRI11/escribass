@@ -264,10 +264,28 @@ holding the file, the next opener gets it, whatever the file says.
 
 Why not signal handlers instead, in the two binaries: they would release the lock on `SIGTERM`
 and `SIGINT` and leave it on `SIGKILL` and on a crash, which is the case ADR 0012 §3 was written
-about and the case the pid check covers. A handler is not refused — a binary may gain one so a
+about and the case ~~the pid check covers~~ **the kernel covers, since it releases the
+descriptor however the process ends**. A handler is not refused — a binary may gain one so a
 `Preview`'s child is reaped on a clean interrupt — but it is not the remedy. Why not a lease
 or a heartbeat: a clock in `core` (CLAUDE.md #3) and a second file format, to answer a question
-the pid already answers.
+~~the pid already answers~~ **the kernel answers for free**.
+
+(**Both clauses re-read 2026-09-24, at M3's close.** They were written to argue against a pid
+protocol and were left unrevised when the amendment above deleted it, so they sat after the
+amendment and read as current. The rejections still stand — neither alternative is wanted —
+but they stand for a better reason than the one they gave.)
+
+**Extended 2026-09-25: the kernel's lock needs one thing from us, and it is a retry.** `flock`
+lives on the open file description, so a child forked while the lock is held inherits a copy and
+`O_CLOEXEC` only closes it at `execve` — leaving a sub-millisecond window in which a lock just
+released is still held. `core` forks for every render, every preview and every session, always
+while the host has the project open, so this arrives in normal use; it was found by the close's
+own suite run, at 4 failures in 40 runs of `core/tests/project.rs`, and reproduced outside Rust
+at 13 refusals in 4,000 cycles, each 0.58–1.03 ms. `ProjectLock::take` now re-attempts ten
+times, a millisecond apart, before it believes a refusal. **It cannot mask a real holder** —
+a real holder never clears — and the amendment is written here *and* in ADR 0012 §3 and
+`docs/specs.md` §10 in this one commit, which is what the previous change to this decision did
+not do and what this walk caught it for (ADR 0012 §3, amended 2026-09-25).
 
 **§18.2 is narrowed as U5 decided, and this decision is what makes the narrowed promise
 true.** An external MCP client drives a project **with the window closed, one process at a
@@ -313,9 +331,9 @@ Its test is loud, so it does not muddy that pull request's silent half.
 | Alternative | Rejected because |
 |---|---|
 | Keep "never broken automatically" and document the `rm` | 50 runs of 50 through the client §18.2 sells left a project unopenable; a rule whose every trigger is a person deleting a file is a rule the product pays for daily |
-| Signal handlers in both binaries | Cover `SIGTERM` and `SIGINT`; do not cover `SIGKILL` or a crash, which the pid check does. Complementary, not the remedy |
-| A lease with a heartbeat | A clock in `core` and a second file format for a question the pid answers |
-| `kill(pid, 0)` through `libc` | A direct dependency `lock.baseline.json` does not list, for what `/proc` gives on the one platform M3 claims |
+| Signal handlers in both binaries | Cover `SIGTERM` and `SIGINT`; do not cover `SIGKILL` or a crash, which ~~the pid check~~ **the kernel's release of the descriptor** does. Complementary, not the remedy |
+| A lease with a heartbeat | A clock in `core` and a second file format for a question ~~the pid answers~~ **the kernel answers** |
+| `kill(pid, 0)` through `libc` | A direct dependency `lock.baseline.json` does not list, for what ~~`/proc` gives on the one platform M3 claims~~ **no longer needs answering at all: `File::try_lock` is stdlib and cross-platform** |
 
 ## Consequences
 

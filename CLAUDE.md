@@ -15,18 +15,69 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 ## Repo layout
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
 
-## Current milestone: M3 — AI loop
+## Current milestone: M4 — Compilers
 
-M0, M1 and M2 are complete: the schema, `core` and the tool API; the render engine; the Tauri
-app with its views as projections of the model and preview playback. §16 makes M3 the AI loop —
-a Python sidecar, a tool-calling loop with dry-run/diff/apply, and the AI panel — preceded by
-the Libretto-grammar ADR §18.2 requires (ADR 0003 §6). **M3 is not planned yet**, and that is
-deliberate: planning it is its own step, as M1's and M2's were.
+M0 to M3 are complete: the schema, `core` and the tool API; the render engine and four golden
+WAVs; the Tauri app with its views as projections of the model and preview playback; and the AI
+loop — a Python sidecar, a proposal a person applies, and the panel. §16 makes M4 the compilers:
+Cmajor JIT with CLAP export through clap-wrapper, the seeded Python DSL generator, the neural
+runtime (§7.3, ADR 0003 §7), **code views** (§9, ADR 0003 §8), and `lock.json` completed with the
+compiled artefacts and model hashes (ADR 0003 §3). **M4 is not planned yet**, and that is
+deliberate: planning it is its own step, as M1's, M2's and M3's were, and ADR 0003's Consequences
+already say M4 grows the most and may need splitting against a real schedule.
 
-Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §18.2 and
-ADR 0003 before starting a step. Read `docs/plan.md`'s "M2, closed" first: it records what M2
-leaves unverified — three merges with no green CI and a preview never played on a real device —
-and one ledger row that is due before M3's loop can call `set_param`.
+**The `[OPEN]` item that was due before M4 is answered.** ADR 0003 §7 said the neural runtime's
+packaging "must be resolved before M4 starts", and the user resolved it on 2026-09-25: it is a
+**separate process and never links into `engine`**, so the engine keeps CLAUDE.md #6 and a crash
+or a version clash in ONNX Runtime cannot reach the audio thread. **What M4's planning still owes
+is the detail** — which transport, what else is pinned, where §7.3's CLAP wrapper lives, and the
+§13 directory, which is a top-level directory and therefore its own ADR. Four ledger rows also
+come due at M4's planning: `FormRule`, `SourceRef.export_hash` and the `Generator`
+compiled-source hash, `lock.json` beyond `schema_version`, and Strudel after M4. Three `[OPEN]`
+items remain in §15 and none is M4's to walk into.
+
+Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §7 and
+ADR 0003 before starting a step. Read `docs/plan.md`'s "M3, closed" first: it records what M3
+leaves unverified — **a milestone and a half of merges no CI runner has seen**, one live model
+turn and no second, a preview that has still never reached a speaker, and one paid call made in
+M3 PR 5 before anybody asked, which is why non-negotiable 7 exists. Note what the ceiling now
+means: `CEILING_USD` in `ai/src/escribass_ai/provider.py` equals the ledger's spent total, so
+every live run fails closed and a new grant is a person raising that number in a commit.
+
+## Completed: M3 — AI loop
+
+1. ADRs 0018–0022: what the model reads and that it writes ticks, a proposal as the model's calls
+   applied to a fork, `ai` serving one stream with the host executing, provenance that names the
+   model and the prompt, and twelve tools with three kinds of failure. **No `song.proto` change**:
+   `schema/` is byte-identical to M1's close, as it was at M2's. `proto/assistant.proto` is new —
+   one service, one bidirectional stream — and `song_tools.proto` is untouched.
+2. `ai/`: a Python 3.12 package under `uv` with `grpclib`, `openai` and `httpx2` pinned, serving
+   `Assistant.Prompt` over a Unix socket it names on its own stdout. It computes ADR 0018's
+   bar-block view and six counted axes — seven pure functions, seven goldens, and a key-reversed
+   twin — and never sees audio (CLAUDE.md #6). A scripted provider replays a recorded transcript;
+   `provider.Live` is the one path that can spend.
+3. `core`: a `Proposal` is a session on a copy of the project that records nothing, so the model's
+   calls go through `core::call` — the same dispatch the window and the MCP server use — and the
+   only gate is `OFFERED`, twelve of twenty-five, with `set_param` and `dry_run` withheld. One
+   patch, once, at approval, under the tool name `proposal`; a document that moved at any path the
+   patch writes to is refused `document_moved`. `prepare` decides every entity's provenance on
+   every path, which closed a forgery. `.escri/lock` is the kernel's, under `File::try_lock`.
+4. `app/`: the AI panel. The conversation is the host's, sent whole per prompt and persisted
+   beside the project as JSON Lines per song id; the proposal is drawn dashed as it grows, with
+   its RFC 6902 diff; Apply, Reject and Edit, one proposal pending at a time. The panel names the
+   model the project records and never calls it verified, pinned or deterministic.
+5. **Money.** Non-negotiable 7 was written mid-milestone, after a transcript was recorded against
+   a real model without asking. A paid call is now priced at a conservative worst case and
+   checked against `CEILING_USD` **before** it goes out, every call writes one line to
+   `~/.escribass/spend.jsonl` read back at startup, and `escribass-ai --account-usage` /
+   `--generation-cost` reconcile against OpenRouter's own counter. The grant was one session, it
+   was spent, and the ceiling was lowered to what it cost.
+6. `tests/`: the loop is goldened end to end against a scripted model — one prompt driven twice
+   through the real `ai` process, compared with itself and against committed bytes — which is
+   §11's seventh bullet, added at M3's close because the test had described itself that way and
+   §11 had never named it. It is behind the `ai` cargo feature, so `cargo test` alone does not run
+   it. `tests/determinism/bar17/` is §18.2's demo driven by the assistant. The live run is
+   `#[ignore]`d and says on every run that it spends money.
 
 ## Completed: M2 — UI
 

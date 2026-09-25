@@ -39,7 +39,11 @@ only as a thousand patch files is neither.
 ### 2. `open` replays and compares; a mismatch is a structured error
 
 Loading a project replays the log from the root to `HEAD` and compares the result with
-`song.json` byte for byte. A mismatch is reported — with the paths that differ — and never
+`song.json`. (~~byte for byte~~ **corrected 2026-09-24, at M3's close**: `verify_against_replay`
+compares the replay against the parsed document as two `serde_json::Value`s, so a `song.json`
+that is equivalent but not canonical passes here rather than being reported. The canonical
+form is enforced where it is written, not where it is read; `json_objects_are_still_written_in_key_order`
+in `tests/determinism.rs` is what holds it.) A mismatch is reported — with the paths that differ — and never
 silently resolved in either direction.
 
 Silently preferring the log would discard an edit a user may have made deliberately.
@@ -74,9 +78,12 @@ recoverable by replaying to the ref that is still current.
 ## Consequences
 
 - **The store (M0.2 PR 5, PR 6).** `open` performs a replay. `commit` writes in the order
-  above. Both a mismatch and an orphan entry are structured errors with the same
-  `path`/`rule`/`message` shape as `Violation`, so the orchestrator handles them like any
-  other.
+  above. A mismatch is a structured error with the same `path`/`rule`/`message` shape as
+  `Violation`, so the orchestrator handles it like any other. (~~and an orphan entry~~
+  **corrected 2026-09-24, at M3's close**: an entry no ref reaches is **loaded and inert**, not
+  reported — which is what ADR 0001 §2 requires and what
+  `an_orphan_entry_left_by_a_crash_does_not_become_history` in `core/tests/project.rs` asserts.
+  Two ADRs disagreed and the code kept the other one; this one was wrong.)
 - **The determinism suite (M0.4).** Replay-and-compare on open is the same assertion the
   suite makes, so every test that opens a project exercises it for free.
 - **§10** gains one sentence naming `song.json` as derived. ADR 0001 is unaffected: it already

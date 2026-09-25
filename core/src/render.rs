@@ -128,7 +128,7 @@ impl Compiler<'_> {
                 self.refuse(
                     format!("{at}/kind"),
                     UNSUPPORTED,
-                    "a bus is the mixer's, which is M2's; in M1 every track outputs to master",
+                    "a bus is the mixer's routing, which no milestone has placed; every track outputs to master",
                 );
                 continue;
             }
@@ -208,7 +208,8 @@ impl Compiler<'_> {
     }
 
     /// Every plan track outputs to master (ADR 0007 §6). Naming master explicitly means what
-    /// absence means; naming anything else is the mixer's, which is M2's.
+    /// absence means; naming anything else is the mixer's routing, which no milestone has
+    /// placed (ADR 0007 §6, amended 2026-09-24).
     fn check_routing(&mut self, at: &str, track: &Track, master: Option<&Track>) {
         let Some(routing) = &track.routing else { return };
         if let Some(output) = &routing.output_track_id {
@@ -216,7 +217,7 @@ impl Compiler<'_> {
                 self.refuse(
                     format!("{at}/routing/output_track_id"),
                     UNSUPPORTED,
-                    format!("`{output}` is a bus; in M1 every track outputs to master"),
+                    format!("`{output}` is a bus; every track outputs to master"),
                 );
             }
         }
@@ -224,14 +225,14 @@ impl Compiler<'_> {
             self.refuse(
                 format!("{at}/routing/sends"),
                 UNSUPPORTED,
-                "sends are the mixer's, which is M2's",
+                "sends are the mixer's routing, which no milestone has placed",
             );
         }
         if !routing.sidechains.is_empty() {
             self.refuse(
                 format!("{at}/routing/sidechains"),
                 UNSUPPORTED,
-                "sidechains are the mixer's, which is M2's",
+                "sidechains are the mixer's routing, which no milestone has placed",
             );
         }
     }

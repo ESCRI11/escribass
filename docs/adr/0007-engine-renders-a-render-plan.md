@@ -153,7 +153,7 @@ golden's job, and that it changes the sound is the render golden's.
 
 compile refuses, naming the field: `DeviceRef.cmajor`, `.faust` and `.neural` (M4);
 `Routing.sends`, `Routing.sidechains`, an `output_track_id` naming a bus, and a
-`TRACK_KIND_BUS` track (the mixer, M2); `RENDER_KIND_STEMS` (M5); and `RenderTarget.dither`
+`TRACK_KIND_BUS` track (~~the mixer, M2~~ — **see the amendment below**); `RENDER_KIND_STEMS` (M5); and `RenderTarget.dither`
 set, because dither is a noise source and §2.2 requires every source of randomness to carry a
 seed stored in the project, which a `bool` cannot. Nothing else. A plugin outside the bundled
 set never reaches compile: ADR 0010 makes that the validator's `plugin_unknown`.
@@ -191,6 +191,31 @@ it could not find, and it is the one caller-fixable refusal in M1 that arrives a
 code. Moving it here means giving compile the file reading its signature was defined not to
 do; that is a question for M2, not a reason to make compile impure now.
 
+**Amended 2026-09-24, at M3's close, walking this ADR against the code.** Two sentences above
+handed work to M2 and M2 closed without it, which is the failure ADR 0003 exists to prevent and
+the one M2's own close caught in ADR 0010's Consequences. Both are corrected here and neither
+is a code defect: compile refuses exactly what it should, and what was wrong was the milestone
+the refusal named.
+
+**`Routing.sends`, `Routing.sidechains`, a bus `output_track_id` and `TRACK_KIND_BUS` are not
+M2's, and are in no milestone.** This section read "(the mixer, M2)" because §16 gives M2 a
+mixer — but ADR 0003 §5 placed *the mixer view*, and what M2 built is a form over `Mix`:
+`gain_db`, `pan`, `mute` and `solo`, written through `apply_patch`, with no routing surface at
+all. Routing is a change to what the engine builds — a bus track, a send with its own gain, a
+sidechain input — and it was never M2's to deliver. It is not M3's either: M3 adds no engine
+capability and the loop reaches a fader through `ParamRef`, which needs none of it (ADR 0015
+§1). So the scope is **unplaced**, which is worse than deferred because nothing walks it. A
+deferred-ledger row now carries it with a trigger something can produce, and the three refusal
+messages in `core/src/render.rs` stop naming a finished milestone: they say the mixer's routing
+is unplaced, which is true and stays true until someone places it.
+
+**The SFZ refusal's "question for M2" was not asked.** An SFZ this engine cannot resolve is
+still refused by the engine, naming the `sample=` it could not find, and compile is still pure.
+M2 gave no reason to move it and did not; M3 does not touch the engine. The paragraph stands as
+a description of what the code does, and the question is retired rather than re-dated: moving
+it would mean giving compile file access its signature was defined not to have, and that
+argument is not a milestone's to settle but an ADR's, whenever someone wants it settled.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |
@@ -217,7 +242,10 @@ do; that is a question for M2, not a reason to make compile impure now.
   that cross by value here.
 - **PR 8b** adds `PlanInstrument.sfz_path` under decision 2 as extended, and the restricted
   case it renders is recorded in `render.proto` beside the field.
-- `proto/` still generates Rust only (ADR 0006 §7); the engine's C++ is generated at build
-  time (ADR 0008 §4).
+- ~~`proto/` still generates Rust only~~ **(true when written; `proto/gen/` holds Rust,
+  TypeScript from M2 PR 3 and Python from M3 PR 3 — ADR 0006 §7, carried out)**; the engine's
+  C++ is generated at build time (ADR 0008 §4).
 - The `docs/plan.md` deferred row for user VST3 plugins is unchanged: a plugin outside the
-  bundled set is refused loudly, by ADR 0010, until M2 places them.
+  bundled set is refused loudly, by ADR 0010, ~~until M2 places them~~ — **M2 did not place
+  them and the row was retriggered on 2026-09-07 (ADR 0014 §3) to name an event instead: when
+  the build manifest can describe a plugin this build did not bundle.**

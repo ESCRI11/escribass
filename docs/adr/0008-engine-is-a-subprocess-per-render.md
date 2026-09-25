@@ -169,10 +169,13 @@ is stale — and its inputs are submodules, which drift by being left alone.
 
 So the engine **embeds its provenance at configure time**: the commit of each submodule as
 `git rev-parse` reports it — Tracktion Engine, JUCE, **protobuf**, Rubber Band, and each
-bundled plugin, which is **seven** — compiled in as constants. (Protobuf added to this list
+bundled plugin, which is ~~**seven**~~ **eight** — compiled in as constants. (Protobuf added to this list
 2026-09-07 in PR 13: §4's own amendment made it a pinned submodule in PR 7 and the binary has
 reported it since, while this sentence still named six. ADR 0010 §1 was corrected for the same
-drift in PR 9; this one was not.) It reports them in two places: on `--version`, and in `RenderResult`.
+drift in PR 9; this one was not. **And it drifted again**: grpc++ joined at M2 PR 9 and the
+count stayed at seven, so the parenthetical written to stop this drift did not — corrected
+2026-09-24, at M3's close. `tests/renders.rs`'s `COMPONENTS: [&str; 8]` is the list that is
+actually checked, and the number to read is that one.) It reports them in two places: on `--version`, and in `RenderResult`.
 The render suite compares them against `lock.baseline.json` before it compares a single sample,
 and a mismatch fails naming the component, not as a golden diff.
 

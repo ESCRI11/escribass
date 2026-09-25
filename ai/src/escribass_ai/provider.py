@@ -142,8 +142,9 @@ MODELS = "https://openrouter.ai/api/v1/models"
 #: $0.00516824, each on its own above this ceiling, so the first call of a turn is refused
 #: against an empty ledger exactly as it is against a full one. The ledger is a record, not the
 #: enforcement point — the enforcement point is this constant, and no file a program can delete
-#: is between it and a call (`test_provider.py`, the empty-ledger test, which prices the
-#: recorded request body against the recorded prices and watches it refuse).
+#: is between it and a call (`ai/tests/test_sidecar.py`,
+#: `test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back`, which prices the recorded
+#: request body against the recorded prices and watches it refuse).
 CEILING_USD = 0.00376174
 
 #: Where the ledger is written: outside the repository, because it is a record of real money
