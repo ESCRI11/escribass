@@ -2210,6 +2210,234 @@ Nothing in the spike is merged, and nothing in it pins anything: `lock.baseline.
 1 or not at all. Every measurement that touches a render is one machine's and is written down as
 such, which is M3 trap 16 applied to a compiler.
 
+### What the spike found (PR 0, run 2026-09-25)
+
+Run on this machine and no other — WSL2, Ubuntu 24.04, x86-64, **AMD Ryzen AI 9 HX PRO 370**
+(Zen 5, `avx512f` present), 24 logical cores, 47 GiB, g++ 13.3.0, CMake 3.28.3, Ninja — against
+`main` at `1e61d09`, with `engine/build/escribass_engine_artefacts/Release/escribass_engine`
+built on 2026-09-09 from that tree. **Every render number below is one machine's**, which is
+what U2 leaves it as; where a number could not be taken, the row says so and says what stopped
+it. The spike's tree lives outside the repository and is not merged; two small scripts that
+reproduce a measurement are in `tests/spike/`, on this branch only.
+
+**The finding that matters, and it is the opposite of what the plan expected.** Item 3 of "What
+'deterministic' means for a compiler" assumed the JIT and the exported C++ are two compilers over
+one source "with no reason to agree to the bit". Measured, at the toolchain's default
+optimisation level, **they agree exactly, and so does the exported plugin**: one patch rendered
+three ways — `cmaj render --engine=llvm` (the LLVM JIT), `cmaj render --engine=cpp` (the same
+generated C++ the export compiles) and the built, clap-wrapped `.clap` driven by a CLAP host —
+produced **byte-identical PCM**, `262509a0…`, 0 differing samples of 96,000. A second patch
+written to break it — per-sample `sin`, `cos`, `exp`, `log`, `sqrt`, `tanh` and eight
+multiply-add accumulators — agreed too. The divergence is real but it is **switched on by `-O`**:
+at `-O4` the JIT and the C++ part company, and so does `-O4` from `-O2` inside one engine.
+
+| `-O` | TwoOsc, JIT vs C++ | HardMath, JIT vs C++ |
+|---|---|---|
+| default, `-O0`, `-O1`, `-O2`, `-O3` | identical | identical |
+| `-O4` | `79ca4e1f…` vs `021bcb9d…` | **8,499 of 96,000 samples differ (8.85%), peak 7.451e-09 — −162.6 dBFS** |
+
+−162.6 dBFS is a long way under a 24-bit floor and it is still a different hash, so a golden
+would catch it. **What this changes**: "the JIT is a preview" is a *design*, not an observation
+forced by the numbers, and item 3 should say so. It remains the right design — LLVM still targets
+the host CPU, and this is one CPU — but the sentence that justified it was a guess and is now
+measured, and the optimisation level joins the flags `lock.json` has to record.
+
+**And the export is byte-reproducible, which the plan said not to promise.** Item 2 says the
+export hash is "an identity, not a reproducibility promise", because "compilers embed paths and
+dates unless told not to". Measured: two independent `cmaj generate --target=clap` runs wrote a
+byte-identical `entry.cpp` (`56c3c00b…`), and two independent builds of those two projects, in
+directories of **different names and different lengths**, produced a byte-identical `.clap`
+(`17923f81…`) and a byte-identical VST3 `.so` (`7119b994…`). `entry.cpp` contains no occurrence
+of the build path; the generated `CMakeLists.txt` contains exactly one — an absolute
+`CLAP_INCLUDE_PATH` baked in at generate time — and it never reaches the binary. The claim can
+therefore be stronger than item 2 makes it on one machine, and item 2's wording should stay
+conservative for the reason it gives (another machine, another compiler build) rather than for
+the reason it gives today.
+
+**Building `cmaj` costs three and a half minutes and 700 MiB, and it does not build on this
+image.** The checkout is cheap once the SSH URLs are rewritten — `sed` on `.gitmodules` plus
+`git submodule sync` took first time, where M1's `insteadOf` had not:
+
+| Step | Wall | Disk |
+|---|---|---|
+| `git clone --filter=blob:none --no-checkout`, then checkout `024a208` | 1.0 s | 13 MiB of `.git` |
+| 31 submodules, `--depth 1 --jobs 8` | **57.9 s** | 91 MiB of tree, 36 MiB of `.git/modules` |
+| `3rdParty/llvm` sparse to `release/linux/x64` | **15.5 s** | **361 MiB in 2,273 files** (378,539,965 bytes), 87 MiB of `.git` |
+| configure (`BUILD_CMAJ=ON`, `BUILD_CMAJ_LIB=OFF`, `BUILD_EXAMPLES=OFF`) | 0.12 s | — |
+| build, Release, `-march=x86-64 -mtune=generic -ffp-contract=off` | **126.9 s wall, 947 s CPU** (746% of 24 cores), peak RSS 2.4 GiB | 182 MiB build, **128 MiB binary** |
+
+**Zero warnings** under the engine's own flags, and `cmaj version` reports 1.0.3177 — the release
+U4's other option would have downloaded. The four submodule commits are exactly the ones the plan
+read: `clap df8f16c`, `clap-wrapper fd24bbe`, `llvm c6380f9`, `choc a08bfd8`. The sparse checkout
+is 2,273 files, not the 2,275 the plan counted.
+
+**What stopped it, three times over, was JACK.** `cmaj` will not configure or link on this image:
+`modules/CMakeLists.txt:447` makes `pkg_check_modules(JACK REQUIRED jack)` a hard gate under
+`CMAJ_INCLUDE_SCRIPTING` and then **never uses `JACK_LIBRARIES`**;
+`include/choc/.../choc_RtAudioPlayer.h:34` defines `__UNIX_JACK__ 1` on Linux, so RtAudio includes
+`jack/jack.h`; and `tools/command/CMakeLists.txt:64` appends `-ljack`. There is no `jack.pc`, no
+`libjack.so` and no `jack/jack.h` on this machine, and no passwordless `sudo` to install one, so
+the build above was taken with **three one-line deviations**, each recorded here rather than
+silently: drop the `REQUIRED`, drop the `__UNIX_JACK__` define, drop `-ljack`. The honest reading
+is that **`libjack-jackd2-dev` is a build dependency of `cmaj`** on the pinned image — the same
+`jack/jack.h` the known gaps already record for Dexed, and (below) the same one that stops
+airwin2rack. One apt line unblocks three things; until it is there, none of them builds.
+
+**Two corrections to what the plan read off the tree.** `tools/command/CMakeLists.txt` requires
+**GTK3 and WebKit2GTK for the command-line tool itself** on Linux, not only for `CmajPlugin`; and
+`helpers/common/CMakeLists.txt` — which the *generated CLAP project* pulls in — makes both
+`REQUIRED` for `cmaj_clap` too. The plan's "read: `cmaj_clap` needs CLAP headers only" is wrong.
+The built `.clap` has eleven direct `DT_NEEDED` entries including `libwebkit2gtk-4.1`,
+`libgtk-3`, `libsoup-3.0` and `libjavascriptcoregtk-4.1`, and **129 shared objects in its
+closure** — GL, EGL, X11, dbus, at-spi, gstreamer and `libenchant` (a spell checker, in an audio
+plugin). It loads headlessly anyway (below), but M5's engine image grows by the whole desktop
+stack, and that is a cost U3 should weigh beside the JIT's.
+
+**`cmaj generate --target=clap` writes 145 files and 14 MiB in 0.10 s**, and on Linux it does
+not write what §7.2 needs. The `CMakeLists.txt` it emits puts the VST3, standalone and AUv2
+targets **inside `if (APPLE)`**: on Linux the project builds a `.clap` and nothing else. It also
+sets `CLAP_WRAPPER_DOWNLOAD_DEPENDENCIES TRUE` unconditionally whenever `CLAP_WRAPPER_PATH` is
+given — ADR 0009 §4's hazard, on by default — and bakes `CLAP_INCLUDE_PATH` as an absolute path.
+**So M5 owns the CMake, not Cmajor**: the export pipeline generates, then replaces the tail with
+a Linux VST3 target of ours. With that tail replaced the whole chain works.
+
+**The pin set U5 asks for, decided by building it.** `clap-wrapper` **v0.16.0 (`1cca996`) does
+not compile against Cmajor's own CLAP submodule.** `src/clap_proxy.h:28` includes
+`clap/ext/draft/gain-adjustment-metering.h`; Cmajor's `3rdParty/clap` at `df8f16c` is **CLAP
+1.2.0** and ships five draft extensions, not that one. §17's **CLAP SDK 1.2.10 (`195b42a`)** ships
+nineteen and includes it, and with 1.2.10 passed to `--clapIncludePath` everything compiles. The
+three-SDK question then answers itself: `guarantee_clap` returns early `if (TARGET clap)`, and the
+generated project already defines `clap` as an INTERFACE target over whatever `--clapIncludePath`
+was given — so **the CLAP the caller passes to `cmaj generate` is the one clap-wrapper uses**,
+`CLAP_SDK_ROOT` is reported unused, and there is one CLAP SDK by construction. It must be 1.2.10.
+`target_add_vst3_wrapper(TARGET … OUTPUT_NAME …)` in the 2026 wrapper is exactly the call the
+generated project makes, so the signature has not drifted. The VST3 SDK wants only four
+submodules (`base`, `public.sdk`, `pluginterfaces`, `cmake`): `v3.8.0_build_66` is
+`9fad9770f2ae8542ab1a548a68c1ad1ac690abe0`, **6.3 s and 34.7 MiB** that way. Configured with
+`CLAP_SDK_ROOT`, `VST3_SDK_ROOT` and `CLAP_WRAPPER_PATH` all vendored and every download flag
+off, **the configure takes 0.67 s and reaches no network**, and the build takes 23.2 s.
+
+**One thing the plan could not have read**: the VST3 link fails without
+`CMAKE_POSITION_INDEPENDENT_CODE=ON` — `relocation R_X86_64_PC32 against symbol
+Steinberg::FUnknown::iid can not be used when making a shared object`, because clap-wrapper's
+static libraries are not built `-fPIC` and nothing in its CMake sets it. One cache variable, and
+it is not documented anywhere the generated project points at.
+
+**The wrapped VST3 loads headlessly.** With `DISPLAY` and `WAYLAND_DISPLAY` unset, the engine's
+`--scan` opened it, instantiated it at 48 kHz and exited 0, writing
+`"Escribass/Two Osc"` with `params {"1": "Gain", "2": "Detune"}` — ADR 0010 §4's key shape,
+unchanged. Two things fall out of that. `--scan` **refuses a component it has no compiled-in
+`pluginCommits` row for, before it opens anything**, so M5's engine PR adds the row in the same
+change that adds the plugin; the scan above passed `surge_xt` as a stand-in and the manifest
+therefore carries Surge's commit against a Cmajor plugin, which is a spike artefact and not a
+result. And **the parameter ids are ordinals**: `cmaj_CLAPPlugin.h:524` sets `out.id =
+endpointHandle`, Cmajor's endpoint handle in declaration order, so inserting an input above
+another renumbers it. A `ParamRef` (ADR 0015) over a compiled device is therefore keyed to
+something the source's *shape* decides, not its names — which is a question M5 has to answer and
+the plan does not yet ask.
+
+**Repeatability, one device kind over from M1 PR 11.** The exported `.clap`, driven by the spike's
+CLAP host: identical PCM in three fresh processes, and identical again at block sizes 64, 128,
+512 and 1,024 — no block-boundary state at all. Then identical from the second build described
+above. `cmaj render`'s own WAV is `JUNK`/`fmt `/`data`, float32, and carries **no date**: choc's
+writer is not JUCE's, and M1's `bext` trap does not recur here.
+
+**But `cmaj render` prepends 20,000 frames of silence**, rounded up to a whole block — 20,000 at
+`--blockSize=32`, 20,096 at 128, 20,480 at 512 and at 1,024, and the same count at 44.1 kHz, so
+it is a frame count and not a duration. Anything shorter than that renders pure zeros and exits
+0, which is how the first three of these measurements were nearly taken against silence. A golden
+driven through `cmaj render` either skips the pre-roll or is longer than it.
+
+**Export-and-load latency, the number U3 turns on: ≈20 seconds.** Cold, for one patch: generate
+0.095 s, configure 0.61 s, build **19.5 s**, total **20.2 s**. Warm is *worse* — 22.8 s — because
+regenerating rewrites `entry.cpp` and nothing is incremental. The floor is one 4,500-line,
+326 KiB translation unit that carries the whole CLAP plugin helper and a QuickJS interpreter, and
+the generated project compiles it **twice**, once per target; the VST3 target alone is 17.7 s. A
+person will feel 20 s; a model will not. **Replacing a plugin under a live one**: overwriting the
+`.clap` in place while a host held it open changed nothing the host played — identical first
+48,000 frames, still the old patch at frame 3.9 M — and did not crash on this run, but the file
+grew under the write and only resident pages saved it. The rule is to **load a new path per
+build**, never to overwrite one.
+
+**The ONNX path exists, works, and is narrower and quieter than U6 assumed.** A feed-forward graph
+(`MatMul`/`Add`/`Tanh`/`MatMul`) converts, compiles, renders, and **exports**: 16.9 s to a
+`.clap` that the CLAP host drove to 76,800 non-zero samples. A `GRU` + `Squeeze` + `MatMul` +
+`Tanh` graph converts and compiles too. But **the DDSP shape U6(c) names does not ride it whole**:
+`GRU` + `Squeeze` + **`Gemm`** + `Tanh` converts and then fails to compile —
+`error: Cannot connect Bd.out (float32[1]) to node_3.add (float32[16, 1])`, because the converter
+does not broadcast `Gemm`'s `C`. The Dense layer has to be written as `MatMul` + a full-rank
+`Add`. Worse for the plan's premise, **an operator outside the sixteen is not refused**:
+`Softmax` produced `onnx::operation::Softmax (…)` and `onnxToCmajor.py` exited 0. The refusal
+arrives one stage later, from the Cmajor compiler, as `error: Type references are not allowed in
+this context` — **which does not name the operator**. So U6(c)'s "refused with the operator named"
+is a thing M5 would have to *write*, not a thing the converter does. Two more, both small and
+both expensive to discover later: `cmaj play --dry-run --stop-on-error` **exits 0 on a compile
+error** and `cmaj render` writes a zero-length `data` chunk and exits 0, so a compile step reads
+stderr and never the status; and the converted patch's I/O is the model's tensor shape, not audio
+— the exported plugin reports 64 input and 16 output channels — so something has to adapt it
+before it is an effect. Cmajor's own shipped `GuitarLSTM` example is the **RTNeural** twin, not
+the ONNX one, and it compiles and renders fine.
+
+**`onnxruntime` 1.29.0 is reproducible in every way this machine can test, and the one that
+matters could not be tested.** The wheel is confirmed:
+`onnxruntime-1.29.0-cp312-cp312-manylinux_2_28_x86_64.whl`, 23,136,745 bytes, sha256
+`2b80d8c7ec2cc7438e4da3760b88c24568cba72c9ace96d668800a6c79419acb` — the `2b80d8c7…` §17 records
+— and it resolves exactly the four dependencies U8 lists (`flatbuffers`, `numpy`, `packaging`,
+`protobuf`). The GRU graph, intra-op and inter-op threads at 1 and `ORT_SEQUENTIAL`, gave the same
+output hash in two fresh processes. A 512×512 `MatMul`/`Tanh`/`MatMul`/`Add` gave the **same hash
+at 1, 2, 4, 8 and 24 intra-op threads** — so thread count is not the hazard here, which is one
+fewer thing for U6(b) to design around. **The CPU feature mask could not be pinned, and that is
+the measurement, not an omission.** 1.29.0 exposes `ORT_INTRA_OP_NUM_THREADS`,
+`ORT_INTER_OP_NUM_THREADS` and a handful of `ORT_DISABLE_*` switches for attention kernels, and
+**nothing that constrains MLAS's ISA dispatch**; MLAS reads CPUID with an inline instruction, so
+no `LD_PRELOAD` can intercept it, `qemu-user` is not installed, no `binfmt_misc` handler but
+WSL's own is registered, and there is no second CPU. Item 4's dispatch hazard stays **certain in
+principle and unmeasured here** — which is M1's still-open cross-CPU question, one dependency
+over, and one more thing U2 would unblock.
+
+**The DSL's one number came back wider than question 3 claims.** `random.Random(2**63 + 1)` — 256
+draws through `getrandbits`, `randrange`, `randint`, `choice`, `shuffle` and `sample` — a
+400-step `Fraction` chain reduced through `__ceil__`, `__floor__` and `round` onto integer ticks,
+and a block of `divmod`, `//`, `%` and three-argument `pow`, hashed together, give
+**`1730edd3f9825ec91c0b0456f477a15fcf2687d37c8d7224cc0f77a7bf741755` on CPython 3.12.12 (the
+pin), 3.12.3 (the system), 3.11.14, 3.13.12 and 3.14.3** — five interpreters, one digest, only
+the recorded version string differing. Question 3's platform-free sentence holds, and holds
+across minors as well as patches. `tests/spike/numeric_domain.py` is the script.
+
+**The hazard is next door, and it is not arithmetic.** `hash()` of a `str` is randomised per
+process, so `set` and `dict` iteration over names is not a property of the source: three runs of
+the same eight names gave three orders. With `PYTHONHASHSEED=0` the order is fixed and identical
+on 3.12.3, 3.12.12 and 3.13.12. **The sandbox sets `PYTHONHASHSEED`**, or the DSL refuses to
+iterate a set — and ADR 0024 says which, because this is the one way a pure integer DSL still
+produces two answers.
+
+**airwin2rack builds a Linux VST3, in three minutes, and brings its own pin problem.** At
+`b6eef0a` (`libs/airwindows` `d22a25b`, `libs/sst-rackhelpers` `f5f3332`), `-DBUILD_JUCE_PLUGIN=ON`:
+configure **50.4 s**, build **113.4 s** (1,324 s CPU, 2,194 targets), 878 MiB of build tree,
+producing VST3, CLAP, LV2 and Standalone. The VST3 is 25 MiB and **`--scan` opens it headlessly**:
+`Airwindows/Airwindows Consolidated`, version `1.2026.269`, **14 parameters** — `Replace`,
+`Brightness`, `Detune`, `Bigness`, `Dry/Wet`, five slots reported as `-`, `Bypass`, `Input Level`,
+`Output Level` and `Mono Behaviour`. That is the consolidated plugin's whole shape: **one plugin,
+one `Replace` parameter that selects the effect**, and five generic controls whose meaning changes
+with it. `add_effect` over Airwindows is therefore a parameter value, not a plugin id, and a
+`ParamRef` to `Brightness` means something different depending on `Replace` — which is the §2.2
+randomness row's problem wearing another hat, and wants an ADR sentence before it lands. Against the Cmajor
+plugin's 129 shared objects, the Airwindows VST3 needs **seven**: fontconfig, freetype, libstdc++,
+libm, libgcc\_s, libc and the loader. No GTK, no WebKit, no X11.
+
+But it **cannot be an `ExternalProject` under ADR 0010's rules as written**: `src-juce/CMakeLists.txt`
+fetches JUCE and `clap-juce-extensions` with CPM **at configure time**, JUCE at tag `8.0.4` and
+`clap-juce-extensions` at **`GIT_TAG main`** — a moving branch, which is ADR 0009 §4's hazard and
+ADR 0010 §1's rule broken by construction. M5 overrides both with `FETCHCONTENT_SOURCE_DIR_*` or
+vendors them. And it needed **`-DJUCE_JACK=0`** to build at all, because `juce_audio_devices`
+includes `jack/jack.h`: the third thing on this list that the one missing apt package stops.
+
+**What was not measured, and why.** The ONNX Runtime CPU feature mask (no knob in the runtime, no
+second CPU, no emulator). Anything about a live preview being *replaced* while it plays through a
+device, because preview has still never reached a speaker. Anything on a second machine, because
+U2. And `cmaj` was built with three JACK lines removed, so "it builds under the engine's flags" is
+true of a tree that differs from `024a208` by those three lines and no others.
+
 ### ADRs, before code
 
 | ADR | Records |
@@ -2229,7 +2457,7 @@ PR 2.
 
 | # | Branch | Adds |
 |---|---|---|
-| 0 | `m4.0-spike` (**never merged**) | The measurements above. Run on this machine against `main`, numbers recorded in this file under "What the spike found" with the commit and the date beside each, before PR 1 is written |
+| 0 | `m4.0-spike` (**never merged**) | The measurements above. Run on this machine against `main`, numbers recorded in this file under "What the spike found" with the commit and the date beside each, before PR 1 is written. **Run 2026-09-25 against `1e61d09`**; nine of the ten measurements taken, the tenth (ONNX Runtime's CPU feature mask) recorded as unmeasurable and why |
 | 1 | `m4.1-adrs` | ADRs 0023–0027, their §15 rows, §7.1, §13, §16 and §17 amended, `roadmap.md`'s spine and `CLAUDE.md`'s milestone sections moved to the split, `lock.baseline.json`'s `toolchains.generator` row — the DSL's own version, **no external pin** — and the U2 answer recorded whichever it is. **No code.** The user's ten questions are answered here or the rows that need them wait. If U2 is answered before this PR opens, it is the first pull request a runner sees, and it says so |
 | 2 | `m4.2-schema` | `Generator.compiled_hash`; codegen for Rust, TypeScript and Python; `tests/fixtures/song/minimal.json` and its three round-trip suites. **A schema change, alone** (M1 PR 2's precedent). No determinism golden carries a generator, so none should move; the fixture is the one file expected to, and any other byte is named |
 | 3 | `m4.3-proto` | `proto/generate.proto` whole — `Compile`, its request and response — and `DefineGenerator` and `CompileGenerator` on `SongTools`, with `proto/`'s Rust, TypeScript and Python regenerated, in one change so `buf breaking` compares it once against a `main` that has not moved (trap 4). The generated Python server is what `compilers/generative` will implement, so the identity check `proto/tests/test_generated_python.py` already makes covers it |
