@@ -18,7 +18,7 @@
 | `rust-toolchain.toml` | Rust 1.98.0; mirrors `lock.baseline.json` `schema.rust.toolchain`. | hand |
 | `lock.baseline.json` | Every pinned dependency and toolchain (specs §17). | hand |
 
-Top-level directories are fixed by specs §13. `ai/` and `compilers/` do not exist yet; M0 created `core/` (M0.2) and `proto/` (M0.3), M1 PR 5 created `engine/`, and M2 PR 2 created `app/`. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
+Top-level directories are fixed by specs §13. `compilers/` does not exist yet — M4 PR 4 creates `compilers/generative/` (ADR 0024 §8); M0 created `core/` (M0.2) and `proto/` (M0.3), M1 PR 5 created `engine/`, M2 PR 2 created `app/`, and M3 PR 5 created `ai/`. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
 
 Never at the root: source code, generated code, project files, or any representation of song state other than `schema/song.proto` (CLAUDE.md #1).
 

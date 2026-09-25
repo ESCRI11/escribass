@@ -77,6 +77,13 @@ the tokens per edit fall by the first turn's share. The field stays on the wire 
 request; a model that sends it anyway, from habit, gets a dry run of the proposal (ADR 0019
 §1). The system prompt says once that nothing is applied until a person approves.
 
+**Amended 2026-09-25 (ADR 0026 §3): fourteen of twenty-seven, from M4 PR 6.** `define_generator`
+and `compile_generator` join the list in `IMPLEMENTED`'s order; both produce ops and nothing
+else, and both are executed against the proposal — a compile on a proposal spawns the sandbox
+and writes the fork's clip. The thirteen withheld are unchanged, with their reasons. The
+Consequences' sentence that these twelve were not claimed to be the right twelve for M4 is
+answered rather than deleted.
+
 ### 2. No `list_params`; a `ParamID` reaches the model only as the document carries it
 
 With `set_param` and `get_song` withheld, the one offered tool that takes a `ParamRef` is
@@ -161,6 +168,14 @@ and a closed stream.
 two-way split does not: a provider's own failure is neither the caller's to fix by calling
 differently nor an operator's project error, and it is neither retried as the first nor
 reported as the second.
+
+**Extended 2026-09-25 (ADR 0026 §3): a compile's diagnostic is the first kind.** From M4 a
+`compile_generator` that fails in the sandbox — the allowlist refusing a node, an exception, a
+non-integral tick, the limit — is `valid = false` with the child's `line:column` and text in
+the message, fed back whole exactly as a validator refusal is, and **counted against the
+three**; a sandbox that will not start, or a toolchain that does not match the project's, is
+the second kind and ends the turn at the host. Nothing is split in a new place, and no compile
+involves a provider.
 
 ### 4. Tested by a scripted provider; the project goldened end to end; no key in CI, ever
 
@@ -401,4 +416,5 @@ promise (plan, trap 5).
   not already automate; ~~not a dollar cap~~ — **amended 2026-09-24: there is one**, a ceiling
   checked in code before each call, ledgered and reconciled (§4's amendment), which M3 declined
   to build while no call was authorised — and not that the twelve are the right twelve for M4,
-  which adds the compilers' tools and decides them then.
+  which adds the compilers' tools and decides them then. **Decided 2026-09-25: fourteen**, the
+  twelve plus `define_generator` and `compile_generator` (ADR 0026 §3; §1 above, amended).

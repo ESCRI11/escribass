@@ -94,6 +94,7 @@ surface in the repository, and Tauri's webview differs per operating system (Web
 WKWebView, WebView2), so "it runs" is three separate answers with three separate rendering
 engines behind them. Nothing is postponed by this that was not already postponed: §16 places the
 installer in M5, and `roadmap.md` places minimum supported OS versions there with it.
+(**Renumbered 2026-09-25, ADR 0023 §1**: the installer's milestone is **M6**.)
 
 **§15's `[OPEN]` item stays open.** This decision answers M2's scope, which is an agent's to
 propose and a human's to accept; it does not answer what the minimum supported version of any

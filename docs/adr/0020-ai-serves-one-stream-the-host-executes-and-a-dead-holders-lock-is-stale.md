@@ -215,7 +215,8 @@ check. Nothing is broken
 while its holder may be alive; that sentence is the one that stands.
 
 The check is `/proc/<pid>` on Linux, which is the platform M3 claims (ADR 0014 §2) and costs no
-dependency; `ponytail:` macOS and Windows get theirs with the installer (M5), and until then a
+dependency; `ponytail:` macOS and Windows get theirs with the installer (M5 — **M6 since the
+2026-09-25 split**, ADR 0023 §1), and until then a
 build for either refuses as today. A recycled pid can only refuse — a new process wearing a
 dead holder's number is alive — so the check errs on the side the old rule chose. It still
 assumes a local filesystem, as the lock always has.

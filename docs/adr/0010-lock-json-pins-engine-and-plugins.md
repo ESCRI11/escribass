@@ -82,6 +82,8 @@ Three things are deliberately absent:
 - **No entry for `SourceRef` or `ModelRef`.** Those already reference content by hash — the
   hash *is* the pin, and the asset is either in `assets/` or reported missing by §10's existing
   rule. M4 adds the compiled artefacts ADR 0003 §3 named; M1 adds only what M1 can host.
+  (**Renumbered 2026-09-25**: M4 adds a `toolchains` block for the DSL, checked at compile and
+  not at load, and the compiled artefacts are **M5's** — ADR 0023 §1, ADR 0027 §1 and §3.)
 
   ~~`SamplerRef` too~~ — **corrected 2026-09-07, in PR 13, and the reason it gave was the
   wrong shape of reason.** A `SamplerRef`'s hash pins the *patch*. It says nothing at all about
@@ -292,6 +294,18 @@ Airwindows is the effect chain having no bundled effect to exercise — which it
 because `Effect` renders through the same device path as `Instrument` and Surge XT's own
 effects exercise it.
 
+**Amended 2026-09-25 (ADR 0023 §5): M5, and without clap-wrapper.** The suspicion above was
+right — `airwindows/airwindows` builds no Linux VST3 — and the conclusion drawn from it was
+not: the build that exists is `baconpaul/airwin2rack`, a **JUCE plugin** in Dexed's shape,
+which the spike built in three minutes and the engine's `--scan` opened headlessly with seven
+shared objects in its closure. It needs no CLAP→VST3 projection, so "where clap-wrapper is
+already scheduled" stopped being a reason, and its home is the milestone that builds the
+engine and rebuilds the manifest. It is re-pinned to airwin2rack at a commit the user approved
+(ADR 0023 §4), with its two configure-time fetches overridden to commits, because one of them
+is `GIT_TAG main` and this ADR's §1 pins commits. The "M2" in the Consequences below that
+promised a re-pin tool is retriggered again, to that pull request — the first that moves a
+plugin pin since M1.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |
@@ -334,4 +348,8 @@ effects exercise it.
   intro stops saying `lock.json` records only `schema_version`; **§8** records three bundled
   plugins rather than four candidates.
 - **M2** gains a re-pin tool and the UI that makes `lock_mismatch` recoverable without a text
-  editor. **M4** adds Airwindows and, per ADR 0003 §3, the compiled artefacts.
+  editor. **M4** adds Airwindows and, per ADR 0003 §3, the compiled artefacts. (**Amended
+  2026-09-25**: M2 built neither, the ledger carries the re-pin tool on the first plugin pin
+  that moves, and both of this bullet's M4 items are **M5's** — Airwindows via airwin2rack and
+  the artefacts with the export pipeline. M4 adds the `toolchains` block: ADR 0023 §1, §5;
+  ADR 0027.)

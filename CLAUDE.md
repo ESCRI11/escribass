@@ -15,34 +15,45 @@ Read `docs/specs.md` before any task. Sections marked [MUST] are binding. Sectio
 ## Repo layout
 See `docs/specs.md` §13. Do not create top-level directories not listed there without an ADR.
 
-## Current milestone: M4 — Compilers
+## Current milestone: M4 — Generators
 
 M0 to M3 are complete: the schema, `core` and the tool API; the render engine and four golden
 WAVs; the Tauri app with its views as projections of the model and preview playback; and the AI
-loop — a Python sidecar, a proposal a person applies, and the panel. §16 makes M4 the compilers:
-Cmajor JIT with CLAP export through clap-wrapper, the seeded Python DSL generator, the neural
-runtime (§7.3, ADR 0003 §7), **code views** (§9, ADR 0003 §8), and `lock.json` completed with the
-compiled artefacts and model hashes (ADR 0003 §3). **M4 is not planned yet**, and that is
-deliberate: planning it is its own step, as M1's, M2's and M3's were, and ADR 0003's Consequences
-already say M4 grows the most and may need splitting against a real schedule.
+loop — a Python sidecar, a proposal a person applies, and the panel. **M4 was split on
+2026-09-25** (ADR 0023 §1, the user's decision): §16's M4 is now the **generators** — the seeded
+Python DSL (§7.1) and its sandbox, `define_generator` and `compile_generator`,
+`Generator.compiled_hash`, the generator code view, and `lock.json`'s `toolchains` block — and it
+adds **no external dependency**. Everything native is **M5**: Cmajor export through clap-wrapper
+with **no JIT in v1** (§7.2, reversed on the spike's measurement), the ONNX-to-Cmajor converter
+as the whole of v1's neural path with no runtime process and no model shipped (§7.3), Airwindows
+via airwin2rack, the DSP code view, and `lock.json`'s `artefacts` and `models` blocks. Interop
+and the installer are **M6**.
 
-**The `[OPEN]` item that was due before M4 is answered.** ADR 0003 §7 said the neural runtime's
-packaging "must be resolved before M4 starts", and the user resolved it on 2026-09-25: it is a
-**separate process and never links into `engine`**, so the engine keeps CLAUDE.md #6 and a crash
-or a version clash in ONNX Runtime cannot reach the audio thread. **What M4's planning still owes
-is the detail** — which transport, what else is pinned, where §7.3's CLAP wrapper lives, and the
-§13 directory, which is a top-level directory and therefore its own ADR. Four ledger rows also
-come due at M4's planning: `FormRule`, `SourceRef.export_hash` and the `Generator`
-compiled-source hash, `lock.json` beyond `schema_version`, and Strudel after M4. Three `[OPEN]`
-items remain in §15 and none is M4's to walk into.
+**M4 is planned and decided.** `docs/plan.md`'s M4 section holds the plan (PR #82), the spike's
+findings (PR #83, never merged, carried onto `main`), the ten user decisions of 2026-09-25 and the
+seventeen answered with them, and ADRs 0023–0027 are the decisions: the split and what M5 and M6
+now own; the sandbox as a subprocess `core` spawns per compile and the DSL as a Python subset over
+`int` and `Fraction` behind an `ast` allowlist, claiming purity and a resource limit and **not**
+security (ADR 0024); `Generator.compiled_hash` alone, with `SourceRef.export_hash` waiting for
+M5's producer (ADR 0025); `proto/generate.proto`, the two tools, fourteen tools offered and a
+compile diagnostic fed back as a refusal (ADR 0026); and a `toolchains` block checked at compile
+and never at open (ADR 0027). The PR table is the plan's, PR 2 next: the schema change alone.
+
+**Three things to carry into every M4 step.** Nothing here is measured on a second machine: the
+repository was still private when M4 PR 1 opened, no runner has executed a step since 2026-09-09,
+and the user's decision to make it public (U2) had not taken effect — the first pull request a
+runner sees says so. `CEILING_USD` in `ai/src/escribass_ai/provider.py` equals the ledger's
+spent total, so every live run fails closed, and no paid measurement of a model writing the DSL
+is made before the DSL exists (U10). And M5's pins are **approved, not vendored**:
+`lock.baseline.json` moves when M5 uses them, `libjack-jackd2-dev` is a build dependency of the
+pinned image the user is installing, and a person reads Cmajor's licence before M5's first export
+(U9).
 
 Live status, deferred items and known gaps: `docs/plan.md`. Read `docs/specs.md` §16, §7 and
-ADR 0003 before starting a step. Read `docs/plan.md`'s "M3, closed" first: it records what M3
-leaves unverified — **a milestone and a half of merges no CI runner has seen**, one live model
+ADRs 0023–0027 before starting a step. Read `docs/plan.md`'s "M3, closed" first: it records what
+M3 leaves unverified — **a milestone and a half of merges no CI runner has seen**, one live model
 turn and no second, a preview that has still never reached a speaker, and one paid call made in
-M3 PR 5 before anybody asked, which is why non-negotiable 7 exists. Note what the ceiling now
-means: `CEILING_USD` in `ai/src/escribass_ai/provider.py` equals the ledger's spent total, so
-every live run fails closed and a new grant is a person raising that number in a commit.
+M3 PR 5 before anybody asked, which is why non-negotiable 7 exists.
 
 ## Completed: M3 — AI loop
 

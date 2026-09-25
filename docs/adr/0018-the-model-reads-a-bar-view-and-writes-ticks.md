@@ -104,7 +104,7 @@ because the written values are what `set_notes` re-sends.
 | `Clip` | id, voice, `start_tick`, `length_ticks`, `loop_length_ticks`, content kind; an audio clip's asset hash, `gain_db`, fades and `time_stretch` | — |
 | `Note` | id, `pitch`, `start_tick`, `length_ticks`, `velocity`; `microtonal_cents` when non-zero | `expression` — no tool the model is offered writes it and the axes do not read it |
 | `Automation` | id, target (a track's name and `gain_db`/`pan`, or a device's id and `ParamID`), every point at its tick with value and curve — listed once, in absolute ticks, not per bar, because a lane is not a voice | — |
-| `Generator` | id, kind, target | `source` — code for M4's compiler, and free-form text a model reads back is not the grammar |
+| `Generator` | id, kind, target — and, **amended 2026-09-25 (ADR 0026 §4)**, `seed` and one word read off `compiled_hash`'s emptiness, `never` or `compiled`, from M4 PR 6, since a model offered `compile_generator` has to see what there is to compile; never `stale`, which is `core`'s comparison and needs a hasher `ai` must not grow | `source` — code for M4's compiler, and free-form text a model reads back is not the grammar |
 | `RenderTarget` | — | Whole. The model is offered no render tool |
 | §4.3 | `id`, wherever a tool takes one | `provenance` and `version` — the history view's, and a caller cannot write them (ADR 0006 §4) |
 

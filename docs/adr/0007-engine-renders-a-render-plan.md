@@ -156,7 +156,10 @@ compile refuses, naming the field: `DeviceRef.cmajor`, `.faust` and `.neural` (M
 `TRACK_KIND_BUS` track (~~the mixer, M2~~ — **see the amendment below**); `RENDER_KIND_STEMS` (M5); and `RenderTarget.dither`
 set, because dither is a noise source and §2.2 requires every source of randomness to carry a
 seed stored in the project, which a `bool` cannot. Nothing else. A plugin outside the bundled
-set never reaches compile: ADR 0010 makes that the validator's `plugin_unknown`.
+set never reaches compile: ADR 0010 makes that the validator's `plugin_unknown`. (**Renumbered
+2026-09-25, ADR 0023 §1**: the "(M4)" beside the three device refs reads **M5**, and the "(M5)"
+beside stems reads **M6**; what lifts each refusal is unchanged, and `export_pending` is the
+name a Cmajor device's refusal takes once M5 has an export to be pending — ADR 0023 §2.)
 
 The validator does not refuse these, because validity and renderability are different
 questions. A song referencing a Cmajor source is a song the model can hold, edit, branch,

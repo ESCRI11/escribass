@@ -34,6 +34,13 @@ is written by the project store at M0.2; §11 requires it checked at load. What 
 compiled artefacts — exported CLAP/VST3 binaries, model hashes — that do not exist until the
 compilers do.
 
+- **Amended 2026-09-25, when M4 was split (ADR 0023 §1):** "completed at M4" reads **completed
+  at M5**. M4 adds the `toolchains` block — the DSL's version and its interpreter's, written on
+  the first compile and checked at compile rather than at load (ADR 0027 §1, §2) — and M5 adds
+  the `artefacts` and `models` blocks the sentence above describes, whose names ADR 0027 §3
+  reserves. "Checked at load" was true of the engine and the plugins and is not true of a
+  toolchain, and §11 now says so.
+
 ### 4. M1 carries the remaining bundled instruments
 
 §16 said "one bundled synth". §8 names Surge XT, sfizz, Dexed and Airwindows as what makes a
@@ -48,6 +55,15 @@ instrument. One synth proves the render path; the set is what M1 delivers.
   a build investigation inside the render milestone into the CLAP→VST3 path M4 uses anyway.
   M1's deliverable was never "four plugins"; it was a render path with a golden per instrument,
   and it still delivers that (ADR 0010 §5).
+- **Amended 2026-09-25 (ADR 0023 §5):** Airwindows is **M5's**, and not "with clap-wrapper".
+  Read on 2026-09-25 and built by the spike: `airwindows/airwindows` builds VST2 and AU and no
+  Linux VST3, which was the suspicion above, confirmed; the maintained consolidated build,
+  `baconpaul/airwin2rack`, is a **JUCE plugin** — Dexed's shape, an `ExternalProject` with its
+  own JUCE, no clap-wrapper anywhere — and it builds a Linux VST3 the engine's `--scan` opens
+  headlessly. So the premise that made M4 its home (the CLAP→VST3 path) was the wrong premise,
+  and its right home is the milestone that builds the engine, with the re-pin to a different
+  repository the user approved. It is one plugin of fourteen parameters whose `Replace` selects
+  the effect, which is a question for M5's own ADR before `add_effect` names one.
 
 ### 5. M2 carries the mixer and the history view
 
@@ -115,10 +131,31 @@ layout). None of that blocks M4 being planned; all of it is inside M4.
 The `[OPEN]` marker is removed from §15 and from `docs/plan.md`'s "Open — not ours to decide",
 because it is answered. §3's tier table said the process was `engine` and is corrected with it.
 
+**Amended 2026-09-25, the same day, by ADR 0023 §1 and §3.** "M4 is where it goes" reads
+**M5**, under the split. And what the detail paragraph above left to M4's planning is
+answered narrower than this section imagined: **in v1 the neural path is Cmajor's own
+ONNX-to-Cmajor converter alone**, riding the DSP export path, and **the separate process this
+section decided is not built in v1** — nothing ships that would run in it, and no model ships
+either. The decision that it *is* a separate process when it exists stands untouched; what the
+spike found is that a converter covers what v1 has a consumer for, minus two things M5 must
+write itself (a `Gemm` bias that does not broadcast, and an out-of-subset operator that is not
+refused with its name). So of the four things this section said M4's planning owed: the
+**transport** is nothing in v1 and is not decided against no consumer; **what else is pinned**
+is the `onnx` PyPI package the converter imports, returning to a person before M5 installs it,
+while ONNX Runtime's §17 row reaches no binary; the **CLAP wrapper** is the DSP pipeline's,
+since a converted model *is* a Cmajor patch; and the **directory** is `compilers/neural/`,
+under §13's existing `/compilers` line, so it is not a top-level directory and needs no ADR of
+its own after all — this amendment and M5's neural ADR are the record.
+
 ### 8. Code views are M4
 
 §9 lists them among the views, but they edit generator and DSP source, neither of which exists
 before M4. Building them at M2 would mean building an editor for nothing.
+
+- **Amended 2026-09-25 (ADR 0023 §1):** the two views split with their compilers. The
+  **generator** view — CodeMirror over `Generator.source`, ADR 0016 §2's pin's first consumer —
+  is M4's; the **DSP** view lands with the export pipeline in M5. The reasoning above is
+  unchanged: each editor lands with the thing it edits.
 
 ### 9. M5 carries MIDI I/O, the REAPER path, and publishing the schema
 
@@ -126,6 +163,11 @@ MIDI import/export is in §10 and was in no milestone. The REAPER RPP path and p
 `song.proto` as a standalone documented, versioned artifact are both §18.2 Stage 2, which maps
 to M4–M5; both are interop, so both are M5. §18.2 calls owning the schema standard a
 defensibility play, which makes it deliverable scope rather than marketing.
+
+- **Renumbered 2026-09-25 (ADR 0023 §1):** the milestone this section calls M5 — interop,
+  polish and the installer — is **M6**, because M4 was split at its native seam and the DSP
+  compilers took the M5 number. Nothing placed here moves; §18.2's "Stage 2 (M4–M5)" reads
+  M5–M6.
 
 ## Still unplaced
 
@@ -142,4 +184,6 @@ Whether they are v1 is a product decision, not an agent's. Added to §15's open 
 - `docs/roadmap.md`'s arc, and its risk item on §16 being thin, are updated in the same change.
 - Nothing here changes the schema, so no code changes and no golden-render pass.
 - M4 grows the most: compilers, neural runtime and code views. If M4 needs splitting, that is
-  a later ADR against a real schedule, not a guess now.
+  a later ADR against a real schedule, not a guess now. **That ADR is 0023, 2026-09-25**: the
+  M4 plan laid the schedule out, the spike measured the native half, and the user split it at
+  the native seam — M4 the generators, M5 the DSP compilers and the neural path, M6 interop.

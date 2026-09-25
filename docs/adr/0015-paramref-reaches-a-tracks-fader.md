@@ -49,6 +49,19 @@ refusing it removes a formula from the pinned set rather than adding one. `param
 the two that are allowed. Revisit when someone asks for a mute lane, which is a request, not an
 inference.
 
+**A hazard recorded 2026-09-25, for the milestone this decision did not foresee (ADR 0026,
+Consequences).** A `ParamRef` naming a *device* is keyed by the plugin's `ParamID` (ADR 0010
+§4), which for a bundled plugin is a number the plugin's own source fixes. For a **compiled**
+device it is not: the M4 spike read `cmaj_CLAPPlugin.h:524`, where a CLAP parameter's id is
+`endpointHandle` — Cmajor's endpoint handle in **declaration order** — so inserting an input
+above another in a Cmajor source renumbers every parameter below it, and a `ParamRef` to
+parameter `2` names `Detune` before the edit and `Gain` after it with nothing in the document
+to say so. This decision's resolution arm for a device is therefore keyed to something a
+source's *shape* decides. **Not M4's**: no compiled device exists before M5, and it bites the
+first `ParamRef` that names one. The trigger is M5's export record deciding what a `ParamID`
+for a Cmajor device *is* — the ordinal, or a name the record maps to one — before `add_automation`
+can target it; written here so M5's plan inherits the hazard rather than rediscovers it.
+
 ### 2. A mix lane's values are in the model's own units, and `PlanTrack` gains `mix_lanes`
 
 ADR 0010 §4, extended, settled that a plan parameter's value is the plugin's **normalised**
