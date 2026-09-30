@@ -394,6 +394,13 @@ pub struct Generator {
     pub toolchain_version: ::prost::alloc::string::String,
     #[prost(btree_map="string, string", tag="10")]
     pub params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    /// The SHA-256 of the inputs the last compile was made from — the CompileRequest core
+    /// built (ADR 0026 §1), hashed by the store's one hasher (ADR 0024 §6). Empty until the
+    /// first compile. Written by compile_generator and by no other tool; a value unequal to
+    /// the hash of the current inputs is what the code view calls "stale", and it describes
+    /// the source's inputs, never the notes, which a person may edit (§2.4).
+    #[prost(string, tag="11")]
+    pub compiled_hash: ::prost::alloc::string::String,
     #[prost(oneof="generator::Target", tags="8, 9")]
     pub target: ::core::option::Option<generator::Target>,
 }

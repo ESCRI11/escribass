@@ -52,6 +52,14 @@ test("reads an audio clip with its gain, fades and stretch flag", () => {
   assert.equal(clip.content.value.timeStretch, true);
 });
 
+test("an uncompiled generator reads its hash as the empty string", () => {
+  // Nothing can compile a generator before M4 PR 5, so "" is the fixture's honest value and
+  // the field's whole meaning here: never compiled (ADR 0025 §1). What this side proves is
+  // that the field reached TypeScript at all — the generated type would not have it, `tsc`
+  // would refuse this line, and `fromJsonString` would reject the fixture's unknown key.
+  assert.equal(song().generators["01M1FPMP00GENCHRS00000000D"].compiledHash, "");
+});
+
 test("a 64-bit field crosses as a string and lands as an exact bigint", () => {
   // Written as a JSON number this would round to 9007199254740992 here, which is why the
   // canonical form encodes 64-bit integers as strings.

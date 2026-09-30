@@ -501,6 +501,17 @@ class Generator(betterproto2.Message):
         ),
     )
 
+    compiled_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        11, betterproto2.TYPE_STRING
+    )
+    """
+    The SHA-256 of the inputs the last compile was made from — the CompileRequest core
+    built (ADR 0026 §1), hashed by the store's one hasher (ADR 0024 §6). Empty until the
+    first compile. Written by compile_generator and by no other tool; a value unequal to
+    the hash of the current inputs is what the code view calls "stale", and it describes
+    the source's inputs, never the notes, which a person may edit (§2.4).
+    """
+
     @model_validator(mode="after")
     def check_oneof(cls, values):
         return cls._validate_field_groups(values)

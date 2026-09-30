@@ -263,6 +263,14 @@ fn build() -> Song {
                 toolchain_version: "0.4.1".to_string(),
                 target: Some(generator::Target::ClipId("01M1FPMP00CPCHRS0000000006".to_string())),
                 params: BTreeMap::new(),
+                // Empty, and deliberately not a plausible-looking digest: "" *is* the
+                // meaningful value here — never compiled — and nothing in this repository
+                // can compile a generator before M4 PR 5 (ADR 0025 §1). A made-up hex
+                // string would be a fact the first real hasher could check and disprove.
+                // What the three suites then prove is the other half of ADR 0002 §4: the
+                // key is written even at its default, which is what makes `replace` legal
+                // against a generator nobody has compiled.
+                compiled_hash: String::new(),
             },
         )]
         .into_iter()
@@ -374,6 +382,11 @@ fn defaults_are_emitted_and_unset_optionals_are_absent() {
     assert!(json.contains("\"expression\": {}"));
     assert!(json.contains("\"markers\": {}"));
     assert!(json.contains("\"allow_overlap\": false"));
+    // The newest such field, and the one whose default carries a meaning: "" is "never
+    // compiled" (ADR 0025 §1). It is written because it is written for every no-presence
+    // field — making it `optional` instead would drop the key, and this line is what would
+    // fail if anybody did.
+    assert!(json.contains("\"compiled_hash\": \"\""));
     // An unset `optional` is genuinely absent, so `add`/`remove` are meaningful for it.
     assert!(!json.contains("loop_length_ticks"));
     assert!(!json.contains("prompt_id"));
