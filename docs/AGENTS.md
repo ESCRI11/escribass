@@ -18,7 +18,7 @@ Prose only: the architecture spec, its decision records, one research report, on
 | Notation | Meaning | Source |
 |---|---|---|
 | `[MUST]` on a heading | Binding; read before writing code | specs line 5; `CLAUDE.md` line 4 |
-| `[OPEN]` | Undecided, and not for an agent to decide: stop and ask. They are the "Remaining open items" paragraph that closes §15 — **four** since ADR 0003 added the fourth on 2026-09-02; this line said three until 2026-09-07, and `roadmap.md` had counted four the whole time | `CLAUDE.md` line 4; specs line 5 |
+| `[OPEN]` | Undecided, and not for an agent to decide: stop and ask. They are the "Remaining open items" paragraph that closes §15 — **four** since ADR 0003 added the fourth on 2026-09-02, and **three** since 2026-09-25, when the user resolved the neural runtime's packaging on the day ADR 0003 §7 said it was due; this line said three until 2026-09-07, and `roadmap.md` had counted four the whole time | `CLAUDE.md` line 4; specs line 5 |
 | `§N.M` where §N has subsection headings | The subsection: §4.4 is the validator invariants | §4, §7, §18 |
 | `§N.M` where §N is a numbered list | Item M: §2.6 is text-first persistence, §14.1 is "read §2, §4, §5, §11", §18.1.3 is differentiator 3 | usage in §15; ADR 0001 §5, §6; ADR 0002 §1, §6 |
 

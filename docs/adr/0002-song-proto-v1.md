@@ -134,6 +134,17 @@ generative compiler exists (§7.1, M4). Defining it now means defining it agains
 consumer. Adding it later is additive — a new map on `Song` — and the M4 ADR will specify
 it against a real caller. `Marker` is two fields and §4.2 names it, so it stays.
 
+**Re-deferred 2026-09-25, at M4's planning, on an event rather than a milestone (ADR 0023
+§6).** The consumer this section waited for arrived and does not consume it: a generator reads
+the layer-2 `sections` it is handed (ADR 0026 §1), which already carry order and length, and
+what a `FormRule` would add is a rule to re-lay sections when `target_length` changes — a
+second compiler nothing has asked for. So "M4" above is not the date it lands; the trigger is
+the first time a person wants a form re-laid rather than re-typed, and `set_form` waits with it
+on the first measurement in which a model fails to lay a form out with the tools it holds
+(`add_section` × N and `apply_patch`, both of which it has). The rule this section states — no
+field against no consumer — is the one that re-deferred it, and the one ADR 0025 §2 applies to
+`SourceRef.export_hash` in the same pass.
+
 ### 8. Reductions from §4.2, each additive to extend
 
 | §4.2 says | v1 has | Upgrade path |
@@ -153,6 +164,9 @@ it against a real caller. `Marker` is two fields and §4.2 names it, so it stays
 
 A no-presence field always has a value, so the compiler can never be handed a missing seed.
 Seed `0` is a legitimate seed. The remaining §4.4 check is `toolchain_version != ""`.
+(**Narrowed 2026-09-25, ADR 0027 §1**: to a generator that has been compiled — the first compile
+writes the version from what the compiler reported, so a generator compiled by nothing has none
+to state, and the check is on the pair `compiled_hash` / `toolchain_version`.)
 
 ### 10. `syntax = "proto3"`, not Editions
 
@@ -220,4 +234,7 @@ established for the id source, and for the same §11 reason.
 **Deferred to M4, both additive and both surfaced by the wireframes:** `SourceRef` needs an
 `export_hash` for §7.2's exported CLAP→VST3 binary (Plate 3's "export pending"), and
 `Generator` needs a compiled-source hash to detect stale compiled output (Plate 3's
-"compiled · stale").
+"compiled · stale"). **Split 2026-09-25 (ADR 0025):** `Generator.compiled_hash` is M4's, with
+a producer and a consumer in the same milestone; `SourceRef.export_hash` waits for the export
+pipeline that would produce one, which is M5's under ADR 0023 §1 — §7's own rule applied to the
+half of this sentence whose consumer is a milestone away.

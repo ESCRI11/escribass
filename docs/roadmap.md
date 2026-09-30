@@ -55,22 +55,35 @@ bar-17 demo driven by the assistant, diff on screen before apply. *Real:* differ
 model-agnostic LLM layer. **Delivered 2026-09-24**; what it does not claim is in
 `plan.md`'s "M3, closed".
 
-**M4 — Compilers.** Write, or ask for, an instrument in Cmajor; hear it at once under JIT;
-export it to a content-hashed VST3 so the render reproduces after the JIT is gone (§7.2).
-Write a generator in the seeded Python DSL and compile it to notes (§7.1). Load a neural
-instrument, wrapped as CLAP like any other (§7.3). Edit generator and DSP source in the app
-(§9). `lock.json` gains the compiled artefacts, completing what M0 began (§10, §11). *Proof:* same seed, same
-notes; change the seed and only the generated clip changes; an exported instrument re-renders
-bit-identical. *Real:* differentiator 2; differentiator 1 complete, lock file included.
+**M4 — Generators.** Write, or ask for, a generator in the seeded Python DSL and compile it to
+notes (§7.1); edit its source in the app and see whether it is compiled or stale (§9).
+`lock.json` gains the toolchain that compiled it, checked when you compile and never when you
+open (§10, §11). No new dependency, and nothing native. *Proof:* same seed, same notes; change
+the seed and only the generated clip changes — on any machine that runs the pinned interpreter,
+which is the first claim here that could be platform-free. *Real:* the generator half of
+differentiator 2. **Split from the milestone below on 2026-09-25** (ADR 0023 §1), when the
+plan found "M4 – Compilers" was twenty-odd pull requests into an engine build no runner had
+executed since 2026-09-09.
 
-**M5 — Interop & polish.** Take the song to Bitwig, Studio One or Cubase as DAWproject and
+**M5 — DSP compilers and the neural path.** Write, or ask for, an instrument in Cmajor; export
+it to a content-hashed VST3 and hear *that* — there is no JIT, so the preview and the render are
+one binary, and the loop costs about twenty seconds an export (§7.2; reversed on measurement,
+ADR 0023 §2). Bring a small ONNX model and have it converted to Cmajor and exported like any
+other instrument; a model the converter refuses is named, and nothing runs a neural runtime in
+v1 (§7.3). Airwindows as the first bundled effect (§8). Edit DSP source in the app (§9).
+`lock.json` gains the compiled artefacts, completing what M0 began. *Proof:* an exported
+instrument re-renders bit-identical, on this machine measured already and on a second machine
+not yet. *Real:* differentiator 2; differentiator 1 complete, lock file included.
+
+**M6 — Interop & polish.** Take the song to Bitwig, Studio One or Cubase as DAWproject and
 bring it back; import and export MIDI; export stems (§10). Take it to REAPER through the RPP
 path (§18.2 Stage 2). One installer for macOS, Windows and Linux carrying `app`, `ai` and
 `engine` (§3). The schema ships as a standalone documented, versioned artifact (§18.2).
 *Proof:* a DAWproject round trip, and per-stem hashes with the untouched stems identical
-(wireframes, Plate 6). *Real:* differentiator 4 in full.
+(wireframes, Plate 6). *Real:* differentiator 4 in full. (§16's M5 line until 2026-09-25,
+unchanged in content.)
 
-**v1 is M5 landed.** Every sentence of §1 is then true of a shipping build, all four §18.1
+**v1 is M6 landed.** Every sentence of §1 is then true of a shipping build, all four §18.1
 differentiators are demonstrable rather than argued, and the audience is the one §18.2 Stage 3
 names: developers, educators, reproducibility-minded producers and composers.
 
@@ -80,24 +93,27 @@ names: developers, educators, reproducibility-minded producers and composers.
 M0  core · tool API · MCP
 ├── M1  engine · offline render
 │   ├── M2  preview playback
-│   ├── M4  Cmajor JIT and CLAP→VST3 export      (both run in `engine`, §7.2)
-│   └── M5  stems
+│   ├── M5  CLAP→VST3 export, no JIT             (a subprocess per export; the engine loads the artefact, §7.2)
+│   └── M6  stems
 ├── M2  timeline · piano roll                     (projections of the model; no engine needed)
 │   └── M3  AI panel
 ├── M3  Python sidecar · tool-calling loop        (needs only the gRPC API, §6)
-│   └── M4  Python DSL generator                  (runs inside `ai`, §7.1)
-└── M5  DAWproject I/O                            (lives in `core`, §3, §13)
-    M5  installer                                 needs all three processes: M1, M2, M3
+├── M4  Python DSL generator                      (a subprocess `core` spawns per compile, §7.1 — needs M0 alone)
+└── M6  DAWproject I/O                            (lives in `core`, §3, §13)
+    M6  installer                                 needs all three processes: M1, M2, M3
 ```
 
 Hard blocks: M0 blocks everything — the model is the only state (§2.1) and the tool API the
-only way to change it (§5). M1 blocks the audio half of M2, the DSP half of M4, and stems.
-M2 blocks the AI panel, not the AI loop. M3's sidecar blocks the DSL compiler (§7.1).
+only way to change it (§5). M1 blocks the audio half of M2, the DSP milestone, and stems.
+M2 blocks the AI panel, not the AI loop. ~~M3's sidecar blocks the DSL compiler (§7.1).~~ The
+DSL compiler needs only `core` (ADR 0024 §1): `ai` neither runs it nor hosts it, which is why
+M4 sits beside M3 in the spine and not under it.
 
 Looks sequential, is not: M1 and M2's editing views share nothing but M0. Most of M3 exists
 at M0 — an external MCP client does dry-run → diff → apply from day one (§18.2); M3 adds the
 bundled orchestrator, the retry loop, the panel, and the Libretto-style grammar ADR §18.2
-wants before M3. M4's two halves are independent. DAWproject I/O can begin the day M0
+wants before M3. What was "M4's two halves" became two milestones on 2026-09-25, because they
+were independent and only one of them is native. DAWproject I/O can begin the day M0
 closes; the installer cannot begin before M3.
 
 ## What v1 is not
@@ -139,7 +155,7 @@ Internal, already flagged by the spec: M1's render turning out not bit-exact on 
 v3.3 tag (§17): a re-pin that moves a golden hash needs an ADR and a full golden pass. The
 four `[OPEN]` items in §15 — symbolic model (~~M3~~ **unplaced: M3 asked it as U2, and it was
 not reached because U1 was answered "not in M3"**), neural runtime packaging (~~due now~~ — **answered 2026-09-25: a
-separate process, ADR 0003 §7, resolved**), minimum OS versions (M5 installer), and whether §6's analysis and
+separate process, ADR 0003 §7, resolved**), minimum OS versions (~~M5~~ M6's installer, since the split), and whether §6's analysis and
 symbolic generation are v1 at all — each block where they sit, and none is an agent's to decide.
 
 ## Where the risk sits
@@ -155,8 +171,10 @@ same review found `serde_json` off by one ULP on ~30% of doubles, tempo events k
 index, and a merge rule that conflicted on every entity by construction. Each was decided on
 paper in an ADR and wrong in execution; ADR 0002 §11 was rewritten before any consumer
 existed. Four languages, three processes, and every boundary ahead is the same hazard class:
-core → engine snapshot (M1), Tracktion and each bundled plugin (M1), JIT versus exported
-binary (M4 — Plate 3's "export pending"), the DSL sandbox (M4). Assume each needs what M0.1
+core → engine snapshot (M1), Tracktion and each bundled plugin (M1), ~~JIT versus exported
+binary (M4 — Plate 3's "export pending")~~ the exported binary versus a second build of it
+(M5 — measured byte-identical on one machine, and there is no JIT), the DSL sandbox (M4).
+Assume each needs what M0.1
 needed: a test that runs it, not an ADR that describes it.
 
 **2. M1 is first contact with code we do not own.** M0 is ours to make deterministic. M1
@@ -177,12 +195,17 @@ M0.3). Closing it is a schema change — another ADR against the foundation — 
 now an event rather than a milestone: the first gesture that reorders a chain or inserts a track
 mid-list, which M2 is on record as not offering (ADR 0015 §4).
 
-**5. M0 carries everything; M4 now carries the rest.** M0 holds the model, the tool API,
+**5. M0 carries everything; M4 ~~now carries the rest~~ carried the rest until it was cut in
+two.** M0 holds the model, the tool API,
 branching, merge and an MCP surface, and its scope has already grown once (`b402dc0`). ADR
 0003 then placed eight pieces of scope that sat in no milestone, and M4 took three — the
 compilers, the neural runtime and the code views — on top of what it had. Both concentrations
-are worth watching: M0 because everything blocks on it, M4 because it is now the widest
+are worth watching: M0 because everything blocks on it, M4 because it ~~is now~~ was the widest
 milestone, and its ONNX packaging question was `[OPEN]` until 2026-09-25, when it was answered
 the way the risk reads best: a separate process, so a runtime that falls over does not take the
-audio thread with it (ADR 0003 §7, resolved). Two gaps stay open by decision
+audio thread with it (ADR 0003 §7, resolved). **The same day the milestone was split at its
+native seam (ADR 0023 §1)**: M4 is the generators and adds no dependency, and everything
+native — Cmajor without a JIT, the converter, Airwindows, an engine image that grows by GTK and
+WebKit — is M5's, into a CI that the repository going public is meant to restore. The risk did
+not go away; it moved one milestone later and got a plan with the spike's numbers in it. Two gaps stay open by decision
 rather than oversight: whether §6's analysis features and symbolic generation are v1 at all.
