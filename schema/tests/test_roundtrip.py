@@ -61,6 +61,13 @@ class TestSongFixture(unittest.TestCase):
         self.assertEqual(clip.audio_clip.fade_out_ticks, 480)
         self.assertIs(clip.audio_clip.time_stretch, True)
 
+    def test_uncompiled_generator_reads_its_hash_as_the_empty_string(self) -> None:
+        # "" is never compiled, and nothing here can compile one before M4 PR 5 (ADR 0025
+        # §1). ``from_json`` ignores what it does not know, so the assertion that carries
+        # weight is the attribute access: a generated class without the field raises here
+        # rather than quietly agreeing.
+        self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].compiled_hash, "")
+
     def test_64_bit_seed_survives_the_json_string_encoding(self) -> None:
         self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].seed, 9007199254740993)
 

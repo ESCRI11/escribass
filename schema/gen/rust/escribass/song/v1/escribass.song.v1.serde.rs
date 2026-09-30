@@ -1254,6 +1254,9 @@ impl serde::Serialize for Generator {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         if self.target.is_some() {
             len += 1;
         }
@@ -1286,6 +1289,9 @@ impl serde::Serialize for Generator {
         if true {
             struct_ser.serialize_field("params", &self.params)?;
         }
+        if true {
+            struct_ser.serialize_field("compiled_hash", &self.compiled_hash)?;
+        }
         if let Some(v) = self.target.as_ref() {
             match v {
                 generator::Target::TrackId(v) => {
@@ -1315,6 +1321,8 @@ impl<'de> serde::Deserialize<'de> for Generator {
             "toolchain_version",
             "toolchainVersion",
             "params",
+            "compiled_hash",
+            "compiledHash",
             "track_id",
             "trackId",
             "clip_id",
@@ -1331,6 +1339,7 @@ impl<'de> serde::Deserialize<'de> for Generator {
             Seed,
             ToolchainVersion,
             Params,
+            CompiledHash,
             TrackId,
             ClipId,
         }
@@ -1362,6 +1371,7 @@ impl<'de> serde::Deserialize<'de> for Generator {
                             "seed" => Ok(GeneratedField::Seed),
                             "toolchainVersion" | "toolchain_version" => Ok(GeneratedField::ToolchainVersion),
                             "params" => Ok(GeneratedField::Params),
+                            "compiledHash" | "compiled_hash" => Ok(GeneratedField::CompiledHash),
                             "trackId" | "track_id" => Ok(GeneratedField::TrackId),
                             "clipId" | "clip_id" => Ok(GeneratedField::ClipId),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
@@ -1391,6 +1401,7 @@ impl<'de> serde::Deserialize<'de> for Generator {
                 let mut seed__ = None;
                 let mut toolchain_version__ = None;
                 let mut params__ = None;
+                let mut compiled_hash__ = None;
                 let mut target__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
@@ -1448,6 +1459,12 @@ impl<'de> serde::Deserialize<'de> for Generator {
                                 map_.next_value::<std::collections::BTreeMap<_, _>>()?
                             );
                         }
+                        GeneratedField::CompiledHash => {
+                            if compiled_hash__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("compiledHash"));
+                            }
+                            compiled_hash__ = Some(map_.next_value()?);
+                        }
                         GeneratedField::TrackId => {
                             if target__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("trackId"));
@@ -1471,6 +1488,7 @@ impl<'de> serde::Deserialize<'de> for Generator {
                     seed: seed__.unwrap_or_default(),
                     toolchain_version: toolchain_version__.unwrap_or_default(),
                     params: params__.unwrap_or_default(),
+                    compiled_hash: compiled_hash__.unwrap_or_default(),
                     target: target__,
                 })
             }

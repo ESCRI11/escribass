@@ -263,6 +263,7 @@
       "seed": "9007199254740993",
       "toolchain_version": "0.4.1",
       "params": {},
+      "compiled_hash": "",
       "clip_id": "01M1FPMP00CPCHRS0000000006"
     }
   },

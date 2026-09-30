@@ -157,6 +157,45 @@ fn a_song_that_does_not_match_a_replay_is_reported_not_repaired() {
 }
 
 #[test]
+fn a_generator_logged_before_compiled_hash_existed_would_strand_its_project() {
+    // The hazard ADR 0011 §4 recorded and ADR 0025 §1 checked a second time, run rather than
+    // asserted. `materialise` replays raw JSON from a default `Song`, and `song.json` is
+    // written with defaults emitted (ADR 0002 §4) — so an entry that added a `Generator`
+    // before field 11 existed carries ten keys where the song now has eleven, and `open`
+    // reports `song_diverged` instead of reading the project.
+    //
+    // It is safe only because no such project exists: every determinism golden has
+    // `"generators": {}`, the schema fixture is a constructed value with no log
+    // (`tests/AGENTS.md`), and no tool could mint a generator before `define_generator`
+    // (M4 PR 5). This is what the next additive change to a logged entity has to establish
+    // for itself, and the reason the one that cannot is the one that owes a migration.
+    let dir = Scratch::new();
+    let mut before = fixture_value();
+    let generator = before["generators"]["01M1FPMP00GENCHRS00000000D"].as_object_mut().unwrap();
+    assert!(generator.remove("compiled_hash").is_some(), "the field the log would predate");
+
+    let mut log = History::new();
+    let empty = serde_json::to_value(Song::default()).unwrap();
+    let root_id = SeededIds::default().next_id();
+    log.append(entry(root_id.clone(), vec![], "create", &diff(&empty, &before), provenance(), 1))
+        .unwrap();
+    log.create_ref("main", &root_id).unwrap();
+    log.set_head("main").unwrap();
+
+    // Today's song, today's writer: eleven keys on disk against the log's ten.
+    let song: Song = serde_json::from_value(fixture_value()).unwrap();
+    Project::new(&dir.0, song, log, manifest()).write().unwrap();
+
+    let e = Project::open(&dir.0, manifest()).unwrap_err();
+    assert_eq!(e.rule, "song_diverged");
+    assert!(
+        e.message.contains("/generators/01M1FPMP00GENCHRS00000000D/compiled_hash"),
+        "the divergence is the new field and nothing else: {}",
+        e.message
+    );
+}
+
+#[test]
 fn an_orphan_entry_left_by_a_crash_does_not_become_history() {
     // refs.json is written last, so a crash before it leaves an entry nothing references.
     let dir = Scratch::new();
