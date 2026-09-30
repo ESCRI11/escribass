@@ -109,7 +109,9 @@ fn every_mutating_rpc_returns_the_shared_result() {
         }
         seen += 1;
     }
-    assert_eq!(seen, 25, "every rpc in the service is checked");
+    // Twenty-seven from M4 PR 3: `DefineGenerator` and `CompileGenerator` both produce ops on
+    // the document, so neither earns its own response message (ADR 0006 §1, ADR 0026 §2).
+    assert_eq!(seen, 27, "every rpc in the service is checked");
 }
 
 // ---- render.proto (ADR 0007 §2) ----

@@ -1072,6 +1072,116 @@ impl<'de> serde::Deserialize<'de> for AssetResponse {
         deserializer.deserialize_struct("escribass.tools.v1.AssetResponse", FIELDS, GeneratedVisitor)
     }
 }
+impl serde::Serialize for CompileGeneratorRequest {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.CompileGeneratorRequest", len)?;
+        if true {
+            struct_ser.serialize_field("generator_id", &self.generator_id)?;
+        }
+        if true {
+            struct_ser.serialize_field("dry_run", &self.dry_run)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for CompileGeneratorRequest {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "generator_id",
+            "generatorId",
+            "dry_run",
+            "dryRun",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            GeneratorId,
+            DryRun,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "generatorId" | "generator_id" => Ok(GeneratedField::GeneratorId),
+                            "dryRun" | "dry_run" => Ok(GeneratedField::DryRun),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = CompileGeneratorRequest;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct escribass.tools.v1.CompileGeneratorRequest")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<CompileGeneratorRequest, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut generator_id__ = None;
+                let mut dry_run__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::GeneratorId => {
+                            if generator_id__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("generatorId"));
+                            }
+                            generator_id__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::DryRun => {
+                            if dry_run__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("dryRun"));
+                            }
+                            dry_run__ = Some(map_.next_value()?);
+                        }
+                    }
+                }
+                Ok(CompileGeneratorRequest {
+                    generator_id: generator_id__.unwrap_or_default(),
+                    dry_run: dry_run__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("escribass.tools.v1.CompileGeneratorRequest", FIELDS, GeneratedVisitor)
+    }
+}
 impl serde::Serialize for CreateBranchRequest {
     #[allow(deprecated)]
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -1197,6 +1307,209 @@ impl<'de> serde::Deserialize<'de> for CreateBranchRequest {
             }
         }
         deserializer.deserialize_struct("escribass.tools.v1.CreateBranchRequest", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for DefineGeneratorRequest {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if true {
+            len += 1;
+        }
+        if self.target.is_some() {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("escribass.tools.v1.DefineGeneratorRequest", len)?;
+        if true {
+            let v = ::escribass_schema::song::GeneratorKind::try_from(self.kind)
+                .map_err(|_| serde::ser::Error::custom(format!("Invalid variant {}", self.kind)))?;
+            struct_ser.serialize_field("kind", &v)?;
+        }
+        if true {
+            struct_ser.serialize_field("source", &self.source)?;
+        }
+        if true {
+            #[allow(clippy::needless_borrow)]
+            #[allow(clippy::needless_borrows_for_generic_args)]
+            struct_ser.serialize_field("seed", ToString::to_string(&self.seed).as_str())?;
+        }
+        if true {
+            struct_ser.serialize_field("params", &self.params)?;
+        }
+        if true {
+            struct_ser.serialize_field("dry_run", &self.dry_run)?;
+        }
+        if let Some(v) = self.target.as_ref() {
+            match v {
+                define_generator_request::Target::TrackId(v) => {
+                    struct_ser.serialize_field("track_id", v)?;
+                }
+                define_generator_request::Target::ClipId(v) => {
+                    struct_ser.serialize_field("clip_id", v)?;
+                }
+            }
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for DefineGeneratorRequest {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "kind",
+            "source",
+            "seed",
+            "params",
+            "dry_run",
+            "dryRun",
+            "track_id",
+            "trackId",
+            "clip_id",
+            "clipId",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            Kind,
+            Source,
+            Seed,
+            Params,
+            DryRun,
+            TrackId,
+            ClipId,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "kind" => Ok(GeneratedField::Kind),
+                            "source" => Ok(GeneratedField::Source),
+                            "seed" => Ok(GeneratedField::Seed),
+                            "params" => Ok(GeneratedField::Params),
+                            "dryRun" | "dry_run" => Ok(GeneratedField::DryRun),
+                            "trackId" | "track_id" => Ok(GeneratedField::TrackId),
+                            "clipId" | "clip_id" => Ok(GeneratedField::ClipId),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = DefineGeneratorRequest;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct escribass.tools.v1.DefineGeneratorRequest")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<DefineGeneratorRequest, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut kind__ = None;
+                let mut source__ = None;
+                let mut seed__ = None;
+                let mut params__ = None;
+                let mut dry_run__ = None;
+                let mut target__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::Kind => {
+                            if kind__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("kind"));
+                            }
+                            kind__ = Some(map_.next_value::<::escribass_schema::song::GeneratorKind>()? as i32);
+                        }
+                        GeneratedField::Source => {
+                            if source__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("source"));
+                            }
+                            source__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::Seed => {
+                            if seed__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("seed"));
+                            }
+                            seed__ = 
+                                Some(map_.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::Params => {
+                            if params__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("params"));
+                            }
+                            params__ = Some(
+                                map_.next_value::<std::collections::BTreeMap<_, _>>()?
+                            );
+                        }
+                        GeneratedField::DryRun => {
+                            if dry_run__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("dryRun"));
+                            }
+                            dry_run__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::TrackId => {
+                            if target__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("trackId"));
+                            }
+                            target__ = map_.next_value::<::std::option::Option<_>>()?.map(define_generator_request::Target::TrackId);
+                        }
+                        GeneratedField::ClipId => {
+                            if target__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("clipId"));
+                            }
+                            target__ = map_.next_value::<::std::option::Option<_>>()?.map(define_generator_request::Target::ClipId);
+                        }
+                    }
+                }
+                Ok(DefineGeneratorRequest {
+                    kind: kind__.unwrap_or_default(),
+                    source: source__.unwrap_or_default(),
+                    seed: seed__.unwrap_or_default(),
+                    params: params__.unwrap_or_default(),
+                    dry_run: dry_run__.unwrap_or_default(),
+                    target: target__,
+                })
+            }
+        }
+        deserializer.deserialize_struct("escribass.tools.v1.DefineGeneratorRequest", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for DeleteBranchRequest {

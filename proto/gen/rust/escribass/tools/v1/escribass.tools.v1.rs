@@ -305,6 +305,90 @@ pub struct MoveSectionRequest {
     pub dry_run: bool,
 }
 // ---------------------------------------------------------------------------
+// Generators (§7.1)
+// ---------------------------------------------------------------------------
+
+/// Adds a Generator (§4.2, layer 1). **Compiles nothing** (ADR 0026 §2).
+///
+/// Two calls rather than one, because a model that defines and compiles in one turn makes one
+/// more call than it would like, while compiling on define costs a process for every definition
+/// a person then edits before compiling — and puts two things a dry run cannot show apart into
+/// one entry (ADR 0024 §5). A dry run of this is the ordinary validator pass over the added
+/// entity.
+///
+/// `toolchain_version` is not a field here. A model cannot know one and a person should not
+/// have to: the first compile writes it, from what the child reported, exactly as a plugin pin
+/// is written on first reference (ADR 0027 §1; ADR 0010 §2).
+///
+/// There is no set_generator_source either, and none is coming until something asks for it.
+/// Editing a source is apply_patch on /generators/{id}/source, as a mix is written by
+/// apply_patch on its path and for the same reason: a typed tool for a `replace` the raw
+/// pipeline already expresses waits on the typed-tools row's trigger — the first measurement in
+/// which a model gets the RFC 6902 wrong where a typed tool would not have let it (ADR 0022 §1,
+/// ADR 0026 §2). `seed` and `params` are edited the same way.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DefineGeneratorRequest {
+    #[prost(enumeration="::escribass_schema::song::GeneratorKind", tag="1")]
+    pub kind: i32,
+    #[prost(string, tag="2")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(uint64, tag="3")]
+    pub seed: u64,
+    #[prost(btree_map="string, string", tag="4")]
+    pub params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    #[prost(bool, tag="7")]
+    pub dry_run: bool,
+    /// The schema allows either (ADR 0002 §3) and the validator accepts either, so this does too.
+    /// In M4 a compile writes a note clip and refuses the rest, `target_not_note_clip` — valid and
+    /// uncompilable, the shape ADR 0007 §6 gave *valid and unrenderable*. What a track target
+    /// should mean is not decided against no consumer (ADR 0024 §5).
+    #[prost(oneof="define_generator_request::Target", tags="5, 6")]
+    pub target: ::core::option::Option<define_generator_request::Target>,
+}
+/// Nested message and enum types in `DefineGeneratorRequest`.
+pub mod define_generator_request {
+    /// The schema allows either (ADR 0002 §3) and the validator accepts either, so this does too.
+    /// In M4 a compile writes a note clip and refuses the rest, `target_not_note_clip` — valid and
+    /// uncompilable, the shape ADR 0007 §6 gave *valid and unrenderable*. What a track target
+    /// should mean is not decided against no consumer (ADR 0024 §5).
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(string, tag="5")]
+        TrackId(::prost::alloc::string::String),
+        #[prost(string, tag="6")]
+        ClipId(::prost::alloc::string::String),
+    }
+}
+/// Compiles a generator: spawns the sandbox, replaces the target clip's notes **whole**, and
+/// sets `compiled_hash` and `toolchain_version` — one entry under this tool's name (ADR 0024
+/// §5). Every note's id is minted by core and its provenance is this call's.
+///
+/// A **dry run compiles and answers with the diff**, which is what the code view's Compile is;
+/// its Apply is the commit (ADR 0017 §4). Except when the inputs hash to `compiled_hash`
+/// already: then it answers *up to date* with an empty patch and **spawns nothing**, so a status
+/// read on an up-to-date generator costs no process and one on a stale generator costs the
+/// compile a person is about to ask for anyway (ADR 0024 §6). One compile per click, never per
+/// keystroke: a keystroke is a draft in an editor's buffer, and nothing is compiled that the
+/// document does not hold.
+///
+/// Refused — `valid = false`, the caller's to fix — with `generator_unknown`,
+/// `target_not_note_clip`, `generator_error` carrying the child's line:column and its own text,
+/// or `generator_timeout`. An operator's instead, ending a model's turn at the host:
+/// `generator_missing` (the process was started with no --generator), `toolchain_mismatch`
+/// (ADR 0027 §2), and `generator_failed` — a child that would not start, printed no socket line,
+/// or exited without answering (ADR 0024 §7; ADR 0006 §2).
+///
+/// There is no state on this wire for "a compile is in progress", and none is missing: a compile
+/// is one call that blocks for its length, bounded by the timeout, and a progress stream for a
+/// call of tens of milliseconds is the Jobs service ADR 0020 §3 refused (ADR 0026 §2).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CompileGeneratorRequest {
+    #[prost(string, tag="1")]
+    pub generator_id: ::prost::alloc::string::String,
+    #[prost(bool, tag="2")]
+    pub dry_run: bool,
+}
+// ---------------------------------------------------------------------------
 // Rendering (§8)
 // ---------------------------------------------------------------------------
 

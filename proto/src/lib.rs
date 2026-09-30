@@ -17,6 +17,12 @@
 //! service nobody implements before M2. Its leaf messages are `song.proto`'s by the same
 //! `extern_path`, which is what makes a plan carry *the* `Note` rather than a copy of it.
 //!
+//! `generate` is the generative compiler's boundary (`proto/generate.proto`, ADR 0024 and
+//! 0026): one `Compile` call to a child `core` spawns per compile, which answers with the
+//! clip's notes or one diagnostic and exits. Its direction is `render`'s — the child serves
+//! and `core` dials — so `generate_client` is the half `core` uses and `generate_server` the
+//! half `compilers/generative` implements, in Python, from this same `.proto` (M4 PR 4).
+//!
 //! `assistant` is the AI sidecar's boundary (`proto/assistant.proto`, ADR 0020): one
 //! bidirectional stream per prompt, on which the model's tool calls come **back** to the host
 //! as a name and arguments. Here the generated `assistant_client` is the half that matters —
@@ -50,9 +56,18 @@ pub mod escribass {
             ));
         }
     }
+    pub mod generate {
+        pub mod v1 {
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/gen/rust/escribass/generate/v1/escribass.generate.v1.rs"
+            ));
+        }
+    }
 }
 
 pub use escribass::assistant::v1 as assistant;
+pub use escribass::generate::v1 as generate;
 pub use escribass::render::v1 as render;
 pub use escribass::tools::v1 as tools;
 

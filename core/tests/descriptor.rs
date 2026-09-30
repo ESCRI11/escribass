@@ -29,12 +29,31 @@ fn every_rpc_in_the_service_becomes_a_tool() {
     // The count is asserted in `escribass-proto`'s own tests against the `.proto` text; here
     // the point is that the descriptor and the service agree, so an RPC cannot be added
     // without appearing.
+    //
+    // Twenty-seven from M4 PR 3, and **two of them are not in `IMPLEMENTED`**: the service
+    // declares `define_generator` and `compile_generator` a pull request before `Session` has
+    // them, so `buf breaking` sees `proto/`'s whole M4 shape once (docs/plan.md, M4 trap 4).
+    // That gap is the *contract's*, not a carrier's: MCP advertises `IMPLEMENTED` and so
+    // advertises twenty-five, which is `core/src/mcp.rs` refusing to hand a model a name that
+    // can only fail. PR 5 closes it from the other side.
     let names = tool_names(DESCRIPTOR).unwrap();
-    assert_eq!(names.len(), 25);
+    assert_eq!(names.len(), 27);
     for expected in ["apply_patch", "get_song", "get_song_at", "get_history", "merge_branch",
-                     "add_asset", "render_export", "render_preview", "undo", "redo"] {
+                     "add_asset", "render_export", "render_preview", "undo", "redo",
+                     "define_generator", "compile_generator"] {
         assert!(names.contains(&expected.to_string()), "{expected} missing from {names:?}");
     }
+}
+
+#[test]
+fn the_generative_compilers_service_is_not_a_tool() {
+    // `Generate` (proto/generate.proto, M4 PR 3) is the fourth service in this descriptor, and
+    // it is the *compiler's* boundary, not a caller's: advertised, `compile` would hand a model
+    // a source, a seed and a clip's bounds and ask it to play the sandbox, next to the
+    // `compile_generator` that does the real thing through the document. A model compiles a
+    // generator the project holds; nothing calls this but `core`, and only with what it built.
+    let names = tool_names(DESCRIPTOR).unwrap();
+    assert!(!names.contains(&"compile".to_string()), "{names:?}");
 }
 
 #[test]
