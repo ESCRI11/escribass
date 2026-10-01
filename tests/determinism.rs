@@ -54,7 +54,11 @@ const SCRIPTED: [&str; 5] = ["every_tool", "refusals", "branches", "render", "un
 /// noticed there was no `uv` and returned would be the quiet skip this suite exists to
 /// prevent. `every_implemented_tool_is_scripted` still reads them, because reading a
 /// `script.json` needs no compiler and a tool that no script calls must fail everywhere.
-const COMPILES: [&str; 1] = ["generators"];
+///
+/// `compile` is M4 PR 6's: its two steps build the clip a **model** then writes a generator
+/// into, so the script itself compiles nothing and the turn does. Naming it here is what puts
+/// the sandbox on that session and the staleness guard on that path (trap 5).
+const COMPILES: [&str; 2] = ["generators", "compile"];
 
 // ---------------------------------------------------------------------------
 // Scripts
@@ -985,6 +989,23 @@ mod through_the_sidecar {
             Author::Human,
         );
 
+        // The sandbox, for a script that compiles — told as a command and never searched for
+        // (ADR 0024 §1), exactly as the two server binaries are told it. Behind the feature
+        // because a compile spawns a real Python child out of `compilers/generative/`, which
+        // cargo cannot build; without it this session has none and `compile_generator` is
+        // `generator_missing`, which is a refusal rather than a quiet skip.
+        #[cfg(feature = "generators")]
+        {
+            if COMPILES.contains(&name) {
+                session.set_sandbox(escribass_core::Sandbox::new(
+                    common::generator_command()
+                        .split_whitespace()
+                        .map(str::to_string)
+                        .collect(),
+                ));
+            }
+        }
+
         let transcript = PathBuf::from(SCRIPTS).join(name).join("transcript.json");
         let mut sidecar: Sidecar = Assistant::new(ai_command(&transcript))
             .start()
@@ -1158,6 +1179,143 @@ mod through_the_sidecar {
                 .expect("lock.json is JSON");
         assert_eq!(lock["ai"]["model"], json!("deepseek/deepseek-v4.1-flash"));
         assert_eq!(lock["ai"]["provider"], json!("openrouter"));
+    }
+
+    // -----------------------------------------------------------------------
+    // A model defines a generator and compiles it (M4 PR 6; ADR 0026 §3)
+    // -----------------------------------------------------------------------
+    //
+    // Behind **both** features, which is what the turn needs: the real `ai` process for the
+    // loop and a real `compilers/generative` child for the compile. `cargo test -p
+    // escribass-tests --features ai,generators` is what runs it, and CI runs exactly that.
+    //
+    // The transcript is **hand-written** and says so in its own file, as `four-refusals.json`
+    // does, because recording one costs a paid call and CLAUDE.md #7 says nothing calls a
+    // paid service without the user's confirmation. So this is not evidence that a model
+    // writes the DSL — that is U10, unmeasured — and the file says that too. What it is
+    // evidence of is the loop: the two tools offered, a diagnostic crossing back whole, a
+    // source edited by `apply_patch` on its path, and one patch at the end for a person.
+
+    /// The prompt the hand-written transcript answers.
+    #[cfg(feature = "generators")]
+    const COMPILE_PROMPT: &str = "write me a drum generator for the empty clip";
+
+    /// The generator the turn mints: counter 100 in Crockford base32, as [`TURN_SEED`] says,
+    /// and the id the transcript's own calls name. Written literally for `tests/AGENTS.md`'s
+    /// reason — a change in mint order should fail here rather than quietly compile something
+    /// else.
+    #[cfg(feature = "generators")]
+    const COMPILED: &str = "01M1FPMP000000000000000034";
+
+    #[cfg(feature = "generators")]
+    #[test]
+    fn a_model_defines_compiles_reads_the_diagnostic_and_compiles_again() {
+        // §11's shape with a model above the tool API **and** a compiler below it, which is
+        // the first time both children are in one claim. Two runs against each other catch a
+        // clock, a pid or a socket path reaching the bytes — a compile spawns a process and
+        // every one of those is in reach — and the committed golden catches drift, which two
+        // runs in one job cannot.
+        let first = drive("compile", AT, COMPILE_PROMPT);
+        let second = drive("compile", AT, COMPILE_PROMPT);
+        assert_same(
+            "the same transcript and the same compiler produced different projects",
+            &Snapshot::of(&first),
+            &Snapshot::of(&second),
+        );
+        assert_matches_golden("compile", &first);
+    }
+
+    #[cfg(feature = "generators")]
+    #[test]
+    fn what_the_compile_golden_covers_that_a_turn_without_a_compiler_would_not() {
+        // Named claims, read off the committed golden rather than off a fresh run, so the
+        // golden cannot quietly stop covering them (docs/plan.md, M3 trap 1).
+        let committed = Snapshot::read("compile");
+        let answers: Value = serde_json::from_slice(
+            committed.0.get("responses.json").expect("the golden has responses.json"),
+        )
+        .expect("responses.json is JSON");
+        let answers = answers.as_array().expect("an array");
+        let turn = &answers
+            .iter()
+            .find(|answer| answer.get("turn").is_some())
+            .expect("the golden has a turn")["turn"];
+        let calls = turn["calls"].as_array().expect("calls");
+
+        // 1. **Four calls, and the two new tools among them.** A turn that only defined would
+        //    prove nothing about the child; one that only compiled would prove nothing about
+        //    the fork.
+        assert_eq!(
+            calls.iter().map(|c| c["name"].as_str().unwrap_or("")).collect::<Vec<_>>(),
+            ["define_generator", "compile_generator", "apply_patch", "compile_generator"],
+        );
+
+        // 2. **The second was refused, by the real compiler, with the line it refused on.**
+        //    This is the whole of ADR 0026 §3: `valid = false`, rule `generator_error`, the
+        //    child's own `line:column` and its own sentence, which `core` does not rewrite.
+        assert_eq!(calls[1]["valid"], json!(false));
+        let refusal = &calls[1]["errors"].as_array().expect("violations")[0];
+        assert_eq!(refusal["path"], json!(format!("/generators/{COMPILED}/source")));
+        assert_eq!(refusal["rule"], json!("generator_error"));
+        assert_eq!(
+            refusal["message"],
+            json!(concat!(
+                "4:24: `/` (Div) is not in the generator DSL: ",
+                "write a // b, or Fraction(a, b) for an exact ratio (ADR 0024 §3)"
+            )),
+        );
+
+        // 3. **And the model acted on it**: the third call patches the path the refusal
+        //    named, which is how a source is edited — there is no `set_generator_source`
+        //    (ADR 0026 §2) — and the fourth compile was accepted.
+        assert!(
+            calls[2]["args"]
+                .as_str()
+                .expect("the arguments as the model wrote them")
+                .contains(&format!("/generators/{COMPILED}/source")),
+            "{}",
+            calls[2]["args"]
+        );
+        assert_eq!(calls[3]["valid"], json!(true));
+
+        // 4. **The notes are in the committed document**, so the child really ran and what it
+        //    wrote survived the fork, the patch and the apply. Eight: a kick on each of four
+        //    beats and a hat between them.
+        let song: Value =
+            serde_json::from_slice(committed.0.get("song.json").expect("song.json"))
+                .expect("song.json is JSON");
+        let notes = song["clips"]["01M1FPMP000000000000000009"]["note_clip"]["notes"]
+            .as_object()
+            .expect("the clip the model compiled into");
+        assert_eq!(notes.len(), 8);
+
+        // 5. **The log grew by exactly one**, under `proposal`, for four calls two of which
+        //    spawned a process (ADR 0017 §1, ADR 0019 §4).
+        assert_eq!(
+            committed.0.keys().filter(|name| name.starts_with("patches/")).count(),
+            4,
+            "one create, two script steps, one proposal"
+        );
+
+        // 6. **The accepted consequence, visible in the golden a reader opens** (ADR 0027 §1,
+        //    amended 2026-10-01). A compile inside a proposal writes the generator's
+        //    `toolchain_version` — it is in the patch a person applies — and does **not**
+        //    write the project's `toolchains` block, because `record_toolchain` fires only on
+        //    a compile that commits an entry and this one committed a `proposal`. So a
+        //    project whose compiles have all been a model's carries a compiled generator and
+        //    an unpinned `lock.json`, and the two cannot disagree because
+        //    `toolchain_mismatch` compares the generator's own version as well as the block.
+        assert_eq!(song["generators"][COMPILED]["toolchain_version"], json!("1"));
+        assert!(!song["generators"][COMPILED]["compiled_hash"]
+            .as_str()
+            .expect("a compiled generator carries its hash")
+            .is_empty());
+        let lock: Value = serde_json::from_slice(committed.0.get("lock.json").expect("lock.json"))
+            .expect("lock.json is JSON");
+        assert!(
+            lock.get("toolchains").is_none(),
+            "a model's compile pinned the project; only a committing compile does (ADR 0027 §1)"
+        );
     }
 
     // -----------------------------------------------------------------------

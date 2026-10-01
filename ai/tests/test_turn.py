@@ -42,7 +42,7 @@ from collections.abc import AsyncIterator
 import grpclib
 from escribass_ai import provider as provider_module
 from escribass_ai.provider import Exhausted, ProviderFailure, Scripted
-from escribass_ai.turn import RESPONSES_PER_TURN, run
+from escribass_ai.turn import RESPONSES_PER_TURN, answered, run
 from escribass_proto.escribass.assistant.v1 import (
     AssistantCommand,
     CallResult,
@@ -294,6 +294,39 @@ class TestWhatIsFedBack(unittest.TestCase):
         self.assertIn("nothing changed", fed)
         # A refusal changed no document, so no view is re-read with it (ADR 0018 §2).
         self.assertNotIn("ticks per quarter", fed)
+
+    def test_a_compile_diagnostic_reaches_the_model_as_the_child_wrote_it(self) -> None:
+        # ADR 0026 §3: a compile that fails in the sandbox is the first kind, and the one
+        # refusal in this repository whose message is the whole fix — "the same text the user
+        # reads is what the LLM retries against" (Plate 3). So this asserts the **exact
+        # string** a model is handed, not that one arrived: `core` puts the child's
+        # `line:column` in front of the child's own sentence and nothing else, and `ai` puts
+        # the path and the rule in front of that.
+        #
+        # The violation is the one `core/tests/assistant.rs` builds from
+        # `compilers/generative`'s own refusal for `beat(1) / 3`, so the three files say one
+        # sentence between them rather than three.
+        self.assertEqual(
+            answered(
+                ToolResult(
+                    valid=False,
+                    errors=[
+                        Violation(
+                            path="/generators/01M1FPMP00GENCHRS00000000D/source",
+                            rule="generator_error",
+                            message=(
+                                "4:24: `/` (Div) is not in the generator DSL: write a // b,"
+                                " or Fraction(a, b) for an exact ratio (ADR 0024 §3)"
+                            ),
+                        )
+                    ],
+                )
+            ),
+            "refused, and nothing changed:\n"
+            "- /generators/01M1FPMP00GENCHRS00000000D/source [generator_error]: 4:24:"
+            " `/` (Div) is not in the generator DSL: write a // b, or Fraction(a, b) for an"
+            " exact ratio (ADR 0024 §3)",
+        )
 
     def test_the_conversation_is_rebuilt_from_what_the_host_sends(self) -> None:
         # `ai` holds nothing between streams: every earlier turn arrives with the prompt

@@ -74,20 +74,27 @@ pub const IMPLEMENTED: &[&str] = &[
     "merge_branch",
 ];
 
-/// The tools the **model** is offered (ADR 0022 §1) — twelve of [`IMPLEMENTED`]'s twenty-seven,
-/// in its order, and data rather than a list written a second time in Python (M3 trap 11).
+/// The tools the **model** is offered (ADR 0022 §1; ADR 0026 §3) — fourteen of
+/// [`IMPLEMENTED`]'s twenty-seven, in its order, and data rather than a list written a second
+/// time in Python (M3 trap 11).
 ///
 /// Every one of them produces operations on the document and nothing else, and every one is
-/// executed against the proposal (ADR 0019 §1). Fifteen are withheld, each for a reason
-/// ADR 0022 §1 states — and the two newest of those, `define_generator` and
-/// `compile_generator`, are withheld only until **M4 PR 6**, which is where ADR 0026 §3's
-/// fourteen lands with the view line a model needs in order to know what there is to compile; `get_song`, because a full document beside a summary is not trusted as
+/// executed against the proposal (ADR 0019 §1). Thirteen are withheld, each for a reason
+/// ADR 0022 §1 states: `get_song`, because a full document beside a summary is not trusted as
 /// the summary (ADR 0018 §2); `get_song_at` and `get_history`, reads of the log a model acting
 /// on the document has no use for; `set_param`, by the user's decision (question 7);
 /// `add_asset`, which takes bytes the model does not have; `render_export`, which writes a file
 /// at a path the model chose, and `render_preview`, which starts an engine it cannot hear
 /// (CLAUDE.md #6); `undo` and `redo`, which reverse a person's approved change; and the four
 /// branch tools, which move the session's `HEAD` under the window.
+///
+/// **`define_generator` and `compile_generator` are the thirteenth and fourteenth**, from
+/// M4 PR 6 (ADR 0026 §3). A compile is the one call in this list whose refusal is a diagnostic
+/// the model can act on — the child's own `line:column` and text, fed back whole and counted
+/// against the three a turn allows — so withholding it would have kept it from the author most
+/// likely to need it. A compile on a proposal spawns the sandbox and writes the **fork's**
+/// clip; it writes no file and plays no sound, which is why the fork inherits the sandbox
+/// where it does not inherit the engine (`Proposal::forked`).
 ///
 /// **`apply_patch` is offered**, and the spike is why: no typed tool sets a track's mix,
 /// deletes, renames, or resizes a clip, and three models reached for it unprompted within nine
@@ -109,6 +116,8 @@ pub const OFFERED: &[&str] = &[
     "set_tempo",
     "add_section",
     "move_section",
+    "define_generator",
+    "compile_generator",
 ];
 
 /// Fields that carry canonical JSON *text* in a `bytes` field, and so cross a JSON carrier as

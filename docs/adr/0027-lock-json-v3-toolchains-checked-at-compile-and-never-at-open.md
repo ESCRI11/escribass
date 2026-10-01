@@ -57,15 +57,36 @@ script compiles, so none gains one, and M4 PR 5's `generators` script is the fir
 carries it. **Never rewritten by a tool and never removed** (ADR 0010 §2): re-pinning is
 editing the text, as it is for a plugin.
 
-**"That commits" is narrower than it reads, noted 2026-10-01 in M4 PR 5.** A compile made
-*inside a proposal* writes nothing: its ops stay on the fork and reach the log only as the one
-patch a person applies (ADR 0019 §1). So such a compile writes `Generator.toolchain_version`,
-because that is in the patch, and does **not** write this block — the next compile on the
-session does. The two cannot then contradict each other, because decision 2 compares the
-generator's own version as well as the block, and a project with no block still has that
-comparison; the only cost is that a project whose compiles have all been a model's is unpinned
-until a person compiles once. Unreachable until M4 PR 6 offers `compile_generator` to the
-model (ADR 0026 §3), named here so PR 6 decides it deliberately rather than meeting it.
+**"That commits" is narrower than it reads, noted 2026-10-01 in M4 PR 5 and accepted
+2026-10-01 in M4 PR 6.** A compile made *inside a proposal* writes nothing: its ops stay on
+the fork and reach the log only as the one patch a person applies (ADR 0019 §1). So such a
+compile writes `Generator.toolchain_version`, because that is in the patch, and does **not**
+write this block — the next compile on the session does. The two cannot then contradict each
+other, because decision 2 compares the generator's own version as well as the block, and a
+project with no block still has that comparison; the only cost is that a project whose
+compiles have all been a model's is unpinned until a person compiles once.
+
+PR 5 named it as unreachable and left the decision to PR 6, where `OFFERED` gains
+`compile_generator` (ADR 0026 §3) and the path opens. **The user decided it on 2026-10-01:
+accept it, and make the acceptance visible.** The reasoning is the block's own: it is a *pin*,
+and this ADR's whole shape is that a pin is written from a fact the child stated, once, on a
+compile somebody kept. A proposal keeps nothing until a person applies, and what a person
+applies is one patch under the tool name `proposal` — so a block written from a fork would be
+a pin that no entry in the log explains, which is the defect ADR 0010 §2 is about arriving
+through a different door. Writing it at apply instead would mean carrying the child's answer
+back out of a fork that by construction records nothing, for a value the next compile writes
+anyway and whose absence refuses nothing. The alternative with the best claim — pin at apply —
+is therefore refused for the reason the whole file is organised around: **one fact, one
+writer, one site.**
+
+What a reader should expect, said plainly because `lock.json` is a file people open: **after a
+model-driven compile, the generator carries `toolchain_version` and the project carries no
+`toolchains` block.** That is correct and not a gap. It is held still by
+`tests/determinism/compile/expected/lock.json`, whose keys are `schema_version`, `engine`,
+`plugins` and `ai` and nothing else, beside a `song.json` in the same directory whose
+generator reads `"toolchain_version": "1"`; and by `core/tests/generator.rs`,
+`a_models_compile_writes_the_generators_version_and_the_block_waits_for_a_commit`, which then
+compiles once on the session and watches the block appear.
 
 **`schema_version` stays 1.** It is the *document's* schema version, which ADR 0025 §1 keeps at
 1; "v2" and "v3" are names for the file's shape in prose, as ADR 0010 §1's "v2" was, and
@@ -178,6 +199,11 @@ and the file is byte-identical to `main`'s (ADR 0023 §4 says the same of M5's s
   files are byte-identical to `main`'s. §4.4's rule is narrowed in `core/src/validate.rs` and
   the narrowing is load-bearing rather than tidy — without it `define_generator` could not add
   a generator at all, since one it has just added carries both fields empty.
+- **M4 PR 6** (`m4.6-model`): `compile_generator` joins `OFFERED`, which makes decision 1's
+  proposal case reachable. **Accepted on the user's decision of 2026-10-01**, written into
+  decision 1 above with its reasoning and goldened in `tests/determinism/compile/`. No code in
+  this file's area changed: the behaviour was already what decision 1 describes, and what PR 6
+  added is the test that would fail if it stopped being.
 - **M4 PR 4** (`m4.4-generator`): `compilers/generative/pyproject.toml`'s `version` is `1`, and
   the child reports it and `sys.version_info` on every `CompileResponse`.
 - §10's description of `lock.json` gains the block; §11's third bullet gains the sentence that a

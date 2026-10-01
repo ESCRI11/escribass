@@ -165,8 +165,8 @@ produce ops on the document and nothing else, and both are executed against the 
 applies the whole once. The schemas the host hands `ai` are the descriptor's own filtered by the
 list, with `dry_run` removed, as before; **ADR 0022 §1 is amended in place** to say fourteen.
 
-**A compile that fails is caller-fixable and goes back whole.** `generator_error` and
-`generator_timeout` are `valid = false` with the child's `line:column` and text in the message,
+**A compile that fails *in the source* is caller-fixable and goes back whole.**
+`generator_error` is `valid = false` with the child's `line:column` and text in the message,
 fed back to the model as the call's result exactly as any refusal is, and **counted against the
 three refused calls per turn** (ADR 0022 §3) — the plan's default, taken, because "the same text
 the user reads is what the LLM retries against" (Plate 3) is §6.1's loop doing its job, and a
@@ -175,11 +175,28 @@ is split: `generator_missing`, `toolchain_mismatch` and a child that died end th
 host as every operator error does, and no compile involves a provider. **ADR 0022 §3 is amended
 in place** with the sentence that a compile's diagnostic is the first kind.
 
+**Amended 2026-10-01, in M4 PR 6, by offering the tool: `generator_timeout` is not the first
+kind.** This paragraph named it beside `generator_error`, and ADR 0024 §7 is amended in place
+with the argument; the short form is that **no source can reach that wall**. The child's own
+CPU and memory limits fire inside it and come back as a `generator_error` carrying the line,
+`core`'s minute is set above them so that they do, and what is left after a minute is a wedged
+child. It carries no line, no column and nothing an author could edit, so it ends the turn at
+the host with the other three rather than spending one of the model's retries on a wall
+(M3 trap 2). One sentence of this decision changes; the rest — a diagnostic fed back whole,
+counted, unrewritten — is what PR 6 implemented.
+
 **What is not measured, and said so.** Whether a model writes the DSL — at all, or reliably — is
 U10, deferred until the DSL exists (ADR 0023 §7). M4 PR 6's transcript, in which the scripted
 model defines and compiles a generator, is **hand-written** and says so in its own file as
 `four-refusals.json` does; the loop is designed for a human author and a model that retries
 against the diagnostic, which the three-refusal budget already bounds.
+
+**Done 2026-10-01**, as `tests/determinism/compile/`: the model defines a generator whose
+source divides, is refused `4:24: \`/\` (Div) is not in the generator DSL: write a // b, or
+Fraction(a, b) for an exact ratio (ADR 0024 §3)` by the **real** child, patches
+`/generators/{id}/source`, and compiles again — one patch at the end for a person. Its `note`
+field says it is hand-written, says the grant of 2026-09-24 was spent, and says in its own
+words that it is **not** evidence a model writes this DSL. What it is evidence of is the loop.
 
 ### 4. The bar view's generator line carries the seed and whether it has ever compiled — never `stale`
 
@@ -199,6 +216,17 @@ knows it did; a model that wants fresh notes compiles. **ADR 0018 §1's table is
 place** — the `Generator` row carries `seed` and the status word, and still abstracts `source`,
 because code a model reads back is not the grammar. The view's golden moves by that line and
 nothing else, in M4 PR 6, and the key-reversed twin moves with it.
+
+**Amended 2026-10-01, in M4 PR 6: "the view's golden moves by that line" was false.** The
+golden is taken over `tests/determinism/render/expected/song.json`, which holds **no
+generator at all**, so that line reads `generators: none` whatever it is made to print and
+both `view.txt` and its key-reversed twin are byte-identical across this change. A golden
+cannot fail for an input it has never been given, so `ai/tests/test_view.py` reads a **second**
+document — `tests/determinism/generators/expected/song.json`, M4 PR 5's own golden, which came
+through the tool API like every other (CLAUDE.md #2) and holds four generators: two compiled,
+two never, a seed above 2⁵³ beside one that fits in a byte, and a target that is a track. The
+new golden is `ai/tests/golden/view-generators.txt`, and the key-reversed twin runs over it
+too, which is the first time the generator ordering has an input that can catch it.
 
 `source` stays abstracted for the reason ADR 0018 §1 gave and one more: a model that wants to
 edit a source it did not write would read it back through… nothing, since `get_song` is
@@ -258,7 +286,12 @@ same change as the service, as ADR 0020 §3 did for `Assistant`.
   §1). The fork carries the sandbox it will need; the single line PR 6 changes is the list.
 - **M4 PR 6** (`m4.6-model`): `OFFERED` and its subset test, the view's generator line and its
   golden, a compile diagnostic fed back as a refusal and counted — watched failing first — and a
-  hand-written transcript in which the model defines and compiles.
+  hand-written transcript in which the model defines and compiles. **Done 2026-10-01**, with
+  three things this ADR had wrong, each amended in place above: `generator_timeout` is not the
+  first kind (§3); the view's golden does not move and a second document is what gives the line
+  an input (§4); and `OFFERED` reaching fourteen makes a compile *on a proposal* reachable, so
+  ADR 0027 §1's named consequence — the generator's `toolchain_version` written, the project's
+  `toolchains` block not — is now accepted deliberately and goldened rather than met.
 - §5 names the two tools and their refusals; §6.1 says fourteen; §13 names `Generate`.
 - ADR 0022 §1 and §3, and ADR 0018 §1, amended in place and dated.
 - **A hazard for M5, written down now because it bites a decision M2 made.** The spike read

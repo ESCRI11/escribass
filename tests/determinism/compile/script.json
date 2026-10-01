@@ -1,0 +1,5 @@
+[
+  {"tool": "add_track", "args": {"name": "Drums", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}}
+]

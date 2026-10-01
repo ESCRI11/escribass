@@ -499,12 +499,22 @@ def view(song: Song) -> str:
     generators = _ordered(song.generators.values(), by=lambda g: g.id)
     # `source` is abstracted: it is code for M4's compiler, and free-form text a model reads
     # back is not this grammar (ADR 0018 §1).
+    #
+    # The seed and the status word are what a model offered `compile_generator` needs in order
+    # to know what there is to compile (ADR 0026 §4). The word is read off `compiled_hash`'s
+    # emptiness and is `never` or `compiled` — **never `stale`**, which is the comparison of
+    # that hash against a freshly built `CompileRequest` and therefore `core`'s (ADR 0024 §6).
+    # Saying it here would need a hasher in `ai`, which is the two-implementations trap in the
+    # one place a golden could not see it. A model that changed a source and did not compile
+    # knows it did; a model that wants fresh notes compiles.
     lines.append(
         "generators: "
         + (
             " · ".join(
                 f"{generator.id} {generator.kind.name.lower()}"
                 f" → {generator.clip_id or generator.track_id or 'nothing'}"
+                f" seed {generator.seed}"
+                f" {'compiled' if generator.compiled_hash else 'never'}"
                 for generator in generators
             )
             or "none"

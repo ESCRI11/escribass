@@ -15,7 +15,7 @@
 
 use crate::clock::Clock;
 use crate::engine::{Engine, Preview};
-use crate::generator::{NotCompiled, Sandbox};
+use crate::generator::Sandbox;
 use crate::history::{ops_of, ops_text, HistoryError};
 use crate::id::IdSource;
 use crate::patch::{diff, Op};
@@ -327,13 +327,15 @@ impl Session {
     ///
     /// **ADR 0006 §2's line runs through this method four times**, and keeping the sides apart
     /// is the whole job. What the caller can fix comes back as `valid = false`:
-    /// `generator_unknown`, `target_not_note_clip`, `generator_error` — the child's own
+    /// `generator_unknown`, `target_not_note_clip`, and `generator_error` — the child's own
     /// `line:column` and text, which is the one refusal in this system whose message is the
-    /// whole fix (Plate 3) — and `generator_timeout`. What only an operator can fix is `Err`:
-    /// `generator_missing` (this process was told no `--generator`), `generator_failed` (the
-    /// child would not start, named no socket, or went away without answering) and
-    /// `toolchain_mismatch` (ADR 0027 §2). A model told to retry any of those three would
-    /// spend §6's three turns learning it cannot.
+    /// whole fix (Plate 3). What only an operator can fix is `Err`: `generator_missing` (this
+    /// process was told no `--generator`), `generator_failed` (the child would not start,
+    /// named no socket, or went away without answering), `generator_timeout` (it answered
+    /// nothing at all inside the wall clock — ADR 0024 §7, amended 2026-10-01, since no source
+    /// reaches that bound and the message carries no line) and `toolchain_mismatch` (ADR 0027
+    /// §2). A model told to retry any of those four would spend §6's three refusals learning
+    /// it cannot.
     ///
     /// **A dry run compiles**, and answers with the diff the commit would write — the code
     /// view's *Compile*, whose *Apply* is the commit (ADR 0017 §4) — except when the request
@@ -377,20 +379,11 @@ impl Session {
                       escribass-generative` (ADR 0024 §1)"
                 .to_string(),
         })?;
-        let answer = match sandbox.compile(&compiling) {
-            Ok(answer) => answer,
-            // The wall clock, and the author's to fix: what loops for ever is the source
-            // (ADR 0024 §7, amended). Not the CPU limit, which the child catches itself and
-            // answers as a diagnostic — `generator_error` below, carrying the line.
-            Err(NotCompiled::TimedOut(message)) => {
-                return Ok(refused(vec![Violation {
-                    path: format!("/generators/{}/source", generator.id),
-                    rule: "generator_timeout",
-                    message,
-                }]))
-            }
-            Err(NotCompiled::Broken(e)) => return Err(e),
-        };
+        // Every way of not answering is an operator error, `generator_timeout` and
+        // `generator_failed` alike (ADR 0024 §7, amended 2026-10-01 in M4 PR 6). The one way
+        // a *source* fails is the `Diagnostic` arm below, which the child's own CPU and memory
+        // limits also come back as, carrying the line they fired on.
+        let answer = sandbox.compile(&compiling)?;
         let crate::generator::Compiled { dsl_version, python_version, result } = answer;
         let compiled = match result {
             // The child's own words, whole, with `core`'s rule around them: it does not
@@ -443,11 +436,17 @@ impl Session {
         // call both answer `valid` and write nothing, and a project pinned by a compile
         // nobody kept would be a pin no log explains.
         //
-        // `ponytail:` a proposal's compile therefore writes the generator's
-        // `toolchain_version` (it is in the patch a person applies) and not the project's
-        // block, which the next compile on the session writes. Unreachable until M4 PR 6
-        // offers the tool to the model; if that gap ever matters, the fork's answer travels
-        // back with the proposal and `apply_proposal` records it.
+        // **A proposal's compile therefore writes the generator's `toolchain_version` and not
+        // the project's block** — and from M4 PR 6, where `compile_generator` joined `OFFERED`,
+        // that path is reachable and the behaviour is **accepted rather than tolerated**
+        // (ADR 0027 §1, amended 2026-10-01). The version is in the patch a person applies; the
+        // block is not, because no entry exists to explain it until one commits. The two
+        // cannot then disagree, because `toolchain_mismatch` compares the generator's own
+        // version as well as the block and a project with no block still has that comparison.
+        // What it costs is one sentence: a project whose compiles have all been a model's is
+        // unpinned until a person compiles once. `core/tests/generator.rs`,
+        // `a_models_compile_writes_the_generators_version_and_the_block_waits_for_a_commit`,
+        // is where that is held still.
         if committed.valid && !committed.entry_id.is_empty() {
             self.project.record_toolchain(&dsl_version, &python_version)?;
         }

@@ -54,6 +54,18 @@ from escribass_schema.escribass.song.v1 import (
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 FIXTURE = ROOT / "tests" / "determinism" / "render" / "expected" / "song.json"
+#: The second document, and the only one in the repository that holds a generator.
+#:
+#: `tests/determinism/generators/expected/song.json` is M4 PR 5's golden: four generators, two
+#: compiled and two never, one seed above 2**53 and one that fits in a byte, three targeting a
+#: clip and one a track. The render fixture has none at all, so the view's generator line
+#: goldens there as `generators: none` whatever it is made to print — which is why ADR 0026
+#: §4's "the view's golden moves by that line" turned out to be false, and why this file reads
+#: a second document rather than that sentence being left standing (amended 2026-10-01).
+#:
+#: It came through the tool API like every other golden here (CLAUDE.md #2), and reaching
+#: across to `tests/` is what this file already does for the fixture above.
+GENERATORS = ROOT / "tests" / "determinism" / "generators" / "expected" / "song.json"
 GOLDEN = HERE / "golden"
 
 #: The seven pure functions of ADR 0018 §5, each with the file it is goldened against.
@@ -182,6 +194,59 @@ class TestTheProjectionGolden(unittest.TestCase):
             ["9", "40"],
             "Python re-sorted an integer-like map key, as JavaScript does",
         )
+
+
+class TestTheGeneratorLine(unittest.TestCase):
+    """What a model offered `compile_generator` reads about what there is to compile.
+
+    ADR 0026 §4: each entry carries the seed and one word read off `compiled_hash`'s
+    emptiness, `never` or `compiled`. Never `stale` — that is the hash compared against a
+    freshly built `CompileRequest`, which is `core`'s and would need a hasher here (ADR 0024
+    §6). The whole view of this document is goldened rather than the one line, for the reason
+    every golden here exists: a line asserted in isolation says nothing about the document it
+    was cut out of.
+    """
+
+    def setUp(self) -> None:
+        self.document = json.loads(GENERATORS.read_text(encoding="utf-8"))
+        self.song = Song.from_dict(self.document)
+
+    def test_the_view_of_a_document_with_generators_is_the_committed_bytes(self) -> None:
+        at = GOLDEN / "view-generators.txt"
+        actual = view(self.song)
+        if os.environ.get("UPDATE_FIXTURES") == "1":
+            at.write_text(actual, encoding="utf-8")
+            return
+        self.assertEqual(actual, at.read_text(encoding="utf-8"))
+
+    def test_the_golden_carries_both_states_and_a_seed_a_double_would_lose(self) -> None:
+        # Named claims, read off the committed file: a golden over a document whose generators
+        # were all compiled, or all seeded below 2**53, would pass for a line that printed a
+        # constant (docs/plan.md, M3 trap 1 — a check that cannot fail).
+        line = next(
+            said
+            for said in (GOLDEN / "view-generators.txt").read_text(encoding="utf-8").splitlines()
+            if said.startswith("generators: ")
+        )
+        entries = line.removeprefix("generators: ").split(" · ")
+        self.assertEqual(len(entries), 4, line)
+        self.assertEqual([said.split()[-1] for said in entries], ["compiled", "compiled", "never", "never"])
+        # 2**53 + 1, which is the first integer a double cannot hold: a seed that passed
+        # through one on the way here would print 9007199254740992 (M4 trap 10).
+        self.assertIn("seed 9007199254740993 compiled", line)
+        # Three name a clip and one names a track, which is the `target` oneof's other arm —
+        # a generator the compiler refuses `target_not_note_clip` and the view still shows.
+        self.assertIn("→ 01M1FPMP000000000000000006 seed 7 never", line)
+        # And never the word the view may not say, in any entry (ADR 0026 §4).
+        self.assertNotIn("stale", line)
+
+    def test_the_order_is_the_models_and_not_the_maps(self) -> None:
+        # Four generators minted in id order, so `sorted by id` and `whatever the map
+        # iterated` are the same list until the keys are reversed — the gap ADR 0012 §5 was
+        # amended for, and the render fixture cannot reach it because it has no generator at
+        # all. Watched failing first by deleting `_ordered` from the generators line.
+        backwards = Song.from_dict(reversed_keys(self.document))
+        self.assertEqual(view(backwards), view(self.song))
 
 
 class TestPurity(unittest.TestCase):
