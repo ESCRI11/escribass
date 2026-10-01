@@ -19,6 +19,17 @@ would pass against the duplicate and prove nothing, because a duplicate imports 
 happily. So the identity is asserted through the field a `Prompt` actually carries
 (CLAUDE.md #1, ADR 0006 §4; ADR 0020 §1, extended).
 
+**Extended 2026-09-30, in M4 PR 3, for `Generate`.** The plan's row said this file's identity
+check "already covers it"; it covered it in one direction and not the other. The rewrite in
+`codegen.sh` is a `sed` over `escribass/*/v1/__init__.py`, whose glob reaches `generate/v1` by
+matching rather than by anyone deciding it should — checked by regenerating without the guard,
+which re-emits `escribass/song` and leaves `generate/v1` naming it `from ...song import v1` —
+and the one thing not covered at all was the **server**: `compilers/generative` implements
+`GenerateBase` in PR 4, and a `.proto` that generated a client and no server would compile,
+import and pass every assertion here before being discovered there. So the mapping is asserted
+as `Assistant`'s is, and the identity again through `CompileRequest`, which is the message
+`Generator.compiled_hash` is the hash of (ADR 0024 §6).
+
 Run from `schema/`'s environment, which is where the compiler and `grpclib` are pinned:
 
     cd schema && uv run python -m unittest discover -s ../proto/tests
@@ -41,7 +52,13 @@ from escribass_proto.escribass.assistant.v1 import (  # noqa: E402
     Prompt,
     ToolSchema,
 )
-from escribass_schema.escribass.song.v1 import Song  # noqa: E402
+from escribass_proto.escribass.generate.v1 import (  # noqa: E402
+    CompileRequest,
+    CompileResponse,
+    GenerateBase,
+    Notes,
+)
+from escribass_schema.escribass.song.v1 import Note, Song, TempoEvent  # noqa: E402
 
 
 class TestTheServerStubIsReal(unittest.TestCase):
@@ -51,6 +68,33 @@ class TestTheServerStubIsReal(unittest.TestCase):
         self.assertEqual(list(mapping), ["/escribass.assistant.v1.Assistant/Prompt"])
         handler = mapping["/escribass.assistant.v1.Assistant/Prompt"]
         self.assertEqual(handler.cardinality.name, "STREAM_STREAM")
+
+    def test_the_generate_server_maps_the_one_rpc(self) -> None:
+        # The stub `compilers/generative` subclasses in M4 PR 4 (ADR 0024 §8). A `.proto` that
+        # generated a client and no server would compile, import, and be discovered in that
+        # pull request rather than this one — `client_generation=none, server_generation=async`
+        # in `buf.gen.yaml` is what decides it, and only a mapping proves it took.
+        mapping = GenerateBase().__mapping__()
+        self.assertEqual(list(mapping), ["/escribass.generate.v1.Generate/Compile"])
+        handler = mapping["/escribass.generate.v1.Generate/Compile"]
+        self.assertEqual(handler.cardinality.name, "UNARY_UNARY")
+        self.assertIs(handler.request_type, CompileRequest)
+        self.assertIs(handler.reply_type, CompileResponse)
+
+    def test_an_answer_with_no_arm_is_not_zero_notes(self) -> None:
+        # generate.proto, `CompileResponse.result`: a generator that legitimately emits nothing
+        # answers `notes` with an empty list, so emptiness cannot mean failure. The two states
+        # have to be distinguishable on the wire, or `core` reads a child that returned without
+        # compiling as a successful compile of no notes — which is `RenderResult::decode(&[])`
+        # returning `Ok`, one boundary over (M1).
+        silent = CompileResponse(dsl_version="1", python_version="3.12.12", notes=Notes(notes=[]))
+        compiled = CompileResponse.parse(bytes(silent))
+        self.assertIsNotNone(compiled.notes, "a compile that emitted nothing still answered")
+        self.assertEqual(compiled.notes.notes, [])
+
+        nothing = CompileResponse.parse(bytes(CompileResponse()))
+        self.assertIsNone(nothing.notes)
+        self.assertIsNone(nothing.diagnostic)
 
     def test_a_tool_schema_carries_the_descriptors_json_text(self) -> None:
         # Not a `google.protobuf.Struct`: the host serialises what `core` built and `ai`
@@ -72,9 +116,22 @@ class TestThereIsOneSong(unittest.TestCase):
             "a Prompt's `song` is a second Song class — codegen.sh's rewrite did not happen",
         )
 
+    def test_a_compile_request_and_its_notes_carry_the_schema_packages_types(self) -> None:
+        # The same assertion one service over, and it needs making again rather than inheriting
+        # the one above: the rewrite in `codegen.sh` is a `sed` over `escribass/*/v1/__init__.py`
+        # whose glob now matches a module it was not written for, and a compiler that spelled
+        # this file's cross-package import differently would leave it matching nothing here
+        # while still matching there. `CompileRequest` is what `Generator.compiled_hash` is the
+        # hash of (ADR 0024 §6), so a second `TempoEvent` in it is a hash over a different type.
+        request = CompileRequest(tempo=[TempoEvent(id="01ARZ3NDEKTSV4RRFFQ69G5FAV", bpm=120.0)])
+        self.assertIs(type(request.tempo[0]), TempoEvent)
+        self.assertIs(type(Notes(notes=[Note(pitch=60)]).notes[0]), Note)
+
     def test_the_generated_module_imports_the_model_from_escribass_schema(self) -> None:
         assistant = sys.modules["escribass_proto.escribass.assistant.v1"]
         self.assertIs(getattr(assistant, "__song__v1__").Song, Song)
+        generate = sys.modules["escribass_proto.escribass.generate.v1"]
+        self.assertIs(getattr(generate, "__song__v1__").Note, Note)
 
     def test_the_model_is_not_re_emitted_under_escribass_proto(self) -> None:
         for gone in (

@@ -12,7 +12,9 @@ __all__ = (
     "AddTrackRequest",
     "ApplyPatchRequest",
     "AssetResponse",
+    "CompileGeneratorRequest",
     "CreateBranchRequest",
+    "DefineGeneratorRequest",
     "DeleteBranchRequest",
     "GetHistoryRequest",
     "GetSongAtRequest",
@@ -341,6 +343,45 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class CompileGeneratorRequest(betterproto2.Message):
+    """
+    Compiles a generator: spawns the sandbox, replaces the target clip's notes **whole**, and
+    sets `compiled_hash` and `toolchain_version` — one entry under this tool's name (ADR 0024
+    §5). Every note's id is minted by core and its provenance is this call's.
+
+    A **dry run compiles and answers with the diff**, which is what the code view's Compile is;
+    its Apply is the commit (ADR 0017 §4). Except when the inputs hash to `compiled_hash`
+    already: then it answers *up to date* with an empty patch and **spawns nothing**, so a status
+    read on an up-to-date generator costs no process and one on a stale generator costs the
+    compile a person is about to ask for anyway (ADR 0024 §6). One compile per click, never per
+    keystroke: a keystroke is a draft in an editor's buffer, and nothing is compiled that the
+    document does not hold.
+
+    Refused — `valid = false`, the caller's to fix — with `generator_unknown`,
+    `target_not_note_clip`, `generator_error` carrying the child's line:column and its own text,
+    or `generator_timeout`. An operator's instead, ending a model's turn at the host:
+    `generator_missing` (the process was started with no --generator), `toolchain_mismatch`
+    (ADR 0027 §2), and `generator_failed` — a child that would not start, printed no socket line,
+    or exited without answering (ADR 0024 §7; ADR 0006 §2).
+
+    There is no state on this wire for "a compile is in progress", and none is missing: a compile
+    is one call that blocks for its length, bounded by the timeout, and a progress stream for a
+    call of tens of milliseconds is the Jobs service ADR 0020 §3 refused (ADR 0026 §2).
+    """
+
+    generator_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+    dry_run: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "CompileGeneratorRequest", CompileGeneratorRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class CreateBranchRequest(betterproto2.Message):
     """
     ---------------------------------------------------------------------------
@@ -369,6 +410,79 @@ class CreateBranchRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "escribass.tools.v1", "CreateBranchRequest", CreateBranchRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class DefineGeneratorRequest(betterproto2.Message):
+    """
+    ---------------------------------------------------------------------------
+    Generators (§7.1)
+    ---------------------------------------------------------------------------
+
+    Adds a Generator (§4.2, layer 1). **Compiles nothing** (ADR 0026 §2).
+
+    Two calls rather than one, because a model that defines and compiles in one turn makes one
+    more call than it would like, while compiling on define costs a process for every definition
+    a person then edits before compiling — and puts two things a dry run cannot show apart into
+    one entry (ADR 0024 §5). A dry run of this is the ordinary validator pass over the added
+    entity.
+
+    `toolchain_version` is not a field here. A model cannot know one and a person should not
+    have to: the first compile writes it, from what the child reported, exactly as a plugin pin
+    is written on first reference (ADR 0027 §1; ADR 0010 §2).
+
+    There is no set_generator_source either, and none is coming until something asks for it.
+    Editing a source is apply_patch on /generators/{id}/source, as a mix is written by
+    apply_patch on its path and for the same reason: a typed tool for a `replace` the raw
+    pipeline already expresses waits on the typed-tools row's trigger — the first measurement in
+    which a model gets the RFC 6902 wrong where a typed tool would not have let it (ADR 0022 §1,
+    ADR 0026 §2). `seed` and `params` are edited the same way.
+
+    Oneofs:
+        - target: The schema allows either (ADR 0002 §3) and the validator accepts either, so this does too.
+            In M4 a compile writes a note clip and refuses the rest, `target_not_note_clip` — valid and
+            uncompilable, the shape ADR 0007 §6 gave *valid and unrenderable*. What a track target
+            should mean is not decided against no consumer (ADR 0024 §5).
+    """
+
+    kind: "__song__v1__.GeneratorKind" = betterproto2.field(
+        1, betterproto2.TYPE_ENUM, default_factory=lambda: __song__v1__.GeneratorKind(0)
+    )
+
+    source: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        2, betterproto2.TYPE_STRING
+    )
+
+    seed: "typing.Annotated[int, pydantic.Field(ge=0, le=2**64 - 1)]" = (
+        betterproto2.field(3, betterproto2.TYPE_UINT64)
+    )
+
+    params: "dict[str, str]" = betterproto2.field(
+        4,
+        betterproto2.TYPE_MAP,
+        map_meta=betterproto2.map_meta(
+            betterproto2.TYPE_STRING, betterproto2.TYPE_STRING
+        ),
+    )
+
+    track_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        5, betterproto2.TYPE_STRING, optional=True, group="target"
+    )
+
+    clip_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        6, betterproto2.TYPE_STRING, optional=True, group="target"
+    )
+
+    dry_run: "bool" = betterproto2.field(7, betterproto2.TYPE_BOOL)
+
+    @model_validator(mode="after")
+    def check_oneof(cls, values):
+        return cls._validate_field_groups(values)
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "DefineGeneratorRequest", DefineGeneratorRequest
 )
 
 
@@ -1135,6 +1249,16 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def define_generator(self, message: "DefineGeneratorRequest") -> "ToolResult":
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def compile_generator(
+        self, message: "CompileGeneratorRequest"
+    ) -> "ToolResult":
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def render_export(self, message: "RenderExportRequest") -> "RenderResponse":
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
@@ -1305,6 +1429,22 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
         response = await self.move_section(request)
         await stream.send_message(response)
 
+    async def __rpc_define_generator(
+        self, stream: "grpclib.server.Stream[DefineGeneratorRequest, ToolResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.define_generator(request)
+        await stream.send_message(response)
+
+    async def __rpc_compile_generator(
+        self, stream: "grpclib.server.Stream[CompileGeneratorRequest, ToolResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.compile_generator(request)
+        await stream.send_message(response)
+
     async def __rpc_render_export(
         self, stream: "grpclib.server.Stream[RenderExportRequest, RenderResponse]"
     ) -> None:
@@ -1471,6 +1611,18 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
                 self.__rpc_move_section,
                 grpclib.const.Cardinality.UNARY_UNARY,
                 MoveSectionRequest,
+                ToolResult,
+            ),
+            "/escribass.tools.v1.SongTools/DefineGenerator": grpclib.const.Handler(
+                self.__rpc_define_generator,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DefineGeneratorRequest,
+                ToolResult,
+            ),
+            "/escribass.tools.v1.SongTools/CompileGenerator": grpclib.const.Handler(
+                self.__rpc_compile_generator,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                CompileGeneratorRequest,
                 ToolResult,
             ),
             "/escribass.tools.v1.SongTools/RenderExport": grpclib.const.Handler(

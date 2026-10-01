@@ -274,6 +274,108 @@ there is one, the cross-CPU question is open on the mechanism and not merely on 
 Widening it on one pair of AMD parts that provably took the same code path would be the "a
 claim is not a goal" this ADR already refuses in its alternatives table.
 
+**Amended 2026-09-30, in M4 PR 3. The experiment finally sampled real hardware variety, and one
+of the draws was an Intel part.** The repository is public (plan, U2, decided 2026-09-25), CI
+executed steps again on 2026-09-30 after a milestone and a half of refused runs, and `cross-cpu` —
+written in PR 11 on 2026-09-07 — **ran for the first time ever**. It has now run three times:
+
+| Run | Pull request | Runner | CPU | SIMD its dispatchers could pick from |
+|---|---|---|---|---|
+| `36744002164` | #85, `m4.2-schema` | 1 | `AMD EPYC 7763 64-Core Processor` | `avx avx2 sse4_2` |
+| `36744002164` | #85, `m4.2-schema` | 2 | `AMD EPYC 9V45 96-Core Processor` | `avx avx2 avx512f sse4_2` |
+| `36744002164` | #85, `m4.2-schema` | 3 | `AMD EPYC 9V45 96-Core Processor` | `avx avx2 avx512f sse4_2` |
+| `36750716757` | #86, `m4.3-proto` | 1 | `AMD EPYC 7763 64-Core Processor` | `avx avx2 sse4_2` |
+| `36750716757` | #86, `m4.3-proto` | 2 | `AMD EPYC 9V74 80-Core Processor` | `avx avx2 avx512f sse4_2` |
+| `36750716757` | #86, `m4.3-proto` | 3 | `AMD EPYC 9V74 80-Core Processor` | `avx avx2 sse4_2` |
+| `36753140163` | #86, `m4.3-proto` | 1 | **`Intel(R) Xeon(R) 6973P-C`** | `avx avx2 avx512f sse4_2` |
+| `36753140163` | #86, `m4.3-proto` | 2 | `AMD EPYC 7763 64-Core Processor` | `avx avx2 sse4_2` |
+| `36753140163` | #86, `m4.3-proto` | 3 | `AMD EPYC 9V74 80-Core Processor` | `avx avx2 avx512f sse4_2` |
+
+**Four model strings, two vendors, nine render jobs, thirty-six golden comparisons, and every one
+of them identical.** Each job rendered all four fixtures — `audio_clip`, `dexed`, `sfizz`,
+`surge_xt` — and compared its own PCM against the committed bytes with no tolerance
+(`every_fixture_still_renders_what_was_committed`), and rendered each twice in two fresh processes
+beside it. In every run `engine` built **one** binary that the three `renders` jobs downloaded, so
+each row is the same machine code on different hardware rather than two builds agreeing. The
+sampling is ongoing by construction: every pull request adds three rows, and this table is the
+three runs that existed when it was written.
+
+**Two things in the table that were not expected, one in each direction.**
+
+The first is `Intel(R) Xeon(R) 6973P-C` on the last run. Until it appeared, this section could
+say that no Intel part had ever executed a golden render for this repository, and an earlier
+draft of this amendment said exactly that, as a limit, two hours before the run that disproved
+it. **The cross-vendor x86-64 case has now been exercised, and it agreed**: an Intel Xeon and two
+AMD EPYCs, in one run, from one binary all three downloaded, produced the committed PCM for all
+four fixtures. That is the half of §6's question this repository has carried as unanswerable
+since M1, and it is answered in the direction the goldens needed. It is also **one run with one
+Intel part**, which is a sample and not a rate, and the table is how it stays one.
+
+The second is `AMD EPYC 9V74` appearing twice on run `36750716757` with **different feature sets**
+— one runner advertising `avx512f` and one not, masked by the hypervisor. A model name is
+therefore not a proxy for what a runtime dispatcher can see, and `cross-cpu`'s count of "2 models"
+on that run under-reported a sample that held three feature sets.
+
+**What this is, and the limits that survive it.** It is stronger than result 2, which was two
+builds with one blessed on the development machine and a pairing that was chosen: this is one
+binary on parts nobody selected, three times, and the parts differ in a feature a dispatcher could
+key on. Anything on the render path selecting by AVX-512 has had six chances across the three runs
+to choose differently — including between two runners bearing one model name, and between two
+vendors — and not one of thirty-six hashes moved.
+
+What is still **not** shown, and the wording does not drift past it: every part is an **x86-64
+server processor**, so this is nothing about ARM or any other ISA and nothing about a consumer
+CPU; every runner is **Ubuntu 24.04 on GitHub's hosted pool**, so it is nothing about macOS or
+Windows; the goldens themselves are still blessed on one developer machine; and the Intel row is
+one draw.
+
+**Decision 1's claim does not move, and the reason is the mechanism rather than timidity.** §1
+stays "identical PCM on the pinned image, compiler and CPU", with this section as the evidence
+beside it. Two vendors agreeing is a strong sample answer and it is not a mechanism answer: the
+paragraph below is still true, and it is vendor-independent. Until a fixture reaches a live
+runtime dispatcher, every row in that table is the *same* code path executing on different
+silicon, which is a real and reassuring thing to know and is not the hazard trap 1 named. What
+would let §1 and §2.2 widen is the table continuing to fill this way across many pull requests
+*and* a fixture that gives a dispatcher a choice to make.
+
+**And the PR 13 mechanism finding is untouched.** sfizz's AVX switch is still empty at this pin,
+so `tests/renders/sfizz` took the same SSE code in all nine jobs, and *its* agreement is still not
+evidence about a dispatcher choosing differently. What the three runs add is that the hazard was,
+for the first time, given somewhere to appear — across two vendors and four feature sets. It did
+not appear. The fixture that would make the test conclusive is still the one this section named:
+something that reaches a live dispatcher, the `strings` effect or a sfizz bump that fills the AVX
+switch in.
+
+### 6a. The job warns rather than fails on a one-model draw, and that stays
+
+`cross-cpu` passes with a `::warning` when every runner draws the same model, so a **green
+`cross-cpu` does not by itself mean two CPUs were compared**. That is not hypothetical and not
+rare: PR 11's own run drew one model three times, and on pull request #84 the job reported success
+with both of its real steps skipped behind the engine gate. The three runs above drew **2, 2 and
+3** models — the pool assigns them and nothing here can ask — so variety is luck, and the next run
+may draw one model three times and go green having compared nothing.
+
+**Decided 2026-09-30: it stays a warning.** Failing on a one-model draw would be worse than the
+gap it closes. The runner pool is not ours to ask anything of, so a failing job would be re-run
+until it drew two models — which is selecting the evidence rather than collecting it, and is the
+"a claim is not a goal" this ADR refuses in its own alternatives table. A required check that goes
+red for reasons unrelated to the change is also the check people learn to ignore, and this one has
+exactly one job: to be believed the day it disagrees.
+
+What keeps "green" from being read as "compared" is a rule about writing rather than a rule about
+CI: **a cross-CPU claim in this repository names the runs it rests on.** The table above gives
+three run ids and every row they produced; the 2026-09-07 and PR 13 amendments gave the date and
+the pull request. A claim with no run behind it is the thing to refuse, not a green badge.
+
+One improvement the evidence does justify, and this pull request does not make: the job counts
+**model strings**, and the 9V74 pair proves a model string is not a feature set, so the count can
+under-report its own sample. Counting the model-and-flags line instead is one line of shell. It is
+not made here because this is a `proto/` pull request and a workflow change is outside the engine
+gate's exclusions, so it would rebuild the engine for a counter; it is a row in `docs/plan.md`'s
+deferred ledger, triggered by the next pull request that touches `checks.yml`.
+
+The retreat of this decision is still not taken, because nothing failed.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |

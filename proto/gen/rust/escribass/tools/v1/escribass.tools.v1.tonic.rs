@@ -476,6 +476,54 @@ pub mod song_tools_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn define_generator(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DefineGeneratorRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/DefineGenerator",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("escribass.tools.v1.SongTools", "DefineGenerator"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn compile_generator(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CompileGeneratorRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/CompileGenerator",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("escribass.tools.v1.SongTools", "CompileGenerator"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn render_export(
             &mut self,
             request: impl tonic::IntoRequest<super::RenderExportRequest>,
@@ -755,6 +803,16 @@ pub mod song_tools_server {
         async fn move_section(
             &self,
             request: tonic::Request<super::MoveSectionRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn define_generator(
+            &self,
+            request: tonic::Request<super::DefineGeneratorRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn compile_generator(
+            &self,
+            request: tonic::Request<super::CompileGeneratorRequest>,
         ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
         ///
         async fn render_export(
@@ -1624,6 +1682,96 @@ pub mod song_tools_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = MoveSectionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/DefineGenerator" => {
+                    #[allow(non_camel_case_types)]
+                    struct DefineGeneratorSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::DefineGeneratorRequest>
+                    for DefineGeneratorSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DefineGeneratorRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::define_generator(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DefineGeneratorSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/CompileGenerator" => {
+                    #[allow(non_camel_case_types)]
+                    struct CompileGeneratorSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::CompileGeneratorRequest>
+                    for CompileGeneratorSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CompileGeneratorRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::compile_generator(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CompileGeneratorSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

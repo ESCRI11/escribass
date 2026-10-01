@@ -30,7 +30,7 @@ import type { PatchEntry, Refs } from "@escribass/schema/history_pb.js";
 import { file_history } from "@escribass/schema/history_pb.js";
 import type { PreviewEvent, PreviewLoop, PreviewSeek, PreviewStop, RenderResult } from "./render_pb.js";
 import { file_render } from "./render_pb.js";
-import type { AudioClip, AutomationPoint, DeviceRef, Note, NoteClip, ParamRef, Song, TrackKind } from "@escribass/schema/song_pb.js";
+import type { AudioClip, AutomationPoint, DeviceRef, GeneratorKind, Note, NoteClip, ParamRef, Song, TrackKind } from "@escribass/schema/song_pb.js";
 import { file_song } from "@escribass/schema/song_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -38,7 +38,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file song_tools.proto.
  */
 export const file_song_tools: GenFile = /*@__PURE__*/
-  fileDesc("ChBzb25nX3Rvb2xzLnByb3RvEhJlc2NyaWJhc3MudG9vbHMudjEiOAoJVmlvbGF0aW9uEgwKBHBhdGgYASABKAkSDAoEcnVsZRgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInwKClRvb2xSZXN1bHQSDQoFdmFsaWQYASABKAgSLQoGZXJyb3JzGAIgAygLMh0uZXNjcmliYXNzLnRvb2xzLnYxLlZpb2xhdGlvbhINCgVwYXRjaBgDIAEoDBIPCgdzdW1tYXJ5GAQgASgJEhAKCGVudHJ5X2lkGAUgASgJIhAKDkdldFNvbmdSZXF1ZXN0IiQKEEdldFNvbmdBdFJlcXVlc3QSEAoIZW50cnlfaWQYASABKAkiNQoMU29uZ1Jlc3BvbnNlEiUKBHNvbmcYASABKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Tb25nIhMKEUdldEhpc3RvcnlSZXF1ZXN0ItABCg9IaXN0b3J5UmVzcG9uc2USQQoHZW50cmllcxgBIAMoCzIwLmVzY3JpYmFzcy50b29scy52MS5IaXN0b3J5UmVzcG9uc2UuRW50cmllc0VudHJ5EigKBHJlZnMYAiABKAsyGi5lc2NyaWJhc3MuaGlzdG9yeS52MS5SZWZzGlAKDEVudHJpZXNFbnRyeRILCgNrZXkYASABKAkSLwoFdmFsdWUYAiABKAsyIC5lc2NyaWJhc3MuaGlzdG9yeS52MS5QYXRjaEVudHJ5OgI4ASIzChFBcHBseVBhdGNoUmVxdWVzdBINCgVwYXRjaBgBIAEoDBIPCgdkcnlfcnVuGAIgASgIIpQBCg9BZGRUcmFja1JlcXVlc3QSDAoEbmFtZRgBIAEoCRIqCgRraW5kGAIgASgOMhwuZXNjcmliYXNzLnNvbmcudjEuVHJhY2tLaW5kEi4KA3JlZhgEIAEoCzIcLmVzY3JpYmFzcy5zb25nLnYxLkRldmljZVJlZkgAiAEBEg8KB2RyeV9ydW4YAyABKAhCBgoEX3JlZiJpChlTZXRUcmFja0luc3RydW1lbnRSZXF1ZXN0EhAKCHRyYWNrX2lkGAEgASgJEikKA3JlZhgCIAEoCzIcLmVzY3JpYmFzcy5zb25nLnYxLkRldmljZVJlZhIPCgdkcnlfcnVuGAMgASgIIn4KEEFkZEVmZmVjdFJlcXVlc3QSEAoIdHJhY2tfaWQYASABKAkSKQoDcmVmGAIgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuRGV2aWNlUmVmEhIKBWluZGV4GAMgASgNSACIAQESDwoHZHJ5X3J1bhgEIAEoCEIICgZfaW5kZXgiUwoPU2V0UGFyYW1SZXF1ZXN0EhEKCWRldmljZV9pZBgBIAEoCRINCgVwYXJhbRgCIAEoCRINCgV2YWx1ZRgDIAEoARIPCgdkcnlfcnVuGAQgASgIIs4BCg5BZGRDbGlwUmVxdWVzdBIQCgh0cmFja19pZBgBIAEoCRISCgpzdGFydF90aWNrGAIgASgFEhQKDGxlbmd0aF90aWNrcxgDIAEoBRIwCglub3RlX2NsaXAYBCABKAsyGy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlQ2xpcEgAEjIKCmF1ZGlvX2NsaXAYBSABKAsyHC5lc2NyaWJhc3Muc29uZy52MS5BdWRpb0NsaXBIABIPCgdkcnlfcnVuGAYgASgIQgkKB2NvbnRlbnQiuQEKD1NldE5vdGVzUmVxdWVzdBIPCgdjbGlwX2lkGAEgASgJEj0KBW5vdGVzGAIgAygLMi4uZXNjcmliYXNzLnRvb2xzLnYxLlNldE5vdGVzUmVxdWVzdC5Ob3Rlc0VudHJ5Eg8KB2RyeV9ydW4YAyABKAgaRQoKTm90ZXNFbnRyeRILCgNrZXkYASABKAkSJgoFdmFsdWUYAiABKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlOgI4ASJZChBUcmFuc3Bvc2VSZXF1ZXN0Eg8KB2NsaXBfaWQYASABKAkSEQoJc2VtaXRvbmVzGAIgASgFEhAKCG5vdGVfaWRzGAMgAygJEg8KB2RyeV9ydW4YBCABKAgiWQoPUXVhbnRpemVSZXF1ZXN0Eg8KB2NsaXBfaWQYASABKAkSEgoKZ3JpZF90aWNrcxgCIAEoBRIQCghub3RlX2lkcxgDIAMoCRIPCgdkcnlfcnVuGAQgASgIIu0BChRBZGRBdXRvbWF0aW9uUmVxdWVzdBIrCgZ0YXJnZXQYASABKAsyGy5lc2NyaWJhc3Muc29uZy52MS5QYXJhbVJlZhJECgZwb2ludHMYAiADKAsyNC5lc2NyaWJhc3MudG9vbHMudjEuQWRkQXV0b21hdGlvblJlcXVlc3QuUG9pbnRzRW50cnkSDwoHZHJ5X3J1bhgDIAEoCBpRCgtQb2ludHNFbnRyeRILCgNrZXkYASABKAkSMQoFdmFsdWUYAiABKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQ6AjgBIjMKD0FkZEFzc2V0UmVxdWVzdBIPCgdjb250ZW50GAEgASgMEg8KB2RyeV9ydW4YAiABKAgiIwoNQXNzZXRSZXNwb25zZRISCgphc3NldF9oYXNoGAEgASgJIj0KD1NldFRlbXBvUmVxdWVzdBILCgNicG0YASABKAESDAoEdGljaxgCIAEoBRIPCgdkcnlfcnVuGAMgASgIIlgKEUFkZFNlY3Rpb25SZXF1ZXN0EgwKBG5hbWUYASABKAkSEgoKc3RhcnRfdGljaxgCIAEoBRIQCghlbmRfdGljaxgDIAEoBRIPCgdkcnlfcnVuGAQgASgIIl8KEk1vdmVTZWN0aW9uUmVxdWVzdBISCgpzZWN0aW9uX2lkGAEgASgJEhIKCnN0YXJ0X3RpY2sYAiABKAUSEAoIZW5kX3RpY2sYAyABKAUSDwoHZHJ5X3J1bhgEIAEoCCI7ChNSZW5kZXJFeHBvcnRSZXF1ZXN0EhMKC291dHB1dF9wYXRoGAEgASgJEg8KB2RyeV9ydW4YAiABKAgikgEKDlJlbmRlclJlc3BvbnNlEg0KBXZhbGlkGAEgASgIEi0KBmVycm9ycxgCIAMoCzIdLmVzY3JpYmFzcy50b29scy52MS5WaW9sYXRpb24SDwoHc3VtbWFyeRgDIAEoCRIxCgZyZXN1bHQYBCABKAsyIS5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdCL5AQoUUmVuZGVyUHJldmlld1JlcXVlc3QSLwoEcGxheRgBIAEoCzIfLmVzY3JpYmFzcy50b29scy52MS5QcmV2aWV3RnJvbUgAEjAKBHNlZWsYAiABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdTZWVrSAASMAoEbG9vcBgDIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld0xvb3BIABIwCgRzdG9wGAQgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U3RvcEgAEg8KB2RyeV9ydW4YBSABKAhCCQoHY29tbWFuZCI1CgtQcmV2aWV3RnJvbRIXCgpzdGFydF90aWNrGAEgASgFSACIAQFCDQoLX3N0YXJ0X3RpY2sikgEKD1ByZXZpZXdSZXNwb25zZRINCgV2YWxpZBgBIAEoCBItCgZlcnJvcnMYAiADKAsyHS5lc2NyaWJhc3MudG9vbHMudjEuVmlvbGF0aW9uEg8KB3N1bW1hcnkYAyABKAkSMAoFZXZlbnQYBCABKAsyIS5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdFdmVudCIeCgtVbmRvUmVxdWVzdBIPCgdkcnlfcnVuGAEgASgIIh4KC1JlZG9SZXF1ZXN0Eg8KB2RyeV9ydW4YASABKAgiSQoTQ3JlYXRlQnJhbmNoUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC2F0X2VudHJ5X2lkGAIgASgJEg8KB2RyeV9ydW4YAyABKAgiNAoTU3dpdGNoQnJhbmNoUmVxdWVzdBIMCgRuYW1lGAEgASgJEg8KB2RyeV9ydW4YAiABKAgiNAoTRGVsZXRlQnJhbmNoUmVxdWVzdBIMCgRuYW1lGAEgASgJEg8KB2RyeV9ydW4YAiABKAgiyAEKEk1lcmdlQnJhbmNoUmVxdWVzdBIMCgRuYW1lGAEgASgJEg8KB2RyeV9ydW4YAiABKAgSRAoHcmVzb2x2ZRgDIAMoCzIzLmVzY3JpYmFzcy50b29scy52MS5NZXJnZUJyYW5jaFJlcXVlc3QuUmVzb2x2ZUVudHJ5Gk0KDFJlc29sdmVFbnRyeRILCgNrZXkYASABKAkSLAoFdmFsdWUYAiABKA4yHS5lc2NyaWJhc3MudG9vbHMudjEuTWVyZ2VTaWRlOgI4ASpTCglNZXJnZVNpZGUSGgoWTUVSR0VfU0lERV9VTlNQRUNJRklFRBAAEhMKD01FUkdFX1NJREVfT1VSUxABEhUKEU1FUkdFX1NJREVfVEhFSVJTEAIy2xAKCVNvbmdUb29scxJPCgdHZXRTb25nEiIuZXNjcmliYXNzLnRvb2xzLnYxLkdldFNvbmdSZXF1ZXN0GiAuZXNjcmliYXNzLnRvb2xzLnYxLlNvbmdSZXNwb25zZRJTCglHZXRTb25nQXQSJC5lc2NyaWJhc3MudG9vbHMudjEuR2V0U29uZ0F0UmVxdWVzdBogLmVzY3JpYmFzcy50b29scy52MS5Tb25nUmVzcG9uc2USWAoKR2V0SGlzdG9yeRIlLmVzY3JpYmFzcy50b29scy52MS5HZXRIaXN0b3J5UmVxdWVzdBojLmVzY3JpYmFzcy50b29scy52MS5IaXN0b3J5UmVzcG9uc2USUwoKQXBwbHlQYXRjaBIlLmVzY3JpYmFzcy50b29scy52MS5BcHBseVBhdGNoUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0Ek8KCEFkZFRyYWNrEiMuZXNjcmliYXNzLnRvb2xzLnYxLkFkZFRyYWNrUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0EmMKElNldFRyYWNrSW5zdHJ1bWVudBItLmVzY3JpYmFzcy50b29scy52MS5TZXRUcmFja0luc3RydW1lbnRSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSUQoJQWRkRWZmZWN0EiQuZXNjcmliYXNzLnRvb2xzLnYxLkFkZEVmZmVjdFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJPCghTZXRQYXJhbRIjLmVzY3JpYmFzcy50b29scy52MS5TZXRQYXJhbVJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJNCgdBZGRDbGlwEiIuZXNjcmliYXNzLnRvb2xzLnYxLkFkZENsaXBSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSTwoIU2V0Tm90ZXMSIy5lc2NyaWJhc3MudG9vbHMudjEuU2V0Tm90ZXNSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSUQoJVHJhbnNwb3NlEiQuZXNjcmliYXNzLnRvb2xzLnYxLlRyYW5zcG9zZVJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJPCghRdWFudGl6ZRIjLmVzY3JpYmFzcy50b29scy52MS5RdWFudGl6ZVJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJZCg1BZGRBdXRvbWF0aW9uEiguZXNjcmliYXNzLnRvb2xzLnYxLkFkZEF1dG9tYXRpb25SZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSUgoIQWRkQXNzZXQSIy5lc2NyaWJhc3MudG9vbHMudjEuQWRkQXNzZXRSZXF1ZXN0GiEuZXNjcmliYXNzLnRvb2xzLnYxLkFzc2V0UmVzcG9uc2USTwoIU2V0VGVtcG8SIy5lc2NyaWJhc3MudG9vbHMudjEuU2V0VGVtcG9SZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSUwoKQWRkU2VjdGlvbhIlLmVzY3JpYmFzcy50b29scy52MS5BZGRTZWN0aW9uUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0ElUKC01vdmVTZWN0aW9uEiYuZXNjcmliYXNzLnRvb2xzLnYxLk1vdmVTZWN0aW9uUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0ElsKDFJlbmRlckV4cG9ydBInLmVzY3JpYmFzcy50b29scy52MS5SZW5kZXJFeHBvcnRSZXF1ZXN0GiIuZXNjcmliYXNzLnRvb2xzLnYxLlJlbmRlclJlc3BvbnNlEl4KDVJlbmRlclByZXZpZXcSKC5lc2NyaWJhc3MudG9vbHMudjEuUmVuZGVyUHJldmlld1JlcXVlc3QaIy5lc2NyaWJhc3MudG9vbHMudjEuUHJldmlld1Jlc3BvbnNlEkcKBFVuZG8SHy5lc2NyaWJhc3MudG9vbHMudjEuVW5kb1JlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJHCgRSZWRvEh8uZXNjcmliYXNzLnRvb2xzLnYxLlJlZG9SZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSVwoMQ3JlYXRlQnJhbmNoEicuZXNjcmliYXNzLnRvb2xzLnYxLkNyZWF0ZUJyYW5jaFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJXCgxTd2l0Y2hCcmFuY2gSJy5lc2NyaWJhc3MudG9vbHMudjEuU3dpdGNoQnJhbmNoUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0ElcKDERlbGV0ZUJyYW5jaBInLmVzY3JpYmFzcy50b29scy52MS5EZWxldGVCcmFuY2hSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSVQoLTWVyZ2VCcmFuY2gSJi5lc2NyaWJhc3MudG9vbHMudjEuTWVyZ2VCcmFuY2hSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHRiBnByb3RvMw", [file_history, file_render, file_song]);
+  fileDesc("ChBzb25nX3Rvb2xzLnByb3RvEhJlc2NyaWJhc3MudG9vbHMudjEiOAoJVmlvbGF0aW9uEgwKBHBhdGgYASABKAkSDAoEcnVsZRgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInwKClRvb2xSZXN1bHQSDQoFdmFsaWQYASABKAgSLQoGZXJyb3JzGAIgAygLMh0uZXNjcmliYXNzLnRvb2xzLnYxLlZpb2xhdGlvbhINCgVwYXRjaBgDIAEoDBIPCgdzdW1tYXJ5GAQgASgJEhAKCGVudHJ5X2lkGAUgASgJIhAKDkdldFNvbmdSZXF1ZXN0IiQKEEdldFNvbmdBdFJlcXVlc3QSEAoIZW50cnlfaWQYASABKAkiNQoMU29uZ1Jlc3BvbnNlEiUKBHNvbmcYASABKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Tb25nIhMKEUdldEhpc3RvcnlSZXF1ZXN0ItABCg9IaXN0b3J5UmVzcG9uc2USQQoHZW50cmllcxgBIAMoCzIwLmVzY3JpYmFzcy50b29scy52MS5IaXN0b3J5UmVzcG9uc2UuRW50cmllc0VudHJ5EigKBHJlZnMYAiABKAsyGi5lc2NyaWJhc3MuaGlzdG9yeS52MS5SZWZzGlAKDEVudHJpZXNFbnRyeRILCgNrZXkYASABKAkSLwoFdmFsdWUYAiABKAsyIC5lc2NyaWJhc3MuaGlzdG9yeS52MS5QYXRjaEVudHJ5OgI4ASIzChFBcHBseVBhdGNoUmVxdWVzdBINCgVwYXRjaBgBIAEoDBIPCgdkcnlfcnVuGAIgASgIIpQBCg9BZGRUcmFja1JlcXVlc3QSDAoEbmFtZRgBIAEoCRIqCgRraW5kGAIgASgOMhwuZXNjcmliYXNzLnNvbmcudjEuVHJhY2tLaW5kEi4KA3JlZhgEIAEoCzIcLmVzY3JpYmFzcy5zb25nLnYxLkRldmljZVJlZkgAiAEBEg8KB2RyeV9ydW4YAyABKAhCBgoEX3JlZiJpChlTZXRUcmFja0luc3RydW1lbnRSZXF1ZXN0EhAKCHRyYWNrX2lkGAEgASgJEikKA3JlZhgCIAEoCzIcLmVzY3JpYmFzcy5zb25nLnYxLkRldmljZVJlZhIPCgdkcnlfcnVuGAMgASgIIn4KEEFkZEVmZmVjdFJlcXVlc3QSEAoIdHJhY2tfaWQYASABKAkSKQoDcmVmGAIgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuRGV2aWNlUmVmEhIKBWluZGV4GAMgASgNSACIAQESDwoHZHJ5X3J1bhgEIAEoCEIICgZfaW5kZXgiUwoPU2V0UGFyYW1SZXF1ZXN0EhEKCWRldmljZV9pZBgBIAEoCRINCgVwYXJhbRgCIAEoCRINCgV2YWx1ZRgDIAEoARIPCgdkcnlfcnVuGAQgASgIIs4BCg5BZGRDbGlwUmVxdWVzdBIQCgh0cmFja19pZBgBIAEoCRISCgpzdGFydF90aWNrGAIgASgFEhQKDGxlbmd0aF90aWNrcxgDIAEoBRIwCglub3RlX2NsaXAYBCABKAsyGy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlQ2xpcEgAEjIKCmF1ZGlvX2NsaXAYBSABKAsyHC5lc2NyaWJhc3Muc29uZy52MS5BdWRpb0NsaXBIABIPCgdkcnlfcnVuGAYgASgIQgkKB2NvbnRlbnQiuQEKD1NldE5vdGVzUmVxdWVzdBIPCgdjbGlwX2lkGAEgASgJEj0KBW5vdGVzGAIgAygLMi4uZXNjcmliYXNzLnRvb2xzLnYxLlNldE5vdGVzUmVxdWVzdC5Ob3Rlc0VudHJ5Eg8KB2RyeV9ydW4YAyABKAgaRQoKTm90ZXNFbnRyeRILCgNrZXkYASABKAkSJgoFdmFsdWUYAiABKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlOgI4ASJZChBUcmFuc3Bvc2VSZXF1ZXN0Eg8KB2NsaXBfaWQYASABKAkSEQoJc2VtaXRvbmVzGAIgASgFEhAKCG5vdGVfaWRzGAMgAygJEg8KB2RyeV9ydW4YBCABKAgiWQoPUXVhbnRpemVSZXF1ZXN0Eg8KB2NsaXBfaWQYASABKAkSEgoKZ3JpZF90aWNrcxgCIAEoBRIQCghub3RlX2lkcxgDIAMoCRIPCgdkcnlfcnVuGAQgASgIIu0BChRBZGRBdXRvbWF0aW9uUmVxdWVzdBIrCgZ0YXJnZXQYASABKAsyGy5lc2NyaWJhc3Muc29uZy52MS5QYXJhbVJlZhJECgZwb2ludHMYAiADKAsyNC5lc2NyaWJhc3MudG9vbHMudjEuQWRkQXV0b21hdGlvblJlcXVlc3QuUG9pbnRzRW50cnkSDwoHZHJ5X3J1bhgDIAEoCBpRCgtQb2ludHNFbnRyeRILCgNrZXkYASABKAkSMQoFdmFsdWUYAiABKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQ6AjgBIjMKD0FkZEFzc2V0UmVxdWVzdBIPCgdjb250ZW50GAEgASgMEg8KB2RyeV9ydW4YAiABKAgiIwoNQXNzZXRSZXNwb25zZRISCgphc3NldF9oYXNoGAEgASgJIj0KD1NldFRlbXBvUmVxdWVzdBILCgNicG0YASABKAESDAoEdGljaxgCIAEoBRIPCgdkcnlfcnVuGAMgASgIIlgKEUFkZFNlY3Rpb25SZXF1ZXN0EgwKBG5hbWUYASABKAkSEgoKc3RhcnRfdGljaxgCIAEoBRIQCghlbmRfdGljaxgDIAEoBRIPCgdkcnlfcnVuGAQgASgIIl8KEk1vdmVTZWN0aW9uUmVxdWVzdBISCgpzZWN0aW9uX2lkGAEgASgJEhIKCnN0YXJ0X3RpY2sYAiABKAUSEAoIZW5kX3RpY2sYAyABKAUSDwoHZHJ5X3J1bhgEIAEoCCKfAgoWRGVmaW5lR2VuZXJhdG9yUmVxdWVzdBIuCgRraW5kGAEgASgOMiAuZXNjcmliYXNzLnNvbmcudjEuR2VuZXJhdG9yS2luZBIOCgZzb3VyY2UYAiABKAkSDAoEc2VlZBgDIAEoBBJGCgZwYXJhbXMYBCADKAsyNi5lc2NyaWJhc3MudG9vbHMudjEuRGVmaW5lR2VuZXJhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRISCgh0cmFja19pZBgFIAEoCUgAEhEKB2NsaXBfaWQYBiABKAlIABIPCgdkcnlfcnVuGAcgASgIGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCCAoGdGFyZ2V0IkAKF0NvbXBpbGVHZW5lcmF0b3JSZXF1ZXN0EhQKDGdlbmVyYXRvcl9pZBgBIAEoCRIPCgdkcnlfcnVuGAIgASgIIjsKE1JlbmRlckV4cG9ydFJlcXVlc3QSEwoLb3V0cHV0X3BhdGgYASABKAkSDwoHZHJ5X3J1bhgCIAEoCCKSAQoOUmVuZGVyUmVzcG9uc2USDQoFdmFsaWQYASABKAgSLQoGZXJyb3JzGAIgAygLMh0uZXNjcmliYXNzLnRvb2xzLnYxLlZpb2xhdGlvbhIPCgdzdW1tYXJ5GAMgASgJEjEKBnJlc3VsdBgEIAEoCzIhLmVzY3JpYmFzcy5yZW5kZXIudjEuUmVuZGVyUmVzdWx0IvkBChRSZW5kZXJQcmV2aWV3UmVxdWVzdBIvCgRwbGF5GAEgASgLMh8uZXNjcmliYXNzLnRvb2xzLnYxLlByZXZpZXdGcm9tSAASMAoEc2VlaxgCIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1NlZWtIABIwCgRsb29wGAMgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3TG9vcEgAEjAKBHN0b3AYBCABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdTdG9wSAASDwoHZHJ5X3J1bhgFIAEoCEIJCgdjb21tYW5kIjUKC1ByZXZpZXdGcm9tEhcKCnN0YXJ0X3RpY2sYASABKAVIAIgBAUINCgtfc3RhcnRfdGljayKSAQoPUHJldmlld1Jlc3BvbnNlEg0KBXZhbGlkGAEgASgIEi0KBmVycm9ycxgCIAMoCzIdLmVzY3JpYmFzcy50b29scy52MS5WaW9sYXRpb24SDwoHc3VtbWFyeRgDIAEoCRIwCgVldmVudBgEIAEoCzIhLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld0V2ZW50Ih4KC1VuZG9SZXF1ZXN0Eg8KB2RyeV9ydW4YASABKAgiHgoLUmVkb1JlcXVlc3QSDwoHZHJ5X3J1bhgBIAEoCCJJChNDcmVhdGVCcmFuY2hSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLYXRfZW50cnlfaWQYAiABKAkSDwoHZHJ5X3J1bhgDIAEoCCI0ChNTd2l0Y2hCcmFuY2hSZXF1ZXN0EgwKBG5hbWUYASABKAkSDwoHZHJ5X3J1bhgCIAEoCCI0ChNEZWxldGVCcmFuY2hSZXF1ZXN0EgwKBG5hbWUYASABKAkSDwoHZHJ5X3J1bhgCIAEoCCLIAQoSTWVyZ2VCcmFuY2hSZXF1ZXN0EgwKBG5hbWUYASABKAkSDwoHZHJ5X3J1bhgCIAEoCBJECgdyZXNvbHZlGAMgAygLMjMuZXNjcmliYXNzLnRvb2xzLnYxLk1lcmdlQnJhbmNoUmVxdWVzdC5SZXNvbHZlRW50cnkaTQoMUmVzb2x2ZUVudHJ5EgsKA2tleRgBIAEoCRIsCgV2YWx1ZRgCIAEoDjIdLmVzY3JpYmFzcy50b29scy52MS5NZXJnZVNpZGU6AjgBKlMKCU1lcmdlU2lkZRIaChZNRVJHRV9TSURFX1VOU1BFQ0lGSUVEEAASEwoPTUVSR0VfU0lERV9PVVJTEAESFQoRTUVSR0VfU0lERV9USEVJUlMQAjKbEgoJU29uZ1Rvb2xzEk8KB0dldFNvbmcSIi5lc2NyaWJhc3MudG9vbHMudjEuR2V0U29uZ1JlcXVlc3QaIC5lc2NyaWJhc3MudG9vbHMudjEuU29uZ1Jlc3BvbnNlElMKCUdldFNvbmdBdBIkLmVzY3JpYmFzcy50b29scy52MS5HZXRTb25nQXRSZXF1ZXN0GiAuZXNjcmliYXNzLnRvb2xzLnYxLlNvbmdSZXNwb25zZRJYCgpHZXRIaXN0b3J5EiUuZXNjcmliYXNzLnRvb2xzLnYxLkdldEhpc3RvcnlSZXF1ZXN0GiMuZXNjcmliYXNzLnRvb2xzLnYxLkhpc3RvcnlSZXNwb25zZRJTCgpBcHBseVBhdGNoEiUuZXNjcmliYXNzLnRvb2xzLnYxLkFwcGx5UGF0Y2hSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSTwoIQWRkVHJhY2sSIy5lc2NyaWJhc3MudG9vbHMudjEuQWRkVHJhY2tSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSYwoSU2V0VHJhY2tJbnN0cnVtZW50Ei0uZXNjcmliYXNzLnRvb2xzLnYxLlNldFRyYWNrSW5zdHJ1bWVudFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJRCglBZGRFZmZlY3QSJC5lc2NyaWJhc3MudG9vbHMudjEuQWRkRWZmZWN0UmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0Ek8KCFNldFBhcmFtEiMuZXNjcmliYXNzLnRvb2xzLnYxLlNldFBhcmFtUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0Ek0KB0FkZENsaXASIi5lc2NyaWJhc3MudG9vbHMudjEuQWRkQ2xpcFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJPCghTZXROb3RlcxIjLmVzY3JpYmFzcy50b29scy52MS5TZXROb3Rlc1JlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJRCglUcmFuc3Bvc2USJC5lc2NyaWJhc3MudG9vbHMudjEuVHJhbnNwb3NlUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0Ek8KCFF1YW50aXplEiMuZXNjcmliYXNzLnRvb2xzLnYxLlF1YW50aXplUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0ElkKDUFkZEF1dG9tYXRpb24SKC5lc2NyaWJhc3MudG9vbHMudjEuQWRkQXV0b21hdGlvblJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJSCghBZGRBc3NldBIjLmVzY3JpYmFzcy50b29scy52MS5BZGRBc3NldFJlcXVlc3QaIS5lc2NyaWJhc3MudG9vbHMudjEuQXNzZXRSZXNwb25zZRJPCghTZXRUZW1wbxIjLmVzY3JpYmFzcy50b29scy52MS5TZXRUZW1wb1JlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJTCgpBZGRTZWN0aW9uEiUuZXNjcmliYXNzLnRvb2xzLnYxLkFkZFNlY3Rpb25SZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSVQoLTW92ZVNlY3Rpb24SJi5lc2NyaWJhc3MudG9vbHMudjEuTW92ZVNlY3Rpb25SZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSXQoPRGVmaW5lR2VuZXJhdG9yEiouZXNjcmliYXNzLnRvb2xzLnYxLkRlZmluZUdlbmVyYXRvclJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJfChBDb21waWxlR2VuZXJhdG9yEisuZXNjcmliYXNzLnRvb2xzLnYxLkNvbXBpbGVHZW5lcmF0b3JSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSWwoMUmVuZGVyRXhwb3J0EicuZXNjcmliYXNzLnRvb2xzLnYxLlJlbmRlckV4cG9ydFJlcXVlc3QaIi5lc2NyaWJhc3MudG9vbHMudjEuUmVuZGVyUmVzcG9uc2USXgoNUmVuZGVyUHJldmlldxIoLmVzY3JpYmFzcy50b29scy52MS5SZW5kZXJQcmV2aWV3UmVxdWVzdBojLmVzY3JpYmFzcy50b29scy52MS5QcmV2aWV3UmVzcG9uc2USRwoEVW5kbxIfLmVzY3JpYmFzcy50b29scy52MS5VbmRvUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0EkcKBFJlZG8SHy5lc2NyaWJhc3MudG9vbHMudjEuUmVkb1JlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJXCgxDcmVhdGVCcmFuY2gSJy5lc2NyaWJhc3MudG9vbHMudjEuQ3JlYXRlQnJhbmNoUmVxdWVzdBoeLmVzY3JpYmFzcy50b29scy52MS5Ub29sUmVzdWx0ElcKDFN3aXRjaEJyYW5jaBInLmVzY3JpYmFzcy50b29scy52MS5Td2l0Y2hCcmFuY2hSZXF1ZXN0Gh4uZXNjcmliYXNzLnRvb2xzLnYxLlRvb2xSZXN1bHQSVwoMRGVsZXRlQnJhbmNoEicuZXNjcmliYXNzLnRvb2xzLnYxLkRlbGV0ZUJyYW5jaFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdBJVCgtNZXJnZUJyYW5jaBImLmVzY3JpYmFzcy50b29scy52MS5NZXJnZUJyYW5jaFJlcXVlc3QaHi5lc2NyaWJhc3MudG9vbHMudjEuVG9vbFJlc3VsdGIGcHJvdG8z", [file_history, file_render, file_song]);
 
 /**
  * The wire form of core's Violation, PatchError, HistoryError and ProjectError, which all
@@ -739,6 +739,129 @@ export const MoveSectionRequestSchema: GenMessage<MoveSectionRequest> = /*@__PUR
   messageDesc(file_song_tools, 21);
 
 /**
+ * Adds a Generator (§4.2, layer 1). **Compiles nothing** (ADR 0026 §2).
+ *
+ * Two calls rather than one, because a model that defines and compiles in one turn makes one
+ * more call than it would like, while compiling on define costs a process for every definition
+ * a person then edits before compiling — and puts two things a dry run cannot show apart into
+ * one entry (ADR 0024 §5). A dry run of this is the ordinary validator pass over the added
+ * entity.
+ *
+ * `toolchain_version` is not a field here. A model cannot know one and a person should not
+ * have to: the first compile writes it, from what the child reported, exactly as a plugin pin
+ * is written on first reference (ADR 0027 §1; ADR 0010 §2).
+ *
+ * There is no set_generator_source either, and none is coming until something asks for it.
+ * Editing a source is apply_patch on /generators/{id}/source, as a mix is written by
+ * apply_patch on its path and for the same reason: a typed tool for a `replace` the raw
+ * pipeline already expresses waits on the typed-tools row's trigger — the first measurement in
+ * which a model gets the RFC 6902 wrong where a typed tool would not have let it (ADR 0022 §1,
+ * ADR 0026 §2). `seed` and `params` are edited the same way.
+ *
+ * @generated from message escribass.tools.v1.DefineGeneratorRequest
+ */
+export type DefineGeneratorRequest = Message<"escribass.tools.v1.DefineGeneratorRequest"> & {
+  /**
+   * @generated from field: escribass.song.v1.GeneratorKind kind = 1;
+   */
+  kind: GeneratorKind;
+
+  /**
+   * @generated from field: string source = 2;
+   */
+  source: string;
+
+  /**
+   * @generated from field: uint64 seed = 3;
+   */
+  seed: bigint;
+
+  /**
+   * @generated from field: map<string, string> params = 4;
+   */
+  params: { [key: string]: string };
+
+  /**
+   * The schema allows either (ADR 0002 §3) and the validator accepts either, so this does too.
+   * In M4 a compile writes a note clip and refuses the rest, `target_not_note_clip` — valid and
+   * uncompilable, the shape ADR 0007 §6 gave *valid and unrenderable*. What a track target
+   * should mean is not decided against no consumer (ADR 0024 §5).
+   *
+   * @generated from oneof escribass.tools.v1.DefineGeneratorRequest.target
+   */
+  target: {
+    /**
+     * @generated from field: string track_id = 5;
+     */
+    value: string;
+    case: "trackId";
+  } | {
+    /**
+     * @generated from field: string clip_id = 6;
+     */
+    value: string;
+    case: "clipId";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * @generated from field: bool dry_run = 7;
+   */
+  dryRun: boolean;
+};
+
+/**
+ * Describes the message escribass.tools.v1.DefineGeneratorRequest.
+ * Use `create(DefineGeneratorRequestSchema)` to create a new message.
+ */
+export const DefineGeneratorRequestSchema: GenMessage<DefineGeneratorRequest> = /*@__PURE__*/
+  messageDesc(file_song_tools, 22);
+
+/**
+ * Compiles a generator: spawns the sandbox, replaces the target clip's notes **whole**, and
+ * sets `compiled_hash` and `toolchain_version` — one entry under this tool's name (ADR 0024
+ * §5). Every note's id is minted by core and its provenance is this call's.
+ *
+ * A **dry run compiles and answers with the diff**, which is what the code view's Compile is;
+ * its Apply is the commit (ADR 0017 §4). Except when the inputs hash to `compiled_hash`
+ * already: then it answers *up to date* with an empty patch and **spawns nothing**, so a status
+ * read on an up-to-date generator costs no process and one on a stale generator costs the
+ * compile a person is about to ask for anyway (ADR 0024 §6). One compile per click, never per
+ * keystroke: a keystroke is a draft in an editor's buffer, and nothing is compiled that the
+ * document does not hold.
+ *
+ * Refused — `valid = false`, the caller's to fix — with `generator_unknown`,
+ * `target_not_note_clip`, `generator_error` carrying the child's line:column and its own text,
+ * or `generator_timeout`. An operator's instead, ending a model's turn at the host:
+ * `generator_missing` (the process was started with no --generator), `toolchain_mismatch`
+ * (ADR 0027 §2), and `generator_failed` — a child that would not start, printed no socket line,
+ * or exited without answering (ADR 0024 §7; ADR 0006 §2).
+ *
+ * There is no state on this wire for "a compile is in progress", and none is missing: a compile
+ * is one call that blocks for its length, bounded by the timeout, and a progress stream for a
+ * call of tens of milliseconds is the Jobs service ADR 0020 §3 refused (ADR 0026 §2).
+ *
+ * @generated from message escribass.tools.v1.CompileGeneratorRequest
+ */
+export type CompileGeneratorRequest = Message<"escribass.tools.v1.CompileGeneratorRequest"> & {
+  /**
+   * @generated from field: string generator_id = 1;
+   */
+  generatorId: string;
+
+  /**
+   * @generated from field: bool dry_run = 2;
+   */
+  dryRun: boolean;
+};
+
+/**
+ * Describes the message escribass.tools.v1.CompileGeneratorRequest.
+ * Use `create(CompileGeneratorRequestSchema)` to create a new message.
+ */
+export const CompileGeneratorRequestSchema: GenMessage<CompileGeneratorRequest> = /*@__PURE__*/
+  messageDesc(file_song_tools, 23);
+
+/**
  * Renders the song as it stands to a WAV at `output_path`. Core compiles the document into a
  * RenderPlan (ADR 0007 §4) and hands it to a fresh engine process, which writes the file and
  * exits (ADR 0008 §2).
@@ -774,7 +897,7 @@ export type RenderExportRequest = Message<"escribass.tools.v1.RenderExportReques
  * Use `create(RenderExportRequestSchema)` to create a new message.
  */
 export const RenderExportRequestSchema: GenMessage<RenderExportRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 22);
+  messageDesc(file_song_tools, 24);
 
 /**
  * What render_export returns. **Not ToolResult, revised 2026-09-07 in M1 PR 10** — it was
@@ -828,7 +951,7 @@ export type RenderResponse = Message<"escribass.tools.v1.RenderResponse"> & {
  * Use `create(RenderResponseSchema)` to create a new message.
  */
 export const RenderResponseSchema: GenMessage<RenderResponse> = /*@__PURE__*/
-  messageDesc(file_song_tools, 23);
+  messageDesc(file_song_tools, 25);
 
 /**
  * Plays the song as it stands through a live engine process, or moves or stops what is playing
@@ -900,7 +1023,7 @@ export type RenderPreviewRequest = Message<"escribass.tools.v1.RenderPreviewRequ
  * Use `create(RenderPreviewRequestSchema)` to create a new message.
  */
 export const RenderPreviewRequestSchema: GenMessage<RenderPreviewRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 24);
+  messageDesc(file_song_tools, 26);
 
 /**
  * Play the song as it stands. `PreviewPlay` without its plan, because the plan is core's to
@@ -925,7 +1048,7 @@ export type PreviewFrom = Message<"escribass.tools.v1.PreviewFrom"> & {
  * Use `create(PreviewFromSchema)` to create a new message.
  */
 export const PreviewFromSchema: GenMessage<PreviewFrom> = /*@__PURE__*/
-  messageDesc(file_song_tools, 25);
+  messageDesc(file_song_tools, 27);
 
 /**
  * What render_preview returns. Not ToolResult, for RenderResponse's reason: a preview records
@@ -966,7 +1089,7 @@ export type PreviewResponse = Message<"escribass.tools.v1.PreviewResponse"> & {
  * Use `create(PreviewResponseSchema)` to create a new message.
  */
 export const PreviewResponseSchema: GenMessage<PreviewResponse> = /*@__PURE__*/
-  messageDesc(file_song_tools, 26);
+  messageDesc(file_song_tools, 28);
 
 /**
  * Reverses the last change by **appending its inverse**, never by rewinding a ref: a rewind
@@ -997,7 +1120,7 @@ export type UndoRequest = Message<"escribass.tools.v1.UndoRequest"> & {
  * Use `create(UndoRequestSchema)` to create a new message.
  */
 export const UndoRequestSchema: GenMessage<UndoRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 27);
+  messageDesc(file_song_tools, 29);
 
 /**
  * Re-applies the change the last `undo` reversed, by the same mechanism and with the same
@@ -1018,7 +1141,7 @@ export type RedoRequest = Message<"escribass.tools.v1.RedoRequest"> & {
  * Use `create(RedoRequestSchema)` to create a new message.
  */
 export const RedoRequestSchema: GenMessage<RedoRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 28);
+  messageDesc(file_song_tools, 30);
 
 /**
  * Names a new position in the log. Branching copies no data (ADR 0001 §2).
@@ -1051,7 +1174,7 @@ export type CreateBranchRequest = Message<"escribass.tools.v1.CreateBranchReques
  * Use `create(CreateBranchRequestSchema)` to create a new message.
  */
 export const CreateBranchRequestSchema: GenMessage<CreateBranchRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 29);
+  messageDesc(file_song_tools, 31);
 
 /**
  * Moves HEAD. Appends nothing: history that recorded navigation would grow every time
@@ -1076,7 +1199,7 @@ export type SwitchBranchRequest = Message<"escribass.tools.v1.SwitchBranchReques
  * Use `create(SwitchBranchRequestSchema)` to create a new message.
  */
 export const SwitchBranchRequestSchema: GenMessage<SwitchBranchRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 30);
+  messageDesc(file_song_tools, 32);
 
 /**
  * Discards the name. The entries stay in the log, unreferenced and inert (ADR 0001 §2).
@@ -1100,7 +1223,7 @@ export type DeleteBranchRequest = Message<"escribass.tools.v1.DeleteBranchReques
  * Use `create(DeleteBranchRequestSchema)` to create a new message.
  */
 export const DeleteBranchRequestSchema: GenMessage<DeleteBranchRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 31);
+  messageDesc(file_song_tools, 33);
 
 /**
  * Merges `name` into the current branch, appending one entry with two parents. Disjoint
@@ -1143,7 +1266,7 @@ export type MergeBranchRequest = Message<"escribass.tools.v1.MergeBranchRequest"
  * Use `create(MergeBranchRequestSchema)` to create a new message.
  */
 export const MergeBranchRequestSchema: GenMessage<MergeBranchRequest> = /*@__PURE__*/
-  messageDesc(file_song_tools, 32);
+  messageDesc(file_song_tools, 34);
 
 /**
  * Which side of a conflict wins at one path (ADR 0015 §3).
@@ -1322,6 +1445,22 @@ export const SongTools: GenService<{
   moveSection: {
     methodKind: "unary";
     input: typeof MoveSectionRequestSchema;
+    output: typeof ToolResultSchema;
+  },
+  /**
+   * @generated from rpc escribass.tools.v1.SongTools.DefineGenerator
+   */
+  defineGenerator: {
+    methodKind: "unary";
+    input: typeof DefineGeneratorRequestSchema;
+    output: typeof ToolResultSchema;
+  },
+  /**
+   * @generated from rpc escribass.tools.v1.SongTools.CompileGenerator
+   */
+  compileGenerator: {
+    methodKind: "unary";
+    input: typeof CompileGeneratorRequestSchema;
     output: typeof ToolResultSchema;
   },
   /**
