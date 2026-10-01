@@ -80,6 +80,14 @@ already pinned and makes **one** call, `Generate.Compile`, and the child exits. 
 a call that fails is the child's exit status, never the transport's (ADR 0013 §3). Its stderr's
 tail travels with an operator error as the engine's does.
 
+**Amended 2026-10-01, in M4 PR 4, with the thing "and the child exits" left unsaid.** The
+child answers, sends its trailers explicitly rather than at the handler's exit, and *then*
+stops serving — the two orders apart being a race in which the server closes before the
+response has left. It also stops when its **stdin closes**, which is the net for a `core` that
+died before it called, or that called and crashed: a child that outlives its purpose is tidied
+by the host letting go, as `ai`'s is (ADR 0020 §5). So `core` may let go of the child without
+waiting, and must not start it with stdin already closed and then expect it to wait.
+
 gRPC rather than stdio or argv-and-files because the client exists on both sides — `tonic` in
 `core`, `grpclib` in the Python the pinned `betterproto2-compiler` generates a server for (ADR
 0020 §2) — and because the messages need a `.proto` under `buf breaking` whichever way they
@@ -110,7 +118,16 @@ namespace, and any attribute beginning with `_`.
 
 **No `float`, anywhere.** A float literal is refused at parse; `/` on two integers is
 `Fraction`'s job and the author writes `Fraction(a, b)` or `a // b`; nothing in the namespace
-returns a float. This is ADR 0018 §4's reason — a transcendental's last bit is the platform's,
+returns a float. **Amended 2026-10-01, in M4 PR 4, where implementing this proved one half of
+it wrong**: `/` on two integers cannot be made `Fraction`'s job and is not. `bar` and `beat`
+return an `int`, as the table below says, and CPython's `/` on two `int`s is float division —
+`beat(1) / 3` is `320.0`, not the `Fraction(320, 1)` the worked example below claimed, and
+there is no hook that would make it otherwise without replacing the `int` the table fixes. So
+**`Div` is outside the language**, refused at parse with its line and naming what the sentence
+above already says to write instead; the worked example's two `/` sentences are corrected with
+it. The rule then holds **twice**, which is this decision's habit: `/` is gone, *and* every
+value that reaches `note` is checked, because `pow(2, -1)` and `2 ** -1` are floats CPython
+hands an author whatever an allowlist says about literals. This is ADR 0018 §4's reason — a transcendental's last bit is the platform's,
 and a byte-compared golden cannot carry it — and it is what makes the platform-free claim
 honest rather than hopeful. A value is an `int`, a `Fraction`, a `str`, a `bool`, `None`, or a
 list, tuple or dict of those.
@@ -159,8 +176,11 @@ compiles to fourteen notes, `set_notes` semantics over the whole clip: kicks at 
 110; eight hats at 0, 480, 960, … 3360 of length 240, whose velocities are the first eight
 draws of `random.Random(7).randrange(0, 30)`, in order, plus 60 — the same eight on every
 machine that runs the pinned interpreter, and on the four others the spike ran. `beat(1) // 2`
-is `480`, an `int`; `beat(1) / 3` would be `Fraction(320, 1)` and legal, and `beat(1) / 7`
-handed to `note` is `Fraction(960, 7)` and refused, naming `start`. The output is a list the
+is `480`, an `int`; ~~`beat(1) / 3` would be `Fraction(320, 1)` and legal, and `beat(1) / 7`
+handed to `note` is `Fraction(960, 7)` and refused, naming `start`~~ — **corrected
+2026-10-01**: `/` is outside the language, `Fraction(beat(1), 3)` is `Fraction(320, 1)` and
+legal, and `Fraction(beat(1), 7)` handed to `note` is `Fraction(960, 7)` and refused, naming
+`start`. The output is a list the
 child returns; the entry it becomes is decision 5's.
 
 ### 4. What "sandbox" claims: purity by construction and a limit on time and memory — not security
@@ -178,14 +198,21 @@ against an allowlist with that arm removed (trap 1).
 
 **A limit, enforced at the process.** The child sets `resource.RLIMIT_CPU` and `RLIMIT_AS` on
 itself before it executes anything, and `core` imposes a wall-clock timeout on the call; a
-generator that loops for ever is a refusal, `generator_timeout`, never a hang — M0.4's rule that
-a hang is not a failure unless one is imposed. The three numbers are the compiler's
+generator that loops for ever is a refusal, never a hang — M0.4's rule that
+a hang is not a failure unless one is imposed; which refusal it is, the paragraph below
+amends. The three numbers are the compiler's
 configuration, named as numbers rather than as rules (ADR 0022 §3's phrasing), and PR 4 chooses
 them where it can watch a loop refused by each.
 
 **`PYTHONHASHSEED=0`** on the child, and nothing else in its environment that the DSL could
 observe: it observes nothing, by the paragraph above, and the variable is there for the
-interpreter's own dicts and the belt-and-braces of decision 3.
+interpreter's own dicts and the belt-and-braces of decision 3. **Amended 2026-10-01, in M4 PR
+4: the child owns it rather than trusting its spawner.** A hash seed is fixed before any of
+the child's own code runs, so it cannot be set from inside — and a lock that works only when
+somebody else remembers it is the half-lock this decision exists to refuse. A child started
+without it therefore **re-executes itself** with it; `core` sets it in the environment and the
+re-exec never happens on that path, so the cost (one more interpreter start) is paid only by a
+shell driving the compiler by hand.
 
 **Not a security boundary against a hostile author**, and "What M4 will not claim" says so.
 An `ast` allowlist has been escaped before, and the threat this is built against is a sloppy
@@ -195,10 +222,33 @@ a separate user), and nothing here would have to be undone to add one. A generat
 hostile author writes runs with the permissions of the person who chose to compile it, which is
 the same sentence that is true of every plugin the engine hosts.
 
-**An assumption, named.** That `resource` limits set inside a child started by `uv run` bind
+~~**An assumption, named.** That `resource` limits set inside a child started by `uv run` bind
 the interpreter that actually runs the source, and not only a launcher in front of it. It is
 tested in PR 4 by a loop watched refused; if the launcher gets in the way, the command `core`
-is told is the interpreter itself.
+is told is the interpreter itself.~~ **Measured 2026-10-01 in M4 PR 4, and they bind.** The
+same unbounded `while True`, through the console script and through
+`uv run --no-sync --project compilers/generative escribass-generative`, was refused at
+**2.04 s** either way at `--cpu-seconds 1` and at **6.05 s** at the default 5 — the budget plus
+one interpreter start, with no launcher in the way; the memory limit refused a loop allocating
+eight megabytes a turn in **0.28 s** at `--memory-mb 300`. `core` may be told either command.
+The limits are the child's own `setrlimit` on itself, so what the measurement actually rules
+out is a launcher that re-execs in front of the interpreter — and `uv` does not.
+
+**The two numbers, and where the budget starts.** `CPU_SECONDS` is 5 and `MEMORY_MB` is 512,
+both flags as well as defaults, so a test can watch a loop refused by each without waiting out
+the default or allocating half a gigabyte on a runner. The CPU budget is counted **from the
+moment the limits are imposed** rather than from process start: `RLIMIT_CPU` counts the whole
+process, and a number that silently meant "five seconds minus however long this interpreter
+took to start" would fire before the call arrived on a slow enough machine.
+
+**How the limit crosses, which the wire decides and not this section.** `CompileResponse` has
+one refusal arm, a `Diagnostic`, whose rule is `core`'s `generator_error` (ADR 0026 §1) — so
+the soft `RLIMIT_CPU` is **caught** in the child, as `SIGXCPU`, and answered as an ordinary
+diagnostic carrying the line the generator was on and the number it exceeded. It reaches a
+caller as `generator_error` with that text, not as `generator_timeout`, which stays the
+wall-clock one `core` imposes (decision 7, amended). The hard limit a few seconds above it is
+what is left if answering itself runs away, and that is a child killed without answering,
+which is `generator_failed`.
 
 ### 5. A compile writes the target clip's notes and `compiled_hash`, in one entry, with ids minted by `core`
 
@@ -219,6 +269,14 @@ keystroke is a draft in the editor's buffer, Save is one `apply_patch` on
 The compile's output then goes through the validator like any `set_notes` — a pitch of 200 is
 `pitch_out_of_range` on the proposal, a note past `clip.length` is refused by §4.4's "notes
 inside clip bounds" — so the DSL needs no rules of its own about the model's ranges.
+**Amended 2026-10-01, in M4 PR 4, splitting that sentence where its two halves actually fall.**
+`note(pitch, start, length, velocity)`'s ranges are its own **argument contract**, written in
+decision 3's table and listed in decision 7 as a `generator_error`, and the child refuses them
+— because the child is where the **line number** is, and `pitch_out_of_range` on a note a
+person cannot locate in their source is the diagnostic Plate 3 complains about. So a pitch of
+200 is refused by the child first and the validator never sees it. What stays entirely the
+validator's is the **clip's bounds**: a note past `clip.length` is §4.4's structural rule about
+a document, not an argument's range, and the child refuses no note for where it lands.
 
 **The target is a note clip.** `Generator.target` is `track_id | clip_id` (ADR 0002 §3) and the
 validator accepts either. In M4 a compile writes a clip, and a generator whose target is a
@@ -269,8 +327,12 @@ status word, which is a tool's answer and is asserted in the host's tests (trap 
   exception during execution, a non-integral tick, a pitch or velocity out of range — with
   `path` `/generators/{id}/source` and a message carrying the child's `line:column` and text, so
   "the same text the user reads is what the LLM retries against" (Plate 3); `generator_timeout`,
-  the limit or the wall clock, the author's to fix too; `target_not_note_clip`;
-  `generator_unknown`.
+  ~~the limit or the wall clock~~ **the wall clock** — amended 2026-10-01, in M4 PR 4: the
+  child's `RLIMIT_CPU` is caught and crosses as a `Diagnostic`, because the wire has one
+  refusal arm and `core` names it `generator_error`, so the *limit* arrives as a
+  `generator_error` whose message carries the limit and the line, and `generator_timeout` is
+  what `core` says when nothing came back at all — the author's to fix too;
+  `target_not_note_clip`; `generator_unknown`.
 - **An operator error**, `Err`, ending a model's turn at the host: `generator_missing` (no
   `--generator`), `toolchain_mismatch` (ADR 0027 §2), and `generator_failed` — the child would
   not start, printed no socket line, or exited non-zero without answering, carrying the tail of
@@ -358,7 +420,13 @@ exposes one console script `core` can be told as its `--generator`.
 
 - **M4 PR 4** (`m4.4-generator`) creates `compilers/generative/`, the allowlist, the namespace,
   the seeded `rng`, the limits, the `Generate` server, its tests and its `checks` step. **No
-  `core` change**: it is a process a shell can drive.
+  `core` change**: it is a process a shell can drive. **Done 2026-10-01**, with four things
+  this ADR had wrong or unsaid, each amended above and dated: `/` cannot be `Fraction`'s job
+  and is out of the language (§3); the hash seed is the child's own, by re-exec, rather than
+  its spawner's (§4); the CPU limit crosses as a `Diagnostic` and so as `generator_error`,
+  leaving `generator_timeout` to the wall clock (§4, §7); and `note`'s ranges are refused by
+  the child, where the line number is, while the clip's bounds stay the validator's (§5). The
+  limits bind under `uv run`, measured. No external dependency was added.
 - **M4 PR 5** (`m4.5-compile-tools`) is `core`'s: `--generator`, the third child in
   `engine.rs`'s shape, the two tools ending in `Session::run` as every tool does, the refusals
   above, the hash, and the `generators` script — **the silent PR**: no existing golden moves, and
@@ -368,8 +436,9 @@ exposes one console script `core` can be told as its `--generator`.
   §3's tier table stops saying the generative compiler runs in `ai`.
 - `docs/plan.md`'s ledger gains a row for what a track target means, and trap 2 gains the
   measurement.
-- **What this rests on that is unmeasured**: the per-compile process cost (PR 5), and that the
-  `resource` limits bind under the launcher (PR 4, watched). What it does **not** claim:
+- **What this rests on that is unmeasured**: the per-compile process cost (PR 5). ~~and that
+  the `resource` limits bind under the launcher (PR 4, watched)~~ — **measured 2026-10-01, and
+  they do** (§4, amended). What it does **not** claim:
   platform-free bytes on a second platform — the arithmetic permits the claim and only a second
   platform running the `generators` golden makes it; until then it is Linux x86-64 like
   everything else.

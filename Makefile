@@ -177,6 +177,7 @@ check-core: schema/node_modules proto/node_modules
 	cd schema && uv run python -m unittest discover -s tests
 	cd schema && uv run python -m unittest discover -s ../proto/tests
 	cd ai && uv run python -m unittest discover -s tests
+	cd compilers/generative && uv run python -m unittest discover -s tests
 
 # `--features custom-protocol` for the reason `run` uses it: that is the binary that ships,
 # and it is the one that fails if `app/dist` is not there.

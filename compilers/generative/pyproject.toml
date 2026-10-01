@@ -1,0 +1,42 @@
+# The generative compiler: the Python DSL's sandbox, as a package of its own (ADR 0024 §8).
+#
+# `ai/`'s shape, one tier over — a `uv` project with its own lock and its own exact interpreter
+# patch, depending on the generated model and the generated service by path. It is a separate
+# project rather than a module of `ai/` because nothing connects them: `ai` serves a stream and
+# holds no session (ADR 0020 §1), an MCP client compiles with no `ai` running at all, and the
+# tier that talks to a model is not the tier that executes code (ADR 0024 §1).
+#
+# **`version` is the DSL's version**, and it is this number that reaches a project's
+# `lock.json` under `toolchains.generator.dsl` and a generator's `toolchain_version` — read
+# here by `importlib.metadata` and reported on every answer, so there is one copy of it and
+# the child is the thing that owns it (ADR 0027 §1). It starts at `1` and is bumped **by an
+# ADR, when the meaning of a construct or a name changes** — when a source that compiled
+# before would compile to different notes. An addition to the namespace moves no golden and
+# bumps nothing (ADR 0024 §3).
+[project]
+name = "escribass-generative"
+version = "1"
+description = "The generative compiler: a Python-subset DSL, compiled in a subprocess that serves one Compile and exits"
+license = "AGPL-3.0-only"
+requires-python = "==3.12.*"
+# Nothing from outside that `ai/` does not already pin (`lock.baseline.json` → `ai`): the
+# generated service imports `grpclib` at module scope and the generated model is betterproto2
+# with pydantic. M4 adds no external dependency, and this file is where that claim is checked.
+dependencies = [
+    "escribass-proto",
+    "escribass-schema",
+    "betterproto2[pydantic,grpclib]==0.10.0",
+    "grpclib==0.4.9",
+]
+
+# What `core` is told as its `--generator` (ADR 0024 §1).
+[project.scripts]
+escribass-generative = "escribass_generative:main"
+
+[tool.uv.sources]
+escribass-proto = { path = "../../proto", editable = true }
+escribass-schema = { path = "../../schema", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
