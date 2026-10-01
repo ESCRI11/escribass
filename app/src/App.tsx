@@ -48,8 +48,18 @@
 // project's is, with what differs dashed. Nothing of it is applied until a person presses one
 // of three buttons (ADR 0019 §3).
 //
+// **A generator is a view too (M4 PR 7).** The code view is CodeMirror over `Generator.source`,
+// and its buffer is a **draft**: the same kind of thing as the new-branch box, not a generator's
+// source until `apply_patch` says so. Save is that patch, proposed and applied like every other
+// control; Compile is one dry run of `compile_generator` on one click, never on a keystroke
+// (trap 8), and what comes back is the diff a compile would write, applied once. The status word
+// is the document's — `never` or `compiled`, off `compiled_hash`'s emptiness, which is the word
+// the model's bar view prints — until `core` answers a dry run, which is the only thing that can
+// say `stale`: the one hasher is `core`'s (ADR 0024 §6, trap 3). `code.tsx` has the rest.
+//
 // Nothing below is song state. `Gesture` is a call waiting to be made, `preview` and `transport`
-// are answers the tool API gave, and `chosen`, `device` and `branch` are names the user picked.
+// are answers the tool API gave, `draft` is text somebody is typing, and `chosen`, `device`,
+// `generator` and `branch` are names the user picked.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fromJson, toJson } from "@bufbuild/protobuf";
@@ -67,6 +77,10 @@ import { HEAD, ROW, Roll, Timeline } from "./canvas.js";
 import type { Moved } from "./canvas.js";
 import { patchLog } from "./history.js";
 import type { HistoryAnswer, Log } from "./history.js";
+import { diagnosticAt, generators, status } from "./generators.js";
+import type { Status } from "./generators.js";
+import { Code } from "./code.js";
+import type { Draft } from "./code.js";
 import { ask, assistant, build, panel, settle, tool } from "./tool.js";
 import type { Assisted } from "./tool.js";
 import { assistant as aiPanel, dashed, dashedNotes } from "./assistant.js";
@@ -209,9 +223,9 @@ function stated(error: string): string {
   return `${parts[1]}: ${own < 0 ? parts[2] : parts[2].slice(own + "escribass_engine: ".length)}`;
 }
 
-/** Which view the lower pane is showing. Four panes and a `<select>`-free switch, because
- *  four buttons are four buttons; a router arrives when there is something to route. */
-type Pane = "roll" | "mixer" | "params" | "history";
+/** Which view the lower pane is showing. Five panes and a `<select>`-free switch, because
+ *  five buttons are five buttons; a router arrives when there is something to route. */
+type Pane = "roll" | "mixer" | "params" | "code" | "history";
 
 export function App() {
   const [song, setSong] = useState<Song | null>(null);
@@ -233,6 +247,12 @@ export function App() {
   /** What is typed in the editor's search box. Not a projection and not an edit: 2855 rows is
    *  a list nobody can read, and narrowing it writes nothing. */
   const [filter, setFilter] = useState("");
+  /** Which generator the code view is open on. A name the user picked, like `chosen`. */
+  const [generator, setGenerator] = useState<string | null>(null);
+  /** What is typed in the code editor, and the document text it was taken from. Not a
+   *  generator's source until `apply_patch` says so — the new-branch box's kind of state, and
+   *  trap 7's whole subject. Only Save reads it; a compile is given an id (`code.tsx`). */
+  const [draft, setDraft] = useState<Draft | null>(null);
   /** The gesture in flight, or the one waiting for approval. */
   const [gesture, setGesture] = useState<Gesture | null>(null);
   /** The tool API's answer about it: the patch to approve, or why it is refused. */
@@ -362,6 +382,51 @@ export function App() {
   const editing = useMemo(
     () => (song && manifest && deviceId !== undefined ? editor(song, manifest, deviceId) : null),
     [song, manifest, deviceId],
+  );
+
+  // The code view's own projection, and the same shape as every other: generators in the
+  // model's order, with the source, the seed, the toolchain and whether `compiled_hash` is
+  // empty — and no status word, which is a tool's answer (ADR 0024 §6, `generators.ts`).
+  const code = useMemo(() => (song ? generators(song).generators : []), [song]);
+  // Derived, never stored, for the reason `openId` and `deviceId` are: a generator this branch
+  // does not have falls back to the first rather than leaving the editor pointed at one that
+  // is gone.
+  const opened =
+    generator !== null && code.some((held) => held.id === generator) ? generator : code[0]?.id;
+  const writing = code.find((held) => held.id === opened) ?? null;
+
+  // **`stale` is `core`'s word, and this is the one place the window hears it** (ADR 0024 §6):
+  // a dry run of `compile_generator` that answers with a patch means the inputs no longer hash
+  // to what the last compile recorded, and one that answers valid with no patch is *up to
+  // date*. Derived from the gesture in flight rather than stored, so it stands for exactly as
+  // long as the proposal it came from — Apply writes a fresh hash and the document says
+  // `compiled`, Discard takes the answer away with the diff.
+  const asked = gesture?.tool === "compile_generator" ? String(gesture.args.generator_id) : null;
+  const answered: Status | null =
+    asked !== null && asked === opened && preview !== null && preview.valid
+      ? (preview.patch?.length ?? 0) > 0
+        ? "stale"
+        : "compiled"
+      : null;
+  // `core`'s own words for a dry run it answered with nothing to apply. The only feedback a
+  // Compile on an up-to-date generator can give, since the status word does not move and no
+  // diff opens — see `code.tsx`.
+  const checked = answered === "compiled" && preview !== null ? preview.summary : null;
+  // The child's own `line:column` and words, put in the margin at the line it named — and only
+  // when the refusal is about *this* generator's source (`generators.ts`, `diagnosticAt`).
+  //
+  // **Memoised, and it is not an optimisation.** `code.tsx` puts the cursor on the line a
+  // refusal names, in an effect keyed on this value, so a fresh object every render is a cursor
+  // that jumps back on every keystroke: typing nine characters after a refused compile wrote
+  // them *backwards* into the position the child had named. Driven in the window on 2026-10-01
+  // and read off the screenshot. `preview` changes identity exactly when a new answer lands,
+  // which is exactly when the margin should move.
+  const diagnostic = useMemo(
+    () =>
+      asked !== null && asked === opened && preview !== null && !preview.valid
+        ? diagnosticAt(preview.errors)
+        : null,
+    [asked, opened, preview],
   );
 
   // Derived, never stored, for the reason `openId` is: a branch the log no longer has falls
@@ -643,6 +708,21 @@ export function App() {
   useEffect(() => {
     const pressed = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "z" || !(event.metaKey || event.ctrlKey)) return;
+      // **Not while somebody is typing.** ⌘Z in a text field undoes the typing, and this
+      // listener is on the window, so one keypress reached both: driven in the window on
+      // 2026-10-01, a ⌘Z inside the code editor undid the keystroke *and* reversed the last
+      // entry in the log, leaving the buffer and the document two different things with no
+      // way to tell which half had happened. The code view is where it bites, because
+      // CodeMirror brings its own history for the buffer (which is right — a draft is not in
+      // the log, §9), but the prompt box and the new-branch box have had the same hole since
+      // they existed and this closes all three: a text field's undo is the field's.
+      const where = event.target;
+      if (
+        where instanceof HTMLElement &&
+        (where.isContentEditable || where.tagName === "INPUT" || where.tagName === "TEXTAREA")
+      ) {
+        return;
+      }
       event.preventDefault();
       void direct(event.shiftKey ? "redo" : "undo");
     };
@@ -746,17 +826,23 @@ export function App() {
 
           <section className="detail">
             <div className="pane-head">
-              {/* Three buttons, not a router and not tabs from a library: what a tab strip is,
-                  for three panes, is three buttons and a piece of state (ADR 0016 §3). */}
+              {/* Buttons, not a router and not tabs from a library: what a tab strip is, for
+                  five panes, is five buttons and a piece of state (ADR 0016 §3). */}
               <span className="panes">
-                {(["roll", "mixer", "params", "history"] as const).map((name) => (
+                {(["roll", "mixer", "params", "code", "history"] as const).map((name) => (
                   <button
                     key={name}
                     className={pane === name ? "pane on" : "pane"}
                     onClick={() => setPane(name)}
                     aria-pressed={pane === name}
                   >
-                    {name === "params" ? "parameters" : name === "roll" ? "piano roll" : name}
+                    {name === "params"
+                      ? "parameters"
+                      : name === "roll"
+                        ? "piano roll"
+                        : name === "code"
+                          ? "generators"
+                          : name}
                   </button>
                 ))}
               </span>
@@ -821,6 +907,13 @@ export function App() {
                     {editing.declares} declared · {editing.set} set
                   </span>
                 </>
+              ) : null}
+
+              {pane === "code" ? (
+                <span className="dim">
+                  {code.length} generator{code.length === 1 ? "" : "s"} ·{" "}
+                  {code.filter((held) => held.compiled).length} compiled
+                </span>
               ) : null}
 
               {pane === "history" && log ? (
@@ -953,6 +1046,52 @@ export function App() {
                 }}
                 opened={deviceId}
               />
+            ) : pane === "code" ? (
+              writing ? (
+                <Code
+                  view={writing}
+                  openable={code}
+                  // The draft belongs to one generator: shown over its own source and never over
+                  // another's, which is what makes switching the `<select>` safe.
+                  draft={draft !== null && draft.id === writing.id ? draft : null}
+                  status={status(writing, answered)}
+                  checked={checked}
+                  said={diagnostic}
+                  onOpen={setGenerator}
+                  onDraft={setDraft}
+                  // One `apply_patch` on the source, proposed and then applied — the gesture
+                  // every other control in this window makes (ADR 0026 §2, ADR 0017 §4). `add`
+                  // rather than `replace` for `mixWrite`'s reason: on an existing object member
+                  // RFC 6902 `add` replaces, so one op covers both cases.
+                  onSave={() =>
+                    draft &&
+                    propose({
+                      tool: "apply_patch",
+                      args: {
+                        patch: [
+                          {
+                            op: "add",
+                            path: `/generators/${writing.id}/source`,
+                            value: draft.text,
+                          },
+                        ],
+                      },
+                    })
+                  }
+                  // One dry run, on one click, and never on a keystroke (trap 8). `core` hashes
+                  // the request first and answers *up to date* without spawning anything when it
+                  // matches what the last compile recorded (ADR 0024 §6).
+                  onCompile={() =>
+                    propose({ tool: "compile_generator", args: { generator_id: writing.id } })
+                  }
+                />
+              ) : (
+                <p className="empty">
+                  This song has no generators. A model defines one with `define_generator`; there
+                  is no button here that does, because a generator needs a target clip and a seed
+                  before it needs an editor.
+                </p>
+              )
             ) : editing ? (
               <Params
                 view={editing}
@@ -1037,7 +1176,9 @@ export function App() {
               ? "ride a fader"
               : pane === "params"
                 ? "set a parameter"
-                : "switch or merge a branch"}
+                : pane === "code"
+                  ? "edit a generator · save · compile"
+                  : "switch or merge a branch"}
         </span>
       </footer>
     </main>
