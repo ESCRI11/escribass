@@ -30,11 +30,11 @@ use crate::session::Session;
 use crate::{to_canonical_json, ProjectError};
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
-    AddTrackRequest, ApplyPatchRequest, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, MergeBranchRequest, MoveSectionRequest, PreviewResponse, QuantizeRequest,
-    RedoRequest, RenderExportRequest, RenderPreviewRequest, RenderResponse, SetNotesRequest,
-    SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult,
-    TransposeRequest, UndoRequest,
+    AddTrackRequest, ApplyPatchRequest, CompileGeneratorRequest, CreateBranchRequest,
+    DefineGeneratorRequest, DeleteBranchRequest, GetSongAtRequest, MergeBranchRequest,
+    MoveSectionRequest, PreviewResponse, QuantizeRequest, RedoRequest, RenderExportRequest,
+    RenderPreviewRequest, RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest,
+    SetTrackInstrumentRequest, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
 use serde_json::{json, Map, Value};
 
@@ -64,6 +64,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "set_tempo",
     "add_section",
     "move_section",
+    "define_generator",
+    "compile_generator",
     "undo",
     "redo",
     "create_branch",
@@ -72,12 +74,14 @@ pub const IMPLEMENTED: &[&str] = &[
     "merge_branch",
 ];
 
-/// The tools the **model** is offered (ADR 0022 §1) — twelve of [`IMPLEMENTED`]'s twenty-five,
+/// The tools the **model** is offered (ADR 0022 §1) — twelve of [`IMPLEMENTED`]'s twenty-seven,
 /// in its order, and data rather than a list written a second time in Python (M3 trap 11).
 ///
 /// Every one of them produces operations on the document and nothing else, and every one is
-/// executed against the proposal (ADR 0019 §1). Thirteen are withheld, each for a reason
-/// ADR 0022 §1 states: `get_song`, because a full document beside a summary is not trusted as
+/// executed against the proposal (ADR 0019 §1). Fifteen are withheld, each for a reason
+/// ADR 0022 §1 states — and the two newest of those, `define_generator` and
+/// `compile_generator`, are withheld only until **M4 PR 6**, which is where ADR 0026 §3's
+/// fourteen lands with the view line a model needs in order to know what there is to compile; `get_song`, because a full document beside a summary is not trusted as
 /// the summary (ADR 0018 §2); `get_song_at` and `get_history`, reads of the log a model acting
 /// on the document has no use for; `set_param`, by the user's decision (question 7);
 /// `add_asset`, which takes bytes the model does not have; `render_export`, which writes a file
@@ -320,6 +324,18 @@ pub fn call(
         "move_section" => {
             let request: MoveSectionRequest = decode("move_section", arguments)?;
             tool_answer(&session.move_section(&request).map_err(broken)?)
+        }
+        "define_generator" => {
+            let request: DefineGeneratorRequest = decode("define_generator", arguments)?;
+            tool_answer(&session.define_generator(&request).map_err(broken)?)
+        }
+        "compile_generator" => {
+            // A `ToolResult` like any other arm, and that is the point: a compile that fails
+            // for the author's reason is `valid = false` with the child's own text, so §6's
+            // retry loop can see it; a child that would not start, or a toolchain that does
+            // not match, leaves through `broken` and ends the turn (ADR 0026 §3).
+            let request: CompileGeneratorRequest = decode("compile_generator", arguments)?;
+            tool_answer(&session.compile_generator(&request).map_err(broken)?)
         }
         "undo" => {
             let request: UndoRequest = decode("undo", arguments)?;

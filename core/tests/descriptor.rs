@@ -30,12 +30,13 @@ fn every_rpc_in_the_service_becomes_a_tool() {
     // the point is that the descriptor and the service agree, so an RPC cannot be added
     // without appearing.
     //
-    // Twenty-seven from M4 PR 3, and **two of them are not in `IMPLEMENTED`**: the service
-    // declares `define_generator` and `compile_generator` a pull request before `Session` has
-    // them, so `buf breaking` sees `proto/`'s whole M4 shape once (docs/plan.md, M4 trap 4).
-    // That gap is the *contract's*, not a carrier's: MCP advertises `IMPLEMENTED` and so
-    // advertises twenty-five, which is `core/src/mcp.rs` refusing to hand a model a name that
-    // can only fail. PR 5 closes it from the other side.
+    // Twenty-seven from M4 PR 3, and all twenty-seven are in `IMPLEMENTED` from M4 PR 5.
+    // Between those two pull requests `define_generator` and `compile_generator` were declared
+    // and not dispatched — the service's whole M4 shape landed in one change so `buf breaking`
+    // saw it once (docs/plan.md, M4 trap 4) — and the gap was the *contract's* rather than a
+    // carrier's: MCP advertises `IMPLEMENTED`, so it advertised twenty-five and refused to
+    // hand a model a name that could only fail. It is closed; what is still a subset is
+    // `OFFERED`, which is ADR 0022 §1's and M4 PR 6's.
     let names = tool_names(DESCRIPTOR).unwrap();
     assert_eq!(names.len(), 27);
     for expected in ["apply_patch", "get_song", "get_song_at", "get_history", "merge_branch",

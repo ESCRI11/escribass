@@ -152,6 +152,18 @@ jobs:
         working-directory: ai
         run: uv sync --locked
 
+      # And the generative compiler's, **before** the Rust step rather than beside its own
+      # tests below, because from M4 PR 5 that step spawns this child too: the `generators`
+      # determinism script drives `escribass-mcp` with a `--generator`, and what it compiles
+      # with is this environment (ADR 0024 §8; M4 trap 5). `--locked` for the sidecar's
+      # reason, and it is also what the suite's staleness guard then has something to be
+      # newer than — a sync that was not run is a child reporting a version the project did
+      # not record, which is a golden passing on a stale sandbox.
+      - name: Install the generative compiler's environment
+        if: env.SKIP != '1'
+        working-directory: compilers/generative
+        run: uv sync --locked
+
       # 1/6 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
       # both generate Rust, TypeScript and Python (ADR 0006 §7, carried out). This step
       # compares bytes; whether `proto`'s Python *imports* is step 4's, which is a different
@@ -162,17 +174,21 @@ jobs:
           ./schema/codegen.sh --check
           ./proto/codegen.sh --check
 
-      # 2/6 — and the one place two tiers meet. `cargo test` is the workspace; the second
+      # 2/6 — and the one place three tiers meet. `cargo test` is the workspace; the second
       # line is M3 PR 8's end-to-end golden, behind the `ai` cargo feature because it needs
       # `uv` and a synced `ai/` and a test that noticed those were missing and returned would
-      # be the quiet skip M0.4 exists to prevent (ADR 0022 §4). It is a second invocation
-      # rather than `--features ai` on the first, because `cargo test -p escribass-tests`
-      # cannot build the binaries it drives — the line above is what builds them.
+      # be the quiet skip M0.4 exists to prevent (ADR 0022 §4); the third is M4 PR 5's
+      # `generators` script, behind its own feature for the same reason one tier over — it
+      # drives both server binaries with a `--generator` and every compile in it spawns a
+      # real Python child out of `compilers/generative/` (ADR 0024 §8). They are separate
+      # invocations rather than features on the first, because `cargo test -p escribass-tests`
+      # cannot build the binaries it drives — the first line is what builds them.
       - name: Rust
         if: env.SKIP != '1'
         run: |
           cargo test
           cargo test -p escribass-tests --features ai
+          cargo test -p escribass-tests --features generators
 
       # 3/6 — the model's round trip, and that the service's generated TypeScript compiles
       # against it. The second is not a formality: `proto/gen/ts` reaches the model through
@@ -222,9 +238,8 @@ jobs:
       # 6/6 — the generative compiler, in the pull request that creates it (ADR 0024 §8; M4
       # trap 6, which is M3 trap 17 one directory over: a path gate that let a directory's
       # changes through to a job with no step that ran its tests). Its own environment again,
-      # with its own lock and the same exact Python patch as the sidecar's (§17), synced
-      # `--locked` so a lock that disagrees with `pyproject.toml` fails here instead of being
-      # quietly re-resolved on a runner.
+      # with its own lock and the same exact Python patch as the sidecar's (§17) — synced
+      # above rather than here since M4 PR 5, because the Rust step now needs it too.
       #
       # What it runs is the compiler as a **real subprocess over a real socket** — the address
       # line, one `Compile`, a child that leaves on its own and leaves with a status — every
@@ -236,9 +251,7 @@ jobs:
       - name: The generative compiler
         if: env.SKIP != '1'
         working-directory: compilers/generative
-        run: |
-          uv sync --locked
-          uv run python -m unittest discover -s tests
+        run: uv run python -m unittest discover -s tests
 
       # song.proto has consumers from M0.2; a field renumbered by accident is a silent
       # wire break. Only meaningful against a different ref, so pull requests only.

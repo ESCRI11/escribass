@@ -717,10 +717,20 @@ impl Violations<'_> {
             if generator.kind == GeneratorKind::Unspecified as i32 {
                 self.add(format!("{at}/kind"), "enum_unspecified", "generator kind must be set");
             }
-            // §4.4: a non-null seed is structural (ADR 0002 §9), so only this remains.
-            if generator.toolchain_version.is_empty() {
+            // §4.4: a non-null seed is structural (ADR 0002 §9), so only this remains — and
+            // from M4 PR 5 it is a rule about the **pair**, narrowed by ADR 0027 §1.
+            //
+            // `toolchain_version` holds the DSL version the generator was last compiled
+            // under, written by `compile_generator` from what the child reported and by
+            // nothing else. A generator `define_generator` has just added has been compiled
+            // by nothing and has no version to state, so requiring one at definition would
+            // mean writing a placeholder that lies until the first compile overwrites it —
+            // which is the shape ADR 0027 exists to refuse. The honest rule is the one that
+            // fires when a generator claims to have been compiled and cannot say with what.
+            if !generator.compiled_hash.is_empty() && generator.toolchain_version.is_empty() {
                 self.add(format!("{at}/toolchain_version"), "toolchain_version_empty",
-                    "a generator records the toolchain version it was compiled with (§4.4)");
+                    "a generator that has been compiled records the toolchain version it was \
+                     compiled with (§4.4, narrowed by ADR 0027 §1)");
             }
             if generator.source.is_empty() {
                 self.add(format!("{at}/source"), "generator_source_empty", "a generator has source");

@@ -43,6 +43,19 @@ const SCRIPTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/determinism");
 /// §17's rule for golden renders arriving where it was always going to.
 const MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/manifest.json");
 
+/// The scripts any machine with a built workspace can drive.
+const SCRIPTED: [&str; 5] = ["every_tool", "refusals", "branches", "render", "undo"];
+
+/// The scripts that **compile**, and so need `core` told a `--generator` (ADR 0024 §1).
+///
+/// Separate from [`SCRIPTED`] because a compile spawns a real Python child out of
+/// `compilers/generative/`, which cargo cannot produce — so the tests that run these are
+/// behind the `generators` cargo feature, for `renders`' and `ai`'s reason: a `#[test]` that
+/// noticed there was no `uv` and returned would be the quiet skip this suite exists to
+/// prevent. `every_implemented_tool_is_scripted` still reads them, because reading a
+/// `script.json` needs no compiler and a tool that no script calls must fail everywhere.
+const COMPILES: [&str; 1] = ["generators"];
+
 // ---------------------------------------------------------------------------
 // Scripts
 // ---------------------------------------------------------------------------
@@ -80,6 +93,18 @@ struct Run {
     results: Vec<Value>,
 }
 
+/// The `--generator` flag, for the scripts that compile and for nothing else.
+///
+/// Reaching the staleness guard from here rather than from each test is deliberate: both
+/// transports and every repeat go through this one function, so there is no path on which a
+/// golden is compared against an environment from before the change (trap 5).
+fn telling_it_about_a_compiler(name: &str) -> Vec<String> {
+    if !COMPILES.contains(&name) {
+        return Vec::new();
+    }
+    vec!["--generator".to_string(), common::generator_command()]
+}
+
 fn run(name: &str, clock: &str) -> Run {
     let steps = script(name);
     let directory = Scratch::new("determinism", name);
@@ -102,21 +127,23 @@ fn run(name: &str, clock: &str) -> Run {
         }));
     }
 
+    let mut flags: Vec<String> = vec![
+        "--create".to_string(),
+        "--manifest".to_string(),
+        MANIFEST.to_string(),
+        "--seed-ids".to_string(),
+        format!("{AT}:1"),
+        "--fixed-clock".to_string(),
+        clock.to_string(),
+        "--author".to_string(),
+        // Passed rather than left to the binary's default: `escribass-grpc` defaults to
+        // `human` and `escribass-mcp` to `model`, so a cross-transport comparison would
+        // differ in every `provenance.author` if neither said which it wanted.
+        "model".to_string(),
+    ];
+    flags.extend(telling_it_about_a_compiler(name));
     let frames = speak(
-        &[
-            "--create",
-            "--manifest",
-            MANIFEST,
-            "--seed-ids",
-            &format!("{AT}:1"),
-            "--fixed-clock",
-            clock,
-            "--author",
-            // Passed rather than left to the binary's default: `escribass-grpc` defaults to
-            // `human` and `escribass-mcp` to `model`, so a cross-transport comparison would
-            // differ in every `provenance.author` if neither said which it wanted.
-            "model",
-        ],
+        &flags.iter().map(String::as_str).collect::<Vec<_>>(),
         &directory.0,
         &requests,
     );
@@ -493,7 +520,7 @@ fn every_project_reopens_in_a_fresh_process() {
     // ADR 0004's invariant, asserted through the binary: `Project::open` replays the log and
     // compares it with `song.json`, so a server that starts at all has agreed the two match.
     // A second process also proves the first left nothing in memory that the directory needs.
-    for name in ["every_tool", "refusals", "branches", "render", "undo"] {
+    for name in SCRIPTED {
         reopens(name);
     }
 }
@@ -626,6 +653,244 @@ fn the_plan_is_reproducible() {
     let second = run("render", AT);
     assert_same("the plan was not reproducible", &Snapshot::of(&first), &Snapshot::of(&second));
     assert_matches_golden("render", &first);
+}
+
+// ---------------------------------------------------------------------------
+// Compiling a generator, end to end (ADR 0024 §8)
+// ---------------------------------------------------------------------------
+//
+// Behind the `generators` cargo feature, for the `ai` module's reason and by the same
+// mechanism: every compile in the script spawns a real Python child out of
+// `compilers/generative/`, which needs `uv` and a synced environment cargo cannot produce.
+//
+//     cd compilers/generative && uv sync --locked
+//     cargo test -p escribass-tests --features generators
+//
+// What it drives is the **real** compiler through the **real** server binaries, over both
+// transports, which is the pairing neither half can check alone: `compilers/generative/`'s 43
+// tests know nothing about a document, and `core/tests/generator.rs` drives a shell script
+// beside a `Generate` server in its own process. Here a source in a document becomes notes in
+// a clip, a hash, a `toolchain_version`, a block in `lock.json` and an entry in the log —
+// twice, and against bytes committed earlier.
+#[cfg(feature = "generators")]
+mod through_the_sandbox {
+    use super::*;
+
+    #[test]
+    fn compiling_twice_is_the_same_bytes_and_the_ones_committed() {
+        // §11's three ways, on a tier CLAUDE.md #3 names for the first time since M0: two
+        // runs against each other catch a clock, a pid, a socket path or a temp directory
+        // reaching the recorded bytes — a compile spawns a process and every one of those is
+        // in reach — and the committed golden catches drift, which two runs in one job
+        // cannot, because both produce the same wrong bytes.
+        let first = run("generators", AT);
+        let second = run("generators", AT);
+        assert_same(
+            "the same script compiled to different projects",
+            &Snapshot::of(&first),
+            &Snapshot::of(&second),
+        );
+        assert_matches_golden("generators", &first);
+    }
+
+    #[test]
+    fn the_two_transports_compile_the_same_way() {
+        // M0.3's review found MCP's hand-decoded `apply_patch` reading `"dry_run": "true"` as
+        // false and applying; the two tools added here are decoded by the generated
+        // deserializer on both sides, and this is what says so rather than assuming it. A
+        // compile is the first tool whose answer depends on a *child process*, so it is also
+        // the first place a transport could differ by starting one differently.
+        let over_mcp = run("generators", AT);
+        let over_grpc = run_over_grpc("generators", AT);
+        assert_same(
+            "`generators` came out differently over the two transports",
+            &Snapshot::of(&over_mcp),
+            &Snapshot::of(&over_grpc),
+        );
+    }
+
+    #[test]
+    fn a_compiled_project_reopens_in_a_fresh_process() {
+        // ADR 0004's invariant on a project a compiler wrote, and ADR 0027 §2's: a second
+        // process opens it with a `toolchains` block in its `lock.json`, compares **nothing**
+        // in that block, and agrees that `song.json` is a replay of the log. A project with a
+        // generator opens on a machine with no compiler, which is what makes the compiled
+        // notes layer 2 rather than a dependency of opening at all.
+        reopens("generators");
+    }
+
+    #[test]
+    fn what_the_generators_golden_covers_that_a_single_compile_would_not() {
+        // Named claims, read off the committed golden rather than off a fresh run, so the
+        // golden cannot quietly stop covering them (docs/plan.md, M3 trap 1).
+        let committed = Snapshot::read("generators");
+        let answers: Vec<Value> = serde_json::from_slice::<Value>(
+            committed.0.get("responses.json").expect("the golden has responses.json"),
+        )
+        .expect("responses.json is JSON")
+        .as_array()
+        .expect("an array")
+        .clone();
+        let steps = script("generators");
+        let at = |tool: &str, nth: usize| -> Value {
+            answers
+                .iter()
+                .zip(&steps)
+                .filter(|(_, step)| step.tool == tool)
+                .map(|(answer, _)| answer.clone())
+                .nth(nth)
+                .unwrap_or_else(|| panic!("no {nth}th `{tool}` in the golden"))
+        };
+
+        // 1. **A dry run and the apply that follows it write the same patch**, note ids
+        //    included — which is what a person approving a diff is promised (ADR 0006 §3).
+        assert_eq!(at("compile_generator", 0)["patch"], at("compile_generator", 1)["patch"]);
+        assert_eq!(at("compile_generator", 0)["entry_id"], json!(""), "a dry run recorded an entry");
+        assert_ne!(at("compile_generator", 1)["entry_id"], json!(""), "the apply recorded none");
+
+        // 2. **Up to date spawns nothing and says nothing changed** (ADR 0024 §6).
+        assert_eq!(at("compile_generator", 2)["summary"], json!("up to date"));
+        assert_eq!(at("compile_generator", 2)["patch"], Value::Null);
+
+        // 3. **Editing the source stales it**, and the next dry run has a diff again — the
+        //    whole of what the code view's three words are read off.
+        assert_ne!(at("compile_generator", 3)["patch"], Value::Null);
+
+        // 4. **The notes are the DSL's**, produced by the pinned interpreter from a seed above
+        //    2⁵³: fourteen from the worked example, six after the hats are deleted.
+        let notes = |answer: Value| {
+            answer["patch"]
+                .as_array()
+                .expect("a patch")
+                .iter()
+                .filter(|op| {
+                    op["path"].as_str().unwrap_or_default().contains("/note_clip/notes/")
+                        && op["op"] == json!("add")
+                })
+                .count()
+        };
+        assert_eq!(
+            notes(at("compile_generator", 1)),
+            14,
+            "the worked example compiles to fourteen notes"
+        );
+        assert_eq!(notes(at("compile_generator", 4)), 6, "and six once the hats are deleted");
+
+        // 5. **A generator that emits nothing writes its hash and no notes** — zero notes is
+        //    an answer, and a different one from no answer at all (`proto/generate.proto`).
+        let empty = at("compile_generator", 5);
+        assert_eq!(notes(empty.clone()), 0);
+        assert!(
+            empty["patch"]
+                .as_array()
+                .expect("a patch")
+                .iter()
+                .any(|op| op["path"].as_str().unwrap_or_default().ends_with("compiled_hash")),
+            "{empty:?}"
+        );
+
+        // 6. **Each of the three refusals the script can reach**, with nothing written.
+        for (nth, rule) in [(6, "target_not_note_clip"), (7, "generator_error"), (8, "generator_unknown")] {
+            let refused = at("compile_generator", nth);
+            assert_eq!(refused["valid"], json!(false), "{rule}");
+            let rules: Vec<&str> = refused["errors"]
+                .as_array()
+                .expect("errors")
+                .iter()
+                .filter_map(|e| e["rule"].as_str())
+                .collect();
+            assert_eq!(rules, vec![rule]);
+        }
+        // The diagnostic is the child's own words with its line in front of them, which is
+        // what a person reads and what a model retries against (ADR 0026 §3, Plate 3).
+        let said = at("compile_generator", 7)["errors"][0]["message"]
+            .as_str()
+            .expect("a message")
+            .to_string();
+        assert!(said.starts_with("1:1: "), "it names where: {said}");
+        assert!(said.contains("Import"), "it names what: {said}");
+
+        // 7. **`lock.json` carries the block**, with the version the child stated and the
+        //    interpreter §17 pins — the one place in this repository where that string is
+        //    compared by byte (ADR 0027 §1, its unmeasured half).
+        let lock: Value = serde_json::from_slice(committed.0.get("lock.json").expect("lock.json"))
+            .expect("lock.json is JSON");
+        assert_eq!(lock["toolchains"], json!({"generator": {"dsl": "1", "python": "3.12.12"}}));
+
+        // 8. **Every compiled note is `core`'s**: a ULID from the seeded source and the
+        //    session's own provenance, because the sandbox returns §4.3 blank (trap 9).
+        let song: Value = serde_json::from_slice(committed.0.get("song.json").expect("song.json"))
+            .expect("song.json is JSON");
+        let compiled = song["clips"]["01M1FPMP000000000000000009"]["note_clip"]["notes"]
+            .as_object()
+            .expect("the compiled clip");
+        assert_eq!(compiled.len(), 6);
+        for (id, note) in compiled {
+            assert_eq!(id.len(), 26, "that is not a ULID: {id}");
+            assert_eq!(note["id"], json!(id));
+            assert_eq!(note["provenance"]["author"], json!("AUTHOR_MODEL"));
+            assert_eq!(note["provenance"]["created_at"], json!("2026-09-02T00:00:00+00:00"));
+        }
+    }
+
+    #[test]
+    fn a_runaway_generator_is_a_generator_error_and_not_the_wall_clock() {
+        // ADR 0024 §4 and §7, as amended in M4 PR 4, asserted against the **real** child and
+        // through the real server: a loop that cannot end reaches the child's own
+        // `RLIMIT_CPU`, which it catches and answers as an ordinary diagnostic — so it comes
+        // back as `generator_error` naming the line it was on, and never as
+        // `generator_timeout`, which is the wall clock's alone. Outside the golden, because
+        // `--cpu-seconds 1` is a different command from the one the script runs under and the
+        // measurement is a second or two.
+        let directory = Scratch::new("determinism", "runaway");
+        let source = "x = 0\nwhile True:\n    x = x + 1\n";
+        let requests = vec![
+            json!({
+                "jsonrpc": "2.0", "id": 0, "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                           "clientInfo": {"name": "escribass-tests", "version": "1"}}
+            }),
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                "name": "add_track",
+                "arguments": {"name": "T", "kind": "TRACK_KIND_INSTRUMENT", "ref": {"plugin": {
+                    "plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}}}}),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "add_clip",
+                "arguments": {"track_id": "01M1FPMP000000000000000006",
+                              "start_tick": 0, "length_ticks": 3840}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                "name": "define_generator",
+                "arguments": {"kind": "GENERATOR_KIND_PYTHON", "seed": "7", "source": source,
+                              "clip_id": "01M1FPMP000000000000000009"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+                "name": "compile_generator",
+                "arguments": {"generator_id": "01M1FPMP00000000000000000B"}}}),
+        ];
+        let frames = speak(
+            &[
+                "--create", "--manifest", MANIFEST,
+                "--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT, "--author", "model",
+                "--generator", &format!("{} --cpu-seconds 1", common::generator_command()),
+            ],
+            &directory.0,
+            &requests,
+        );
+        let answer = frames.iter().find(|f| f["id"] == json!(4)).expect("an answer");
+        let content = &answer["result"]["structuredContent"];
+        assert_eq!(content["valid"], json!(false), "a loop that cannot end was not refused");
+        assert_eq!(content["errors"][0]["rule"], json!("generator_error"),
+            "the CPU limit is not the wall clock (ADR 0024 §7)");
+        let said = content["errors"][0]["message"].as_str().expect("a message");
+        assert!(said.contains("CPU limit"), "{said}");
+        // Which of the loop's two lines the signal lands on is the scheduler's to decide, and
+        // that it lands on one of them is the claim: a limit that reported line 0 would be
+        // the diagnostic Plate 3 complains about.
+        assert!(
+            said.starts_with("2:") || said.starts_with("3:"),
+            "it names the line the generator was on: {said}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1424,6 +1689,10 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
             "--listen",
             &address,
         ])
+        // The same command the other transport is told, from the same guarded helper: a
+        // cross-transport comparison in which one side compiled with a different child would
+        // compare two different claims (ADR 0006: a transport decides nothing).
+        .args(telling_it_about_a_compiler(name))
         .arg(&directory.0)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1535,6 +1804,8 @@ fn run_over_grpc(name: &str, clock: &str) -> Run {
                 "set_tempo" => set_tempo: SetTempoRequest,
                 "add_section" => add_section: AddSectionRequest,
                 "move_section" => move_section: MoveSectionRequest,
+                "define_generator" => define_generator: DefineGeneratorRequest,
+                "compile_generator" => compile_generator: CompileGeneratorRequest,
                 "undo" => undo: UndoRequest,
                 "redo" => redo: RedoRequest,
                 "create_branch" => create_branch: CreateBranchRequest,
@@ -1654,7 +1925,7 @@ fn the_two_transports_answer_the_same_way() {
     // transport reshapes, reclassifies or quietly drops something on the way out. That is not
     // hypothetical: MCP's `get_history` once lost `provenance`, and its hand-decoded
     // `apply_patch` once read `"dry_run": "true"` as false and applied.
-    for name in ["every_tool", "refusals", "branches", "render", "undo"] {
+    for name in SCRIPTED {
         let over_mcp = run(name, AT);
         let over_grpc = run_over_grpc(name, AT);
         assert_same(
@@ -1801,8 +2072,9 @@ fn every_implemented_tool_is_scripted() {
     // The `call!` macro panics on a tool it does not know, but only if a script calls one — so
     // an RPC could be implemented, advertised, and never exercised here. This is what makes
     // `tests/AGENTS.md`'s "add it to a script" a rule rather than a suggestion.
-    let steps: Vec<Step> = ["every_tool", "refusals", "branches", "render", "undo"]
+    let steps: Vec<Step> = SCRIPTED
         .iter()
+        .chain(COMPILES.iter())
         .flat_map(|name| script(name))
         .collect();
     let this_file = include_str!("determinism.rs");
@@ -1975,6 +2247,59 @@ fn the_checks_job_runs_for_every_tier_it_has_a_step_for() {
             "`{file}` changed and the checks job skipped, so the step that tests it never ran"
         );
     }
+}
+
+#[test]
+fn the_staleness_guard_walks_the_sandboxs_sources_too() {
+    // **Trap 5**, which is M1 PR 13's hole one child over. The `generators` golden is
+    // produced by a Python process out of `compilers/generative/`, and a `uv sync` that was
+    // not run passes every byte of it: the child reports the version its *installed*
+    // metadata says, so a `pyproject.toml` bumped to `2` and not synced still answers `1`,
+    // matches the golden's `lock.json`, and the suite calls it green.
+    //
+    // Checked here rather than inside the feature-gated module because it needs no `uv`: the
+    // question is whether the guard's roots reach the three files, and a stub dated 1970 is
+    // older than all of them. The guard itself is `common::generator_command`'s, so every
+    // run of the script on either transport goes through it.
+    let dir = Scratch::new("determinism", "sandbox-staleness");
+    std::fs::create_dir_all(&dir.0).expect("a scratch directory");
+    let pretend = dir.0.join("RECORD");
+    std::fs::write(&pretend, b"an environment synced before the last edit").expect("a stub");
+    std::fs::File::options()
+        .write(true)
+        .open(&pretend)
+        .expect("the stub opens")
+        .set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::UNIX_EPOCH))
+        .expect("a modification time can be set");
+
+    let roots = common::generator_sources();
+    // A root that is not there cannot be newer than anything, so a list of three paths that
+    // have been renamed would make the guard pass silently — which is the shape of the hole
+    // it exists to close.
+    for root in &roots {
+        assert!(root.exists(), "`{}` is a staleness root and is not there", root.display());
+    }
+    let refused = std::panic::catch_unwind(|| {
+        refuse_if_older_than_source(
+            "the generative compiler's environment",
+            &pretend,
+            &roots,
+            "run `uv sync --locked`",
+        )
+    })
+    .expect_err("an environment synced in 1970 is older than every source it was built from");
+    let message = refused
+        .downcast_ref::<String>()
+        .cloned()
+        .unwrap_or_else(|| refused.downcast_ref::<&str>().map(|s| s.to_string()).unwrap_or_default());
+    let named = message
+        .split_once("is older than ")
+        .and_then(|(_, rest)| rest.split_once(".\n"))
+        .map(|(path, _)| common::workspace().join(path));
+    assert!(
+        named.is_some_and(|path| roots.contains(&path)),
+        "the guard must name the source it is older than, and said: {message}"
+    );
 }
 
 #[test]

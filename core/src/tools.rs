@@ -23,15 +23,15 @@ use crate::patch::Op;
 use crate::validate::Violation;
 use escribass_proto::tools::add_clip_request::Content as AddClipContent;
 use escribass_proto::tools::{
-    AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
-    AddTrackRequest, CreateBranchRequest, DeleteBranchRequest, MoveSectionRequest,
-    QuantizeRequest, SetNotesRequest, SetParamRequest, SetTempoRequest,
-    SetTrackInstrumentRequest, SwitchBranchRequest, TransposeRequest,
+    define_generator_request, AddAutomationRequest, AddClipRequest, AddEffectRequest,
+    AddSectionRequest, AddTrackRequest, CreateBranchRequest, DefineGeneratorRequest,
+    DeleteBranchRequest, MoveSectionRequest, QuantizeRequest, SetNotesRequest, SetParamRequest,
+    SetTempoRequest, SetTrackInstrumentRequest, SwitchBranchRequest, TransposeRequest,
 };
 use escribass_schema::song::clip::Content;
 use escribass_schema::song::{
-    Author, Automation, AutomationPoint, Clip, Effect, Instrument, Mix, Note, NoteClip,
-    Provenance, Routing, Section, Song, TempoEvent, Track, TrackKind,
+    generator, Author, Automation, AutomationPoint, Clip, Effect, Generator, Instrument, Mix,
+    Note, NoteClip, Provenance, Routing, Section, Song, TempoEvent, Track, TrackKind,
 };
 use serde_json::{json, Value};
 
@@ -597,6 +597,115 @@ pub fn add_section(
         end_tick: request.end_tick,
     };
     Ok(vec![add(format!("/sections/{id}"), entity_value("/name", &section)?)])
+}
+
+// ---------------------------------------------------------------------------
+// Generators (§7.1, ADR 0026 §2)
+// ---------------------------------------------------------------------------
+
+/// §5 `define_generator`: adds a `Generator` and **compiles nothing** (ADR 0026 §2).
+///
+/// `toolchain_version` and `compiled_hash` are written empty, and that is the honest value
+/// rather than a placeholder: this generator has been compiled by nothing, the first compile
+/// writes both from what the child reported (ADR 0027 §1), and §4.4's non-empty rule is on
+/// the pair rather than on the field. A string that lies until a compile overwrites it is the
+/// shape ADR 0027 exists to refuse.
+///
+/// What is checked here is only what the validator structurally cannot: that the target names
+/// something in *this* song, so a caller learns it at `/track_id` or `/clip_id` rather than at
+/// the entity the call was about to mint. An unset target falls through to `oneof_unset`,
+/// which is the validator's and reads the same either way.
+pub fn define_generator(
+    song: &Song,
+    request: &DefineGeneratorRequest,
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let target = match &request.target {
+        Some(define_generator_request::Target::TrackId(id)) => {
+            if !song.tracks.contains_key(id) {
+                return Err(refuse(
+                    "/track_id",
+                    "track_unknown",
+                    format!("`{id}` is not a track in this song"),
+                ));
+            }
+            Some(generator::Target::TrackId(id.clone()))
+        }
+        Some(define_generator_request::Target::ClipId(id)) => {
+            if !song.clips.contains_key(id) {
+                return Err(refuse(
+                    "/clip_id",
+                    "clip_unknown",
+                    format!("`{id}` is not a clip in this song"),
+                ));
+            }
+            Some(generator::Target::ClipId(id.clone()))
+        }
+        None => None,
+    };
+
+    let id = ids.next_id();
+    let generator = Generator {
+        id: id.clone(),
+        provenance: Some(provenance(author, clock)),
+        version: 0,
+        kind: request.kind,
+        source: request.source.clone(),
+        seed: request.seed,
+        toolchain_version: String::new(),
+        target,
+        params: request.params.clone(),
+        compiled_hash: String::new(),
+    };
+    Ok(vec![add(format!("/generators/{id}"), entity_value("/kind", &generator)?)])
+}
+
+/// §5 `compile_generator`, once the sandbox has answered: the target clip's notes replaced
+/// whole, and the two fields the compile writes on the generator (ADR 0024 §5).
+///
+/// **Three operations, one entry.** `set_notes` semantics over the whole clip, because a
+/// compile is the generator's output and not an edit to it; `compiled_hash`, so the next
+/// reader can tell *stale* from *compiled*; and `toolchain_version`, so the generator records
+/// what compiled it. A hand edit to the notes afterwards is allowed and is the log's to show,
+/// not the hash's — *stale* describes the source's inputs, never the notes (§2.4).
+///
+/// Note ids are minted **here**, from `core`'s injectable source (ADR 0001 §5), and never by
+/// the sandbox, which returns §4.3 blank: that is what makes `--seed-ids` a pure function of
+/// the script and the `generators` golden reproducible (docs/plan.md, M4 trap 9). Every note
+/// is new on every compile, because the clip's notes are replaced whole — nothing references
+/// a note id today, and the day something does, this is where it breaks.
+pub fn compile_generator(
+    clip_id: &str,
+    generator_id: &str,
+    compiled_hash: &str,
+    toolchain_version: &str,
+    compiled: &[Note],
+    ids: &mut dyn IdSource,
+    clock: &dyn Clock,
+    author: Author,
+) -> Result<Vec<Op>, Vec<Violation>> {
+    let mut notes = std::collections::BTreeMap::new();
+    for note in compiled {
+        let id = ids.next_id();
+        notes.insert(
+            id.clone(),
+            Note {
+                id,
+                provenance: Some(provenance(author, clock)),
+                version: 0,
+                ..note.clone()
+            },
+        );
+    }
+    Ok(vec![
+        // The map itself, not a `NoteClip` around it: the path already names the field, as
+        // `set_notes` names it.
+        add(format!("/clips/{clip_id}/note_clip/notes"), entity_value("/notes", &notes)?),
+        add(format!("/generators/{generator_id}/compiled_hash"), json!(compiled_hash)),
+        add(format!("/generators/{generator_id}/toolchain_version"), json!(toolchain_version)),
+    ])
 }
 
 /// §5 `move_section`.

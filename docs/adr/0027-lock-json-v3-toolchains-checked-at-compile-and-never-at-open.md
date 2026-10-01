@@ -57,6 +57,16 @@ script compiles, so none gains one, and M4 PR 5's `generators` script is the fir
 carries it. **Never rewritten by a tool and never removed** (ADR 0010 §2): re-pinning is
 editing the text, as it is for a plugin.
 
+**"That commits" is narrower than it reads, noted 2026-10-01 in M4 PR 5.** A compile made
+*inside a proposal* writes nothing: its ops stay on the fork and reach the log only as the one
+patch a person applies (ADR 0019 §1). So such a compile writes `Generator.toolchain_version`,
+because that is in the patch, and does **not** write this block — the next compile on the
+session does. The two cannot then contradict each other, because decision 2 compares the
+generator's own version as well as the block, and a project with no block still has that
+comparison; the only cost is that a project whose compiles have all been a model's is unpinned
+until a person compiles once. Unreachable until M4 PR 6 offers `compile_generator` to the
+model (ADR 0026 §3), named here so PR 6 decides it deliberately rather than meeting it.
+
 **`schema_version` stays 1.** It is the *document's* schema version, which ADR 0025 §1 keeps at
 1; "v2" and "v3" are names for the file's shape in prose, as ADR 0010 §1's "v2" was, and
 nothing reads them. `Lock` keeps `deny_unknown_fields`, so a `core` from before M4 opening a
@@ -163,7 +173,11 @@ and the file is byte-identical to `main`'s (ADR 0023 §4 says the same of M5's s
   `compile_generator` writes it and `Generator.toolchain_version` from the child's answer;
   `toolchain_mismatch` before anything is written; the `generators` determinism script and its
   golden, which is the first `lock.json` in `tests/` with the block. **No existing golden
-  moves**, and any byte that does is named.
+  moves**, and any byte that does is named. **Done 2026-10-01**, and none did: the block is
+  `skip_serializing_if` as the `ai` block is, so the five determinism goldens' `lock.json`
+  files are byte-identical to `main`'s. §4.4's rule is narrowed in `core/src/validate.rs` and
+  the narrowing is load-bearing rather than tidy — without it `define_generator` could not add
+  a generator at all, since one it has just added carries both fields empty.
 - **M4 PR 4** (`m4.4-generator`): `compilers/generative/pyproject.toml`'s `version` is `1`, and
   the child reports it and `sys.version_info` on every `CompileResponse`.
 - §10's description of `lock.json` gains the block; §11's third bullet gains the sentence that a
@@ -175,4 +189,6 @@ and the file is byte-identical to `main`'s (ADR 0023 §4 says the same of M5's s
 - **What this rests on that is unmeasured**: that CPython 3.12.12 under `uv` is what the child
   reports as `python_version` on every machine the pin is installed on — a `uv`-managed
   interpreter should make it so, and the `generators` golden is the check, since its `lock.json`
-  carries the string.
+  carries the string. **The check exists from 2026-10-01** and has passed on one machine; it
+  becomes a measurement the first time CI runs it, and a claim about a second platform only
+  when there is one (ADR 0009 §1).

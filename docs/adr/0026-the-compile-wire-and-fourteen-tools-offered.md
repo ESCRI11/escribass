@@ -82,6 +82,15 @@ message Diagnostic {
 }
 ```
 
+**Amended 2026-10-01, in M4 PR 5, where "ties by name" turned out to be true of one of the
+three.** `Section` has a `name` and its ties break by it. `TempoEvent` and
+`TimeSignatureEvent` have none: they are keyed maps, so they iterate in id order, and a stable
+sort by `tick` leaves a tie in that order — which is exactly what `core/src/render.rs` already
+does for a plan's tempo list ("Tick order; ties by id"), and a second rule for the same data one
+message over would be the thing that stops agreeing. A valid song has no tie in either map
+anyway, since `set_tempo` upserts by tick; the ids are blanked after the sort, so nothing a
+reader of the hashed JSON can see depends on which rule it was.
+
 Three things the shape decides. **`toolchain_version` does not cross**: the child states its
 own version in every response, `core` compares it against the document's and the lock's (ADR
 0027 §2), and the request stays exactly the set of things a compile reads — which is what lets
@@ -241,6 +250,12 @@ same change as the service, as ADR 0020 §3 did for `Assistant`.
   (trap 4) — locally against `main`, until U2 takes effect. The generated Python server is what
   `compilers/generative` implements, so `proto/tests/test_generated_python.py`'s identity check
   already covers it.
+- **M4 PR 5** (`m4.5-compile-tools`) implements §2's two tools in `core`, over both
+  transports, and leaves §3 alone. **Noted 2026-10-01, because the gap is visible from the
+  outside**: `IMPLEMENTED` gains two and `OFFERED` gains none, so from PR 5 until PR 6 the
+  model is offered twelve of **twenty-seven** rather than of twenty-five — and a compile *on a
+  proposal* is unreachable, because the one gate on a proposal's calls is `OFFERED` (ADR 0019
+  §1). The fork carries the sandbox it will need; the single line PR 6 changes is the list.
 - **M4 PR 6** (`m4.6-model`): `OFFERED` and its subset test, the view's generator line and its
   golden, a compile diagnostic fed back as a refusal and counted — watched failing first — and a
   hand-written transcript in which the model defines and compiles.

@@ -2,9 +2,10 @@
 
 - **Status:** Accepted (2026-09-25)
 - **Affects:** `compilers/generative/` (new, under §13's existing line; M4 PR 4);
-  `core/src/session.rs` and `core/src/engine.rs` (a third child, M4 PR 5); `core/src/bin/*`
+  `core/src/session.rs` and `core/src/generator.rs` (a third child, M4 PR 5 — its own module
+  beside `engine.rs`, whose `listening`, `ended` and `tail` it reuses); `core/src/bin/*`
   (`--generator`); `docs/specs.md` §7.1 and §3; `tests/determinism/generators/` (M4 PR 5);
-  `.github/workflows/checks.yml` (M4 PR 4)
+  `.github/workflows/checks.yml` (M4 PR 4 and PR 5)
 - **Builds on:** ADR 0008 §1 (stdout carries the protocol and nothing else; failure is an exit
   code) and §2 (a fresh process per call, and why); ADR 0013 §3 (the child names its socket and
   prints `unix:<path>` once it is listening; the verdict is the child's exit status); ADR 0020
@@ -67,10 +68,14 @@ the status the moment the child is gone, and this child is short-lived so `Previ
 open gap does not recur. The child is told **nothing about the project**: no path, no
 `lock.json`, no `song.json`; it is handed what it compiles (ADR 0026 §1) and hands back notes.
 
-What the process costs per compile is **unmeasured** here — a CPython start under `uv run` is
-tens to a few hundred milliseconds — and is measured in M4 PR 5 rather than assumed, because
-trap 8 (a dry run that spawns a process per keystroke) is real only if it is felt. The rule that
-makes it not matter is decision 5's: one compile per click, never per keystroke.
+~~What the process costs per compile is **unmeasured** here~~ — **measured 2026-10-01, in M4
+PR 5, and it is 280–370 ms** for a one-note compile driven end to end through `escribass-mcp`
+on this machine. The child alone, from spawn to the socket line, is a median **242 ms** through
+the console script and **366 ms** through `uv run --no-sync`, so the launcher is about 120 ms of
+it; a thousand notes add about 80 ms and ten thousand take the whole call to 1.0 s. A third of a
+second is nothing per click and would be unusable per keystroke, which is trap 8 felt rather
+than argued, and the rule that makes it not matter is decision 5's: one compile per click,
+never per keystroke.
 
 ### 2. The transport is gRPC over a socket the child names, one `Compile` call, exit
 
@@ -87,6 +92,13 @@ response has left. It also stops when its **stdin closes**, which is the net for
 died before it called, or that called and crashed: a child that outlives its purpose is tidied
 by the host letting go, as `ai`'s is (ADR 0020 §5). So `core` may let go of the child without
 waiting, and must not start it with stdin already closed and then expect it to wait.
+**Sharpened 2026-10-01, in M4 PR 5, where the sentence above turned out to have a sharp
+edge**: the engine is spawned with `Stdio::null()` (ADR 0008 §2's reason — nothing arrives that
+way and an inherited stdin would compete with the MCP server for it), and `/dev/null` is
+*already at end of file*. A child started that way stops serving before it is dialled. So this
+child's stdin is a **pipe `core` holds open for the length of the call** and drops on every
+path out of it, which is `ai`'s shape rather than the engine's (ADR 0020 §4) and is named here
+because "spawn it the way the engine is spawned" is the obvious wrong move.
 
 gRPC rather than stdio or argv-and-files because the client exists on both sides — `tonic` in
 `core`, `grpclib` in the Python the pinned `betterproto2-compiler` generates a server for (ADR
@@ -233,6 +245,16 @@ one interpreter start, with no launcher in the way; the memory limit refused a l
 eight megabytes a turn in **0.28 s** at `--memory-mb 300`. `core` may be told either command.
 The limits are the child's own `setrlimit` on itself, so what the measurement actually rules
 out is a launcher that re-execs in front of the interpreter — and `uv` does not.
+
+**The third number, `core`'s, added 2026-10-01 in M4 PR 5.** The wall clock this decision asks
+`core` to impose is **a minute**, and it is a field on the sandbox rather than only a constant.
+A minute because it has to sit above everything the child's own limits allow — five CPU seconds
+soft, five more before the hard one, plus an interpreter start, measured at 6.05 s on the
+default budget — and a wall clock below that would turn the child's own diagnostic into
+`generator_timeout` and lose the line number with it. A field because a bound nothing has ever
+been seen to fire is a bound nobody should believe (trap 1): the test that watches a sandbox
+which never answers shrinks it to 400 ms, and with the bound removed that test does not fail,
+it **hangs**, which is the defect's own shape.
 
 **The two numbers, and where the budget starts.** `CPU_SECONDS` is 5 and `MEMORY_MB` is 512,
 both flags as well as defaults, so a test can watch a loop refused by each without waiting out
@@ -431,12 +453,21 @@ exposes one console script `core` can be told as its `--generator`.
   `engine.rs`'s shape, the two tools ending in `Session::run` as every tool does, the refusals
   above, the hash, and the `generators` script — **the silent PR**: no existing golden moves, and
   any byte that does is named. It measures the process cost per compile and writes it into the
-  plan.
+  plan. **Done 2026-10-01**, and no existing golden moved: the five determinism goldens, the
+  four render WAVs and `app/tests/projection.golden.json` are byte-identical to `main`'s, and
+  `tests/determinism/generators/expected/` is the only new bytes. Three things this ADR had
+  unsaid, each amended above and dated: the per-compile cost is 280–370 ms (§1); the child's
+  stdin is a pipe `core` holds and emphatically not `Stdio::null()` (§2); and the wall clock is
+  a minute and is a field, so a test can watch it fire (§4). The type `core` spawns it with is
+  called `Sandbox` and not `Generator`, because `escribass_schema::song::Generator` is the
+  document's entity and the flag and every rule id keep saying `generator`. No external
+  dependency was added and no paid call was made.
 - §7.1 is rewritten: the subprocess is `core`'s, the DSL is this subset, "sandbox" means this;
   §3's tier table stops saying the generative compiler runs in `ai`.
 - `docs/plan.md`'s ledger gains a row for what a track target means, and trap 2 gains the
   measurement.
-- **What this rests on that is unmeasured**: the per-compile process cost (PR 5). ~~and that
+- **What this rests on that is unmeasured**: ~~the per-compile process cost (PR 5)~~ —
+  **measured 2026-10-01** (§1, amended) — ~~and that
   the `resource` limits bind under the launcher (PR 4, watched)~~ — **measured 2026-10-01, and
   they do** (§4, amended). What it does **not** claim:
   platform-free bytes on a second platform — the arithmetic permits the claim and only a second

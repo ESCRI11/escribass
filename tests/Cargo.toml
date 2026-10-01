@@ -39,6 +39,16 @@ renders = []
 #     cd ai && uv sync --locked
 #     cargo test -p escribass-tests --features ai
 ai = []
+# The `generators` script (M4 PR 5; ADR 0024 §8). A feature for `ai`'s reason one tier over:
+# the suite tells `escribass-mcp` a `--generator`, and every compile in the script spawns a
+# real Python child out of `compilers/generative/` — which needs `uv` and a synced
+# environment that cargo cannot produce. A `#[test]` that noticed that and returned would be
+# the quiet skip M0.4 exists to prevent; with the feature, the suite insists, and the
+# staleness guard refuses an environment older than the lock it was built from (trap 5).
+#
+#     cd compilers/generative && uv sync --locked
+#     cargo test -p escribass-tests --features generators
+generators = []
 
 # `escribass-core`, `escribass-proto` and `prost` are dependencies rather than dev-dependencies
 # because `render-once` above links them, and a `[[bin]]` sees only the first list. Nothing
