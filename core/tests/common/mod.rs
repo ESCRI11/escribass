@@ -8,6 +8,7 @@
 #![allow(dead_code)]
 
 use escribass_core::Manifest;
+use escribass_proto::generate::{CompileRequest, CompileResponse};
 use escribass_proto::render::render_server::RenderServer;
 use escribass_proto::render::{RenderPlan, RenderResult};
 use std::path::{Path, PathBuf};
@@ -186,6 +187,137 @@ impl escribass_proto::render::render_server::Render for Answering {
         match &self.answer {
             Ok(result) => Ok(tonic::Response::new(result.clone())),
             Err(why) => Err(tonic::Status::internal(why.clone())),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The generative compiler's side of the boundary (ADR 0024 §2, ADR 0026 §1)
+// ---------------------------------------------------------------------------
+
+/// A generative compiler that is a shell script, written into `dir`, and the command `core`
+/// is told for it (`--generator`).
+///
+/// [`fake_engine`]'s shape one child over and for its reasons: what these suites test is
+/// `core`'s side of the boundary, and the unhappy paths — a child that will not start, one
+/// that names no socket, one that names a socket nothing is listening on, one that exits
+/// without answering — are a line of shell each where a real compiler would have to be broken
+/// to produce them. What a real compiler does with a real source is
+/// `compilers/generative/tests/`, which has 43 tests and no `core`.
+///
+/// It records `PYTHONHASHSEED` from its environment before it does anything else, so a test
+/// can read back what `core` set on it rather than trusting that it did (ADR 0024 §4).
+#[cfg(unix)]
+pub fn fake_generator(dir: &Path, body: &str) -> Vec<String> {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("fake-generator");
+    let script = format!(
+        "#!/bin/sh\n[ \"$1\" = --probe ] && exit 0\nprintf '%s' \"$PYTHONHASHSEED\" > '{seed}'\n{body}\n",
+        seed = dir.join("hashseed").display(),
+    );
+    std::fs::write(&path, script).expect("the fake generator is writable");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    startable(&path);
+    vec![path.display().to_string()]
+}
+
+/// What the child read out of its environment, or `None` if it never ran.
+#[cfg(unix)]
+pub fn hash_seed(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join("hashseed")).ok()
+}
+
+/// A `Generate` server on a Unix socket in `dir`, answering the one call the same way.
+///
+/// [`fake_server`]'s shape, and the same note applies: a real sandbox serves one call and
+/// exits (ADR 0024 §1), and nothing here pretends otherwise — the process `core` spawns, reads
+/// a line from and lets go of is the script, and this is only what answers on the address
+/// that script names.
+///
+/// `answer` is a whole `CompileResponse` rather than one of its arms, because the shapes worth
+/// testing include the ones that are **not** an answer: no `result` arm set, and an empty
+/// `dsl_version` (`proto/generate.proto`). `None` never answers at all, which is what the wall
+/// clock is for.
+#[cfg(unix)]
+pub fn fake_compiler(dir: &Path, answer: Option<CompileResponse>) -> Compiling {
+    use escribass_proto::generate::generate_server::GenerateServer;
+    let socket = dir.join("generate.sock");
+    let asked = Arc::new(Mutex::new(None));
+    let service = Answers { answer, asked: asked.clone() };
+    let bound = socket.clone();
+    let (listening, ready) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime for the fake compiler");
+        runtime.block_on(async move {
+            let socket = tokio::net::UnixListener::bind(&bound).expect("a socket to serve on");
+            listening.send(()).expect("the test is still waiting");
+            tonic::transport::Server::builder()
+                .add_service(GenerateServer::new(service))
+                .serve_with_incoming(
+                    tonic::codegen::tokio_stream::wrappers::UnixListenerStream::new(socket),
+                )
+                .await
+                .expect("the fake compiler serves");
+        });
+    });
+    ready.recv().expect("the fake compiler binds its socket");
+    Compiling { socket, asked }
+}
+
+/// A running [`fake_compiler`]: where it listens, and what it was asked to compile.
+#[cfg(unix)]
+pub struct Compiling {
+    pub socket: PathBuf,
+    asked: Arc<Mutex<Option<CompileRequest>>>,
+}
+
+#[cfg(unix)]
+impl Compiling {
+    /// What `core` sent, as the generated server decoded it.
+    pub fn request(&self) -> CompileRequest {
+        self.asked
+            .lock()
+            .expect("the fake compiler has not panicked")
+            .clone()
+            .expect("the fake compiler was called")
+    }
+
+    /// Whether it was called at all — which is what an *up to date* dry run must not do.
+    pub fn called(&self) -> bool {
+        self.asked.lock().expect("the fake compiler has not panicked").is_some()
+    }
+
+    /// The line a fake generator prints to send `core` here.
+    pub fn address(&self) -> String {
+        format!("echo unix:{}", self.socket.display())
+    }
+}
+
+#[cfg(unix)]
+struct Answers {
+    answer: Option<CompileResponse>,
+    asked: Arc<Mutex<Option<CompileRequest>>>,
+}
+
+#[cfg(unix)]
+#[tonic::async_trait]
+impl escribass_proto::generate::generate_server::Generate for Answers {
+    async fn compile(
+        &self,
+        request: tonic::Request<CompileRequest>,
+    ) -> Result<tonic::Response<CompileResponse>, tonic::Status> {
+        *self.asked.lock().expect("nothing else panicked") = Some(request.into_inner());
+        match &self.answer {
+            Some(answer) => Ok(tonic::Response::new(answer.clone())),
+            // Never answers, and never returns: the whole point of this arm is that the only
+            // thing which ends the call is `core`'s own wall clock (ADR 0024 §7, amended).
+            None => {
+                std::future::pending::<()>().await;
+                unreachable!("pending never completes")
+            }
         }
     }
 }

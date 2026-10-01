@@ -73,7 +73,7 @@ fn err(path: impl AsRef<Path>, rule: &'static str, message: impl Into<String>) -
     }
 }
 
-/// `lock.json` v2: the build this project was authored against (ADR 0010 §1).
+/// `lock.json` v3: the build this project was authored against (ADR 0010 §1, ADR 0027 §1).
 ///
 /// Not a protobuf message, and it does not become one. It is not song state — it describes a
 /// build, not a song — so CLAUDE.md #1 is not in play, and making it a proto would put a
@@ -84,7 +84,13 @@ fn err(path: impl AsRef<Path>, rule: &'static str, message: impl Into<String>) -
 /// reference existed — including every lock this repository wrote before M1 — has nothing to
 /// disagree with, and saying so costs one attribute rather than a migration.
 ///
-/// M4 adds the compiled artefacts and model hashes ADR 0003 §3 named.
+/// M4 adds the `toolchains` block (ADR 0027 §1); M5 adds the compiled artefacts and model
+/// hashes ADR 0003 §3 named, under the names ADR 0027 §3 reserves.
+///
+/// `schema_version` stays 1: it is the *document's* version, and "v2" and "v3" are names for
+/// this file's shape in prose. `deny_unknown_fields` stays too, so a `core` from before M4
+/// opening a project a later one compiled in refuses the file rather than ignoring a block it
+/// does not know — the strict direction (ADR 0010 §3; ADR 0027 §1).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Lock {
@@ -93,6 +99,15 @@ struct Lock {
     engine: BTreeMap<String, String>,
     #[serde(default)]
     plugins: BTreeMap<String, Pin>,
+    /// What this project last compiled a generator with — **a pin, compared at compile and
+    /// never at open** (ADR 0027 §1, §2).
+    ///
+    /// Absent until the first `compile_generator` that commits, and absent from the file when
+    /// absent here: the `ai` block's shape, and what keeps every M0.4 golden's `lock.json`
+    /// byte-identical through a milestone that adds a block, since no determinism script
+    /// compiled until `generators`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    toolchains: Option<Toolchains>,
     /// The model this project's prompts go to — **a record, not a pin** (ADR 0021 §4).
     ///
     /// Absent until the first prompt is sent, and absent from the file when absent here:
@@ -115,6 +130,32 @@ struct Lock {
 pub struct Ai {
     pub provider: String,
     pub model: String,
+}
+
+/// The toolchains a project has compiled with (ADR 0027 §1).
+///
+/// One key today, `generator`, and a map with one entry rather than a bare field because M5
+/// adds the toolchain that made each artefact beside it (ADR 0027 §3) — and because the
+/// generator's own entry is the shape the others take. `deny_unknown_fields` for `Lock`'s
+/// reason, one level down.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Toolchains {
+    pub generator: Toolchain,
+}
+
+/// The generative compiler's version and its interpreter's, **as the child stated them**
+/// (ADR 0027 §1).
+///
+/// Never from a constant in `core`: a fact about the child is stated by the child, and a
+/// second copy in Rust is the copy that stops agreeing (ADR 0010 §4). `dsl` is
+/// `compilers/generative/pyproject.toml`'s `version`, read back through `importlib.metadata`;
+/// `python` is §17's row, as `platform.python_version()` writes it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Toolchain {
+    pub dsl: String,
+    pub python: String,
 }
 
 /// The provider and model a project records when it records none of its own (ADR 0021 §4).
@@ -406,6 +447,9 @@ pub struct Project {
     /// What `lock.json`'s `ai` block says, if it says anything (ADR 0021 §4). `None` until a
     /// prompt has been sent in this project.
     ai: Option<Ai>,
+    /// What `lock.json`'s `toolchains` block says, if it says anything (ADR 0027 §1). `None`
+    /// until a compile has committed in this project.
+    toolchains: Option<Toolchains>,
 }
 
 impl Project {
@@ -416,7 +460,15 @@ impl Project {
         history: History,
         manifest: Arc<Manifest>,
     ) -> Self {
-        Self { root: root.into(), song, history, manifest, pins: BTreeMap::new(), ai: None }
+        Self {
+            root: root.into(),
+            song,
+            history,
+            manifest,
+            pins: BTreeMap::new(),
+            ai: None,
+            toolchains: None,
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -473,6 +525,7 @@ impl Project {
             manifest,
             pins: BTreeMap::new(),
             ai: None,
+            toolchains: None,
         };
         project.write()?;
         Ok(project)
@@ -676,6 +729,7 @@ impl Project {
             manifest: Arc::clone(&self.manifest),
             pins: self.pins.clone(),
             ai: self.ai.clone(),
+            toolchains: self.toolchains.clone(),
         };
         next.write()?;
         *self = next;
@@ -806,6 +860,7 @@ impl Project {
             manifest: Arc::clone(&self.manifest),
             pins: self.pins.clone(),
             ai: self.ai.clone(),
+            toolchains: self.toolchains.clone(),
         };
         next.write()?;
         *self = next;
@@ -870,7 +925,19 @@ impl Project {
         // there is exactly one engine and a project cannot choose it, so refusing would refuse
         // every project on the machine at once, repaired by hand-editing each. Nothing is lost
         // by it, because what a render was made with travels with the render (ADR 0008 §5).
-        let project = Project { root, song, history, manifest, pins: lock.plugins, ai: lock.ai };
+        // The `toolchains` block is read and **nothing in it is compared** (ADR 0027 §2): a
+        // project with a generator renders with no compiler installed at all, because the
+        // compiled notes are layer 2 and the render never asks for the compiler. It is
+        // compared when a compile is asked for, which is when it can be wrong.
+        let project = Project {
+            root,
+            song,
+            history,
+            manifest,
+            pins: lock.plugins,
+            ai: lock.ai,
+            toolchains: lock.toolchains,
+        };
         project.verify_against_replay()?;
         Ok(project)
     }
@@ -913,6 +980,7 @@ impl Project {
             schema_version: SCHEMA_VERSION,
             engine: self.manifest.engine.clone(),
             plugins: self.pins.clone(),
+            toolchains: self.toolchains.clone(),
             ai: self.ai.clone(),
         })
         .expect("the lock serialises")
@@ -942,6 +1010,32 @@ impl Project {
             return Ok(());
         }
         self.ai = Some(Ai { provider: provider.to_string(), model: model.to_string() });
+        write_atomically(&self.root.join(LOCK), self.lock_text())
+    }
+
+    /// What this project last compiled a generator with, if it has compiled one (ADR 0027 §1).
+    pub fn toolchains(&self) -> Option<&Toolchains> {
+        self.toolchains.as_ref()
+    }
+
+    /// Records the toolchain a compile ran under, **on the first compile that commits**.
+    ///
+    /// [`record_ai`](Self::record_ai)'s shape one block over, which is ADR 0010 §2's shape one
+    /// tier up: written on first reference, never rewritten by a tool, and changed by editing
+    /// the text. A project that already records one keeps it — including one naming a
+    /// different version, because a tool that rewrote this would be re-pinning by running,
+    /// which is the whole thing `toolchain_mismatch` exists to refuse (ADR 0027 §2).
+    ///
+    /// It writes `lock.json` and nothing else, for `record_ai`'s reason: a full
+    /// [`write`](Self::write) here would rewrite every entry in `patches/` to record a fact
+    /// about no entry at all (docs/plan.md, M3 trap 9).
+    pub fn record_toolchain(&mut self, dsl: &str, python: &str) -> Result<(), ProjectError> {
+        if self.toolchains.is_some() {
+            return Ok(());
+        }
+        self.toolchains = Some(Toolchains {
+            generator: Toolchain { dsl: dsl.to_string(), python: python.to_string() },
+        });
         write_atomically(&self.root.join(LOCK), self.lock_text())
     }
 

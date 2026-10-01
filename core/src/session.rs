@@ -15,6 +15,7 @@
 
 use crate::clock::Clock;
 use crate::engine::{Engine, Preview};
+use crate::generator::{NotCompiled, Sandbox};
 use crate::history::{ops_of, ops_text, HistoryError};
 use crate::id::IdSource;
 use crate::patch::{diff, Op};
@@ -23,13 +24,15 @@ use crate::project::{Prepared, Project, ProjectError, DEFAULT_MODEL, DEFAULT_PRO
 use crate::version::restore_versions;
 use crate::validate::Violation;
 use crate::tools;
+use escribass_proto::generate::compile_response::Result as Answered;
 use escribass_proto::tools::{
     AddAssetRequest, AddAutomationRequest, AddClipRequest, AddEffectRequest, AddSectionRequest,
-    AddTrackRequest, ApplyPatchRequest, AssetResponse, CreateBranchRequest, DeleteBranchRequest,
-    GetSongAtRequest, HistoryResponse, MergeBranchRequest, MergeSide, MoveSectionRequest,
-    PreviewResponse, QuantizeRequest, RedoRequest, RenderExportRequest, RenderPreviewRequest,
-    RenderResponse, SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest,
-    SongResponse, SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
+    AddTrackRequest, ApplyPatchRequest, AssetResponse, CompileGeneratorRequest,
+    CreateBranchRequest, DefineGeneratorRequest, DeleteBranchRequest, GetSongAtRequest,
+    HistoryResponse, MergeBranchRequest, MergeSide, MoveSectionRequest, PreviewResponse,
+    QuantizeRequest, RedoRequest, RenderExportRequest, RenderPreviewRequest, RenderResponse,
+    SetNotesRequest, SetParamRequest, SetTempoRequest, SetTrackInstrumentRequest, SongResponse,
+    SwitchBranchRequest, ToolResult, TransposeRequest, UndoRequest,
 };
 use escribass_schema::song::{Author, Provenance, Song};
 use serde_json::{Map, Value};
@@ -50,6 +53,10 @@ pub struct Session {
     /// Where the engine is, when this process was told (`--engine`). `None` is not a silent
     /// skip: `render_export` says so and refuses, as an operator error (see it below).
     engine: Option<Engine>,
+    /// Where the generative compiler is, when this process was told (`--generator`). `None`
+    /// is not a silent skip: `compile_generator` says so and refuses, as an operator error
+    /// (ADR 0024 §1).
+    sandbox: Option<Sandbox>,
     /// The preview playing, if one is (ADR 0013 §3).
     ///
     /// The one piece of session state here, because it is a fact about a running process and
@@ -120,6 +127,7 @@ impl Session {
             clock,
             author,
             engine: None,
+            sandbox: None,
             preview: None,
             proposal: None,
             made: Made::Session,
@@ -134,6 +142,16 @@ impl Session {
     /// the call that would need a binary.
     pub fn set_engine(&mut self, engine: Engine) {
         self.engine = Some(engine);
+    }
+
+    /// Names the command this session compiles a generator with (ADR 0024 §1).
+    ///
+    /// Separate from `new` for [`set_engine`](Self::set_engine)'s reason, one child over: a
+    /// session that never compiles needs none, and a process told nothing here still edits,
+    /// validates, renders and previews — it refuses only the call that would need a compiler.
+    /// A command, not a path, and never inspected (see [`crate::generator`]).
+    pub fn set_sandbox(&mut self, sandbox: Sandbox) {
+        self.sandbox = Some(sandbox);
     }
 
     pub fn project(&self) -> &Project {
@@ -284,6 +302,206 @@ impl Session {
     ) -> Result<ToolResult, ProjectError> {
         let built = tools::move_section(self.project.song(), request);
         self.from_tool("move_section", built, request.dry_run, self.ids.fork())
+    }
+
+    // ---- generators (§7.1, ADR 0026 §2) ----
+
+    /// §5 `define_generator`: adds a generator and **compiles nothing** (ADR 0026 §2).
+    ///
+    /// Two calls rather than one, because compiling on define costs a process for every
+    /// definition a person then edits before compiling, and puts two things a dry run cannot
+    /// show apart into one entry (ADR 0024 §5). A dry run of this is the ordinary validator
+    /// pass over the added entity.
+    pub fn define_generator(
+        &mut self,
+        request: &DefineGeneratorRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let mut ids = self.ids.fork();
+        let built = tools::define_generator(
+            self.project.song(), request, &mut *ids, &*self.clock, self.author);
+        self.from_tool("define_generator", built, request.dry_run, ids)
+    }
+
+    /// §5 `compile_generator`: spawn the sandbox, replace the target clip's notes whole, and
+    /// write `compiled_hash` and `toolchain_version` — one entry (ADR 0024 §5).
+    ///
+    /// **ADR 0006 §2's line runs through this method four times**, and keeping the sides apart
+    /// is the whole job. What the caller can fix comes back as `valid = false`:
+    /// `generator_unknown`, `target_not_note_clip`, `generator_error` — the child's own
+    /// `line:column` and text, which is the one refusal in this system whose message is the
+    /// whole fix (Plate 3) — and `generator_timeout`. What only an operator can fix is `Err`:
+    /// `generator_missing` (this process was told no `--generator`), `generator_failed` (the
+    /// child would not start, named no socket, or went away without answering) and
+    /// `toolchain_mismatch` (ADR 0027 §2). A model told to retry any of those three would
+    /// spend §6's three turns learning it cannot.
+    ///
+    /// **A dry run compiles**, and answers with the diff the commit would write — the code
+    /// view's *Compile*, whose *Apply* is the commit (ADR 0017 §4) — except when the request
+    /// already hashes to `compiled_hash`, which is *up to date* and **spawns no process**
+    /// (ADR 0024 §6). So a status read on a fresh generator costs nothing and one on a stale
+    /// generator costs the compile a person is about to ask for anyway.
+    pub fn compile_generator(
+        &mut self,
+        request: &CompileGeneratorRequest,
+    ) -> Result<ToolResult, ProjectError> {
+        let Some(generator) = self.project.song().generators.get(&request.generator_id).cloned()
+        else {
+            return Ok(refused(vec![Violation {
+                path: "/generator_id".to_string(),
+                rule: "generator_unknown",
+                message: format!(
+                    "`{}` is not a generator in this song",
+                    request.generator_id
+                ),
+            }]));
+        };
+        let (clip_id, compiling) =
+            match crate::generator::to_compile(self.project.song(), &generator) {
+                Ok(both) => both,
+                Err(violation) => return Ok(refused(vec![violation])),
+            };
+        let hash = crate::generator::compiled_hash(&compiling);
+
+        // ADR 0024 §6, and the reason the hash is computed before the child is started rather
+        // than after: *up to date* is an answer no process has to be spawned to give.
+        if request.dry_run && hash == generator.compiled_hash {
+            return Ok(described("up to date".to_string()));
+        }
+
+        let sandbox = self.sandbox.as_ref().ok_or_else(|| ProjectError {
+            path: "--generator".to_string(),
+            rule: "generator_missing",
+            message: "this process was not told how to run the generative compiler, and \
+                      does not look for one: pass `--generator <command>`, which on a build \
+                      tree is `uv run --no-sync --project compilers/generative \
+                      escribass-generative` (ADR 0024 §1)"
+                .to_string(),
+        })?;
+        let answer = match sandbox.compile(&compiling) {
+            Ok(answer) => answer,
+            // The wall clock, and the author's to fix: what loops for ever is the source
+            // (ADR 0024 §7, amended). Not the CPU limit, which the child catches itself and
+            // answers as a diagnostic — `generator_error` below, carrying the line.
+            Err(NotCompiled::TimedOut(message)) => {
+                return Ok(refused(vec![Violation {
+                    path: format!("/generators/{}/source", generator.id),
+                    rule: "generator_timeout",
+                    message,
+                }]))
+            }
+            Err(NotCompiled::Broken(e)) => return Err(e),
+        };
+        let crate::generator::Compiled { dsl_version, python_version, result } = answer;
+        let compiled = match result {
+            // The child's own words, whole, with `core`'s rule around them: it does not
+            // rewrite them, because the same text the user reads is what the model retries
+            // against (ADR 0026 §3). A column of 0 means the child had no position for it.
+            Answered::Diagnostic(said) => {
+                let at = if said.column > 0 {
+                    format!("{}:{}", said.line, said.column)
+                } else {
+                    said.line.to_string()
+                };
+                return Ok(refused(vec![Violation {
+                    path: format!("/generators/{}/source", generator.id),
+                    rule: "generator_error",
+                    message: format!("{at}: {}", said.message),
+                }]));
+            }
+            Answered::Notes(notes) => notes.notes,
+        };
+
+        // **Before anything is written**, and nothing is written if it disagrees: not the
+        // notes, not the hash, not the block (ADR 0027 §2). An operator error, because every
+        // fix is an operator action — `uv sync --locked` in `compilers/generative/`, install
+        // the pinned interpreter, or edit `lock.json` deliberately — and a model retrying a
+        // tool call can produce none of them.
+        //
+        // After the diagnostic above and not before it, because what this guards is *writing*
+        // and a diagnostic writes nothing: an author whose source does not compile is handed
+        // their line, and meets this on the next call, which is the one that would have
+        // written notes a golden compares.
+        if let Some(e) = self.toolchain_mismatch(&generator, &dsl_version, &python_version) {
+            return Err(e);
+        }
+
+        let mut ids = self.ids.fork();
+        let built = tools::compile_generator(
+            &clip_id,
+            &generator.id,
+            &hash,
+            &dsl_version,
+            &compiled,
+            &mut *ids,
+            &*self.clock,
+            self.author,
+        );
+        let committed = self.from_tool("compile_generator", built, request.dry_run, ids)?;
+
+        // ADR 0027 §1: written on the first compile that **commits**, from what the child
+        // reported. `entry_id` is the only honest test of that — a dry run and a proposal's
+        // call both answer `valid` and write nothing, and a project pinned by a compile
+        // nobody kept would be a pin no log explains.
+        //
+        // `ponytail:` a proposal's compile therefore writes the generator's
+        // `toolchain_version` (it is in the patch a person applies) and not the project's
+        // block, which the next compile on the session writes. Unreachable until M4 PR 6
+        // offers the tool to the model; if that gap ever matters, the fork's answer travels
+        // back with the proposal and `apply_proposal` records it.
+        if committed.valid && !committed.entry_id.is_empty() {
+            self.project.record_toolchain(&dsl_version, &python_version)?;
+        }
+        Ok(committed)
+    }
+
+    /// Whether the child that just answered is the one this project and this generator were
+    /// compiled by (ADR 0027 §2).
+    ///
+    /// Two comparisons, because there are two pins and they are written by one answer: the
+    /// project's `toolchains.generator` block, if it has one, and the generator's own
+    /// `toolchain_version`, if it has ever been compiled. A project that has neither is being
+    /// compiled for the first time and has nothing to disagree with.
+    ///
+    /// It is **also trap 5's guard**: a `uv sync` that was not run, or an environment from
+    /// before the change, is a child stating a version the project did not record, and the
+    /// compile is refused rather than a golden passing on a stale sandbox.
+    fn toolchain_mismatch(
+        &self,
+        generator: &escribass_schema::song::Generator,
+        dsl_version: &str,
+        python_version: &str,
+    ) -> Option<ProjectError> {
+        const REPIN: &str = "run `uv sync --locked` in compilers/generative/, install the \
+                             pinned interpreter, or edit lock.json and the generator \
+                             deliberately (ADR 0027 §2)";
+        let mismatch = |what: &str, recorded: &str, stated: &str| ProjectError {
+            path: self.project.root().display().to_string(),
+            rule: "toolchain_mismatch",
+            message: format!(
+                "this project was compiled with {what} `{recorded}` and the compiler that \
+                 just answered is `{stated}`; nothing was written. {REPIN}"
+            ),
+        };
+        if let Some(pinned) = self.project.toolchains() {
+            if pinned.generator.dsl != dsl_version {
+                return Some(mismatch(
+                    "the generator DSL at version",
+                    &pinned.generator.dsl,
+                    dsl_version,
+                ));
+            }
+            if pinned.generator.python != python_version {
+                return Some(mismatch("Python", &pinned.generator.python, python_version));
+            }
+        }
+        if !generator.toolchain_version.is_empty() && generator.toolchain_version != dsl_version {
+            return Some(mismatch(
+                "this generator's own toolchain_version at",
+                &generator.toolchain_version,
+                dsl_version,
+            ));
+        }
+        None
     }
 
     // ---- assets (§10) ----
@@ -1361,6 +1579,12 @@ impl Proposal {
             // `render_preview` is offered, and an engine the model cannot hear is the reason
             // (ADR 0022 §1, CLAUDE.md #6).
             engine: None,
+            // The sandbox **is** inherited, where the engine is not, and the difference is
+            // what the model is offered: `compile_generator` is, from M4 PR 6, and a compile
+            // on a proposal spawns the sandbox and writes the fork's clip, which a person
+            // then applies whole (ADR 0026 §3). It writes no file and plays no sound, so
+            // CLAUDE.md #6 has nothing to say about it.
+            sandbox: from.sandbox.clone(),
             preview: None,
             // One proposal at a time, structurally: a fork has no fork (ADR 0019 §3).
             proposal: None,

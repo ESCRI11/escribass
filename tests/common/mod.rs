@@ -140,6 +140,115 @@ pub fn engine_sources() -> Vec<PathBuf> {
     ]
 }
 
+/// Where the generative compiler lives (ADR 0024 §8).
+pub fn generative() -> PathBuf {
+    workspace().join("compilers").join("generative")
+}
+
+/// What the generative compiler's **environment** must be newer than.
+///
+/// Named here beside [`engine_sources`], and the list is short for a reason the test that
+/// walks it asserts rather than assumes: `uv sync` installs this project **editable**, so
+/// `src/escribass_generative/*.py` and the generated `escribass_proto` and `escribass_schema`
+/// it imports are read from the working tree on every start and cannot be stale. What *can*
+/// be stale is everything the environment is built from rather than read through — the
+/// dependency closure (`uv.lock`), the version `importlib.metadata` reports back as
+/// `dsl_version` (`pyproject.toml`), and the interpreter `python_version` names
+/// (`.python-version`) — and each of those three is a child reporting something the project
+/// did not record, which is exactly the stale sandbox trap 5 names.
+pub fn generator_sources() -> Vec<PathBuf> {
+    vec![
+        generative().join("pyproject.toml"),
+        generative().join("uv.lock"),
+        generative().join(".python-version"),
+    ]
+}
+
+/// The command the suite tells `core` as its `--generator`, having refused a stale one.
+///
+/// `--no-sync`, deliberately: with a plain `uv run` the launcher would sync the environment
+/// on the way past, so the staleness this guards against could never be observed and a test
+/// would silently mutate the thing it is validating. ADR 0024 §4 measured the limits binding
+/// under exactly this command.
+///
+/// One string, because `--generator` is one flag split on whitespace — the bargain the Tauri
+/// host's `--ai` already makes, with the same upgrade path (`core/src/bin/`). A checkout at a
+/// path with a space in it would be expressed wrongly rather than refused, so it is refused
+/// here, where the message can say what the limit is.
+pub fn generator_command() -> String {
+    refuse_if_sandbox_is_stale();
+    let project = generative().display().to_string();
+    assert!(
+        !project.contains(char::is_whitespace),
+        "`--generator` is one string split on whitespace and this checkout is at `{project}`; \
+         the flag cannot express it (core/src/bin/, the `ponytail:` note on --generator)"
+    );
+    format!("uv run --no-sync --project {project} escribass-generative")
+}
+
+/// Refuses to compile against an environment older than what it was built from (trap 5).
+///
+/// M0.4 found the suite could validate a stale binary; M1 PR 13 found the render suite had
+/// never compared the engine against `engine/src`. This is the same question asked of the
+/// third child: a determinism golden carries `lock.json`'s `toolchains` block and every note
+/// the DSL produced, and a `uv sync` that was not run passes all of it.
+///
+/// What stands in for "the binary" is the installed distribution's `RECORD`, which `uv sync`
+/// rewrites every time it reinstalls the project — and the project is reinstalled on every
+/// sync, because it is a path dependency. Its directory name carries the version, so a
+/// `pyproject.toml` bumped and not synced has no matching `RECORD` at all, which this reports
+/// as the same thing for the same reason.
+fn refuse_if_sandbox_is_stale() {
+    let site = generative().join(".venv/lib");
+    let remedy = "Run `uv sync --locked` in compilers/generative/. The suite drives the \
+                  installed environment, and cargo cannot build one — so without this a \
+                  golden would be compared against a compiler from before your change.";
+    let installed = std::fs::read_dir(&site)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|python| python.path().join("site-packages"))
+        .flat_map(|packages| std::fs::read_dir(packages).into_iter().flatten().flatten())
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.starts_with("escribass_generative-") && name.ends_with(".dist-info")
+                })
+        });
+    let Some(installed) = installed else {
+        panic!(
+            "`compilers/generative/` has no installed `escribass-generative` under {}.\n{remedy}",
+            site.display()
+        );
+    };
+    // The claim the short root list rests on, asserted rather than remembered: the install is
+    // **editable**, so the compiler's own source is read from the working tree and is not a
+    // root below. The day it stops being editable, `src/` becomes one and this says so.
+    let editable = std::fs::read_to_string(
+        installed.parent().expect("site-packages").join("escribass_generative.pth"),
+    )
+    .unwrap_or_default();
+    assert!(
+        editable.trim().ends_with("compilers/generative/src"),
+        "`escribass-generative` is no longer installed editable (its .pth says `{}`), so its \
+         source can now be stale and `generator_sources()` must gain \
+         `compilers/generative/src`",
+        editable.trim()
+    );
+    let record = installed.join("RECORD");
+    // Named here rather than left to `refuse_if_older_than_source`'s `expect`, which would
+    // say only that something has no modification time.
+    assert!(record.exists(), "`{}` has no RECORD.\n{remedy}", installed.display());
+    refuse_if_older_than_source(
+        "the generative compiler's environment",
+        &record,
+        &generator_sources(),
+        remedy,
+    );
+}
+
 /// The cargo half of the check above: a workspace binary against every crate it embeds.
 fn refuse_if_stale(name: &str, path: &Path) {
     // Every crate the binaries embed, not just `core`: the canonical writer lives in

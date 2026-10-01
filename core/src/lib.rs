@@ -10,6 +10,7 @@ pub mod canonical;
 pub mod clock;
 pub mod descriptor;
 pub mod engine;
+pub mod generator;
 pub mod grpc;
 pub mod history;
 pub mod id;
@@ -29,6 +30,7 @@ pub use call::{call, Answer, CallError, ErrorKind, IMPLEMENTED, OFFERED};
 pub use canonical::{from_canonical_json, to_canonical_json, CanonicalError};
 pub use clock::{timestamp_from_ms, Clock, FixedClock, SystemClock};
 pub use engine::{Engine, Preview};
+pub use generator::{Compiled, NotCompiled, Sandbox};
 pub use descriptor::{message_fields, offered_schemas, tool_names, tool_schemas, Field,
     ToolSchema};
 pub use history::{check_refs, entry, entry_from_json, entry_to_json, ops_of, ops_text,
@@ -37,7 +39,7 @@ pub use id::{IdSource, SeededIds, UlidSource};
 pub use patch::{apply, diff, Op, PatchError};
 pub use manifest::Manifest;
 pub use project::{asset_hash, authorship, Ai, Prepared, Project, ProjectError, ProjectLock,
-    DEFAULT_MODEL, DEFAULT_PROVIDER};
+    Toolchain, Toolchains, DEFAULT_MODEL, DEFAULT_PROVIDER};
 pub use render::compile;
 pub use mcp::{InArrivalOrder, SongTools};
 pub use session::{new_song, Proposal, Session};

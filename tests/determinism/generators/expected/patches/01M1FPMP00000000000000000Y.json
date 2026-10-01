@@ -1,0 +1,29 @@
+{
+  "id": "01M1FPMP00000000000000000Y",
+  "parents": [
+    "01M1FPMP00000000000000000X"
+  ],
+  "tool": "apply_patch",
+  "ops": [
+    {
+      "op": "replace",
+      "path": "/generators/01M1FPMP00000000000000000D/source",
+      "value": "# The hats went; the kick and the snare stay.\nfor b in range(4):\n    note(36, beat(b), beat(1) // 2, 100)\n    if b % 2 == 1:\n        note(38, beat(b), beat(1) // 2, 110)\n"
+    },
+    {
+      "op": "replace",
+      "path": "/generators/01M1FPMP00000000000000000D/version",
+      "value": 3
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 7
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

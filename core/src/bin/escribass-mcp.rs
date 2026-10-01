@@ -15,6 +15,11 @@
 //!                          searched, for the reason `--manifest` is (ADR 0008 §2); optional
 //!                          because only that one call needs it, and without it the call is
 //!                          refused as an operator error rather than skipped
+//! --generator <command>    the command that starts the generative compiler — on a build tree
+//!                          `"uv run --no-sync --project compilers/generative escribass-generative"`
+//!                          — told and never searched, as the engine is (ADR 0024 §1).
+//!                          Optional, because only `compile_generator` needs it, and without
+//!                          it that call is refused `generator_missing` rather than skipped
 //! --author human|model     provenance on everything this process writes, the project it
 //!                          creates included (default: model)
 //! --seed-ids <ms>:<n>      deterministic ids instead of ULIDs from the clock and entropy
@@ -107,6 +112,11 @@ async fn run() -> Result<(), String> {
     if let Some(engine) = options.engine {
         session.set_engine(escribass_core::Engine::new(engine, options.manifest));
     }
+    // Told or absent, never searched, for the engine's reason one child over (ADR 0024 §1).
+    // It is handed no project path and no manifest: a compiler is handed what it compiles.
+    if let Some(generator) = options.generator {
+        session.set_sandbox(escribass_core::Sandbox::new(generator));
+    }
     let server = SongTools::new(session)?;
 
     // rmcp answers every protocol version it knows, so a client on the current revision and
@@ -128,6 +138,7 @@ struct Options {
     project: PathBuf,
     manifest: PathBuf,
     engine: Option<PathBuf>,
+    generator: Option<Vec<String>>,
     create: bool,
     author: Author,
     seed: Option<(i64, u64)>,
@@ -139,6 +150,7 @@ impl Options {
         let mut project = None;
         let mut manifest = None;
         let mut engine = None;
+        let mut generator = None;
         let mut create = false;
         let mut author = Author::Model;
         let mut seed = None;
@@ -153,6 +165,19 @@ impl Options {
                 "--create" => create = true,
                 "--manifest" => manifest = Some(PathBuf::from(value("--manifest")?)),
                 "--engine" => engine = Some(PathBuf::from(value("--engine")?)),
+                // `ponytail:` one string, split on whitespace, so a command whose program
+                // or arguments contain a space cannot be expressed — the Tauri host's `--ai`
+                // has the same bargain and the same upgrade path: the flag repeated once per
+                // word, or an installer that knows where the compiler lives.
+                "--generator" => {
+                    let command = value("--generator")?;
+                    let words: Vec<String> =
+                        command.split_whitespace().map(str::to_string).collect();
+                    if words.is_empty() {
+                        return Err("--generator needs a command to run".to_string());
+                    }
+                    generator = Some(words);
+                }
                 "--author" => {
                     author = match value("--author")?.as_str() {
                         "human" => Author::Human,
@@ -191,6 +216,7 @@ impl Options {
                  parameters exist, and the validator has no answer without it (ADR 0010 §4). \
                  It is written by `cmake --build engine/build --target manifest`\n{USAGE}"))?,
             engine,
+            generator,
             create,
             author,
             seed,
@@ -199,6 +225,6 @@ impl Options {
     }
 }
 
-const USAGE: &str = "usage: escribass-mcp --manifest <manifest.json> [--engine <path>] [--create] \
-                     [--author human|model] [--seed-ids <ms>:<n>] [--fixed-clock <ms>] \
-                     <project.escri>";
+const USAGE: &str = "usage: escribass-mcp --manifest <manifest.json> [--engine <path>] \
+                     [--generator <command>] [--create] [--author human|model] \
+                     [--seed-ids <ms>:<n>] [--fixed-clock <ms>] <project.escri>";

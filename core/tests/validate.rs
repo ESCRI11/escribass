@@ -183,10 +183,32 @@ fn a_clip_needs_a_positive_length_or_the_render_length_is_not_derivable() {
 }
 
 #[test]
-fn a_generator_records_the_toolchain_it_was_compiled_with() {
+fn a_generator_that_has_been_compiled_records_the_toolchain_it_was_compiled_with() {
+    // §4.4, **narrowed by ADR 0027 §1 in M4 PR 5**: the rule is on the pair. A generator the
+    // fixture presents as compiled by nothing carries `compiled_hash: ""`, so the pair has to
+    // be made first — and that this line is needed at all is the narrowing.
     assert_fires("toolchain_version_empty", |s| {
-        s.generators.values_mut().for_each(|g| g.toolchain_version.clear());
+        s.generators.values_mut().for_each(|g| {
+            g.compiled_hash = "a".repeat(64);
+            g.toolchain_version.clear();
+        });
     });
+}
+
+#[test]
+fn a_generator_nothing_has_compiled_may_say_nothing_about_a_toolchain() {
+    // The other half of the narrowing, and the half `define_generator` depends on: a
+    // generator that has just been defined has been compiled by nothing and has no version to
+    // state. Before M4 PR 5 this song was refused, so `define_generator` could not have added
+    // one without writing a placeholder that lies until the first compile overwrites it —
+    // which is the shape ADR 0027 §1 exists to refuse.
+    let fired = rules(|s| {
+        s.generators.values_mut().for_each(|g| {
+            g.compiled_hash.clear();
+            g.toolchain_version.clear();
+        });
+    });
+    assert!(!fired.contains(&"toolchain_version_empty"), "{fired:?}");
 }
 
 #[test]

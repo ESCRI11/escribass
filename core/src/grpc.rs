@@ -16,13 +16,12 @@
 //! because §6's retry loop has to be able to see it. Only an operator's problem becomes a
 //! `Status`.
 //!
-//! Every RPC in `song_tools.proto` is answered here, and from M4 PR 3 two of them are answered
-//! `UNIMPLEMENTED`: `DefineGenerator` and `CompileGenerator` are declared a pull request before
-//! `Session` has them, because `proto/`'s whole M4 shape has to land in one change for
-//! `buf breaking` to compare it once (docs/plan.md, M4 trap 4). They are the only two, they say
-//! so at the call site, and PR 5 turns them into two more macro arms. The tools §5 lists that
-//! are missing from this file are missing from the *contract* too, named in a comment there
-//! with the milestone each waits for.
+//! Every RPC in `song_tools.proto` is answered here. `DefineGenerator` and `CompileGenerator`
+//! answered `UNIMPLEMENTED` between M4 PR 3, which declared `proto/`'s whole M4 shape in one
+//! change so `buf breaking` compared it once (docs/plan.md, M4 trap 4), and M4 PR 5, which
+//! gave `Session` the two tools — so they are two more macro arms now and the two methods are
+//! gone. The tools §5 lists that are missing from this file are missing from the *contract*
+//! too, named in a comment there with the milestone each waits for.
 
 use crate::session::Session;
 use crate::ProjectError;
@@ -146,32 +145,6 @@ macro_rules! service {
                 Ok(Response::new(response))
             }
 
-            // Declared in M4 PR 3 with the rest of `proto/`'s M4 shape, so `buf breaking`
-            // compares the service once (docs/plan.md, M4 trap 4), and wired to a `Session`
-            // in PR 5. They return `ToolResult` like the macro's arms and will *become* two
-            // of them — two lines added below and these two methods deleted — as soon as
-            // `Session` has the tools; until then there is nothing to dispatch into, and a
-            // stub that answered `valid = false` would be this transport inventing a refusal
-            // rule, which is the one thing ADR 0006 says a transport never does.
-            //
-            // Both carriers refuse, and say the same thing: `define_generator` is not in
-            // `IMPLEMENTED`, so MCP neither advertises it nor dispatches it — a call there is
-            // `no tool`, a caller's mistake — and here it is `UNIMPLEMENTED`. Nothing is
-            // written either way.
-            async fn define_generator(
-                &self,
-                _request: Request<DefineGeneratorRequest>,
-            ) -> Result<Response<ToolResult>, Status> {
-                Err(Status::unimplemented("define_generator arrives in M4 PR 5 (ADR 0026 §2)"))
-            }
-
-            async fn compile_generator(
-                &self,
-                _request: Request<CompileGeneratorRequest>,
-            ) -> Result<Response<ToolResult>, Status> {
-                Err(Status::unimplemented("compile_generator arrives in M4 PR 5 (ADR 0026 §2)"))
-            }
-
             $(
                 async fn $tool(
                     &self,
@@ -200,6 +173,11 @@ service! {
     set_tempo: SetTempoRequest,
     add_section: AddSectionRequest,
     move_section: MoveSectionRequest,
+    // A compile refused for the author's reason is still `OK` carrying `valid = false`, like
+    // every arm here; a sandbox that would not start, or a toolchain that does not match,
+    // becomes a `Status` through `status` (ADR 0006 §2, ADR 0026 §3).
+    define_generator: DefineGeneratorRequest,
+    compile_generator: CompileGeneratorRequest,
     undo: UndoRequest,
     redo: RedoRequest,
     create_branch: CreateBranchRequest,

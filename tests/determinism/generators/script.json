@@ -1,0 +1,44 @@
+[
+  {"tool": "add_track", "args": {"name": "Drums", "kind": "TRACK_KIND_INSTRUMENT",
+    "ref": {"plugin": {"plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 0, "length_ticks": 3840}},
+  {"tool": "add_clip", "args": {"track_id": "01M1FPMP000000000000000006", "start_tick": 3840, "length_ticks": 3840}},
+
+  {"tool": "define_generator", "args": {"kind": "GENERATOR_KIND_PYTHON", "dry_run": true,
+    "source": "note(36, 0, 240)\n", "seed": "9007199254740993", "clip_id": "01M1FPMP000000000000000009"}},
+
+  {"tool": "define_generator", "args": {"kind": "GENERATOR_KIND_PYTHON",
+    "seed": "9007199254740993", "clip_id": "01M1FPMP000000000000000009",
+    "source": "# A kick on every beat, a snare on two and four, a hat on every eighth whose\n# velocity the seed decides (ADR 0024 §3's worked example).\nfor b in range(4):\n    note(36, beat(b), beat(1) // 2, 100)\n    if b % 2 == 1:\n        note(38, beat(b), beat(1) // 2, 110)\n    for h in range(2):\n        note(42, beat(b) + h * (beat(1) // 2), beat(1) // 4, 60 + rng.randrange(0, 30))\n"}},
+
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000000D", "dry_run": true}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000000D"}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000000D", "dry_run": true}},
+
+  {"tool": "apply_patch", "args": {"patch": [
+    {"op": "replace", "path": "/generators/01M1FPMP00000000000000000D/source",
+     "value": "# The hats went; the kick and the snare stay.\nfor b in range(4):\n    note(36, beat(b), beat(1) // 2, 100)\n    if b % 2 == 1:\n        note(38, beat(b), beat(1) // 2, 110)\n"}
+  ]}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000000D", "dry_run": true}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000000D"}},
+
+  {"tool": "define_generator", "args": {"kind": "GENERATOR_KIND_PYTHON", "seed": "7",
+    "clip_id": "01M1FPMP00000000000000000B",
+    "source": "# Nothing to write until there is a chorus to write it into: a generator that\n# emits no notes is an answer, and a different one from no answer at all.\nfor name, start, end in sections:\n    if name == \"Chorus\":\n        note(60, 0, 240)\n"}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP000000000000000016"}},
+
+  {"tool": "define_generator", "args": {"kind": "GENERATOR_KIND_PYTHON", "seed": "7",
+    "track_id": "01M1FPMP000000000000000006", "source": "note(36, 0, 240)\n"}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP000000000000000019"},
+    "refused": "target_not_note_clip"},
+
+  {"tool": "define_generator", "args": {"kind": "GENERATOR_KIND_PYTHON", "seed": "7",
+    "clip_id": "01M1FPMP00000000000000000B", "source": "import math\n\nnote(36, 0, math.floor(240))\n"}},
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP00000000000000001B"},
+    "refused": "generator_error"},
+
+  {"tool": "compile_generator", "args": {"generator_id": "01M1FPMP0000000000000NOPE0"},
+    "refused": "generator_unknown"},
+
+  {"tool": "add_track", "args": {"name": "After", "kind": "TRACK_KIND_AUDIO"}}
+]

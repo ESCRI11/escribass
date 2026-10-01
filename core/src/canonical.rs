@@ -19,6 +19,7 @@
 //!   truncates.
 
 use escribass_schema::song::Song;
+use serde::Serialize;
 use serde_json::Value;
 
 /// A song that cannot be written as canonical JSON.
@@ -47,20 +48,28 @@ impl std::fmt::Display for CanonicalError {
 
 impl std::error::Error for CanonicalError {}
 
-/// Serialises a song to its canonical JSON form.
+/// Serialises a generated message to its canonical JSON form.
 ///
-/// Byte-stable: the same song always produces the same bytes, and parsing the output and
+/// Byte-stable: the same value always produces the same bytes, and parsing the output and
 /// serialising it again produces those bytes again (docs/specs.md §11).
-pub fn to_canonical_json(song: &Song) -> Result<String, CanonicalError> {
+///
+/// **Generic over the message since M4 PR 5, and over exactly one definition of "canonical".**
+/// Its caller was a `Song` and nothing else until `compiled_hash` was defined as the SHA-256
+/// of the canonical JSON of a `CompileRequest` (ADR 0024 §6) — a *different* generated
+/// message, written by the same generated `serde` impls, through the same pretty printer, with
+/// the same trailing newline. A second spelling of those three lines beside the hasher is the
+/// spelling that stops matching this one, which is trap 3 — two canonicalisations disagreeing
+/// — arriving as a hash rather than as a status word.
+pub fn to_canonical_json<T: Serialize + ?Sized>(value: &T) -> Result<String, CanonicalError> {
     // A `Value` only to locate anything unrepresentable and name its path. The output below
-    // is serialised from the song itself — see the module note on field ordering.
-    let probe = serde_json::to_value(song).map_err(|_| CanonicalError::Unrepresentable {
+    // is serialised from the value itself — see the module note on field ordering.
+    let probe = serde_json::to_value(value).map_err(|_| CanonicalError::Unrepresentable {
         path: String::new(),
     })?;
     check_representable(&probe, &mut String::new())?;
 
     let mut text =
-        serde_json::to_string_pretty(song).expect("a representable song always serialises");
+        serde_json::to_string_pretty(value).expect("a representable message always serialises");
     text.push('\n');
     Ok(text)
 }

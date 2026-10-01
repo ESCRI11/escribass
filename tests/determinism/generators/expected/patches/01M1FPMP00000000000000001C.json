@@ -1,0 +1,38 @@
+{
+  "id": "01M1FPMP00000000000000001C",
+  "parents": [
+    "01M1FPMP00000000000000001A"
+  ],
+  "tool": "define_generator",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/generators/01M1FPMP00000000000000001B",
+      "value": {
+        "clip_id": "01M1FPMP00000000000000000B",
+        "compiled_hash": "",
+        "id": "01M1FPMP00000000000000001B",
+        "kind": "GENERATOR_KIND_PYTHON",
+        "params": {},
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00"
+        },
+        "seed": "7",
+        "source": "import math\n\nnote(36, 0, math.floor(240))\n",
+        "toolchain_version": "",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 12
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}
