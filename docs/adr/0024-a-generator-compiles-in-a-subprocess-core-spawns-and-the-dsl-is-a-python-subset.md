@@ -348,17 +348,36 @@ status word, which is a tool's answer and is asserted in the host's tests (trap 
   the three (ADR 0022 §3): `generator_error` — the allowlist refusing a node or a name, an
   exception during execution, a non-integral tick, a pitch or velocity out of range — with
   `path` `/generators/{id}/source` and a message carrying the child's `line:column` and text, so
-  "the same text the user reads is what the LLM retries against" (Plate 3); `generator_timeout`,
-  ~~the limit or the wall clock~~ **the wall clock** — amended 2026-10-01, in M4 PR 4: the
-  child's `RLIMIT_CPU` is caught and crosses as a `Diagnostic`, because the wire has one
-  refusal arm and `core` names it `generator_error`, so the *limit* arrives as a
-  `generator_error` whose message carries the limit and the line, and `generator_timeout` is
-  what `core` says when nothing came back at all — the author's to fix too;
-  `target_not_note_clip`; `generator_unknown`.
+  "the same text the user reads is what the LLM retries against" (Plate 3); `target_not_note_clip`;
+  `generator_unknown`. ~~`generator_timeout`, the limit or the wall clock~~ — **amended twice,
+  both on 2026-10-01**. In M4 PR 4 the *limit* left this bullet: the child's `RLIMIT_CPU` is
+  caught and crosses as a `Diagnostic`, because the wire has one refusal arm and `core` names
+  it `generator_error`, so a runaway source arrives as a `generator_error` whose message
+  carries the limit and the line. In **M4 PR 6** `generator_timeout` left it too, and moved to
+  the bullet below.
 - **An operator error**, `Err`, ending a model's turn at the host: `generator_missing` (no
-  `--generator`), `toolchain_mismatch` (ADR 0027 §2), and `generator_failed` — the child would
+  `--generator`), `toolchain_mismatch` (ADR 0027 §2), `generator_failed` — the child would
   not start, printed no socket line, or exited non-zero without answering, carrying the tail of
-  its stderr (ADR 0013 §3's `engine_failed`, one child over).
+  its stderr (ADR 0013 §3's `engine_failed`, one child over) — and, **from 2026-10-01 in M4
+  PR 6, `generator_timeout`**.
+
+  **Why it moved, and what showed it.** This ADR said a timeout was "the author's to fix too",
+  on the reasoning that what loops for ever is the source. M4 PR 6 is where
+  `compile_generator` is offered to a model (ADR 0026 §3), which is the first time the
+  distinction costs anything — and the test PR 5 wrote for this arm was already named
+  `a_sandbox_that_never_answers`, because **no source can reach this wall**. The child imposes
+  its own CPU and memory limits, catches the first of them and answers a `Diagnostic` with the
+  line, measured at 2.04 s, 6.05 s and 0.28 s in PR 4; §4's minute is set above all of them
+  *deliberately*, so that the diagnostic arrives as a diagnostic and keeps its line. What is
+  left after a minute is a wedged child, a machine under impossible load, or a `Generate`
+  server that is not the real one. None of those is fixed by editing a source, and the message
+  such a refusal carries has no line, no column and nothing an author could act on — so by ADR
+  0006 §2's own test ("nothing the caller can say differently would help") it was on the wrong
+  side. Feeding it to a model and charging it one of the three refusals a turn allows is M3
+  trap 2 exactly: a retry budget spent on a wall. It keeps its **own rule id** rather than
+  becoming `generator_failed`, because "it never answered" and "it died" send a person to
+  different places. Watched failing first in `core/tests/assistant.rs`,
+  `a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back`.
 - **Nothing here is the third kind.** A provider failure is `ai`'s and a compile involves no
   provider.
 

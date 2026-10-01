@@ -1,0 +1,347 @@
+{
+  "recorded": null,
+  "model": "deepseek/deepseek-v4.1-flash",
+  "note": "A turn in which the model defines a generator, compiles it, is handed the compiler's own diagnostic, patches the source it names, and compiles again (ADR 0026 §3). The second call is refused `generator_error` by the real `compilers/generative` child — `/` is not in the DSL — and the third is the model acting on the line it was given, which is the whole claim this transcript exists to drive.\n\n**Hand-written**, as `four-refusals.json` and `rate-limited.json` are, and for the same reason: recording a turn costs a paid call to OpenRouter, and CLAUDE.md #7 says nothing calls a paid service without the user's confirmation, which this pull request did not have. The grant of 2026-09-24 was one session, it was spent on `tests/determinism/proposal/transcript.json`, and `CEILING_USD` now equals what that cost, so a live call fails closed by design.\n\n**So this is not evidence that a model writes this DSL.** Whether the default model can is U10, deferred until the DSL existed and still unmeasured (ADR 0023 §7; docs/plan.md, \"The open questions — for the user\"). What it is evidence of is the loop: that the two tools are offered, that a diagnostic crosses back whole with its line and column, that a source is edited by `apply_patch` on its path, and that the whole turn lands as one patch a person applies.\n\nEvery field but `choices` and `usage.prompt_tokens` is copied from the recorded response in `one-answer.json`, so what the SDK parses is the shape a provider really sends: `provider`, `native_finish_reason`, `service_tier`, `moderation` and the rest. `usage.prompt_tokens` is generous on purpose — the loop refuses a response whose token count says the provider dropped the prompt (ADR 0022 §3), and this prompt carries two sources and fourteen tool schemas.",
+  "exchanges": [
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": null,
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "id": "call_1",
+                  "type": "function",
+                  "index": 0,
+                  "function": {
+                    "name": "define_generator",
+                    "arguments": "{\"kind\": \"GENERATOR_KIND_PYTHON\", \"source\": \"# A kick on every beat and a hat on the off-beats, as loud as the seed decides.\\nfor b in range(4):\\n    note(36, beat(b), beat(1) // 2, 100)\\n    note(42, beat(b) + beat(1) / 2, 240, 60 + rng.randrange(0, 30))\\n\", \"seed\": \"9007199254740993\", \"clip_id\": \"01M1FPMP000000000000000009\"}"
+                  }
+                }
+              ]
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790700000,
+        "id": "gen-1790700000-define",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": null,
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "id": "call_2",
+                  "type": "function",
+                  "index": 0,
+                  "function": {
+                    "name": "compile_generator",
+                    "arguments": "{\"generator_id\": \"01M1FPMP000000000000000034\"}"
+                  }
+                }
+              ]
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790700000,
+        "id": "gen-1790700000-compile-1",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": null,
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "id": "call_3",
+                  "type": "function",
+                  "index": 0,
+                  "function": {
+                    "name": "apply_patch",
+                    "arguments": "{\"patch\": [{\"op\": \"replace\", \"path\": \"/generators/01M1FPMP000000000000000034/source\", \"value\": \"# A kick on every beat and a hat on the off-beats, as loud as the seed decides.\\nfor b in range(4):\\n    note(36, beat(b), beat(1) // 2, 100)\\n    note(42, beat(b) + beat(1) // 2, 240, 60 + rng.randrange(0, 30))\\n\"}]}"
+                  }
+                }
+              ]
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790700000,
+        "id": "gen-1790700000-fix",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": null,
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "id": "call_4",
+                  "type": "function",
+                  "index": 0,
+                  "function": {
+                    "name": "compile_generator",
+                    "arguments": "{\"generator_id\": \"01M1FPMP000000000000000034\"}"
+                  }
+                }
+              ]
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790700000,
+        "id": "gen-1790700000-compile-2",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    },
+    {
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "annotations": null,
+              "audio": null,
+              "content": "I defined a Python generator on the empty Drums clip and compiled it. The first compile was refused: `/` is not in the generator DSL, so the hat's offset had to be `beat(1) // 2`. With that changed it compiled to eight notes — a kick on every beat and a hat between them, whose velocity the seed decides. Nothing is applied yet; the proposal is yours to read and apply.",
+              "function_call": null,
+              "reasoning": null,
+              "reasoning_details": null,
+              "refusal": null,
+              "role": "assistant",
+              "tool_calls": null
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1790700000,
+        "id": "gen-1790700000-reply",
+        "metadata": null,
+        "model": "deepseek/deepseek-v4.1-flash",
+        "moderation": null,
+        "object": "chat.completion",
+        "provider": "CoreWeave",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 40,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 100,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "cost": 8.965e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.605e-05,
+            "upstream_inference_cost": 8.965e-05,
+            "upstream_inference_prompt_cost": 1.36e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 12000,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": null,
+            "video_tokens": 0
+          },
+          "total_tokens": 12040
+        }
+      }
+    }
+  ]
+}

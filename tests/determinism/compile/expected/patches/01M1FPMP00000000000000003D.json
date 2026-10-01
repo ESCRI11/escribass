@@ -1,0 +1,216 @@
+{
+  "id": "01M1FPMP00000000000000003D",
+  "parents": [
+    "01M1FPMP00000000000000000A"
+  ],
+  "tool": "proposal",
+  "ops": [
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP000000000000000035",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP000000000000000035",
+        "length_ticks": 480,
+        "microtonal_cents": 0.0,
+        "pitch": 36,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 0,
+        "velocity": 100,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP000000000000000036",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP000000000000000036",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 42,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 480,
+        "velocity": 71,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP000000000000000037",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP000000000000000037",
+        "length_ticks": 480,
+        "microtonal_cents": 0.0,
+        "pitch": 36,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 960,
+        "velocity": 100,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP000000000000000038",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP000000000000000038",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 42,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 1440,
+        "velocity": 69,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP000000000000000039",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP000000000000000039",
+        "length_ticks": 480,
+        "microtonal_cents": 0.0,
+        "pitch": 36,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 1920,
+        "velocity": 100,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000003A",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP00000000000000003A",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 42,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 2400,
+        "velocity": 70,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000003B",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP00000000000000003B",
+        "length_ticks": 480,
+        "microtonal_cents": 0.0,
+        "pitch": 36,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 2880,
+        "velocity": 100,
+        "version": 1
+      }
+    },
+    {
+      "op": "add",
+      "path": "/clips/01M1FPMP000000000000000009/note_clip/notes/01M1FPMP00000000000000003C",
+      "value": {
+        "expression": {},
+        "id": "01M1FPMP00000000000000003C",
+        "length_ticks": 240,
+        "microtonal_cents": 0.0,
+        "pitch": 42,
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_4"
+        },
+        "start_tick": 3360,
+        "velocity": 77,
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/clips/01M1FPMP000000000000000009/version",
+      "value": 2
+    },
+    {
+      "op": "add",
+      "path": "/generators/01M1FPMP000000000000000034",
+      "value": {
+        "clip_id": "01M1FPMP000000000000000009",
+        "compiled_hash": "feeebcae4b1b8b27e32144b061c540d875a4f8c80da96c0095c1b4089a1371fa",
+        "id": "01M1FPMP000000000000000034",
+        "kind": "GENERATOR_KIND_PYTHON",
+        "params": {},
+        "provenance": {
+          "author": "AUTHOR_MODEL",
+          "created_at": "2026-09-02T00:00:00+00:00",
+          "model_id": "deepseek/deepseek-v4.1-flash",
+          "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+          "tool_call_id": "call_1"
+        },
+        "seed": "9007199254740993",
+        "source": "# A kick on every beat and a hat on the off-beats, as loud as the seed decides.\nfor b in range(4):\n    note(36, beat(b), beat(1) // 2, 100)\n    note(42, beat(b) + beat(1) // 2, 240, 60 + rng.randrange(0, 30))\n",
+        "toolchain_version": "1",
+        "version": 1
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/version",
+      "value": 4
+    }
+  ],
+  "provenance": {
+    "author": "AUTHOR_MODEL",
+    "model_id": "deepseek/deepseek-v4.1-flash",
+    "prompt_id": "9ea24ef28c73bb8fcc54535d742c5558b9d8e08dbcbe405387c2f9b18cf3318b",
+    "created_at": "2026-09-02T00:00:00+00:00"
+  },
+  "schema_version": 1
+}

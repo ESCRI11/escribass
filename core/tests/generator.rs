@@ -303,28 +303,38 @@ fn a_compiled_note_carries_the_provenance_of_the_call_that_compiled_it() {
 }
 
 #[test]
-fn a_model_cannot_compile_yet_and_the_gate_is_the_only_reason() {
-    // **Found by writing the test**: ADR 0026 §3 says a compile on a proposal spawns the
-    // sandbox and writes the fork's clip, and in M4 PR 5 it cannot, because the one gate on a
-    // proposal's calls is `OFFERED` (ADR 0019 §1) and `OFFERED` gains these two in PR 6. So
-    // what is true today is asserted today: the tool is implemented, the fork carries the
-    // sandbox it would need, and the refusal names the list — which is the single line PR 6
-    // changes.
+fn a_models_compile_writes_the_generators_version_and_the_block_waits_for_a_commit() {
+    // **The consequence ADR 0027 §1 named in M4 PR 5 and this pull request accepts**, pinned
+    // here rather than left incidental. `compile_generator` joined `OFFERED` in M4 PR 6
+    // (ADR 0026 §3), so a compile *inside a proposal* is reachable: it spawns the sandbox,
+    // writes the fork's clip, and `Generator.toolchain_version` travels in the patch a person
+    // applies. `lock.json`'s `toolchains` block does **not**, because `record_toolchain` fires
+    // only on a compile that commits an entry, and a proposal commits nothing until a person
+    // applies — at which point the one entry is `proposal`, not `compile_generator`.
+    //
+    // So a project whose compiles have all been a model's is unpinned until a person compiles
+    // once, and the two can never disagree in the meantime: `toolchain_mismatch` compares the
+    // generator's own version as well as the block, and a project with no block still has
+    // that comparison (ADR 0027 §2).
+    //
+    // Watched failing first by dropping the `entry_id` condition from `record_toolchain`'s
+    // guard: a fork is a clone of the project and shares its root, so the block lands in the
+    // **real** `lock.json` and leaves a pin no entry in the log explains.
     //
     // The second half is the forgery check M3's review earned (`Session.made` not restored),
-    // asked of this path: a refused call inside a turn must not leave the session answering
-    // as the model. It passes for the strongest possible reason — `compile_generator` ends in
-    // `Session::run` like every other tool and never touches `made` at all.
+    // asked of this path: a call inside a turn must not leave the session answering as the
+    // model afterwards.
     let dir = Scratch::new();
     let (mut session, _track, clip) = opened(&dir);
     let id = define(&mut session, "note(36, 0, 240)", Target::ClipId(clip.clone()));
-    let (compiling, sandbox) = compiler(&dir, Some(answered(&[(36, 0)])));
+    let (compiling, sandbox) = compiler(&dir, Some(answered(&[(36, 0), (38, 960)])));
     session.set_sandbox(sandbox);
+    assert!(lock(&session).get("toolchains").is_none(), "nothing has compiled yet");
 
     let entries_before = entries(&session);
     session.propose("prompt-sha").expect("a turn starts");
     let proposal = session.proposal_mut().expect("a proposal");
-    let refused = proposal
+    let answer = proposal
         .call(
             "compile_generator",
             &serde_json::from_str(&format!("{{\"generator_id\": \"{id}\"}}"))
@@ -332,23 +342,47 @@ fn a_model_cannot_compile_yet_and_the_gate_is_the_only_reason() {
             "a-model",
             "call-7",
         )
-        .expect_err("`compile_generator` is offered in M4 PR 6, not here");
-    assert!(refused.message.contains("not one of the tools you were offered"), "{refused}");
-    assert!(!compiling.called(), "a tool that is not offered reached the sandbox");
+        .expect("`compile_generator` is offered from M4 PR 6");
+    assert!(!answer.refused, "{:?}", answer.text);
+    assert!(compiling.called(), "the fork inherits the sandbox (`Proposal::forked`)");
+
+    // On the fork: the notes, the hash and the version. Not on the project, and not in the
+    // log — a proposal records nothing (ADR 0019 §1).
+    let forked = session.proposal().expect("still pending").song().generators[&id].clone();
+    assert_eq!(forked.toolchain_version, DSL);
+    assert!(!forked.compiled_hash.is_empty());
     assert_eq!(entries(&session), entries_before, "a proposal records nothing");
     assert!(notes_of(session.project().song(), &clip).notes.is_empty());
-    assert!(lock(&session).get("toolchains").is_none());
+    assert!(lock(&session).get("toolchains").is_none(), "a fork's compile pinned the project");
 
-    assert!(session.reject(), "the proposal is dropped");
-    let mine = session
-        .apply_patch(&ApplyPatchRequest {
-            patch: format!("[{{\"op\": \"replace\", \"path\": \"/generators/{id}/seed\", \"value\": \"4\"}}]")
-                .into_bytes(),
-            dry_run: false,
-        })
-        .expect("the patch applies");
-    assert!(mine.valid, "{:?}", mine.errors);
-    let entry = session.project().history().get(&mine.entry_id).expect("the entry").clone();
+    // Applied. One entry, under `proposal`, carrying the model's work — and **still no
+    // block**, which is the accepted consequence: the version is in the patch and the block
+    // is not.
+    let applied = session.apply_proposal("a-model").expect("the project writes");
+    assert!(applied.valid, "{:?}", applied.errors);
+    let committed = &session.project().song().generators[&id];
+    assert_eq!(committed.toolchain_version, DSL, "the version travelled in the patch");
+    assert_eq!(committed.compiled_hash, forked.compiled_hash);
+    assert_eq!(notes_of(session.project().song(), &clip).notes.len(), 2);
+    assert_eq!(
+        session.project().history().get(&applied.entry_id).expect("the entry").tool,
+        "proposal",
+        "a proposal applies as one entry under its own tool name (ADR 0019 §4)"
+    );
+    assert!(
+        lock(&session).get("toolchains").is_none(),
+        "the block is written by a compile that commits, and a proposal's did not"
+    );
+
+    // **The next committing compile writes it**, from the same answer, and the generator's own
+    // version is what the mismatch check compares against in the meantime.
+    let second = compile(&mut session, &id, false);
+    assert!(second.valid, "{:?}", second.errors);
+    assert_eq!(lock(&session)["toolchains"]["generator"]["dsl"], serde_json::json!(DSL));
+    assert_eq!(lock(&session)["toolchains"]["generator"]["python"], serde_json::json!(PYTHON));
+
+    // And the session is still a person's: the entry that compile wrote names no model.
+    let entry = session.project().history().get(&second.entry_id).expect("the entry").clone();
     let made = entry.provenance.expect("an entry carries provenance");
     assert_eq!(made.model_id, None, "the session's next commit is not the model's");
 }
@@ -561,10 +595,17 @@ fn a_diagnostic_with_no_column_names_the_line_alone() {
 }
 
 #[test]
-fn a_sandbox_that_never_answers_is_refused_on_the_wall_clock_and_not_as_an_operators_problem() {
-    // M0.4's rule — a hang is not a failure unless one is imposed — and ADR 0024 §7's
-    // amendment: `generator_timeout` is the wall clock's alone. The CPU limit is a different
-    // thing with a different answer, which the test below this one is about.
+fn a_sandbox_that_never_answers_ends_the_turn_rather_than_spending_a_models_retries() {
+    // M0.4's rule — a hang is not a failure unless one is imposed — and **ADR 0024 §7,
+    // amended a second time on 2026-10-01, in M4 PR 6**. Until then `generator_timeout` was
+    // caller-fixable, on the reasoning that what loops for ever is the source. Offering
+    // `compile_generator` to a model is what showed that wrong, and this test's own name was
+    // the evidence: it drives *a sandbox that never answers*, because no source can reach
+    // this bound. The child catches its own CPU and memory limits well inside it and answers
+    // a `Diagnostic` with the line (2.04 s, 6.05 s and 0.28 s, measured in M4 PR 4), and
+    // `ANSWERING` is a minute precisely so that it sits above all of them. What arrives here
+    // has no line, no column and nothing an author could edit — so feeding it to a model and
+    // charging it one of three refusals is a retry budget spent on a wall (M3 trap 2).
     //
     // Watched failing first by returning the call's own `Err` arm instead of the timeout:
     // with no bound on it this test does not fail, it **hangs**, which is the shape of the
@@ -579,10 +620,13 @@ fn a_sandbox_that_never_answers_is_refused_on_the_wall_clock_and_not_as_an_opera
     session.set_sandbox(sandbox);
 
     let before = entries(&session);
-    let refused = compile(&mut session, &id, false);
-    assert!(!refused.valid, "a sandbox that never answered was not refused");
-    assert_eq!(rules(&refused), vec!["generator_timeout"]);
-    assert_eq!(refused.errors[0].path, format!("/generators/{id}/source"));
+    let broken = session
+        .compile_generator(&CompileGeneratorRequest { generator_id: id.clone(), dry_run: false })
+        .expect_err("a child that never answers is the operator's");
+    assert_eq!(broken.rule, "generator_timeout");
+    // Not `generator_failed`: the two are different things to go and look at, and the id is
+    // the whole of that distinction (`core/src/generator.rs`, `verdict`).
+    assert!(broken.message.contains("did not answer within"), "{}", broken.message);
     assert!(compiling.called(), "the call did reach the sandbox");
     assert_eq!(entries(&session), before);
     assert!(notes_of(session.project().song(), &clip).notes.is_empty());

@@ -175,20 +175,29 @@ jobs:
           ./proto/codegen.sh --check
 
       # 2/6 — and the one place three tiers meet. `cargo test` is the workspace; the second
-      # line is M3 PR 8's end-to-end golden, behind the `ai` cargo feature because it needs
-      # `uv` and a synced `ai/` and a test that noticed those were missing and returned would
-      # be the quiet skip M0.4 exists to prevent (ADR 0022 §4); the third is M4 PR 5's
-      # `generators` script, behind its own feature for the same reason one tier over — it
-      # drives both server binaries with a `--generator` and every compile in it spawns a
-      # real Python child out of `compilers/generative/` (ADR 0024 §8). They are separate
-      # invocations rather than features on the first, because `cargo test -p escribass-tests`
-      # cannot build the binaries it drives — the first line is what builds them.
+      # line is everything that needs a child cargo cannot build. `ai` is M3 PR 8's end-to-end
+      # golden, which needs `uv` and a synced `ai/` (ADR 0022 §4); `generators` is M4 PR 5's
+      # script, which drives both server binaries with a `--generator` and spawns a real
+      # Python child out of `compilers/generative/` per compile (ADR 0024 §8). Both are
+      # features rather than plain tests because a `#[test]` that noticed its child was
+      # missing and returned would be the quiet skip M0.4 exists to prevent.
+      #
+      # **Both at once, in one invocation, from M4 PR 6**: its turn is a model defining and
+      # compiling a generator (ADR 0026 §3), so it needs the real sidecar *and* the real
+      # compiler and is `#[cfg(all(feature = "ai", feature = "generators"))]` by sitting
+      # inside the `ai` module behind the `generators` feature. Run separately, as the two
+      # lines here used to be, it would be compiled out of both and run nowhere — the quiet
+      # skip again, arriving through the build system instead of through a `return`. Either
+      # feature still runs alone for anyone who wants only one tier.
+      #
+      # It is a second invocation rather than features on the first because
+      # `cargo test -p escribass-tests` cannot build the binaries it drives: cargo holds the
+      # build lock while tests run, and the first line is what builds them.
       - name: Rust
         if: env.SKIP != '1'
         run: |
           cargo test
-          cargo test -p escribass-tests --features ai
-          cargo test -p escribass-tests --features generators
+          cargo test -p escribass-tests --features ai,generators
 
       # 3/6 — the model's round trip, and that the service's generated TypeScript compiles
       # against it. The second is not a formality: `proto/gen/ts` reaches the model through

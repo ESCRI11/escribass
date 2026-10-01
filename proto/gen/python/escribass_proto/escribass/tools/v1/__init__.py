@@ -358,11 +358,14 @@ class CompileGeneratorRequest(betterproto2.Message):
     document does not hold.
 
     Refused — `valid = false`, the caller's to fix — with `generator_unknown`,
-    `target_not_note_clip`, `generator_error` carrying the child's line:column and its own text,
-    or `generator_timeout`. An operator's instead, ending a model's turn at the host:
-    `generator_missing` (the process was started with no --generator), `toolchain_mismatch`
-    (ADR 0027 §2), and `generator_failed` — a child that would not start, printed no socket line,
-    or exited without answering (ADR 0024 §7; ADR 0006 §2).
+    `target_not_note_clip`, and `generator_error` carrying the child's line:column and its own
+    text, which includes the CPU and memory limits, since the child catches those itself and
+    answers a diagnostic naming the line it was on. An operator's instead, ending a model's turn
+    at the host: `generator_missing` (the process was started with no --generator),
+    `toolchain_mismatch` (ADR 0027 §2), `generator_timeout` — nothing came back inside the wall
+    clock, which no source can cause because the child's own limits fire well inside it
+    (ADR 0024 §7, amended 2026-10-01) — and `generator_failed`, a child that would not start,
+    printed no socket line, or exited without answering (ADR 0006 §2).
 
     There is no state on this wire for "a compile is in progress", and none is missing: a compile
     is one call that blocks for its length, bounded by the timeout, and a progress stream for a

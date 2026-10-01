@@ -35,12 +35,13 @@
 //!    owns the lock rather than trusting us — one that is started without the variable
 //!    re-executes itself with it — so what setting it here buys is not safety but the
 //!    interpreter start that re-exec would cost on every compile.
-//! 3. **The whole answer is bounded by a wall clock, and running out of it is a *refusal*.**
-//!    The engine's two clocks decide only whether it failed; this one decides between two
-//!    answers a caller reads differently. A generator that loops for ever is the author's to
-//!    fix (ADR 0024 §7, amended), so it comes back as `generator_timeout` and not as an
-//!    operator error — while a child that will not start, names no socket, or exits without
-//!    answering is still `generator_failed`, as every other child's is.
+//! 3. **The whole answer is bounded by a wall clock, and running out of it has its own rule
+//!    id.** The engine's two clocks decide only whether it failed; this one also decides which
+//!    of two things a person is sent to look at. `generator_timeout` is a child that never
+//!    answered; `generator_failed` is one that would not start, named no socket, or exited
+//!    without answering. **Both are the operator's** — amended 2026-10-01 in M4 PR 6, where
+//!    offering the tool to a model is what showed the first of them was not an author's: see
+//!    [`NotCompiled`].
 //! 4. **Nothing about the child survives the call.** A fresh process per compile (ADR 0024
 //!    §1), so a compile cannot depend on the compile before it and a limit that kills the
 //!    child costs a restart and nothing else. The child is told **nothing about the project**:
@@ -72,14 +73,15 @@ use tonic::transport::Endpoint;
 /// is a CPython start under `uv` and the import of `grpclib`, `betterproto2` and `pydantic`.
 const NAMING_ITS_SOCKET: Duration = Duration::from_secs(60);
 
-/// How long the sandbox has to answer the one call, before the call is refused
-/// `generator_timeout` (ADR 0024 §7, amended).
+/// How long the sandbox has to answer the one call, before the call ends the caller's turn
+/// with `generator_timeout` (ADR 0024 §7, amended twice).
 ///
 /// **This is the imposed failure M0.4's rule asks for**: a hang is not a failure unless one is
 /// imposed, and the DSL can express a loop that never ends. The child imposes its own CPU and
-/// memory limits and catches the first of them, so in practice a runaway generator comes back
+/// memory limits and catches the first of them, so a runaway generator comes back
 /// as `generator_error` naming the line and the limit it exceeded; this is what is left if
-/// answering itself never happens.
+/// answering itself never happens — which is a wedged child and not a source, and is why this
+/// is an operator error from M4 PR 6 (see [`NotCompiled`]).
 ///
 /// A minute, so it sits far above everything the child's own limits allow — five CPU seconds
 /// soft, five more before the hard one, plus an interpreter start, measured at 6.05 s for the
@@ -112,17 +114,22 @@ pub struct Compiled {
     pub result: Answer,
 }
 
-/// Why a compile produced no answer, split where ADR 0006 §2 splits everything.
-#[derive(Debug)]
-pub enum NotCompiled {
-    /// The wall clock ran out. **Caller-fixable** (ADR 0024 §7, amended): what loops for ever
-    /// is the source, and the author is who fixes it. The string is the message the refusal
-    /// carries.
-    TimedOut(String),
-    /// An operator's: the child would not start, named no socket, or went away without
-    /// answering.
-    Broken(ProjectError),
-}
+/// Why a compile produced no answer — and there is only one side of ADR 0006 §2's line left
+/// here, which is the amendment of 2026-10-01 (ADR 0024 §7, M4 PR 6).
+///
+/// Until M4 PR 6 this was an enum: `TimedOut` was caller-fixable, on the reasoning that what
+/// loops for ever is the source. Offering `compile_generator` to a model is what showed that
+/// wrong. **No source can reach this wall.** The child imposes its own CPU and memory limits,
+/// catches the first of them and answers a `Diagnostic` carrying the line — measured at 2.04 s
+/// and 6.05 s and 0.28 s in M4 PR 4 — and [`ANSWERING`] is set a minute out *so that* it sits
+/// above all of them. A child that has neither answered nor died after that is wedged, and the
+/// message says so and carries no line, no column and nothing an author could edit. Feeding
+/// that to a model and charging it one of the three refusals a turn allows is M3 trap 2: a
+/// retry budget spent on a wall. So it is an operator error like every other child that will
+/// not speak, with its own rule id — `generator_timeout`, which is still not
+/// `generator_failed`, because "it never answered" and "it died" are different things to go
+/// and look at.
+pub type NotCompiled = ProjectError;
 
 impl Sandbox {
     pub fn new(command: Vec<String>) -> Self {
@@ -178,11 +185,17 @@ impl Sandbox {
                 let _ = child.kill();
                 let _ = child.wait();
                 drop(tail(said));
-                Err(NotCompiled::TimedOut(format!(
-                    "the generator did not answer within {} seconds and was stopped; a source \
-                     that cannot finish is the author's to fix (ADR 0024 §7)",
-                    self.answering.as_secs()
-                )))
+                Err(self.broke(
+                    "generator_timeout",
+                    format!(
+                        "the generator did not answer within {} seconds and was stopped. \
+                         Nothing an author can write reaches this bound: the child's own CPU \
+                         and memory limits fire inside it and come back as `generator_error` \
+                         with the line, so a compiler that is silent for this long is wedged \
+                         (ADR 0024 §7, amended 2026-10-01)",
+                        self.answering.as_secs()
+                    ),
+                ))
             }
             Err(Call::Failed) => {
                 // The transport's view of the failure is not read, for the engine's reason:
@@ -248,11 +261,7 @@ impl Sandbox {
     }
 
     fn broke(&self, rule: &'static str, message: String) -> NotCompiled {
-        NotCompiled::Broken(ProjectError {
-            path: self.command.join(" "),
-            rule,
-            message,
-        })
+        ProjectError { path: self.command.join(" "), rule, message }
     }
 }
 

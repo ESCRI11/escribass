@@ -555,22 +555,21 @@ fn an_edit_elsewhere_merges_cleanly() {
 
 #[test]
 fn offered_is_a_subset_of_implemented_in_its_order() {
-    assert_eq!(OFFERED.len(), 12, "ADR 0022 §1 offers twelve");
+    assert_eq!(OFFERED.len(), 14, "ADR 0026 §3 offers fourteen of twenty-seven");
     let kept: Vec<&&str> = IMPLEMENTED.iter().filter(|name| OFFERED.contains(name)).collect();
     assert_eq!(
         kept.into_iter().copied().collect::<Vec<&str>>(),
         OFFERED.to_vec(),
         "`OFFERED` is `IMPLEMENTED` filtered, in its order"
     );
-    // Every withheld tool is withheld on purpose, and the count says so: fifteen from M4 PR
-    // 5, which implements `define_generator` and `compile_generator` and offers neither.
-    // ADR 0026 §3 makes them the thirteenth and fourteenth offered, and M4 PR 6 is where
-    // that lands — with the view line a model needs in order to know what there is to
-    // compile, which is the half that would be missing if this number moved here.
-    assert_eq!(IMPLEMENTED.len() - OFFERED.len(), 15);
-    for later in ["define_generator", "compile_generator"] {
-        assert!(IMPLEMENTED.contains(&later), "`{later}` is implemented from M4 PR 5");
-        assert!(!OFFERED.contains(&later), "`{later}` is offered in M4 PR 6, not here");
+    // Every withheld tool is withheld on purpose, and the count says so: thirteen from M4
+    // PR 6, where `define_generator` and `compile_generator` became the thirteenth and
+    // fourteenth offered (ADR 0022 §1, amended; ADR 0026 §3). They land together with the
+    // view line a model needs in order to know what there is to compile — without it a model
+    // is offered `compile_generator` and handed no id to call it with.
+    assert_eq!(IMPLEMENTED.len() - OFFERED.len(), 13);
+    for compiling in ["define_generator", "compile_generator"] {
+        assert!(OFFERED.contains(&compiling), "`{compiling}` is offered from M4 PR 6");
     }
     assert!(OFFERED.contains(&"apply_patch"), "no typed tool sets a mix (ADR 0022 §1)");
     for withheld in ["get_song", "set_param", "undo", "render_preview", "merge_branch"] {

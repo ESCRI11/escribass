@@ -177,6 +177,17 @@ three**; a sandbox that will not start, or a toolchain that does not match the p
 the second kind and ends the turn at the host. Nothing is split in a new place, and no compile
 involves a provider.
 
+**Narrowed 2026-10-01, in M4 PR 6, where the tool was actually offered: a compile's *timeout*
+is the second kind, not the first** (ADR 0024 §7, amended, which carries the argument). The
+first kind is a failure the caller can fix by calling differently, and a wall clock that ran
+out is not one: the child's own CPU and memory limits fire well inside it and arrive as the
+diagnostic above, carrying the line, so what reaches the timeout is a wedged child and a
+message with nothing in it to act on. Three of those would end a turn having told the model
+nothing — this decision's own wall, met from the inside. The two tests are
+`a_compile_diagnostic_is_fed_back_whole_and_three_of_them_end_the_turn` and
+`a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back`, which drive
+the **same** four calls and differ only in what the sandbox does.
+
 ### 4. Tested by a scripted provider; the project goldened end to end; no key in CI, ever
 
 **The scripted provider** is the `openai` client replaced by a replayer of a recorded

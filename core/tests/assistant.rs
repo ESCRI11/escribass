@@ -19,7 +19,8 @@ mod common;
 use common::{fake_assistant, manifest};
 
 use escribass_core::{
-    Assistant, FixedClock, Health, Project, SeededIds, Session, TurnEnd, REFUSALS_PER_TURN,
+    Assistant, FixedClock, Health, Project, ProjectError, Sandbox, SeededIds, Session, Turn,
+    TurnEnd, REFUSALS_PER_TURN,
 };
 use escribass_proto::assistant::{
     assistant_command, assistant_event, AssistantEvent, Done, ReplyText, ToolCall,
@@ -556,6 +557,215 @@ fn a_call_the_host_cannot_even_read_is_counted_against_the_same_budget() {
     // Nothing reached the fork: a call that never became one changed nothing.
     assert!(session.proposal().expect("still pending").calls().is_empty());
     assert_eq!(session.project().history().entries().len(), 1);
+}
+
+// ---- a compile, and which side of ADR 0006 §2's line each of its failures falls on ----
+//
+// M4 PR 6, where `compile_generator` joined `OFFERED` (ADR 0026 §3). The compiler here is the
+// **fake** one `core/tests/generator.rs` drives — a shell script beside a `Generate` server in
+// this process — because what these two tests are about is the loop, not the compiler: which
+// answers reach the model, which spend its budget, and which end the turn before it sees
+// them. What a real child does with a real source is `compilers/generative/tests/`, and the
+// two of them together under the real sidecar is `tests/determinism/compile`.
+
+/// The one generator the fixture carries, already pointed at a note clip
+/// (`tests/fixtures/song/minimal.json`).
+///
+/// Its `toolchain_version` is `0.4.1`, a made-up string from M0.1, which ADR 0027 §1 records
+/// as making it **uncompilable by design** — the last of the four cases below is that, taken
+/// as a fixture rather than built.
+const GENERATOR: &str = "01M1FPMP00GENCHRS00000000D";
+
+/// A sandbox on this session that answers `answer`, or never answers when it is `None`.
+///
+/// `answering` is shrunk from the minute a compile is really given, for the reason the field
+/// exists: a bound nothing has ever been seen to fire is a bound nobody should believe, and
+/// the server above answers in microseconds or not at all.
+#[cfg(unix)]
+fn sandbox_answering(
+    dir: &Scratch,
+    session: &mut Session,
+    answer: Option<escribass_proto::generate::CompileResponse>,
+) -> common::Compiling {
+    let compiler = common::fake_compiler(&dir.0, answer);
+    let mut sandbox = Sandbox::new(common::fake_generator(&dir.0, &compiler.address()));
+    sandbox.answering = Duration::from_millis(400);
+    session.set_sandbox(sandbox);
+    compiler
+}
+
+/// What the child says when the source does not compile: a line, a column, and its own words.
+#[cfg(unix)]
+fn diagnostic() -> escribass_proto::generate::CompileResponse {
+    use escribass_proto::generate::{compile_response, CompileResponse, Diagnostic};
+    CompileResponse {
+        dsl_version: "1".to_string(),
+        python_version: "3.12.12".to_string(),
+        result: Some(compile_response::Result::Diagnostic(Diagnostic {
+            // The child's own words, copied out of `compilers/generative`'s own refusal for
+            // `beat(1) / 3` on line 4 of a four-line source — `/` is not in the DSL, and the
+            // refusal is written to teach (ADR 0024 §3, amended in M4 PR 4). Copied rather
+            // than imported, because the point of the next twenty lines is that `core` does
+            // **not** compose this sentence and must not be able to.
+            line: 4,
+            column: 24,
+            message: "`/` (Div) is not in the generator DSL: write a // b, or Fraction(a, b) for an exact ratio (ADR 0024 §3)"
+                .to_string(),
+        })),
+    }
+}
+
+/// What the child says when it does compile. Used by the toolchain case, which has to get
+/// past the diagnostic arm in order to reach the comparison.
+#[cfg(unix)]
+fn one_note() -> escribass_proto::generate::CompileResponse {
+    use escribass_proto::generate::{compile_response, CompileResponse, Notes};
+    CompileResponse {
+        dsl_version: "1".to_string(),
+        python_version: "3.12.12".to_string(),
+        result: Some(compile_response::Result::Notes(Notes {
+            notes: vec![escribass_schema::song::Note {
+                pitch: 36,
+                start_tick: 0,
+                length_ticks: 240,
+                velocity: 100,
+                ..Default::default()
+            }],
+        })),
+    }
+}
+
+/// A turn in which the model asks to compile the fixture's generator, four times, against
+/// whatever sandbox the caller has already put on the session.
+///
+/// Four and not three, so a budget that let one more through has somewhere to go — and so
+/// that the two tests below differ in **nothing but the sandbox**, which is what makes the
+/// comparison between them a measurement rather than two separate claims.
+#[cfg(unix)]
+fn four_compiles(
+    dir: &Scratch,
+    session: &mut Session,
+) -> (Result<Turn, ProjectError>, Vec<escribass_proto::tools::ToolResult>) {
+    let asked =
+        || call_event("c", "compile_generator", &format!(r#"{{"generator_id": "{GENERATOR}"}}"#));
+    let served = fake_assistant(
+        &dir.0,
+        vec![asked(), asked(), asked(), asked(), done_event("gave up")],
+        None,
+    );
+    let script = fake_sidecar(dir, &format!("{}\ncat > /dev/null", served.address()));
+    let mut sidecar = told(&script, &[]).start().expect("it starts");
+    let turn = sidecar.turn(session, "make the chorus busier", &[], |_, _| {});
+    (turn, settled(&served))
+}
+
+#[cfg(unix)]
+#[test]
+fn a_compile_diagnostic_is_fed_back_whole_and_three_of_them_end_the_turn() {
+    // ADR 0022 §3's first kind, reached by a compiler instead of by the validator, which is
+    // ADR 0026 §3's whole claim: the child's own `line:column` and text go back as the call's
+    // result and are **counted against the three a turn allows**. It is the one refusal in
+    // this repository whose message is the whole fix — "the same text the user reads is what
+    // the LLM retries against" (Plate 3) — so nothing in `core` rewrites it.
+    //
+    // Watched failing first by returning the diagnostic from `Session::compile_generator` as
+    // `Err` rather than `Ok(refused(..))`: the turn ends on the first call, with nothing fed
+    // back, which is what the test below this one asserts of the failures that really are the
+    // operator's.
+    let dir = Scratch::new();
+    let mut session = opened(&dir);
+    let compiler = sandbox_answering(&dir, &mut session, Some(diagnostic()));
+
+    let (turn, fed) = four_compiles(&dir, &mut session);
+
+    let turn = turn.expect("a diagnostic is the caller's and does not end the turn as an error");
+    assert_eq!(turn.end, TurnEnd::Refused, "the diagnostics were not counted");
+    assert_eq!(turn.recorded.calls.len(), REFUSALS_PER_TURN, "{:?}", turn.recorded.calls);
+    assert!(compiler.called(), "the fork inherits the sandbox and really compiled");
+
+    // **What the model is handed**, whole and unrewritten: the path it can patch, the rule,
+    // and the child's line, column and sentence.
+    let violation = turn.recorded.calls[0]
+        .result
+        .as_ref()
+        .expect("a refusal is a result")
+        .errors
+        .first()
+        .expect("a diagnostic is one violation")
+        .clone();
+    assert_eq!(violation.path, format!("/generators/{GENERATOR}/source"));
+    assert_eq!(violation.rule, "generator_error");
+    assert_eq!(violation.message, "4:24: `/` (Div) is not in the generator DSL: write a // b, or Fraction(a, b) for an exact ratio (ADR 0024 §3)");
+
+    // Fed back, and provably: the sidecar sends its next call only once the previous call's
+    // result has arrived, so the third diagnostic exists because the first two were fed back.
+    // Exactly two, on a count that has stopped moving — the host closes its half before the
+    // refusal that ends the turn goes out (ADR 0022 §3, extended 2026-09-24).
+    assert_eq!(fed.len(), REFUSALS_PER_TURN - 1, "{fed:?}");
+    assert!(fed.iter().all(|r| !r.valid), "{fed:?}");
+
+    // Nothing was written, by any of them: a diagnostic writes no notes and no hash, and a
+    // proposal commits nothing until a person applies.
+    assert!(session.proposal().is_some(), "the proposal is still a person's to reject");
+    assert_eq!(session.project().history().entries().len(), 1);
+    assert!(session.project().song().generators[GENERATOR].compiled_hash.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back() {
+    // ADR 0022 §3's second kind, and the half of ADR 0026 §3 that matters more than the
+    // first: a model told to retry any of these would spend its three refusals learning it
+    // cannot, which is M3 trap 2 — a retry budget spent on a wall.
+    //
+    // Four ways a compile fails that no source can fix, each driven through the **same** four
+    // calls the test above drives, so the only difference between the two tests is what the
+    // sandbox does. Each ends the turn on the **first** call: zero results fed back against
+    // that test's two, and one call made against its three.
+    //
+    // `generator_timeout` is here from 2026-10-01 and was a refusal until then (ADR 0024 §7,
+    // amended): no source reaches that wall, because the child's own CPU and memory limits
+    // fire inside it and come back as `generator_error` with the line, and the message a
+    // timeout carries has no line, no column and nothing an author could edit.
+    //
+    // Watched failing first by returning each of the four from `Session::compile_generator`
+    // as `Ok(refused(..))` instead: the turn then ends `Refused` after three of them, with
+    // two fed back — the shape above, which is the shape this one must not have.
+    for expected in ["generator_missing", "generator_failed", "generator_timeout", "toolchain_mismatch"] {
+        let dir = Scratch::new();
+        let mut session = opened(&dir);
+        match expected {
+            // Told no `--generator` at all, which is the flag's absence and not a child's.
+            "generator_missing" => {}
+            // A child that will not start.
+            "generator_failed" => {
+                session.set_sandbox(Sandbox::new(common::fake_generator(&dir.0, "exit 9")));
+            }
+            // A child that starts, is dialled, and never answers.
+            "generator_timeout" => {
+                sandbox_answering(&dir, &mut session, None);
+            }
+            // A child that answers perfectly well, under a DSL version this generator was not
+            // compiled with: the fixture's `0.4.1` against the `1` the child states
+            // (ADR 0027 §1, §2).
+            _ => {
+                sandbox_answering(&dir, &mut session, Some(one_note()));
+            }
+        }
+
+        let (turn, fed) = four_compiles(&dir, &mut session);
+
+        let broken = turn.expect_err(&format!("`{expected}` is the operator's"));
+        // The host's own rule for "the project said no, out of the stream"; which project
+        // error it was travels in the message, where a person reads it (`Sidecar::interrupted`).
+        assert_eq!(broken.rule, "project_failed", "{expected}: {broken:?}");
+        assert!(broken.message.contains(&format!("[{expected}]")), "{expected}: {}", broken.message);
+        assert!(fed.is_empty(), "`{expected}` was fed back to the model: {fed:?}");
+        // The proposal goes: nothing a person could act on came back, and a half-built fork
+        // nobody has seen is not a thing to leave pending (ADR 0022 §3).
+        assert!(session.proposal().is_none(), "`{expected}` left a proposal pending");
+        assert_eq!(session.project().history().entries().len(), 1, "{expected}");
+    }
 }
 
 #[cfg(unix)]
