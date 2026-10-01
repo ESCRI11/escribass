@@ -11,6 +11,7 @@
 | `core/` | Rust: model round-trip, validator, patch log, project store. See `core/AGENTS.md`. | hand |
 | `tests/` | Cross-language fixtures and the determinism suite (`escribass-tests`). See `tests/AGENTS.md`. | hand + tests |
 | `app/` | The desktop UI: the Tauri host in `app/src-tauri/` (Rust, embedding `core`) and the frontend at `app/` (React, Vite). One decoded `Song` and pure selectors over it (ADR 0012 §2); one gesture, previewed with `dry_run` at every position and committed once (ADR 0017). | hand |
+| `compilers/` | The compilers §13 names. `generative/` is M4's: a Python package under `uv` serving `Generate.Compile` on a socket it names, one compile per process, with the DSL's `ast` allowlist and namespace in `dsl.py`. `dsp/` and `neural/` are M5's and do not exist yet. | hand |
 | `docs/` | `specs.md` (architecture source of truth), `adr/`, `landscape-2026-09.md`, `wireframes.html`, `plan.md`, `roadmap.md`. See `docs/AGENTS.md` and `docs/adr/AGENTS.md`. | hand |
 | `Cargo.toml` | Cargo workspace. Members: `schema`, `proto`, `core`, `tests`, `app/src-tauri`. The last is **not** a default member: building it needs WebKitGTK's development headers and a built `app/dist`, so `cargo test` skips it and CI's `app` job runs `cargo test -p escribass-app` instead. | hand |
 | `Cargo.lock` | Integrity hashes for crates.io packages (specs §17). Never edit. | cargo |
@@ -18,7 +19,7 @@
 | `rust-toolchain.toml` | Rust 1.98.0; mirrors `lock.baseline.json` `schema.rust.toolchain`. | hand |
 | `lock.baseline.json` | Every pinned dependency and toolchain (specs §17). | hand |
 
-Top-level directories are fixed by specs §13. `compilers/` does not exist yet — M4 PR 4 creates `compilers/generative/` (ADR 0024 §8); M0 created `core/` (M0.2) and `proto/` (M0.3), M1 PR 5 created `engine/`, M2 PR 2 created `app/`, and M3 PR 5 created `ai/`. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
+Top-level directories are fixed by specs §13. M0 created `core/` (M0.2) and `proto/` (M0.3), M1 PR 5 created `engine/`, M2 PR 2 created `app/`, M3 PR 5 created `ai/`, and M4 PR 4 created `compilers/generative/` (ADR 0024 §8) — under §13's existing `/compilers` line, so no directory ADR. Any directory not in §13 needs an ADR first (CLAUDE.md, Repo layout).
 
 Never at the root: source code, generated code, project files, or any representation of song state other than `schema/song.proto` (CLAUDE.md #1).
 
@@ -34,6 +35,7 @@ Never at the root: source code, generated code, project files, or any representa
 | `@bufbuild/protobuf` for `proto/gen/ts` | 2.14.1, the version `schema` already pins | `npm --prefix proto ci` | `proto/package-lock.json` |
 | Python, `uv`, `betterproto2-compiler` | 3.12 | `cd schema && uv sync` | `schema/uv.lock` |
 | The AI sidecar's own environment (`ai/`, M3 PR 5) | Python 3.12.12, `grpclib`, `openai`, `httpx2` | `cd ai && uv sync` | `ai/uv.lock` |
+| The generative compiler's own environment (`compilers/generative/`, M4 PR 4) | Python 3.12.12, `grpclib`; nothing `ai/` does not already pin | `cd compilers/generative && uv sync` | `compilers/generative/uv.lock` |
 
 `make` lists the shortcuts for all of this — running the app, the Vite loop, a scratch
 project, and the checks below. It shells out to exactly these commands and CI does not use it.
@@ -50,10 +52,14 @@ npm --prefix proto ci && cd schema && npx tsc --noEmit --project ../proto
 cd schema && uv run python -m unittest discover -s tests
 cd schema && uv run python -m unittest discover -s ../proto/tests
 cd ai && uv sync --locked && uv run python -m unittest discover -s tests
-cargo test -p escribass-tests --features ai   # after the line above: it spawns the real `ai`
+cd compilers/generative && uv sync --locked && uv run python -m unittest discover -s tests
+cargo test -p escribass-tests --features ai   # after the `ai` line above: it spawns the real `ai`
 ```
 
-The last two are the newer halves of the Python check: `proto/`'s generated tree imports and
+The `compilers/generative/` line is M4 PR 4's: the generative compiler driven as a real
+subprocess over a real socket, every construct outside the DSL fed and watched refused, and
+each of its two limits watched stopping a loop that cannot end. The two before it are the
+newer halves of the Python check: `proto/`'s generated tree imports and
 reaches *the* model (M3 PR 3), and the AI sidecar starts, names a socket, drives a two-call
 turn from a transcript and leaves with a status (M3 PR 5, extended in PR 8). Both run in an
 environment of their own — `proto/` borrows `schema`'s, `ai/` has one, with the exact Python

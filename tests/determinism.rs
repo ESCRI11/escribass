@@ -1867,32 +1867,30 @@ fn make_run_opens_against_the_build_manifest_when_there_is_one() {
     assert!(said.contains("lock_mismatch"), "saying what the fixture cannot open: {said}");
 }
 
+/// Runs one of `checks.yml`'s path-gate steps against a `git` that reports one changed file,
+/// and answers whether it decided to skip.
+///
+/// The step is **run as the workflow has it**, not retyped: its `run:` block is read out of
+/// the YAML by the name of its step, so a gate edited in the workflow and not here fails here
+/// rather than quietly stopping a job from testing what changed.
 #[cfg(unix)]
-#[test]
-fn the_engine_job_renders_a_change_to_compile_or_to_the_client() {
-    // M2 PR 11. The engine job's path gate skipped every `core/`-only pull request, and
-    // `renders` and `cross-cpu` inherit its decision — so a change to `compile` or to the
-    // engine client, the two files between the document and a WAV, rendered no golden in CI.
-    // Written into no test, and so into no pull request, until a review found it.
-    //
-    // The step is run as `checks.yml` has it, not retyped: its `run:` block is read out of the
-    // workflow and executed against a `git` that reports one changed file.
+fn gate_skips(step_name: &str, scratch: &str, changed: &str) -> bool {
     use std::os::unix::fs::PermissionsExt;
 
     let workflow = std::fs::read_to_string(common::workspace().join(".github/workflows/checks.yml"))
         .expect("the workflow");
     let step = workflow
-        .split_once("- name: Does this pull request touch anything the engine is built from?")
+        .split_once(step_name)
         .and_then(|(_, rest)| rest.split_once("run: |\n"))
         .map(|(_, rest)| rest)
-        .expect("the engine job's gate step, by its name");
+        .unwrap_or_else(|| panic!("no gate step named `{step_name}` in checks.yml"));
     let script: String = step
         .lines()
         .take_while(|line| line.is_empty() || line.starts_with("          "))
         .map(|line| format!("{}\n", line.get(10..).unwrap_or("")))
         .collect();
 
-    let dir = Scratch::new("determinism", "engine-gate");
+    let dir = Scratch::new("determinism", scratch);
     std::fs::create_dir_all(&dir.0).expect("a scratch directory");
     let git = dir.0.join("git");
     std::fs::write(&git, "#!/bin/sh\ncase \"$1\" in rev-parse) echo base ;; diff) echo \"$CHANGED\" ;; esac\n")
@@ -1901,26 +1899,81 @@ fn the_engine_job_renders_a_change_to_compile_or_to_the_client() {
     let gate = dir.0.join("gate.sh");
     std::fs::write(&gate, script).expect("the step, as a file");
 
+    let env = dir.0.join("env");
+    let ran = Command::new("bash")
+        .arg(&gate)
+        .env("PATH", format!("{}:{}", dir.0.display(), std::env::var("PATH").unwrap_or_default()))
+        .env("CHANGED", changed)
+        .env("GITHUB_ENV", &env)
+        .env("GITHUB_OUTPUT", dir.0.join("output"))
+        .output()
+        .expect("bash runs the step");
+    assert!(ran.status.success(), "the gate step failed: {}", String::from_utf8_lossy(&ran.stderr));
+    std::fs::read_to_string(&env).unwrap_or_default().contains("SKIP=1")
+}
+
+#[cfg(unix)]
+#[test]
+fn the_engine_job_renders_a_change_to_compile_or_to_the_client() {
+    // M2 PR 11. The engine job's path gate skipped every `core/`-only pull request, and
+    // `renders` and `cross-cpu` inherit its decision — so a change to `compile` or to the
+    // engine client, the two files between the document and a WAV, rendered no golden in CI.
+    // Written into no test, and so into no pull request, until a review found it.
     let skips = |changed: &str| {
-        let env = dir.0.join("env");
-        let _ = std::fs::remove_file(&env);
-        let ran = Command::new("bash")
-            .arg(&gate)
-            .env("PATH", format!("{}:{}", dir.0.display(), std::env::var("PATH").unwrap_or_default()))
-            .env("CHANGED", changed)
-            .env("GITHUB_ENV", &env)
-            .env("GITHUB_OUTPUT", dir.0.join("output"))
-            .output()
-            .expect("bash runs the step");
-        assert!(ran.status.success(), "the gate step failed: {}", String::from_utf8_lossy(&ran.stderr));
-        std::fs::read_to_string(&env).unwrap_or_default().contains("SKIP=1")
+        gate_skips(
+            "- name: Does this pull request touch anything the engine is built from?",
+            "engine-gate",
+            changed,
+        )
     };
 
     // A gate that never skips would pass the two assertions after these, so it is shown able to.
     assert!(skips("core/src/session.rs"), "the rest of `core/` still skips the engine build");
     assert!(skips("docs/plan.md"), "and so does prose");
-    for file in ["core/src/render.rs", "core/src/engine.rs"] {
+    // M4 PR 4: Python that no C++ target reads. Its M5 siblings under `compilers/` are not
+    // excluded with it, and the assertion after this one is what keeps that true.
+    assert!(
+        skips("compilers/generative/src/escribass_generative/dsl.py"),
+        "the generative compiler is Python the engine is not built from"
+    );
+    for file in [
+        "core/src/render.rs",
+        "core/src/engine.rs",
+        "compilers/dsp/CMakeLists.txt",
+        "compilers/neural/convert.py",
+    ] {
         assert!(!skips(file), "a pull request touching only `{file}` skipped the engine, so no golden renders");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_checks_job_runs_for_every_tier_it_has_a_step_for() {
+    // M3 trap 17, and M4 trap 6 one directory over: a path gate that lets a directory's
+    // changes through to a job with **no step that runs its tests** is the same defect as a
+    // gate that skips a job which does have one. The second half — that a step exists — is
+    // `checks.yml`'s to show by running; this is the first half, which is the one a later
+    // exclusion could silently undo.
+    let skips = |changed: &str| {
+        gate_skips(
+            "- name: Does this pull request touch anything these checks read?",
+            "checks-gate",
+            changed,
+        )
+    };
+
+    assert!(skips("docs/plan.md"), "prose alone still skips these checks");
+    assert!(skips("engine/src/main.cpp"), "and so does the engine's C++");
+    for file in [
+        "ai/src/escribass_ai/view.py",
+        "compilers/generative/src/escribass_generative/dsl.py",
+        "compilers/generative/tests/test_dsl.py",
+        "compilers/generative/uv.lock",
+    ] {
+        assert!(
+            !skips(file),
+            "`{file}` changed and the checks job skipped, so the step that tests it never ran"
+        );
     }
 }
 

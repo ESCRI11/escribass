@@ -81,9 +81,10 @@ jobs:
       # gate.
       #
       # `ai/` is in none of the exclusions, so a change under it has run this job since the
-      # directory existed — which is exactly why step 5/5 exists from the pull request that
+      # directory existed — which is exactly why step 5/6 exists from the pull request that
       # created it: a job that runs and tests nothing of what changed is a green tick nobody
-      # earned (docs/plan.md, M3 trap 17).
+      # earned (docs/plan.md, M3 trap 17). `compilers/generative/` is in none of them either,
+      # and step 6/6 lands with the directory for the same reason (M4 trap 6).
       - name: Does this pull request touch anything these checks read?
         if: github.event_name == 'pull_request'
         run: |
@@ -151,7 +152,7 @@ jobs:
         working-directory: ai
         run: uv sync --locked
 
-      # 1/5 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
+      # 1/6 — generated code matches the protos. Two modules, two scripts, and since M3 PR 3
       # both generate Rust, TypeScript and Python (ADR 0006 §7, carried out). This step
       # compares bytes; whether `proto`'s Python *imports* is step 4's, which is a different
       # claim and is made separately.
@@ -161,7 +162,7 @@ jobs:
           ./schema/codegen.sh --check
           ./proto/codegen.sh --check
 
-      # 2/5 — and the one place two tiers meet. `cargo test` is the workspace; the second
+      # 2/6 — and the one place two tiers meet. `cargo test` is the workspace; the second
       # line is M3 PR 8's end-to-end golden, behind the `ai` cargo feature because it needs
       # `uv` and a synced `ai/` and a test that noticed those were missing and returned would
       # be the quiet skip M0.4 exists to prevent (ADR 0022 §4). It is a second invocation
@@ -173,7 +174,7 @@ jobs:
           cargo test
           cargo test -p escribass-tests --features ai
 
-      # 3/5 — the model's round trip, and that the service's generated TypeScript compiles
+      # 3/6 — the model's round trip, and that the service's generated TypeScript compiles
       # against it. The second is not a formality: `proto/gen/ts` reaches the model through
       # `@escribass/schema/song_pb.js`, an exports subpath that exists for the rewrite in
       # `proto/buf.gen.yaml` and for nothing else, and a resolution that quietly fails degrades
@@ -187,7 +188,7 @@ jobs:
           node --import tsx --test tests/*.test.ts
           npx tsc --noEmit --project ../proto
 
-      # 4/5 — the model's round trip, and that the service's generated Python imports and
+      # 4/6 — the model's round trip, and that the service's generated Python imports and
       # reaches *the* model. The second is not a formality either: `betterproto2-compiler`
       # re-emits `song.proto` beside the service and `codegen.sh` deletes it, so without this
       # a second `Song` would be committed, import cleanly, and be a different class from the
@@ -201,7 +202,7 @@ jobs:
           uv run python -m unittest discover -s tests
           uv run python -m unittest discover -s ../proto/tests
 
-      # 5/5 — the AI sidecar. Its own environment, not schema's: `ai/` is a project with a
+      # 5/6 — the AI sidecar. Its own environment, not schema's: `ai/` is a project with a
       # lock of its own and an exact Python patch in `.python-version`, which `uv` installs
       # (§17). `--locked` rather than `sync`, so a lock that disagrees with `pyproject.toml`
       # fails here instead of being quietly re-resolved on a runner.
@@ -217,6 +218,27 @@ jobs:
         if: env.SKIP != '1'
         working-directory: ai
         run: uv run python -m unittest discover -s tests
+
+      # 6/6 — the generative compiler, in the pull request that creates it (ADR 0024 §8; M4
+      # trap 6, which is M3 trap 17 one directory over: a path gate that let a directory's
+      # changes through to a job with no step that ran its tests). Its own environment again,
+      # with its own lock and the same exact Python patch as the sidecar's (§17), synced
+      # `--locked` so a lock that disagrees with `pyproject.toml` fails here instead of being
+      # quietly re-resolved on a runner.
+      #
+      # What it runs is the compiler as a **real subprocess over a real socket** — the address
+      # line, one `Compile`, a child that leaves on its own and leaves with a status — every
+      # construct outside the DSL fed and watched refused, each arm of the allowlist removed
+      # and the same source watched getting through, a loop that cannot end watched stopped by
+      # each of the two limits, the same seed twice and a changed seed, and the spike's
+      # five-interpreter digest as a check rather than a sentence (ADR 0024 §8). Nothing here
+      # spends money, reads a key or needs a network.
+      - name: The generative compiler
+        if: env.SKIP != '1'
+        working-directory: compilers/generative
+        run: |
+          uv sync --locked
+          uv run python -m unittest discover -s tests
 
       # song.proto has consumers from M0.2; a field renumbered by accident is a silent
       # wire break. Only meaningful against a different ref, so pull requests only.
@@ -256,7 +278,11 @@ jobs:
       # What this job reads is app/ and everything app/ is built from: `core` and `schema` are
       # path dependencies of the host, `schema`'s generated TypeScript is what the frontend
       # decodes with, and the pins are in the two lockfiles. What it does not read is docs/,
-      # engine/, .githooks/ and the root prose files. Since M2 PR 10 `app` does launch the
+      # engine/, compilers/generative/, .githooks/ and the root prose files. The exclusion is
+      # that one subdirectory and not `compilers/`: the generative compiler is a Python
+      # package nothing here builds or links, and `compilers/dsp/` and `compilers/neural/`
+      # (M5) are artefacts a render will read, so excluding their parent now would be a hole
+      # waiting for a directory (ADR 0024 §8). Since M2 PR 10 `app` does launch the
       # engine — `core`'s session spawns it for a preview or an export — but only at run time
       # and by a path it is told, so nothing here builds, links or tests against it, and no
       # source path connects them (CLAUDE.md #6).
@@ -267,7 +293,7 @@ jobs:
           changed=$(git diff --name-only "$base" HEAD) || exit 0
           echo "$changed"
           [ -n "$changed" ] || exit 0
-          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|engine/|\.githooks/|[^/]+\.md$)'; then
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|engine/|compilers/generative/|\.githooks/|[^/]+\.md$)'; then
             echo "SKIP=1" >> "$GITHUB_ENV"
             echo "::notice::nothing this job reads has changed"
           fi
@@ -404,7 +430,9 @@ jobs:
       # is *not* giving up. `lock.baseline.json` stays outside every exclusion, so a pin that
       # moves still runs the pass.
       #
-      # Everything else runs
+      # `compilers/generative/` joins the exclusions in M4 PR 4, for the same reason and with
+      # the same narrowness: it is Python that no C++ target reads, and its M5 siblings under
+      # `compilers/` are not excluded with it. Everything else runs
       # the build, because the failure mode is a plugin or a pin silently no longer compiling
       # — the thing this job exists to catch — and an hour of runner time is the cheaper half
       # of that trade. `schema/` is not narrowed to song.proto: a rebuild triggered by a
@@ -419,7 +447,7 @@ jobs:
           changed=$(git diff --name-only "$base" HEAD) || exit 0
           echo "$changed"
           [ -n "$changed" ] || exit 0
-          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|app/|\.githooks/|[^/]+\.md$)' &&
+          if ! printf '%s\n' "$changed" | grep -qvE '^(docs/|core/|app/|compilers/generative/|\.githooks/|[^/]+\.md$)' &&
              ! printf '%s\n' "$changed" | grep -qE '^core/src/(render|engine)\.rs$'; then
             echo "SKIP=1" >> "$GITHUB_ENV"
             echo "skip=1" >> "$GITHUB_OUTPUT"
@@ -1148,10 +1176,15 @@ jobs:
             echo "::error::/proc/cpuinfo declares no model name on this runner, so ADR 0009 §6 has nothing to compare"
             exit 1
           fi
-          flags=$(grep -m1 '^flags' /proc/cpuinfo | grep -o '\bavx512f\|\bavx2\|\bavx\|\bsse4_2' | sort -u | tr '\n' ' ')
+          flags=$(grep -m1 '^flags' /proc/cpuinfo | grep -o '\bavx512f\|\bavx2\|\bavx\|\bsse4_2' | sort -u | tr '\n' ' ' | sed 's/ *$//')
           echo "$model"
           echo "SIMD the runtime dispatchers can pick from: $flags"
-          echo "model=$model" >> "$GITHUB_OUTPUT"
+          # The flags travel **with** the model, because a model string is not a feature set:
+          # run 36750716757 drew two `AMD EPYC 9V74` runners whose /proc/cpuinfo flags
+          # differed — one with avx512f, one without, masked by the hypervisor — and the
+          # cross-cpu job counted them as one, under-reporting its own evidence. What that
+          # job compares is this line (docs/plan.md, ledger, closed in M4 PR 4).
+          echo "model=$model [$flags]" >> "$GITHUB_OUTPUT"
 
       - name: The engine that was built, not one built here
         if: needs.engine.outputs.skipped != '1'
@@ -1260,14 +1293,14 @@ jobs:
           # which counts the single empty line an empty variable prints as one model (M1 PR 13).
           models=$(head -1 -q report/*.txt | sed '/^[[:space:]]*$/d' | sort -u)
           count=$(printf '%s\n' "$models" | grep -c . || true)
-          echo "CPU models seen: $count"
+          echo "CPU model-and-SIMD lines seen: $count"
           printf '%s\n' "$models"
           if [ "$count" -eq 0 ]; then
             echo "::error::no runner reported a CPU model; the cpu step should have failed before this"
             exit 1
           fi
           if [ "$count" -ge 2 ]; then
-            echo "::notice::ADR 0009 §6: identical PCM on $count different CPU models"
+            echo "::notice::ADR 0009 §6: identical PCM on $count different CPU model-and-SIMD lines"
           else
-            echo "::warning::ADR 0009 §6 is inconclusive this run: every runner was the same CPU model, so the agreement says nothing about cross-CPU. The claim stays where ADR 0009 §1 puts it."
+            echo "::warning::ADR 0009 §6 is inconclusive this run: every runner reported the same CPU model and the same SIMD flags, so the agreement says nothing about cross-CPU. The claim stays where ADR 0009 §1 puts it."
           fi
