@@ -130,6 +130,10 @@
       "version": "6.0.2",
       "note": "no consumer until M4's code views (ADR 0003 §8). Pinned now anyway: it replaces `\"6.x\"`, which was not a pin and would have re-resolved silently on the first install."
     },
+    "codemirror_lint": {
+      "version": "6.9.7",
+      "note": "the lint extension, which is what puts a compile diagnostic at the line the child named (M4 PR 7, ADR 0026 §3). It arrived as `codemirror` 6.0.2's own dependency and was imported directly for one call, `setDiagnostics`, which made it a direct dependency in fact and an undeclared one on paper. §17's rule is about what this build imports, not about how npm happened to hoist it, so it is declared and pinned at what was already resolved — `npm ci` installs the same tree and `app/package-lock.json`'s integrity hash for it does not move. Added 2026-10-01 at the user's decision; the alternative, leaving it transitive, is an assumption about another package's dependency list that nothing in this repository checks."
+    },
     "_reused": {
       "typescript": "5.9.3",
       "bufbuild_protobuf": "2.14.1",

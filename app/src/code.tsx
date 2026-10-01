@@ -36,14 +36,13 @@
 
 import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
-// `ponytail:` a sub-package of the pinned `codemirror` 6.0.2 tree rather than a new row in
-// `lock.baseline.json`. `@codemirror/lint` is `codemirror`'s own dependency, resolved at 6.9.7
-// with its integrity hash in `app/package-lock.json`, installed by `npm ci` whether this import
-// exists or not, and `basicSetup` already carries its keymap. Nothing is added to
-// `app/package.json`, because that would be a pin change and pins are a person's (CLAUDE.md #4).
-// The ceiling: if `codemirror` ever stops depending on it, this breaks at `tsc` and at
-// `vite build` rather than at run time, which is the failure worth having. The upgrade path is a
-// row of its own in the baseline — one line, and a yes.
+// Declared and pinned at 6.9.7 in `lock.baseline.json` and `app/package.json`, because this
+// file imports it (CLAUDE.md #4; §17's rule is about what the build imports, not about how npm
+// happened to hoist it). It first arrived as `codemirror` 6.0.2's own dependency and was
+// imported from there, which made it a direct dependency in fact and an undeclared one on
+// paper — the shape of unstated assumption this repository keeps finding, so the user's answer
+// was to say it out loud. Declaring it changed no resolution: 108 lockfile entries identical,
+// 25 installed packages identical, one line added to the root's dependency list.
 import { setDiagnostics } from "@codemirror/lint";
 import type { Diagnostic as Said, GeneratorView, Status } from "./generators.js";
 
