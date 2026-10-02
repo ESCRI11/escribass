@@ -38,15 +38,18 @@ has already been retried our number of times, so it surfaces at once.
 CLAUDE.md #7 asks for three things around a paid call, and [`Live`] is where all three are,
 because it is the only object in this repository that can spend money.
 
-1. **A ceiling checked before each call, against a conservative worst case.** [`CEILING_USD`]
-   is the whole of what one machine may spend; [`_worst_case`] prices the request *about to go
-   out* — its bytes floored at [`BYTES_PER_TOKEN`], plus the whole of the completion it is
-   allowed — and a call that would cross the line raises [`BudgetExhausted`] **without being
-   made**. Never the cost it turned out to have: a guard that reads the receipt has already
-   paid. The worst case is priced from the *listed* price, fetched from OpenRouter's own
-   catalogue with [`prices`]; when that cannot be fetched the fallback is [`DEAREST`], the
-   dearest model on OpenRouter the day this was written, so a run with no price list refuses
-   rather than guesses cheaply.
+1. **A grant, and a ceiling checked before each call against a conservative worst case.**
+   [`GRANT_USD`] is the gate and is read **before a price is even fetched**: at zero no call
+   goes out, whatever it is priced at, because a hosted route a catalogue lists at $0 is still
+   a call to a metered account (added 2026-10-02, after review found exactly that call going
+   out). [`CEILING_USD`] is then the budget — the whole of what one machine may spend —
+   [`_worst_case`] prices the request *about to go out* (its bytes floored at
+   [`BYTES_PER_TOKEN`], plus the whole of the completion it is allowed), and a call that would
+   reach the line raises [`BudgetExhausted`] **without being made**. Never the cost it turned
+   out to have: a guard that reads the receipt has already paid. The worst case is priced from
+   the *listed* price, fetched from OpenRouter's own catalogue with [`prices`]; when that
+   cannot be fetched the fallback is [`DEAREST`], the dearest model on OpenRouter the day this
+   was written, so a run with no price list refuses rather than guesses cheaply.
 2. **A ledger**, [`SPEND`], one JSON line per call: what it was estimated at, what the
    response's own `usage` says it cost, and the running total. It is read back at startup, so
    the ceiling holds **across attempts and across processes** — a per-process ceiling would let
@@ -66,11 +69,11 @@ because it is the only object in this repository that can spend money.
    each read, and fails if it has not settled inside the bound rather than passing on a figure
    that has not arrived — a reconciliation that gives up quietly is worse than none.
 
-`ponytail:` one ceiling, one ledger, one reconciliation — no budget framework, no cost model,
-no price cache. The ceiling is a committed constant rather than an environment variable on
-purpose: a cap an operator can raise from the shell is not a cap. The upgrade path, if a
-machine ever runs two sidecars at once, is a lock around the ledger file; today the ledger is
-appended to by one process at a time and read whole at startup.
+`ponytail:` one grant, one ceiling, one ledger, one reconciliation — no budget framework, no
+cost model, no price cache. Both numbers are committed constants rather than environment
+variables on purpose: a cap an operator can raise from the shell is not a cap. The upgrade
+path, if a machine ever runs two sidecars at once, is a lock around the ledger file; today the
+ledger is appended to by one process at a time and read whole at startup.
 """
 
 from __future__ import annotations
