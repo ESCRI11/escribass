@@ -499,12 +499,14 @@ pub(crate) fn ended(
         return Ended {
             crashed: true,
             by_signal: None,
+            exit_code: None,
             message: format!("{what}, and could not be waited for"),
         };
     };
     Ended {
         crashed: !finished.success(),
         by_signal: if ours { None } else { signal_of(&finished) },
+        exit_code: if ours { None } else { finished.code() },
         message: format!("{what}; it {}{}", how(&finished), tail(said)),
     }
 }
@@ -523,6 +525,15 @@ pub(crate) struct Ended {
     /// `SIGKILL` after being dialled has hit its own hard CPU limit, which is the author's to
     /// fix and not the operator's (ADR 0024 §7, amended 2026-10-02).
     pub by_signal: Option<i32>,
+    /// The status it exited with **on its own**, and `None` on the same terms as [`by_signal`].
+    ///
+    /// Both, because `core` is told a *command* and not a binary: on a build tree the generative
+    /// compiler is `uv run …`, so the process the kernel kills is the launcher's child and what
+    /// `core` sees is the launcher exiting **137** — 128 plus the signal, the convention every
+    /// shell and supervisor uses. One event, two shapes, and reading only the signal would have
+    /// been a fix that worked against the test's fake and not against the real command
+    /// (measured end to end, M4 PR 8).
+    pub exit_code: Option<i32>,
     pub message: String,
 }
 

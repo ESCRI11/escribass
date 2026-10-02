@@ -100,6 +100,15 @@ pub const ANSWERING: Duration = Duration::from_secs(60);
 /// every Linux ABI and this repository claims one platform (ADR 0009 §1).
 const SIGKILL: i32 = 9;
 
+/// The same death, reported by a launcher standing in front of the child.
+///
+/// `core` is told a **command** and never a binary (see the module note), and on a build tree
+/// that command is `uv run --no-sync --project compilers/generative escribass-generative`. So
+/// the process the kernel kills is `uv`'s child, `uv` sees it die and exits `128 + 9` — the
+/// convention every shell and supervisor uses — and `core` reads an exit *code* where a bundle
+/// shipping the binary directly would give it a *signal*. One event, two shapes.
+const KILLED_BY_THE_KERNEL: i32 = 128 + SIGKILL;
+
 /// Removes the directory the socket was in, once the child that owned it is gone.
 ///
 /// The child removes it itself in a `finally` — and a `finally` does not run when the process
@@ -250,9 +259,11 @@ impl Sandbox {
                 // 2026-10-02, where review found it reported as `generator_failed`).
                 //
                 // Told apart by all three facts and not by the signal alone: the child got as
-                // far as naming a socket and being called, and `by_signal` is `None` for the
+                // far as naming a socket and being called, and both fields are `None` for the
                 // `SIGKILL` [`ended`] itself sends to a child that would not leave.
-                if gone.by_signal == Some(SIGKILL) {
+                if gone.by_signal == Some(SIGKILL)
+                    || gone.exit_code == Some(KILLED_BY_THE_KERNEL)
+                {
                     return Err(self.broke("generator_error", format!(
                         "the generator exceeded the compiler's CPU limit inside a single \
                          built-in call and was stopped by the kernel, so it never regained \

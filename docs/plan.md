@@ -3105,7 +3105,14 @@ the reason the section exists.
   and under `--cpu-seconds 1` the child was killed by its own hard limit at 6.9 s with exit −9 and
   no answer — which `core` reported as `generator_failed`, an operator error, for something an
   author fixes by doing less work per call. It is `generator_error` with no line from 2026-10-02,
-  told apart by three facts (named a socket, was dialled, died by `SIGKILL` on its own).
+  told apart by three facts (named a socket, was dialled, died by `SIGKILL` on its own). **And
+  the fix needed a second reading of the same death**: `core` is told a *command* and on a build
+  tree that is `uv run …`, so the kernel kills the launcher's child and `core` reads `uv` exiting
+  **137** rather than a signal. The version that read only the signal passed the unit test —
+  whose fake dies by `kill -9 $$` — and did nothing at all for the real command. The end-to-end
+  test written beside it is what caught that, which is the argument for having one: *told a
+  command, not a binary* means every fact `core` reads about the child is a fact about whatever
+  is in front of it.
 - **A killed child leaks its socket directory**, because a `finally` does not run on `SIGKILL`.
   Three paths reached it. `core` sweeps the directory it dialled on both of its kill paths, with
   `remove_dir` and not `remove_dir_all` — an empty-directory removal cannot take anything with it

@@ -504,6 +504,18 @@ positionless diagnostic at the top of the file rather than dropping it. Watched 
 `a_child_killed_by_its_own_hard_cpu_limit_is_the_authors_and_not_the_operators`, which before the
 fix came back as an operator error from the same source.
 
+**And the same death has two shapes, which only the end-to-end test showed.** Decision 1 says
+`core` is told a *command* and never a binary, and on a build tree that command is `uv run …`.
+So the process the kernel kills is the launcher's child: `uv` sees it die and exits **137** —
+128 plus the signal, the convention every shell and supervisor uses — and `core` reads an exit
+*code* where a bundle shipping the binary directly gives it a *signal*. A fix that read only the
+signal passed the unit test, whose fake child dies by `kill -9 $$`, and did nothing at all for
+the real command; `tests/determinism.rs`'s
+`a_runaway_inside_one_builtin_call_is_a_refusal_with_no_line_at_all` drives
+`x = sum(range(10**10))` through the real server and the real child under `--cpu-seconds 1` and
+is what caught it. The general shape is worth keeping: **"told a command, not a binary" means
+every fact `core` reads about the child is a fact about whatever is in front of it.**
+
 **What the three have in common, and it is worth writing down.** Every one of them moved a case
 across ADR 0006 §2's line *in the direction of the mechanism that was actually observed* — and
 each time the previous position had been reasoned from how the limit was meant to work rather
