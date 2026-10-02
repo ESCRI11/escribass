@@ -704,7 +704,12 @@ def _guarded(tree: ast.AST) -> ast.AST:
             elif isinstance(value, ast.AST):
                 setattr(node, field, _wrap(value))
         stack.extend(ast.iter_child_nodes(node))
-    return ast.fix_missing_locations(tree)
+    # No `ast.fix_missing_locations` after this, and that is deliberate: it recurses, and this
+    # function is iterative for a reason. Every node [`_call`] makes is given its position by
+    # `copy_location`, which copies all four attributes `compile` wants, so there is nothing
+    # left to fix — and a recursive pass over an author's twenty-thousand-deep tree would raise
+    # where a refusal is expected.
+    return tree
 
 
 def _wrap(node: ast.AST) -> ast.AST:
