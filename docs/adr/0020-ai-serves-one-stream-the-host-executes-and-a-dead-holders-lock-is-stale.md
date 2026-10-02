@@ -154,7 +154,8 @@ proposal now has it, from which `ai` recomputes the view (ADR 0018 §2). `ai` �
 events: **text**, streamed as the model produces it; a **call** — the provider's call id, the
 tool name, the arguments as the JSON object the model wrote, and the model id the response
 named; and **done**, with the model's final text and that model id. The arguments cross as
-JSON text and not as a `oneof` of the twelve request messages, because twelve typed arms
+JSON text and not as a `oneof` of the ~~twelve~~ **fourteen** request messages, because
+~~twelve~~ fourteen typed arms
 mirroring `song_tools.proto` are the second description ADR 0006 §4 refuses, and the host
 hands the object to `call` exactly as MCP does. PR 3 writes the messages; they are named here
 so that `buf breaking` compares `proto/`'s whole M3 shape once against a `main` that has not
@@ -315,7 +316,7 @@ Its test is loud, so it does not muddy that pull request's silent half.
 |---|---|
 | A `Jobs` service beside the stream | A second way to ask about one thing, with a handle nobody needs; the stream already carries progress, cancellation and the answer. §13 named it and nothing defined it in three milestones |
 | Unary RPCs — `Prompt`, then `Poll` | Invents the job handle the stream makes unnecessary, and gives cancellation a second mechanism |
-| Tool arguments as a `oneof` of the request messages | Twelve arms mirroring `song_tools.proto`, free to drift from it (ADR 0006 §4); the host takes a JSON object already |
+| Tool arguments as a `oneof` of the request messages | ~~Twelve~~ **Fourteen** arms mirroring `song_tools.proto`, free to drift from it (ADR 0006 §4); the host takes a JSON object already. **Recounted 2026-10-02 at M4's close**: `OFFERED` gained `define_generator` and `compile_generator` at M4 PR 6 (ADR 0026 §3), and a count written as an argument against typed arms grows with the thing it argues about — which is the argument getting stronger, not the sentence staying true |
 | An error arm on the event | ADR 0013 §2's reason: a failure ends the stream with a status, and a provider failure after its retries is one (ADR 0022 §3) |
 
 **Spawn (question 12)**

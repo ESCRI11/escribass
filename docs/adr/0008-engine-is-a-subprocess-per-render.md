@@ -168,14 +168,18 @@ outside the cargo graph entirely — nothing in `cargo test` knows it exists, le
 is stale — and its inputs are submodules, which drift by being left alone.
 
 So the engine **embeds its provenance at configure time**: the commit of each submodule as
-`git rev-parse` reports it — Tracktion Engine, JUCE, **protobuf**, Rubber Band, and each
+`git rev-parse` reports it — Tracktion Engine, JUCE, **protobuf**, **grpc**, Rubber Band, and each
 bundled plugin, which is ~~**seven**~~ **eight** — compiled in as constants. (Protobuf added to this list
 2026-09-07 in PR 13: §4's own amendment made it a pinned submodule in PR 7 and the binary has
 reported it since, while this sentence still named six. ADR 0010 §1 was corrected for the same
 drift in PR 9; this one was not. **And it drifted again**: grpc++ joined at M2 PR 9 and the
 count stayed at seven, so the parenthetical written to stop this drift did not — corrected
 2026-09-24, at M3's close. `tests/renders.rs`'s `COMPONENTS: [&str; 8]` is the list that is
-actually checked, and the number to read is that one.) It reports them in two places: on `--version`, and in `RenderResult`.
+actually checked, and the number to read is that one. **And the list was still one short of its
+own number until 2026-10-02**, at M4's close: the 2026-09-24 correction changed "seven" to
+"eight" and did not add `grpc` to the five names it counts, so the sentence enumerated seven
+things and called them eight for a milestone. `grpc` is in the list now. The lesson is small and
+exact: when a count is corrected, the thing to re-read is not the number.) It reports them in two places: on `--version`, and in `RenderResult`.
 The render suite compares them against `lock.baseline.json` before it compares a single sample,
 and a mismatch fails naming the component, not as a golden diff.
 

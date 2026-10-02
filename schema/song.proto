@@ -63,8 +63,11 @@ message Song {
 
   RenderTarget render_target = 13;
 
-  // FormRule (§4.2, layer 1) is deferred to M4, when the generative compiler gives it a
-  // consumer. Adding it is additive: a new map on this message. ADR 0002 §7.
+  // FormRule (§4.2, layer 1) is deferred on an **event** rather than on a milestone: the
+  // consumer it waited for was the generative compiler, and M4's compiler reads the layer-2
+  // sections it is handed and needs no rule. Its trigger is the first time a person wants a
+  // form re-laid rather than re-typed. Adding it is additive: a new map on this message.
+  // ADR 0002 §7, re-deferred 2026-09-25 by ADR 0023 §6; this comment moved 2026-10-02.
 }
 
 // ---------------------------------------------------------------------------

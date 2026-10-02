@@ -352,10 +352,14 @@ switch in.
 **Amended 2026-10-01, in M4 PR 7, which walked the run history instead of the last three runs.
 Two of the sentences above are wrong, and they are wrong in opposite directions.**
 
-`cross-cpu` has executed — both of its gated steps `success` — in **thirty-seven** runs, not
-three. Twenty-five of them are M1's and M2's, from run `34120276911` (PR #50, `m1.11-goldens`,
-2026-09-07, the run that wrote the job) to run `34392687932` (the push of `17356bd`,
-2026-09-09, the last green run on `main` before the blackout). Their model counts, in order,
+`cross-cpu` has executed — both of its gated steps `success` — in ~~**thirty-seven**~~
+**forty-three** runs (thirty-seven on 2026-10-01; **recounted 2026-10-02 at M4's close**, where
+the six executions of M4 PRs 7 and 8 and their merges had already made the number stale — a count
+of one's own evidence goes out of date by the evidence arriving, which is the argument for dating
+it rather than stating it), not three. Twenty-five of them are M1's and M2's, from run
+`34120276911` (PR #50, `m1.11-goldens`, 2026-09-07, the run that wrote the job) to run
+`34392687932` (the push of `17356bd`, 2026-09-09, the last green run on `main` before the
+blackout). Their model counts, in order,
 are 1, 1, 1, 2, 3, 1, 1, 3, 1, 2, 3, 1, 2, 2, 2, 2, 2, 2, 3, 2, 2, 1, 1, 3, 2. So the job ran
 for the first time **since 2026-09-09**, not for the first time ever, and "the first time since
 it was written" is the sentence that should have been written.
@@ -381,8 +385,10 @@ runs.
 **The record, completed.** Six model strings have executed a golden render for this repository,
 across two vendors: `AMD EPYC 7763 64-Core Processor`, `AMD EPYC 9V74 80-Core Processor`,
 `AMD EPYC 9V45 96-Core Processor`, `Intel(R) Xeon(R) 6973P-C`,
-`Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz` and `INTEL(R) XEON(R) PLATINUM 8573C`. The twelve
-executions since CI came back, in order, with the pull request and the count:
+`Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz` and `INTEL(R) XEON(R) PLATINUM 8573C`. The
+~~twelve~~ **eighteen** executions since CI came back, in order, with the pull request and the
+count — the last six added 2026-10-02 at M4's close, which is what keeps this table a record
+rather than a snapshot:
 
 | Run | Ref | Models |
 |---|---|---|
@@ -398,13 +404,22 @@ executions since CI came back, in order, with the pull request and the count:
 | `36867215121` | #88, M4 PR 5 | 2 — EPYC 7763 ×2 `[avx avx2 sse4_2]`, **Xeon Platinum 8370C `[… avx512f …]`** |
 | `36871836825` | `main`, #88's merge | **1** — EPYC 7763 ×3, warned |
 | `36876840013` | #89, M4 PR 6 | 3 — EPYC 7763, and **two EPYC 9V74s split by their flags**, one with `avx512f` and one without |
+| `36887266727` | `main`, #89's merge, **attempt 2** | 3 — EPYC 7763, EPYC 9V74 `[… avx512f …]`, **Xeon 6973P-C `[… avx512f …]`** |
+| `36893329861` | #90, M4 PR 7 | 2 — EPYC 7763 ×2, **Xeon Platinum 8370C `[… avx512f …]`** |
+| `36917300767` | #90, M4 PR 7 | 3 — EPYC 7763, EPYC 9V74 `[avx avx2 sse4_2]`, **XEON PLATINUM 8573C `[… avx512f …]`** |
+| `36980841282` | `main`, #90's merge | 3 — EPYC 7763, EPYC 9V74 `[avx avx2 sse4_2]`, **EPYC 9V45 `[… avx512f …]`** — the first 9V45 to be counted with its flags |
+| `36992228042` | #91, M4 PR 8 | 3 — EPYC 7763, EPYC 9V74 `[… avx512f …]`, **Xeon 6973P-C `[… avx512f …]`** |
+| `36995454955` | `main`, #91's merge | 2 — EPYC 7763, EPYC 9V74 `[… avx512f …]` ×2 |
 
-From `36834898970` the line carries the flags as well as the model (M4 PR 4 closed the ledger
-row §6a left open), which is why the AVX-512 column only exists from there — and why
-`36876840013` reads 3 where the old counter would have read 2. **AVX-512 against non-AVX-512 in
-one run, from one binary, is recorded four times** (`36834898970`, `36860277354`, `36867215121`,
-`36876840013`), the last of them between two runners bearing the *same* model name. Nothing
-moved: every render job in every run reproduced all four committed hashes.
+From `36834898970` the line carries the flags as well as the model (~~a ledger row §6a left
+open~~ — **closed 2026-10-01 in M4 PR 4**, and §6a's own last paragraph is struck for it), which
+is why the AVX-512 column only exists from there — and why `36876840013` reads 3 where the old
+counter would have read 2. **AVX-512 against non-AVX-512 in one run, from one binary, is recorded
+~~four times~~ ten** — the four of 2026-10-01 (`36834898970`, `36860277354`, `36867215121`,
+`36876840013`) and every one of the six added above, which is every flagged run but
+`36871836825`'s one-model draw — one of them, `36876840013`, between two runners bearing the
+*same* model name. Nothing moved: every render job in every one of the **forty-three** executions
+reproduced all four committed hashes, M1's and M2's twenty-five included.
 
 The limits in the paragraph below are unchanged by any of this, and one is sharper for it:
 every part in the whole record, M1's included, is an **x86-64 server processor on GitHub's
@@ -426,24 +441,44 @@ until it drew two models — which is selecting the evidence rather than collect
 red for reasons unrelated to the change is also the check people learn to ignore, and this one has
 exactly one job: to be believed the day it disagrees.
 
-**Confirmed 2026-10-01, in M4 PR 7, with the rate.** Of the twelve executions since CI came back,
-**two drew one model and warned** (`36748500385` and `36871836825`, both pushes to `main`), and
-of M1's and M2's twenty-five, **eight** did. So a green `cross-cpu` means "compared" about four
-times in five and the exception is not rare. The decision stands for the reason above; the
-warning is loud in the run's annotations and the table in §6 is where a reader finds out which
-runs were which.
+**Confirmed 2026-10-01, in M4 PR 7, with the rate.** Of the ~~twelve~~ **eighteen** executions
+since CI came back, **two drew one model and warned** (`36748500385` and `36871836825`, both
+pushes to `main`), and of M1's and M2's twenty-five, ~~**eight**~~ **nine** did. ~~So a green
+`cross-cpu` means "compared" about four times in five~~ **So eleven of forty-three executions
+warned, and a green `cross-cpu` means "compared" about three times in four** — and the exception
+is not rare.
+
+**Recounted 2026-10-02 at M4's close, and the correction is a subtraction this ADR could have
+made for itself.** "Eight" was wrong the day it was written: §6's own list of M1's and M2's
+twenty-five counts, nine lines above, prints `1, 1, 1, 2, 3, 1, 1, 3, 1, 2, 3, 1, 2, 2, 2, 2, 2,
+2, 3, 2, 2, 1, 1, 3, 2`, and that sequence holds **nine** `1`s — confirmed independently against
+the `##[warning]` annotations of all forty-three logs, which give eleven warned and thirty-two
+noticed. So the data in §6 and the summary in §6a disagreed, in the same pull request, about a
+number one of them had already written down; and the rate the summary drew from it was the right
+fraction of the wrong window — four-in-five is the twelve post-blackout runs alone, not the record
+the sentence claims to be about. **§6's own rule — before writing "for the first time" or
+"never", list the runs — needs a second clause: before writing a rate, divide the list you have
+already printed.** The decision stands for the reason above; the warning is loud in the run's
+annotations and the table in §6 is where a reader finds out which runs were which.
 
 What keeps "green" from being read as "compared" is a rule about writing rather than a rule about
 CI: **a cross-CPU claim in this repository names the runs it rests on.** The table above gives
 three run ids and every row they produced; the 2026-09-07 and PR 13 amendments gave the date and
 the pull request. A claim with no run behind it is the thing to refuse, not a green badge.
 
-One improvement the evidence does justify, and this pull request does not make: the job counts
+~~One improvement the evidence does justify, and this pull request does not make: the job counts
 **model strings**, and the 9V74 pair proves a model string is not a feature set, so the count can
 under-report its own sample. Counting the model-and-flags line instead is one line of shell. It is
 not made here because this is a `proto/` pull request and a workflow change is outside the engine
 gate's exclusions, so it would rebuild the engine for a counter; it is a row in `docs/plan.md`'s
-deferred ledger, triggered by the next pull request that touches `checks.yml`.
+deferred ledger, triggered by the next pull request that touches `checks.yml`.~~ **Made
+2026-10-01 in M4 PR 4, which was that pull request; the ledger row is closed and §6's table carries
+the flags from `36834898970` on.** The paragraph is struck rather than deleted because the thing
+worth keeping is that it was written in the present tense and stayed there: §6 of this same ADR
+recorded the closure on 2026-10-01 and this section, one heading away, went on describing an open
+row until M4's close read both halves together. The job now counts `model [flags]`
+(`.github/workflows/checks.yml`, the `cpu` step's `GITHUB_OUTPUT` line and `cross-cpu`'s
+`CPU model-and-SIMD lines seen`).
 
 The retreat of this decision is still not taken, because nothing failed.
 

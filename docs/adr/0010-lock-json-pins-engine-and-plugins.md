@@ -43,6 +43,7 @@ looks kind.
 {
   "schema_version": 1,
   "engine": {
+    "grpc": "868412b573a0663c8db41558498caf44098f4390",
     "juce": "37c894f83d379179b2070d437ccd0f1cd9af9576",
     "protobuf": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
     "rubberband": "1d95888bec3ae0a17c0c4af791810d5a63f6bc35",
@@ -62,6 +63,14 @@ code writes; as first recorded it showed an invented plugin id, `com.surge-synth
 three engine components. The id is the one decision 4 was later refined to require — vendor and
 class name, as the plugin reports itself — and `engine` is a map rather than a fixed set of
 fields precisely so a fourth component (protobuf, PR 5) is a value and not an edit to a struct.
+
+**Corrected again 2026-10-02, at M4's close, and it is the same correction a second time.** The
+example showed **four** engine components and every `lock.json` the code writes has **five**:
+`grpc` joined at M2 PR 9 and the example was not re-read, exactly as ADR 0008 §5's list was not.
+The map-not-struct argument above is what made that invisible — a fifth component really is a
+value and not an edit, so nothing broke and nothing complained; the nine committed
+`tests/determinism/*/expected/lock.json` are what a reader should compare an example against, and
+they all carry five.
 
 Keys are sorted and the file stays pretty-printed JSON, because M0.4 byte-compares it across
 two processes and two transports; a map with a nondeterministic order would fail that suite
@@ -275,7 +284,7 @@ Neither rule refuses anything ADR 0007 §6 refuses, and the division there holds
 refuses what this engine cannot *render*, and the validator refuses what does not *resolve*.
 A Cmajor device is valid and unrenderable in M1; a plugin id nothing declares is neither.
 
-### 5. Airwindows is deferred to M4, with clap-wrapper. M1 bundles three synths
+### 5. Airwindows is ~~deferred to M4, with clap-wrapper~~ **M5's, via airwin2rack and no clap-wrapper**. M1 bundles three synths
 
 ADR 0003 §4 put "the remaining bundled instruments" in M1 on the strength of §8's candidate
 list — Surge XT, sfizz, Dexed, Airwindows — and §11's golden per bundled instrument. Three of
@@ -320,7 +329,7 @@ plugin pin since M1.
 | `lock_mismatch` as a `Violation` (caller-fixable) | Every fix is an operator action — install, rebuild, or edit the pin. Inside §6's retry loop it would only spend retries. |
 | Commit the manifest | Two pins for one fact — the manifest and the plugin binary — with the stale one silent. ADR 0008 §4's argument, one artefact over. |
 | The validator takes an optional manifest | Gives both rules a silent skip arm, which is the defect M0.4 exists to prevent. |
-| Bundle Airwindows in M1 anyway | A build investigation on a repository that may produce no Linux VST3, inside the milestone that has to prove bit-exactness. M4 already has clap-wrapper. |
+| Bundle Airwindows in M1 anyway | A build investigation on a repository that may produce no Linux VST3, inside the milestone that has to prove bit-exactness. ~~M4 already has clap-wrapper.~~ **The spike confirmed upstream builds no Linux VST3, and the maintained build needs no clap-wrapper at all** (2026-09-25, ADR 0023 §5; heading struck 2026-10-02 at M4's close, which closed without Airwindows as §5's own amendment said it would). |
 
 ## Consequences
 

@@ -117,16 +117,22 @@ around the list. This is a **subset of Python, not a dialect**: everything the D
 what CPython means by it, so a model that knows Python needs no second grammar, and everything
 it refuses is refused with the node's name and its line.
 
-**Nodes allowed:** `Module`, `Expr`, `Assign`, `AugAssign` ~~without a value's annotation being
-evaluated~~, `AnnAssign`, `For`, `While`, `If`, `Break`, `Continue`, `Pass`, `FunctionDef`
+**Nodes allowed:** `Module`, `Expr`, `Assign`, `AugAssign`, `AnnAssign` ~~without a value's
+annotation being evaluated~~, `For`, `While`, `If`, `Break`, `Continue`, `Pass`, `FunctionDef`
 with positional and keyword parameters and no decorator, `Return`, `Call`, `Name`, `Constant`
 whose value is an `int`, `str`, `bool` or `None`, `BinOp`, `UnaryOp`, `BoolOp`, `Compare`,
 `IfExp`, `List`, `Tuple`, `Dict`, `ListComp`, `DictComp`, `Subscript`, `Slice`, `Attribute`
 whose name does not begin with `_`, and `JoinedStr` with `FormattedValue` for messages. **Refused
 by absence:** `Import`, `ImportFrom`, `ClassDef`, `Lambda`, `Try`, `Raise`, `With`, `Global`,
-`Nonlocal`, `Yield`, `Await`, every `Async*`, `Starred`, `Set`, `SetComp`, `Delete`, `Assert`,
+`Nonlocal`, `Yield`, **`YieldFrom`**, `Await`, every `Async*`, `Starred`, `Set`, `SetComp`,
+`Delete`, `Assert`, **`TryStar`**, **`Match`**, **`NamedExpr`** (`:=`), **`GeneratorExp`**,
+**`MatMult`** (`@`), **`Div`** (`/`, decision 3's own amendment below),
 and a `Constant` that is a `float`, `complex` or `bytes`. **Refused by name:** any name not in the
-namespace, and any attribute beginning with `_`.
+namespace, and any attribute beginning with `_`. (**Six names added 2026-10-02, at M4's close.**
+This section claims the list is "written out so a reader and a model see the same list", and it
+was not: `compilers/generative`'s `_PHRASE` table gives each of those a readable phrase, and
+`dsl.py` flags `MatMult` and `Div` as deliberate absences, so the code was more complete than the
+ADR. Nothing was wrong in the language — only in the list a reader would have checked it against.)
 
 **Corrected 2026-10-02, in M4 PR 8: an `AnnAssign`'s annotation *is* evaluated.** The clause
 above said otherwise, and `x: len = 1` runs `len` — harmlessly, because every name an annotation
@@ -198,9 +204,13 @@ changes, because a golden would move. Refusing more moves no golden: every sourc
 before and still compiles compiles to the same notes, and the sources that stop compiling were
 never a function of their own text. `dsl_version` stays **1**.
 
-**No `float`, anywhere.** A float literal is refused at parse; `/` on two integers is
-`Fraction`'s job and the author writes `Fraction(a, b)` or `a // b`; nothing in the namespace
-returns a float. **Amended 2026-10-01, in M4 PR 4, where implementing this proved one half of
+**No `float`, anywhere.** A float literal is refused at parse; ~~`/` on two integers is
+`Fraction`'s job and~~ **`/` is outside the language and** the author writes `Fraction(a, b)` or
+`a // b`; ~~nothing in the namespace returns a float~~ **nothing in the namespace returns a float
+that reaches a value — `pow` could, and is checked where it makes one** (both clauses struck
+2026-10-02 at M4's close: the two amendments below already declared them false and left them
+standing, while the worked example four paragraphs on struck its own equivalents — one document
+cannot strike in one place and not the other for the same fact). **Amended 2026-10-01, in M4 PR 4, where implementing this proved one half of
 it wrong**: `/` on two integers cannot be made `Fraction`'s job and is not. `bar` and `beat`
 return an `int`, as the table below says, and CPython's `/` on two `int`s is float division —
 `beat(1) / 3` is `320.0`, not the `Fraction(320, 1)` the worked example below claimed, and
@@ -276,7 +286,10 @@ read as a security boundary by default and this one is not.
 **Purity by construction.** The names for a clock, a file, a socket, an environment variable
 and an import do not exist in the namespace, and the nodes that could reach them do not exist
 in the language. A generator therefore *cannot* read the time or the filesystem — not because a
-call is intercepted, but because there is nothing to call. This is CLAUDE.md #3 held by absence,
+call is intercepted, but ~~because there is nothing to call~~ **because no name reaches the host
+and, since 2026-10-02, no route from a name reaches it either** (struck at M4's close; the
+amendment below says in as many words that "there is nothing to call" was the sentence that was
+wrong, and left it standing for a pull request). This is CLAUDE.md #3 held by absence,
 which is stronger than held by discipline, and it is what the tests in M4 PR 4 exercise: every
 construct outside the allowlist fed and watched refused with its line, each failing first
 against an allowlist with that arm removed (trap 1).
@@ -381,7 +394,7 @@ function of the script and the `generators` golden reproducible, and it means ev
 changes on every compile — nothing references a note id today, and the day something does (an
 expression on the wire, a selection held across a compile) this is where it breaks.
 
-**A dry run compiles and answers with the diff**; the code view's *Compile* is a dry run and its
+**A dry run compiles and answers with the diff** — narrowed by §6: when the request's hash equals `compiled_hash` it answers *up to date* with an empty patch and **spawns nothing** (cross-referenced 2026-10-02 at M4's close, because §5 read as though every dry run spawns a child, and the code view's one-click-buys-the-truth claim depends on its not doing so) — the code view's *Compile* is a dry run and its
 *Apply* is the commit (ADR 0017 §4). **One compile per click, never per keystroke** (trap 8): a
 keystroke is a draft in the editor's buffer, Save is one `apply_patch` on
 `/generators/{id}/source`, and nothing is compiled that the document does not hold (trap 7).

@@ -79,12 +79,28 @@ Two entries need their own sentence.
 already pinned at 2.11.5 as a Rust crate. They are separate packages with separate version lines
 and §17's Tauri row lists the first two of the three; the row now names all three.
 
-**`codemirror` 6.0.2 has no consumer until M4.** Code views are ADR 0003 §8's, and §9 places
+**`codemirror` 6.0.2 ~~has~~ had no consumer until M4.** Code views are ADR 0003 §8's, and §9 places
 them there. Pinning it now is not scope creep — it is deleting the `"6.x"` that is in the file
 today, because a wrong pin is worse than a pin for something unbuilt: the range would be
 re-resolved silently on the first `npm install` in M4 and nobody would read it as a change. It is
 pinned, unused, and noted as unused, in the shape §17 already carries for Faust ("import path
 only; pin hash when vendored").
+
+**Amended 2026-10-02, at M4's close, because the set grew twice and this section said so neither
+time.** `codemirror` has its consumer — `app/src/code.tsx`, M4 PR 7 — and the editor cost what
+nothing had measured: the frontend bundle went from 388 kB raw / 115 kB gzipped to **777 kB /
+240 kB**, which is the number M5's DSP code view should cost nothing more of, being the same
+editor. **Two packages joined the `app` block after this sign-off, and neither is in the list
+above.** `@codemirror/lint` 6.9.7 arrived as `codemirror` 6.0.2's own transitive dependency and
+was then imported directly for one call, `setDiagnostics`, which made it a direct dependency in
+fact and an undeclared one on paper; it is pinned at what was already resolved, so `npm ci`
+installs the same tree and `app/package-lock.json`'s integrity hash for it does not move
+(added 2026-10-01 in M4 PR 7, **at the user's decision**, which is what §2's own rule asks for —
+what was missing was this amendment, not the approval). `tauri-build` 2.6.3 is the second: Tauri's
+own build half, declared in `app/src-tauri/Cargo.toml` since M2 and unpinned until `tests/baseline.rs`
+read the file in both directions and found it (2026-10-02, M4 PR 8). So §2's list is a sign-off of
+**nine** packages plus the four reused, and the `app` block is **eight** entries. §2's rule held
+in substance and failed on paper, which is the one kind of failure a list taken "once" invites.
 
 ### 3. What is deliberately absent, and what each absence costs
 
@@ -153,8 +169,10 @@ version we chose.
 ## Consequences
 
 - `lock.baseline.json`'s `app` block goes from three entries, two of which were not pins, to
-  seven that are — plus a `_note` and a `_reused` block naming the three that gain a consumer
-  rather than an entry, and saying which entry has no consumer yet.
+  ~~seven~~ **eight** that are (seven at M2; `codemirror_lint` joined 2026-10-01 and `tauri.build`
+  2026-10-02, §2 amended) — plus a `_note` and a `_reused` block naming the three — **four,
+  since `@types/node`** — that gain a consumer rather than an entry, and saying which entry has no
+  consumer yet — and **from M4 PR 7 none is without one**.
 - §17's Tauri row names all three Tauri packages and carries the webview note; the table gains a
   frontend row and a gRPC row (ADR 0013 §1); the rules gain one appended line.
 - PR 2 writes `app/package.json` against exactly this list and commits `app/package-lock.json`
