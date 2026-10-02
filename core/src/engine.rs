@@ -489,17 +489,22 @@ pub(crate) fn ended(
             _ => std::thread::sleep(Duration::from_millis(10)),
         }
     }
+    // Whether the kill below is ours, which is the whole of what [`Ended::by_signal`] is for.
+    let mut ours = false;
     if matches!(child.try_wait(), Ok(None)) {
         let _ = child.kill();
+        ours = true;
     }
     let Ok(finished) = child.wait() else {
         return Ended {
             crashed: true,
+            by_signal: None,
             message: format!("{what}, and could not be waited for"),
         };
     };
     Ended {
         crashed: !finished.success(),
+        by_signal: if ours { None } else { signal_of(&finished) },
         message: format!("{what}; it {}{}", how(&finished), tail(said)),
     }
 }
@@ -508,7 +513,26 @@ pub(crate) fn ended(
 pub(crate) struct Ended {
     /// Whether it exited non-zero or was killed — as against exiting 0 without answering.
     pub crashed: bool,
+    /// The signal it died of **on its own**, and `None` when [`ended`] is the one that killed
+    /// it or when it exited normally.
+    ///
+    /// The distinction is the only thing that makes the number worth reading: a child this
+    /// function had to kill is killed with `SIGKILL`, so a signal read without it says 9 for a
+    /// wedged child and 9 for one the kernel stopped, which are opposite reports.
+    /// `crate::generator` is the one caller that reads it — a generative compiler that dies by
+    /// `SIGKILL` after being dialled has hit its own hard CPU limit, which is the author's to
+    /// fix and not the operator's (ADR 0024 §7, amended 2026-10-02).
+    pub by_signal: Option<i32>,
     pub message: String,
+}
+
+/// The signal a child died of, if it died of one.
+///
+/// Unix's `WTERMSIG`, unconditionally: this repository claims Linux x86-64 and nothing else
+/// (ADR 0009 §1, ADR 0014 §2), and a `cfg` arm for a platform no test ever builds would be a
+/// second answer nobody reads.
+fn signal_of(finished: &std::process::ExitStatus) -> Option<i32> {
+    std::os::unix::process::ExitStatusExt::signal(finished)
 }
 
 /// Reads a pipe to end of stream, on a thread, so it can never fill.

@@ -37,14 +37,19 @@ now own; the sandbox as a subprocess `core` spawns per compile and the DSL as a 
 security (ADR 0024); `Generator.compiled_hash` alone, with `SourceRef.export_hash` waiting for
 M5's producer (ADR 0025); `proto/generate.proto`, the two tools, fourteen tools offered and a
 compile diagnostic fed back as a refusal (ADR 0026); and a `toolchains` block checked at compile
-and never at open (ADR 0027). The PR table is the plan's, PR 2 next: the schema change alone.
+and never at open (ADR 0027). The PR table is the plan's; PRs 2 to 8 are merged.
 
-**Three things to carry into every M4 step.** Nothing here is measured on a second machine: the
-repository was still private when M4 PR 1 opened, no runner has executed a step since 2026-09-09,
-and the user's decision to make it public (U2) had not taken effect — the first pull request a
-runner sees says so. `CEILING_USD` in `ai/src/escribass_ai/provider.py` equals the ledger's
-spent total, so every live run fails closed, and no paid measurement of a model writing the DSL
-is made before the DSL exists (U10). And M5's pins are **approved, not vendored**:
+**Three things to carry into every M4 step.** **CI executes steps again, from 2026-09-30** — what
+unblocked it was the billing and not the repository going public — and M4 PRs 2 to 8 have each had
+a full pull-request run, every job executing every real step. ~~No runner has executed a step since
+2026-09-09.~~ That sentence was true when M4 PR 1 opened and is not now; what it is *still* true
+of is every merge from M2 PR 9 through M4 PR 1, and **a push to `main` is watched by nobody** —
+#89's push run sat ninety-one minutes in apt, was cancelled, and nobody noticed for a day
+(docs/plan.md, "M4, mid-flight"). Spending fails closed at a **committed grant**: `GRANT_USD` in
+`ai/src/escribass_ai/provider.py` is `0.0` and is read before any price, because a hosted route
+listed at $0 is still a call to a metered account — raising it in a commit is what a grant is. And
+no paid measurement of a model writing the DSL is made before the DSL exists (U10). And M5's pins
+are **approved, not vendored**:
 `lock.baseline.json` moves when M5 uses them, `libjack-jackd2-dev` is a build dependency of the
 pinned image the user is installing, and a person reads Cmajor's licence before M5's first export
 (U9).
@@ -82,7 +87,9 @@ M3 PR 5 before anybody asked, which is why non-negotiable 7 exists.
    checked against `CEILING_USD` **before** it goes out, every call writes one line to
    `~/.escribass/spend.jsonl` read back at startup, and `escribass-ai --account-usage` /
    `--generation-cost` reconcile against OpenRouter's own counter. The grant was one session, it
-   was spent, and the ceiling was lowered to what it cost.
+   was spent, and the ceiling was lowered to what it cost — and from M4 PR 8 the *gate* is
+   `GRANT_USD`, committed at zero and read before the price, because a route listed at $0 is still
+   a call to a metered account and the arithmetic let one out.
 6. `tests/`: the loop is goldened end to end against a scripted model — one prompt driven twice
    through the real `ai` process, compared with itself and against committed bytes — which is
    §11's seventh bullet, added at M3's close because the test had described itself that way and

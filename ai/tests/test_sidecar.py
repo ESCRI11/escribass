@@ -293,6 +293,17 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         self.ledger = Path(self.directory.name) / "spend.jsonl"
         self.addCleanup(self.directory.cleanup)
 
+    def granted(self, usd: float = 1.0) -> object:
+        """A grant in place, for the tests that are about what happens **inside** one.
+
+        `GRANT_USD` is committed at zero and nothing but a commit raises it, so every test of
+        the ledger, of the estimate and of the ceiling has to say out loud that it is pretending
+        a person granted something. The number is not the real one and does not have to be: what
+        these tests are about is the arithmetic and the order of events within a grant, and the
+        only test of the *committed* value is the one that makes no grant at all.
+        """
+        return mock.patch.object(provider_module, "GRANT_USD", usd)
+
     def stub(self, answer: object) -> object:
         """An `openai.OpenAI` in the one shape `Live.call` uses, counting what it was asked."""
         made: list[dict] = []
@@ -332,7 +343,7 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         client = self.stub(self.answered())
         over = int((CEILING_USD / self.PRICED.completion) * 2)
         provider = Live(client, self.ledger, priced=self.PRICED)
-        with self.assertRaises(BudgetExhausted) as refused:
+        with self.granted(), self.assertRaises(BudgetExhausted) as refused:
             provider.call(self.body(over))
         self.assertEqual(client.made, [], "the call went out anyway")
         self.assertIn("refusing to spend", str(refused.exception))
@@ -341,8 +352,9 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
 
     def test_the_ledger_records_the_estimate_the_cost_and_the_running_total(self) -> None:
         provider = Live(self.stub(self.answered()), self.ledger, priced=self.PRICED)
-        provider.call(self.body())
-        provider.call(self.body())
+        with self.granted():
+            provider.call(self.body())
+            provider.call(self.body())
         rows = [json.loads(line) for line in self.ledger.read_text().splitlines()]
         self.assertEqual(len(rows), 2)
         # The recorded response carries the provider's own `usage.cost`, so the ledger charges
@@ -358,7 +370,8 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         # The hole a per-process ceiling leaves: every retry of a recording session would
         # spend the whole grant again. The ledger is read back, so it does not.
         first = Live(self.stub(self.answered()), self.ledger, priced=self.PRICED)
-        first.call(self.body())
+        with self.granted():
+            first.call(self.body())
         second = Live(self.stub(self.answered()), self.ledger, priced=self.PRICED)
         self.assertAlmostEqual(second._spent, 8.965e-05, places=8)
 
@@ -367,7 +380,7 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         # was — over-counting, which is the only safe direction for a ceiling, and the row
         # says which it is so reconciliation can explain the gap.
         provider = Live(self.stub(RuntimeError("boom")), self.ledger, priced=self.PRICED)
-        with self.assertRaises(RuntimeError):
+        with self.granted(), self.assertRaises(RuntimeError):
             provider.call(self.body())
         row = json.loads(self.ledger.read_text().splitlines()[0])
         self.assertIsNone(row["cost_usd"])
@@ -377,13 +390,16 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
     def test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back(self) -> None:
         # CLAUDE.md #7, and the hole the `ponytail:` used to name: the ledger lives in `$HOME`
         # and a program can delete it, so if the ceiling were large the reset would hand the
-        # next run the whole remaining grant. It is not large any more — it is exactly what the
-        # recorded run cost — and the three rows of that run were *estimated* at $0.0045,
-        # $0.0048 and $0.0052 apiece, each above it on its own.
+        # next run the whole remaining grant.
         #
-        # So this prices the **recorded request body**, at the **recorded prices**, against an
-        # **empty** ledger, and watches it refuse. Nothing about the reset needs closing: the
-        # enforcement point is the constant, and no file stands between it and a call.
+        # **What this covers, exactly** (it was read as covering more, which is why the next
+        # test exists): the **recorded request body** of 2026-09-24, priced at the **recorded
+        # prices** of that day, against an **empty** ledger — one body, one price list, one day.
+        # It is evidence that the recorded run cannot be replayed for free and is not evidence
+        # about any other body or any other price: at the prices here the completion term alone
+        # is $0.00344 of the $0.00376 ceiling, so about 4.6 KB of prompt headroom is what stands
+        # between this refusal and a call going out. The thing that does not depend on a price is
+        # `GRANT_USD`, and the test below is the one about that.
         #
         # Watched failing first at `CEILING_USD = 0.25`, where the same call is let out.
         recorded = json.loads(TRANSCRIPT.read_text(encoding="utf-8"))
@@ -391,9 +407,48 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         client = self.stub(self.answered())
         provider = Live(client, self.ledger, priced=self.PRICED)
         self.assertEqual(provider._spent, 0.0, "the ledger is empty, which is the premise")
-        with self.assertRaises(BudgetExhausted):
+        with self.granted(), self.assertRaises(BudgetExhausted):
             provider.call(first)
         self.assertEqual(client.made, [], "the call went out anyway")
+
+    def test_no_grant_refuses_a_route_the_catalogue_prices_at_nothing(self) -> None:
+        # The hole the arithmetic above leaves, found by review on 2026-10-02 and closed by the
+        # user's decision the same day. `ai.model` is a text field a person edits in a project's
+        # `lock.json`, and a `:free` route is listed at $0.00 per token — so `_worst_case` is
+        # exactly 0.0, `0.00376174 + 0 > 0.00376174` is **false**, and the call went out. A
+        # hosted model at $0 is still a call to a metered account, which is what CLAUDE.md #7 is
+        # about, so the gate is `GRANT_USD` and not a price.
+        #
+        # Watched failing first with the `GRANT_USD` gate deleted: the stub records one call.
+        # Note what is *not* patched here — the grant is the committed one.
+        free = Prices(0.0, 0.0, 131072, "2026-10-02", "a :free route")
+        client = self.stub(self.answered())
+        provider = Live(client, self.ledger, priced=free)
+        with self.assertRaises(BudgetExhausted) as refused:
+            provider.call(dict(self.body(), model="deepseek/deepseek-v4.1-flash:free"))
+        self.assertEqual(client.made, [], "a free route is still a paid call")
+        self.assertIn("GRANT_USD is $0.00000000", str(refused.exception))
+        self.assertEqual(provider_module.GRANT_USD, 0.0, "the committed grant is zero")
+        self.assertFalse(self.ledger.exists(), "a call nobody made is not a charge")
+
+    def test_a_ledger_already_at_the_ceiling_has_nothing_left_for_a_free_call(self) -> None:
+        # The second gate, on its own, and the `>=` in it (mutation D5, which survived because
+        # nothing exercised that line's boundary). Inside a grant, with the ledger at exactly
+        # the ceiling and a call that could cost nothing: `>` lets it out and `>=` does not.
+        #
+        # Watched failing first with `>` restored, where the stub records one call.
+        free = Prices(0.0, 0.0, 131072, "2026-10-02", "a :free route")
+        self.ledger.parent.mkdir(parents=True, exist_ok=True)
+        self.ledger.write_text(
+            json.dumps({"charged_usd": CEILING_USD}) + "\n", encoding="utf-8"
+        )
+        client = self.stub(self.answered())
+        provider = Live(client, self.ledger, priced=free)
+        self.assertEqual(provider._spent, CEILING_USD, "the ledger is at the ceiling")
+        with self.granted(), self.assertRaises(BudgetExhausted) as refused:
+            provider.call(self.body())
+        self.assertEqual(client.made, [], "the call went out anyway")
+        self.assertIn("reaches the ceiling", str(refused.exception))
 
     def test_the_prompt_the_request_carries_is_priced_too(self) -> None:
         # `_worst_case` is two terms, and the one a mutant drops is the prompt's: without it a
@@ -423,7 +478,7 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         # four calls, and the message read "after 3 retries".
         client = self.stub(provider_module.openai.OpenAIError("the SDK gave up"))
         provider = Live(client, self.ledger, priced=self.PRICED)
-        with self.assertRaises(provider_module.ProviderFailure) as failed:
+        with self.granted(), self.assertRaises(provider_module.ProviderFailure) as failed:
             asyncio.run(provider_module.ask(provider, self.body()))
         self.assertEqual(len(client.made), 1, "the SDK's failure was retried again")
         self.assertNotIn("after 3 retries", str(failed.exception))
@@ -436,7 +491,8 @@ class TestTheCeilingAndTheLedger(unittest.TestCase):
         provider = Live(
             self.stub(self.answered()), self.ledger, record_to=recording, priced=self.PRICED
         )
-        provider.call(self.body())
+        with self.granted():
+            provider.call(self.body())
         written = recording.read_text(encoding="utf-8")
         self.assertNotIn("Authorization", written)
         self.assertNotIn("api_key", written)

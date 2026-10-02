@@ -24,23 +24,38 @@ somebody has to have thought of. The two halves of that:
     use even if its node were allowed, and no `open`, `eval`, `exec`, `getattr` or `globals`
     to reach around the list with. Two locks on the same door, which is the shape ADR 0024 §3
     chose deliberately for `set` and which costs nothing to keep for the rest.
+  * **A value on its way out of the arithmetic is checked**, which is the third lock and the
+    one the review of 2026-10-02 added (ADR 0024 §3, §4, amended; M4 PR 8). An allowlist reads
+    *parsed source*, and three things happen in places a parse cannot see: `str.format`'s
+    replacement fields are a second language inside a string constant, so
+    `"{0.__globals__[random]._os.environ[HOME]}".format(note)` returned `$HOME` past the
+    `_`-attribute rule; `repr` of anything whose repr is the default carries a heap address, so
+    `f"{rng}"` was velocity 45 on one run of a source and velocity 3 on the next; and `**` is
+    integer arithmetic until its exponent turns out to be a `Fraction`, after which it is
+    `libm`. So `format` and `format_map` are refused by name, [`_shown`] decides what may
+    become text, and [`_power`] and [`_modulo`] check the two operators' results — the last two
+    through [`_guarded`], which rewrites the node into a call after the allowlist has run.
 
 **What this is not.** Not a security boundary (ADR 0024 §4). An `ast` allowlist has been
 escaped before; what it is built against is a sloppy author — a model reaching for
 `import random` and `math.sin` — and what it buys is *purity by construction*: there is no
-name for a clock, a file, a socket or an environment variable, so a generator cannot read one.
-That is CLAUDE.md #3 held by absence rather than by discipline. A resource limit, which is the
-other half of what "sandbox" claims here, belongs to the process and is in
+name for a clock, a file, a socket or an environment variable, and no route from an object in
+the namespace to one, so a generator cannot read one. That is CLAUDE.md #3 held by absence
+rather than by discipline — **and "no route" is a claim that was false until 2026-10-02**,
+which is why the third lock above is written down as a lock and not as a tidy-up. A resource
+limit, which is the other half of what "sandbox" claims here, belongs to the process and is in
 [`escribass_generative`].
 
 **No `float`, anywhere** (ADR 0024 §3), for ADR 0018 §4's reason: a transcendental's last bit
-is the platform's and a byte-compared golden cannot carry it. Held twice, as `set` is. A float
+is the platform's and a byte-compared golden cannot carry it. Held three times now. A float
 literal is refused at parse and so is `/`, because `bar` and `beat` return an `int` and
 CPython's `int / int` is float division — `beat(1) / 3` is `320.0`, not the `Fraction(320, 1)`
-ADR 0024 §3's worked example claimed, which is what the amendment of 2026-10-01 corrects. And
-every value that reaches a note is checked anyway: `pow(2, -1)` and `2 ** -1` are floats
-CPython hands an author whatever an allowlist says about literals, and [`_whole`] refuses one
-naming the argument.
+ADR 0024 §3's worked example claimed, which is what the amendment of 2026-10-01 corrects.
+`2 ** -1`, `2 ** Fraction(1, 2)` and `pow(2, Fraction(1, 2))` are the floats CPython hands an
+author whatever an allowlist says about literals, and [`_power`] refuses them **where they are
+made**: `int((2 ** Fraction(1, 2)) * 10**15) % 128` was a legal pitch until 2026-10-02, because
+`int()` launders a float into a whole number before [`_whole`] can see it. And every value that
+reaches a note is checked anyway, by [`_whole`], naming the argument.
 """
 
 from __future__ import annotations
@@ -168,9 +183,51 @@ _INSTEAD = {
     " comprehension keeps the source's order",
 }
 
+#: The attributes refused by **name**, beside the `_` rule, and the one reason both have.
+#:
+#: `"{0.__globals__[random]._os.environ[HOME]}".format(note)` returns `$HOME`, and
+#: `"{0.__globals__[__file__]}".format(note)` returns the install path. Neither is an escape
+#: the allowlist missed: `str.format`'s replacement-field syntax is **a second language inside
+#: a string constant**, and a walker over the parsed source cannot see into a string. So the
+#: `_`-attribute rule — the one that stops `().__class__.__bases__` — does not apply to the
+#: attribute chain a format field walks, and `format` and `format_map` hand an author arbitrary
+#: attribute access with it. There is no narrowing of the field syntax that would be safe, so
+#: the two methods that read it are outside the language and the f-string takes their place:
+#: an f-string's values are expressions the allowlist *does* see, and [`_shown`] checks each one
+#: (ADR 0024 §3, amended 2026-10-02; M4 PR 8).
+#:
+#: `%` is the third door into the same room and is shut at run time rather than here, because
+#: `a % b` is integer arithmetic until `a` turns out to be a `str` — see [`_modulo`].
+_SUBLANGUAGE = {
+    "format": ": its replacement fields are a second language inside a string constant, which"
+    " the allowlist cannot see into — `{0.__globals__[__file__]}` reaches the host through it."
+    " Write an f-string, whose values the DSL checks",
+    "format_map": ": its replacement fields are a second language inside a string constant,"
+    " which the allowlist cannot see into — `{0.__globals__[__file__]}` reaches the host"
+    " through it. Write an f-string, whose values the DSL checks",
+}
+
 #: What a `Constant` may hold. ADR 0024 §3: a value is an `int`, a `Fraction`, a `str`, a
 #: `bool` or `None` — and a `Fraction` is built by a call, never written as a literal.
 _CONSTANTS = (int, str, bool, type(None))
+
+#: The two operators the DSL checks the **result** of, and the name each is rewritten to call.
+#:
+#: Neither can be checked by looking at the source: `a ** b` is integer arithmetic until `b`
+#: turns out to be `Fraction(1, 2)` and `a % b` is integer arithmetic until `a` turns out to be
+#: a `str`, and in both cases the operands are expressions. So [`_guarded`] rewrites the node
+#: into a call to [`_power`] or [`_modulo`], **after** the allowlist has read the author's own
+#: tree (ADR 0024 §3, amended 2026-10-02; M4 PR 8).
+#:
+#: **The names are not identifiers, on purpose.** `compile` takes any string as a `Name`'s id,
+#: and `<pow>` is not something a source can write — so it is also not something a source can
+#: *shadow*. A guard injected under `__pow__` would be disarmed by an author writing
+#: `def __pow__(a, b):\n    return a ** b`, which the allowlist permits: it refuses an
+#: *attribute* beginning with `_`, never a name. `tests/test_dsl.py` feeds exactly that source.
+_GUARDED = {"Pow": "<pow>", "Mod": "<mod>"}
+
+#: The name an f-string's values are checked under, by the same rewrite and for the same reason.
+_SHOW = "<show>"
 
 
 def _bound(tree: ast.AST) -> set[str]:
@@ -235,6 +292,27 @@ def _refusals(tree: ast.AST, free: frozenset[str]) -> list[Refused]:
                 Refused(
                     f"the attribute `{node.attr}` begins with `_`, which is not in the"  # type: ignore[attr-defined]
                     " generator DSL (ADR 0024 §3)",
+                    line,
+                    column,
+                )
+            )
+        elif name == "Attribute" and node.attr in _SUBLANGUAGE:  # type: ignore[attr-defined]
+            found.append(
+                Refused(
+                    f"`.{node.attr}` is not in the generator DSL"  # type: ignore[attr-defined]
+                    f"{_SUBLANGUAGE[node.attr]} (ADR 0024 §3)",  # type: ignore[attr-defined]
+                    line,
+                    column,
+                )
+            )
+        elif name == "AugAssign" and type(node.op).__name__ in _GUARDED:  # type: ignore[attr-defined]
+            operator = {"Pow": "**=", "Mod": "%="}[type(node.op).__name__]  # type: ignore[attr-defined]
+            found.append(
+                Refused(
+                    f"`{operator}` is not in the generator DSL: `**` and `%` are the two"
+                    f" operators whose **result** the DSL checks — one for a float, the other"
+                    f" for a string being formatted — and an augmented assignment is not a"
+                    f" form it checks. Write `x = x {operator[:-1]} n` (ADR 0024 §3)",
                     line,
                     column,
                 )
@@ -334,10 +412,13 @@ def _whole(value: Any, where: str, low: int | None = None, high: int | None = No
     An `int` is itself; an integral `Fraction` is its numerator; **a `Fraction` that is not
     integral is refused, never rounded** (ADR 0024 §3) — `Fraction(beat(1), 3)` is
     `Fraction(320, 1)` and legal, `Fraction(beat(1), 7)` is `Fraction(960, 7)` and is refused
-    naming `start`. Anything else, a float included, is refused by its type: this is the
-    second of the two locks on floats, the first being that `/` is outside the language, and
-    it is the one that catches `2 ** -1`, which CPython hands an author whatever an allowlist
-    says about literals.
+    naming `start`. Anything else — a `str`, a `list`, a `None`, and a float if one ever
+    reappears — is refused by its type.
+
+    It is the **last** of three locks on floats, not the one that catches them: `/` is outside
+    the language, [`_power`] refuses the float where `**` makes it, and this is the boundary
+    check that would catch one arriving from somewhere nobody has thought of. Until 2026-10-02
+    it was the only lock after `/`, and `int()` walked around it (see the module note).
     """
     if isinstance(value, Fraction):
         if value.denominator != 1:
@@ -354,6 +435,97 @@ def _whole(value: Any, where: str, low: int | None = None, high: int | None = No
     if low is not None and not low <= value <= high:  # type: ignore[operator]
         raise Refused(f"{where} is {value}, which is outside {low}–{high} (ADR 0024 §3)")
     return value
+
+
+#: What the DSL will turn into text — at `str()`, in an f-string, and nowhere else.
+#:
+#: The leak is `repr`. A closure's default repr is `<function note at 0x7f…>`, a
+#: `random.Random`'s is `<random.Random object at 0x…>`, a bound method's and a `zip` object's
+#: are the same shape — and that address is where the allocator happened to put something,
+#: which ASLR moves between two runs of **one** source. `f"{rng}"` compiled to velocity 45 and
+#: then to velocity 3, and `str(note)` to a different length each run, so a generator whose
+#: notes were a function of that text had a stable `compiled_hash` and unstable notes
+#: (CLAUDE.md #3; docs/specs.md §11; ADR 0024 §4, amended 2026-10-02).
+#:
+#: This is the list rather than a denial of the known-leaky types, because the leaky set is
+#: open: every object in the language has bound methods, and each of those has an address.
+_SHOWABLE = (int, str, bool, type(None), Fraction)
+
+
+def _shown(value: Any, where: str) -> Any:
+    """`value` unchanged if its text is the source's, or a refusal naming the type it is not.
+
+    Recurses into a `list`, a `tuple` and a `dict`, because `str([rng])` leaks exactly what
+    `str(rng)` does. A `Clip` is a `NamedTuple` and so arrives as a tuple of ints, whose repr
+    is its fields; `sections` and `params` are the same shape.
+    """
+    if isinstance(value, _SHOWABLE):
+        return value
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _shown(item, where)
+        return value
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _shown(key, where)
+            _shown(item, where)
+        return value
+    raise Refused(
+        f"{where} of a {type(value).__name__} is not in the generator DSL: its text would be"
+        " the host's rather than the source's — a function's, an iterator's and a bound"
+        " method's default repr all carry a heap address, which moves between two runs of one"
+        " source. The DSL shows an int, a Fraction, a str, a bool, None, and a list, tuple or"
+        " dict of those (ADR 0024 §3)"
+    )
+
+
+def _text(value: Any) -> str:
+    """`str`, as the namespace offers it: the standard library's, over a checked value."""
+    return str(_shown(value, "str()"))
+
+
+def _power(base: Any, exponent: Any, modulus: Any = None) -> Any:
+    """`a ** b` and `pow(a, b)`: the one operation in the DSL that can make a float.
+
+    `2 ** -1` is `0.5`, `2 ** Fraction(1, 2)` is `1.4142135623730951` and
+    `(-8) ** Fraction(1, 3)` is a complex number — all three from `libm`, whose last bit is the
+    platform's, and all three laundered into a tick by `int()` or `round()` before [`_whole`]
+    ever sees a float (ADR 0024 §3, "no `libm` anywhere a golden can see"; found 2026-10-02).
+    Refused **where it is made**, so no float exists in the language at all and nothing
+    downstream has to know about one.
+    """
+    result = base**exponent if modulus is None else pow(base, exponent, modulus)
+    if isinstance(result, (float, complex)):
+        raise Refused(
+            f"{base} ** {exponent} is {result}, a {type(result).__name__}: the DSL's numbers"
+            " are int and Fraction, and this one came out of libm, whose last bit is the"
+            " platform's rather than the source's. A negative integer exponent of an int, and"
+            " any non-integral exponent, leave the language — write Fraction(a, b) for an exact"
+            " ratio, and nothing at all for an irrational one (ADR 0024 §3)"
+        )
+    return result
+
+
+def _modulo(left: Any, right: Any) -> Any:
+    """`a % b`: the remainder of an `int` or a `Fraction`, and nothing else — because `%` formats.
+
+    `"%r" % (note,)` is [`_shown`]'s leak reached through an operator rather than through a name.
+    **And `bytes` is the same operator again**, which is why this checks for a number rather than
+    against a `str`: `("%a".encode() % (note,)).decode()` compiled to velocity 53 on the first
+    sweep *after* the `str` arm was written, because PEP 461 gives `bytes.__mod__` its own `%a`
+    and `str` was the only type being refused. Two sublanguages, one operator, and a denial of
+    the types that have one is a list that was already wrong once — so the DSL's `%` is numeric,
+    text is the f-string's job, and the f-string is checked (ADR 0024 §3).
+    """
+    if not isinstance(left, (int, Fraction)):
+        raise Refused(
+            f"`%` on a {type(left).__name__} is not in the generator DSL: on a str or bytes it"
+            " formats, and its conversions carry whatever repr the value has —"
+            ' `"%r" % (rng,)` and `"%a".encode() % (rng,)` are both a heap address. The DSL\'s'
+            " `%` is the remainder of an int or a Fraction; write an f-string for text, whose"
+            " values the DSL checks (ADR 0024 §3)"
+        )
+    return left % right
 
 
 def namespace(request: CompileRequest, notes: list[Note]) -> dict[str, Any]:
@@ -458,9 +630,14 @@ def namespace(request: CompileRequest, notes: list[Note]) -> dict[str, Any]:
         # The standard library's, unchanged. `floor` and `ceil` are `math`'s, which call
         # `Fraction.__floor__` and `__ceil__` — integer arithmetic throughout, and three of the
         # operations the spike's digest covers.
+        #
+        # Two are **not** unchanged, and are the only two: `str` is the standard library's over
+        # a checked value ([`_shown`]) and `pow` is it over a checked result ([`_power`]). Both
+        # narrow what was accepted and neither changes what an accepted source means, so
+        # `dsl_version` stays 1 (ADR 0027 §1; the user's decision, 2026-10-02).
         "Fraction": Fraction,
         "int": int,
-        "str": str,
+        "str": _text,
         "bool": bool,
         "len": len,
         "range": range,
@@ -473,7 +650,7 @@ def namespace(request: CompileRequest, notes: list[Note]) -> dict[str, Any]:
         "sorted": sorted,
         "reversed": reversed,
         "divmod": divmod,
-        "pow": pow,
+        "pow": _power,
         "floor": math.floor,
         "ceil": math.ceil,
         "round": round,
@@ -500,6 +677,52 @@ def _span(signature: tuple[int, int], whole_bar: bool = True) -> int | None:
 # ---------------------------------------------------------------------------
 # Running one
 # ---------------------------------------------------------------------------
+
+
+def _guarded(tree: ast.AST) -> ast.AST:
+    """Rewrites the three places a value leaves the DSL's arithmetic into a checked call.
+
+    An f-string's value, `a ** b` and `a % b`, each wrapped in a call to [`_shown`],
+    [`_power`] or [`_modulo`] under a name no source can write. It runs **after** [`check`], so
+    what the allowlist reads and what a refusal's line points at are the author's own tree, and
+    it runs **whatever the allowlist said**, so a hole in the allowlist is not a way past these
+    three (ADR 0024 §3's two locks, a third time).
+
+    Iterative, for [`_refusals`]' reason: a source is an author's text and a recursive walk over
+    a tree twenty thousand deep would raise outside the refusal path. A node is rewritten as a
+    *field of its parent*, and the parent's children are read back after the rewrite, so
+    `2 ** (3 % 4)` is guarded twice and `f"{2 ** x}"` three times.
+    """
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    if isinstance(item, ast.AST):
+                        value[index] = _wrap(item)
+            elif isinstance(value, ast.AST):
+                setattr(node, field, _wrap(value))
+        stack.extend(ast.iter_child_nodes(node))
+    return ast.fix_missing_locations(tree)
+
+
+def _wrap(node: ast.AST) -> ast.AST:
+    """One node, guarded if it is one of the three — and itself if it is not."""
+    if isinstance(node, ast.FormattedValue):
+        # The value, not the node: `!r`, the conversion and the format spec all take the value
+        # as it is, so checking it on the way in covers `f"{rng!r}"` and `f"{rng:>10}"` too.
+        node.value = _call(_SHOW, [node.value], node.value)
+        return node
+    if isinstance(node, ast.BinOp) and type(node.op).__name__ in _GUARDED:
+        return _call(_GUARDED[type(node.op).__name__], [node.left, node.right], node)
+    return node
+
+
+def _call(name: str, arguments: list[ast.expr], at: ast.AST) -> ast.Call:
+    """A call to one of the guards, at the position of the node it replaces."""
+    function = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), at)
+    return ast.copy_location(ast.Call(func=function, args=arguments, keywords=[]), at)
 
 
 def _line(traceback: TracebackType | None) -> int:
@@ -541,10 +764,18 @@ def run(request: CompileRequest) -> list[Note]:
 
     # `__builtins__` is the namespace and nothing else, which is the second of the two locks:
     # there is no `__import__` for an `import` to reach, and no `open`, `eval`, `exec`,
-    # `getattr` or `globals` to reach around the allowlist with (ADR 0024 §3).
-    scope: dict[str, Any] = {"__builtins__": space, "__name__": "generator"}
+    # `getattr` or `globals` to reach around the allowlist with (ADR 0024 §3). The three guards
+    # beside it are the third lock, reachable only from the tree [`_guarded`] rewrote: their
+    # names are not identifiers, so an author can neither call nor shadow one.
+    scope: dict[str, Any] = {
+        "__builtins__": space,
+        "__name__": "generator",
+        _SHOW: lambda value: _shown(value, "formatting"),
+        _GUARDED["Pow"]: _power,
+        _GUARDED["Mod"]: _modulo,
+    }
     try:
-        exec(compile(tree, SOURCE, "exec"), scope)  # noqa: S102 — the whole point of the file
+        exec(compile(_guarded(tree), SOURCE, "exec"), scope)  # noqa: S102 — the point of the file
     except Refused as refused:
         # From `note()`, from `_whole`, or from the CPU limit's handler: it has the words and
         # may not have the line.

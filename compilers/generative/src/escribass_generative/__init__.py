@@ -268,23 +268,24 @@ def _with_hash_seed() -> None:
         raise SystemExit(2) from None
 
 
-def _on_sigxcpu(_signal: int, frame: FrameType | None) -> None:
-    """Turns the soft CPU limit into the ordinary refusal, with the line it was reached on."""
+def _on_sigxcpu(_signal: int, _frame: FrameType | None) -> None:
+    """Turns the soft CPU limit into the ordinary refusal, which carries the author's line.
+
+    **The line is not read off `frame` here, and a walk of it was deleted on 2026-10-02.** This
+    raises inside the author's own call stack, so the exception's traceback has their frame in it
+    and `dsl.run` fills the line from it like any other refusal's — the frame walk this function
+    used to do was a second answer to one question, and review's mutation of it survived the suite
+    for the only reason such a mutation can: nothing depended on it (M4 PR 8, mutation A4).
+    """
     # One shot: the answer has to get out, and the kernel re-sends SIGXCPU every second after
-    # the soft limit. The hard limit a few seconds up is what is left if the answer hangs.
+    # the soft limit. The hard limit a few seconds up is what is left if the answer hangs — and
+    # what stops a call that never returns to the interpreter at all, which this handler cannot
+    # interrupt (ADR 0024 §4, §7, amended 2026-10-02).
     signal.signal(signal.SIGXCPU, signal.SIG_IGN)
-    line = 0
-    at = frame
-    while at is not None:
-        if at.f_code.co_filename == dsl.SOURCE:
-            line = at.f_lineno
-            break
-        at = at.f_back
     plural = "" if _measured_budget == 1 else "s"
     raise dsl.Refused(
         f"the generator reached the compiler's CPU limit of {_measured_budget} second{plural}"
-        " (ADR 0024 §4)",
-        line,
+        " (ADR 0024 §4)"
     )
 
 

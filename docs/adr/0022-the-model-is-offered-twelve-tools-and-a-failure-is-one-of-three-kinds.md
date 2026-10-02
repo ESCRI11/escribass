@@ -230,10 +230,25 @@ provider's own counter** — CLAUDE.md #7's three mechanisms, all three in `prov
 which is the only object in this repository that can spend money and which a scripted turn
 never constructs:
 
-- **The ceiling** is `CEILING_USD`, a committed constant and deliberately not an environment
-  variable, since a cap an operator raises from the shell is not a cap. **Amended 2026-09-24 in
-  M3 PR 10, by the user's decision: it is $0.00376174 — what the grant actually bought — and not
-  $0.25.** The grant was one recording session; it produced the transcript; it is spent.
+- **The gate** is `GRANT_USD` and **the budget** is `CEILING_USD`, both committed constants and
+  deliberately not environment variables, since a cap an operator raises from the shell is not a
+  cap. **Amended 2026-09-24 in M3 PR 10, by the user's decision: the ceiling is $0.00376174 —
+  what the grant actually bought — and not $0.25.** The grant was one recording session; it
+  produced the transcript; it is spent.
+
+  **Amended again 2026-10-02 in M4 PR 8, by the user's decision, because the ceiling alone was
+  fail-closed by *consequence* and not by rule.** The reasoning below — the ceiling equals the
+  ledger's total, so any call whose worst case is above zero is refused — is sound and has a
+  hole exactly where it says "above zero". A route the catalogue prices at **$0.00** has a worst
+  case of exactly zero; `0.00376174 + 0 > 0.00376174` is **false**; and `ai.model` is a text
+  field a person edits in a project's `lock.json`, so a `:free` route is a one-word change away.
+  A hosted model at $0 is still a call to a metered account, which is what CLAUDE.md #7 is about.
+  So `GRANT_USD` is **$0.0** and is read **before the price is even fetched**: at zero no call
+  goes out whatever it is priced at, and a grant is a person raising that number in a commit. The
+  ceiling keeps its job — is the grant spent? — with `>` corrected to `>=`, because a call whose
+  worst case is exactly what is left is a call that could land on the ceiling. Two gates, each
+  with a test that watches it refuse: a price can no longer be the only thing between a loop and
+  a bill.
   Leaving $0.246 behind a constant is a standing authorisation for whatever runs next, machine-
   wide and all-time, and CLAUDE.md #7 says a previous authorisation does not carry. Any live
   run now fails closed until a person raises the line in code, where a reviewer sees it. The

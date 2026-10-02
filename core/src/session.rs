@@ -379,11 +379,26 @@ impl Session {
                       escribass-generative` (ADR 0024 §1)"
                 .to_string(),
         })?;
-        // Every way of not answering is an operator error, `generator_timeout` and
-        // `generator_failed` alike (ADR 0024 §7, amended 2026-10-01 in M4 PR 6). The one way
-        // a *source* fails is the `Diagnostic` arm below, which the child's own CPU and memory
-        // limits also come back as, carrying the line they fired on.
-        let answer = sandbox.compile(&compiling)?;
+        // Every way of not answering is an operator error — `generator_timeout` and
+        // `generator_failed` alike (ADR 0024 §7, amended 2026-10-01 in M4 PR 6) — **except
+        // one**, which is the amendment of 2026-10-02: a child killed by its own hard CPU
+        // limit said nothing, and is still the author's to fix. `Sandbox::compile` is what can
+        // tell that case apart, so it names the rule a refusal carries and this turns it into
+        // one. The other way a *source* fails is the `Diagnostic` arm below, which the child's
+        // own soft CPU limit and its memory limit come back as, carrying the line they fired on.
+        let answer = match sandbox.compile(&compiling) {
+            Ok(answer) => answer,
+            Err(e) if e.rule == "generator_error" => {
+                return Ok(refused(vec![Violation {
+                    path: format!("/generators/{}/source", generator.id),
+                    rule: "generator_error",
+                    // No position prefix, because there is none: the kernel stopped the child
+                    // mid-call and nothing in it ever regained control to name a line.
+                    message: e.message,
+                }]))
+            }
+            Err(e) => return Err(e),
+        };
         let crate::generator::Compiled { dsl_version, python_version, result } = answer;
         let compiled = match result {
             // The child's own words, whole, with `core`'s rule around them: it does not

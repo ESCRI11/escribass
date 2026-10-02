@@ -137,15 +137,28 @@ MODELS = "https://openrouter.ai/api/v1/models"
 #: person grants the next one, in code, where a reviewer sees it (the user's decision,
 #: 2026-09-24).
 #:
-#: **Deleting the ledger, or moving `HOME`, does not buy a call back**, and that is measured
-#: rather than hoped: the three recorded rows were *estimated* at $0.00453901, $0.00480732 and
-#: $0.00516824, each on its own above this ceiling, so the first call of a turn is refused
-#: against an empty ledger exactly as it is against a full one. The ledger is a record, not the
-#: enforcement point — the enforcement point is this constant, and no file a program can delete
-#: is between it and a call (`ai/tests/test_sidecar.py`,
-#: `test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back`, which prices the recorded
-#: request body against the recorded prices and watches it refuse).
+#: **Deleting the ledger, or moving `HOME`, does not buy a call back.** The ledger is a record,
+#: not the enforcement point — the enforcement point is [`GRANT_USD`], and no file a program can
+#: delete is between it and a call.
 CEILING_USD = 0.00376174
+
+#: **What a person has authorised this machine to spend, in US dollars. It is zero.**
+#:
+#: The gate, where [`CEILING_USD`] is the budget: at zero **no call goes out, whatever it is
+#: priced at**, and raising this line in a commit is what a grant is (CLAUDE.md #7, which says a
+#: previous authorisation does not carry to the next task).
+#:
+#: **Why a constant and not the arithmetic.** Until 2026-10-02 fail-closed was a *consequence*
+#: of the numbers: `CEILING_USD` equalled the ledger's total, every priced call's worst case was
+#: above it on its own, and so every call was refused. Review found what that leaves out. A
+#: route the catalogue prices at $0 — a `:free` one, and `ai.model` is a text field a person
+#: edits in a project's `lock.json` — has a worst case of exactly $0.00, and
+#: `0.00376174 + 0 > 0.00376174` is **false**: it went out. A hosted model at $0 is still a call
+#: to a metered account, which is what CLAUDE.md #7 is about, so the price can no longer be what
+#: decides. Two gates now, in this order, and each has a test that watches it refuse
+#: (`ai/tests/test_sidecar.py`): this one, which asks whether anything at all was granted, and
+#: the ceiling, which asks whether the grant is spent (the user's decision, 2026-10-02).
+GRANT_USD = 0.0
 
 #: Where the ledger is written: outside the repository, because it is a record of real money
 #: and not a fixture, and in one fixed place, because the ceiling is only a ceiling if every
@@ -328,12 +341,25 @@ class Live:
 
     def call(self, body: dict[str, Any]) -> ChatCompletion:
         """One paid call, capped before it goes out and ledgered whichever way it ends."""
+        # **Before the price, and whatever the price is** (CLAUDE.md #7; see [`GRANT_USD`]). A
+        # route listed at $0 is still a call to a metered account, and a catalogue that lies
+        # about a price, or cannot be read at all, must not be able to buy one either.
+        if GRANT_USD <= 0.0:
+            raise BudgetExhausted(
+                f"refusing to spend: GRANT_USD is ${GRANT_USD:.8f}, so no call goes out, "
+                f"whatever it is priced at — a route a provider lists at $0 is still a call "
+                f"to a metered account (CLAUDE.md #7). A grant is a person raising GRANT_USD "
+                f"in a commit, and the ceiling with it"
+            )
         priced = self._priced = self._priced or prices(body["model"])
         worst = _worst_case(body, priced)
-        if self._spent + worst > CEILING_USD:
+        # `>=` and not `>`: a call whose worst case is exactly what is left is a call that could
+        # land on the ceiling, and a ledger already *at* the ceiling has nothing left to spend
+        # even on a call priced at nothing (found by review, 2026-10-02 — mutation D5).
+        if self._spent + worst >= CEILING_USD:
             raise BudgetExhausted(
                 f"refusing to spend: ${self._spent:.6f} is already on the ledger and this "
-                f"call could cost ${worst:.6f}, which crosses the ceiling of "
+                f"call could cost ${worst:.6f}, which reaches the ceiling of "
                 f"${CEILING_USD:.8f} (priced at ${priced.prompt}/${priced.completion} per "
                 f"token from {priced.source}, {priced.on}; ledger {self.ledger})"
             )
