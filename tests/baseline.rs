@@ -539,11 +539,18 @@ fn every_dependency_a_manifest_declares_is_declared_here_too() {
         let text = read(manifest);
         let mut inside = false;
         for line in text.lines() {
-            if line.starts_with('[') {
-                inside = matches!(
-                    line.trim(),
-                    "[dependencies]" | "[dev-dependencies]" | "[build-dependencies]"
-                );
+            if let Some(header) = line.trim().strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+                inside = matches!(header, "dependencies" | "dev-dependencies" | "build-dependencies");
+                // `[dependencies.foo]` is the same declaration written as a section, and a
+                // scanner that only reads `foo = …` lines would not see it — a hole in a guard
+                // whose whole job is not to have one. Nothing in this tree uses the form today.
+                for table in ["dependencies.", "dev-dependencies.", "build-dependencies."] {
+                    if let Some(name) = header.strip_prefix(table) {
+                        if !ours(name) && !covered(name) {
+                            missing.push(format!("{manifest} asks for the crate `{name}`"));
+                        }
+                    }
+                }
                 continue;
             }
             let Some((name, rest)) = line.split_once(" = ") else { continue };
