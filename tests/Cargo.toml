@@ -14,6 +14,13 @@ autotests = false
 name = "determinism"
 path = "determinism.rs"
 
+# `lock.baseline.json` against the files that really pin what it declares, both ways (M4 PR 8).
+# Unconditional on purpose: it reads text files and spawns nothing, so there is no environment
+# for it to need and no reason for a plain `cargo test` not to run it.
+[[test]]
+name = "baseline"
+path = "baseline.rs"
+
 # The golden renders, absent unless asked for. They need a built engine and three VST3s, which
 # cargo cannot produce, and a `#[test]` that noticed that and returned early would be the quiet
 # skip M0.4 exists to prevent (docs/plan.md, M1 PRs). `required-features` makes the target not

@@ -108,7 +108,8 @@
       "version": "2.11.5",
       "cli": "2.11.4",
       "api": "2.11.1",
-      "note": "one Rust crate and two npm packages on separate version lines. The webview Tauri renders in — WebKitGTK, WKWebView, WebView2 — ships with the operating system and cannot be pinned by anyone (ADR 0016 §5)."
+      "build": "2.6.3",
+      "note": "one Rust crate, one build crate and two npm packages on separate version lines. `build` is `tauri-build`, Tauri's build half, declared in app/src-tauri/Cargo.toml and unpinned here until 2026-10-02, when the guard that reads this file in both directions found it (M4 PR 8). The webview Tauri renders in — WebKitGTK, WKWebView, WebView2 — ships with the operating system and cannot be pinned by anyone (ADR 0016 §5)."
     },
     "react": {
       "version": "19.2.8"
@@ -317,6 +318,13 @@
       "version": "v4"
     },
     "actions_cache": {
+      "version": "v4"
+    },
+    "actions_upload_artifact": {
+      "version": "v4",
+      "note": "the engine job hands its built binary and its goldens to the jobs that read them. Used since M1 and unpinned here until 2026-10-02 (M4 PR 8)."
+    },
+    "actions_download_artifact": {
       "version": "v4"
     },
     "node": {

@@ -117,8 +117,8 @@ around the list. This is a **subset of Python, not a dialect**: everything the D
 what CPython means by it, so a model that knows Python needs no second grammar, and everything
 it refuses is refused with the node's name and its line.
 
-**Nodes allowed:** `Module`, `Expr`, `Assign`, `AugAssign`, `AnnAssign` without a value's
-annotation being evaluated, `For`, `While`, `If`, `Break`, `Continue`, `Pass`, `FunctionDef`
+**Nodes allowed:** `Module`, `Expr`, `Assign`, `AugAssign` ~~without a value's annotation being
+evaluated~~, `AnnAssign`, `For`, `While`, `If`, `Break`, `Continue`, `Pass`, `FunctionDef`
 with positional and keyword parameters and no decorator, `Return`, `Call`, `Name`, `Constant`
 whose value is an `int`, `str`, `bool` or `None`, `BinOp`, `UnaryOp`, `BoolOp`, `Compare`,
 `IfExp`, `List`, `Tuple`, `Dict`, `ListComp`, `DictComp`, `Subscript`, `Slice`, `Attribute`
@@ -127,6 +127,76 @@ by absence:** `Import`, `ImportFrom`, `ClassDef`, `Lambda`, `Try`, `Raise`, `Wit
 `Nonlocal`, `Yield`, `Await`, every `Async*`, `Starred`, `Set`, `SetComp`, `Delete`, `Assert`,
 and a `Constant` that is a `float`, `complex` or `bytes`. **Refused by name:** any name not in the
 namespace, and any attribute beginning with `_`.
+
+**Corrected 2026-10-02, in M4 PR 8: an `AnnAssign`'s annotation *is* evaluated.** The clause
+above said otherwise, and `x: len = 1` runs `len` — harmlessly, because every name an annotation
+can hold is a name the allowlist already weighed, and an annotation in this language can no more
+reach outside it than an expression can. Nothing changes but the sentence, which is the point of
+correcting it: a reader who trusted it would have believed a position in the language is
+unevaluated when none is.
+
+**And a third lock, added 2026-10-02 in M4 PR 8, because the two above were not enough.** Review
+reached `$HOME`, the install path and a heap address from inside the DSL, with every node and
+every name on the allowlist and the namespace exactly as this decision writes it:
+
+```python
+f"{rng}"                                                  # velocity 45, then 3, from one source
+"{0.__globals__[random]._os.environ[HOME]}".format(note)  # $HOME
+"{0.__globals__[__file__]}".format(note)                  # the install path
+str(note)                                                 # "<function … at 0x…>"
+int((2 ** Fraction(1, 2)) * 10**15) % 128                 # pitch 103, out of libm
+```
+
+Each compiled, each produced notes, and each had a stable `compiled_hash`. **The lesson is one
+sentence: an allowlist reads parsed source, and three things happen where a parse cannot see.**
+`str.format`'s replacement fields are a second language inside a string *constant*, so the
+`_`-attribute rule — the rule that stops `().__class__.__bases__` — never applies to the
+attribute chain a format field walks. `repr` of anything whose repr is the default is a function
+of the heap, which ASLR moves between two runs of one source, and `str()` and an f-string are
+both `repr` with extra steps. And `**` is integer arithmetic right up until its exponent turns
+out to be a `Fraction`, after which it is `libm` — and `int()` launders the result into a whole
+number of ticks before the boundary check below can see a float.
+
+So a value **on its way out of the arithmetic** is checked, which is the third lock and the one
+neither of the other two can be:
+
+  * `format` and `format_map` are **refused by name**, like an attribute beginning with `_`.
+    There is no narrowing of the field syntax that would be safe, and the f-string takes their
+    place: its values are expressions the allowlist does see.
+  * `str()` and an f-string refuse anything that is not an `int`, a `Fraction`, a `str`, a
+    `bool`, `None`, or a list, tuple or dict of those — the same list this decision already calls
+    a value, recursively, because `str([rng])` leaks exactly what `str(rng)` does. The leaky set
+    cannot be denied instead of allowing this one: every object in the language has bound
+    methods, and every bound method has an address.
+  * `%` is **numeric**: its left operand is an `int` or a `Fraction` or it is refused. It was
+    written first as "refused on a `str`", and the next sweep of the family found
+    `("%a".encode() % (note,)).decode()` returning the address anyway — PEP 461 gives
+    `bytes.__mod__` its own `%a`, and `str` was the only type being denied. **A denial of the
+    types that format is a list that has already been wrong once; a requirement that `%` is
+    numeric is a rule.** That is the 51st refusal and the same lesson as the 49th.
+  * `**` and `pow` refuse a `float` or `complex` **result** where they make it. `**=` and `%=`
+    are refused with them: those are the two operators whose result is checked, and an augmented
+    assignment is not a form that checks one.
+
+**One route to the host survives, named here because it is bounded rather than closed.** An
+exception's *message* can carry a default repr: `[1, 2].index(note)` raises `ValueError:
+<function … at 0x…>`, and that text crosses as the `Diagnostic`. It cannot reach a note — the DSL
+has no `try`, so an exception ends the compile and the answer has no notes in it — and it is not
+hashed, so no golden and no `compiled_hash` can carry it. What it costs is that one refusal's
+*text* is not a pure function of the source. Sanitising every exception CPython can raise would
+be the denial list this decision just stopped writing twice; the bound is the one that matters,
+and it is the absence of `try`.
+
+The two operators are checked by rewriting the node into a call after the allowlist has read the
+author's own tree, under names that are not identifiers — so no source can call one, and no
+source can *shadow* one either, which a guard named `__show__` could not claim: this language
+refuses an attribute beginning with `_` and has never refused a *name*.
+
+**None of this bumps `dsl_version`, and that was decided rather than overlooked** (the user's
+decision, 2026-10-02). ADR 0027 §1 bumps the version when a name is removed or a name's meaning
+changes, because a golden would move. Refusing more moves no golden: every source that compiled
+before and still compiles compiles to the same notes, and the sources that stop compiling were
+never a function of their own text. `dsl_version` stays **1**.
 
 **No `float`, anywhere.** A float literal is refused at parse; `/` on two integers is
 `Fraction`'s job and the author writes `Fraction(a, b)` or `a // b`; nothing in the namespace
@@ -137,9 +207,12 @@ return an `int`, as the table below says, and CPython's `/` on two `int`s is flo
 there is no hook that would make it otherwise without replacing the `int` the table fixes. So
 **`Div` is outside the language**, refused at parse with its line and naming what the sentence
 above already says to write instead; the worked example's two `/` sentences are corrected with
-it. The rule then holds **twice**, which is this decision's habit: `/` is gone, *and* every
-value that reaches `note` is checked, because `pow(2, -1)` and `2 ** -1` are floats CPython
-hands an author whatever an allowlist says about literals. This is ADR 0018 §4's reason — a transcendental's last bit is the platform's,
+it. The rule then holds **three times**, which is this decision's habit: `/` is gone; `**`
+and `pow` refuse a float **result** where they make it (**amended 2026-10-02 in M4 PR 8**, where
+`int((2 ** Fraction(1, 2)) * 10**15) % 128` was a legal pitch — "nothing in the namespace returns
+a float" was false of `pow`, and `int()` and `round()` laundered what it returned before anything
+checked it); *and* every value that reaches `note` is checked, which is now the backstop rather
+than the catch. This is ADR 0018 §4's reason — a transcendental's last bit is the platform's,
 and a byte-compared golden cannot carry it — and it is what makes the platform-free claim
 honest rather than hopeful. A value is an `int`, a `Fraction`, a `str`, a `bool`, `None`, or a
 list, tuple or dict of those.
@@ -165,7 +238,7 @@ guarantee since 3.7, and `sorted` over strings is lexicographic and reads no has
 | `params` | `Generator.params`, a dict of `str` to `str`; the author converts with `int(...)` or `Fraction(...)`. Typed params stay deferred (ADR 0002 §8) |
 | `sections` | The song's sections as `(name, start_tick, end_tick)` tuples in absolute ticks, in tick order |
 | `tempo_at(tick)`, `signature_at(tick)` | `Fraction` bpm, and `(numerator, denominator)`, in force at an absolute tick |
-| `Fraction`, `int`, `str`, `bool`, `len`, `range`, `enumerate`, `zip`, `min`, `max`, `abs`, `sum`, `sorted`, `reversed`, `divmod`, `pow`, `floor`, `ceil`, `round` | The standard library's, unchanged; `floor`, `ceil` and `round` take a `Fraction` to an `int` by `fractions`' own definitions, which the spike measured stable |
+| `Fraction`, `int`, `str`, `bool`, `len`, `range`, `enumerate`, `zip`, `min`, `max`, `abs`, `sum`, `sorted`, `reversed`, `divmod`, `pow`, `floor`, `ceil`, `round` | The standard library's, unchanged; `floor`, `ceil` and `round` take a `Fraction` to an `int` by `fractions`' own definitions, which the spike measured stable. **Two are not unchanged, from 2026-10-02 (M4 PR 8), and they are the only two**: `str` is the standard library's over a checked value and `pow` is it over a checked result — both narrow what is accepted and neither changes what an accepted source means |
 
 Additions to the namespace are additive and move no golden; a name removed, or a name whose
 meaning changes, bumps the DSL's version (ADR 0027 §1), because a golden would move.
@@ -208,6 +281,17 @@ which is stronger than held by discipline, and it is what the tests in M4 PR 4 e
 construct outside the allowlist fed and watched refused with its line, each failing first
 against an allowlist with that arm removed (trap 1).
 
+**Amended 2026-10-02, in M4 PR 8: that paragraph was false, and "there is nothing to call" is
+the sentence that was wrong.** There was nothing to *call*, and there were two routes that call
+nothing — `str.format`'s replacement fields, which walk an attribute chain inside a string
+constant the allowlist cannot read, and `repr`, which is a function of where the allocator put
+something. Review reproduced `$HOME`, the install path and a velocity that changed between two
+runs of one source; decision 3 above now holds the third lock that closes them, and the claim
+here is narrower and true: **no name reaches the host, and no route from a name reaches it
+either.** The general form is worth more than the fix. A rule about *parsed source* cannot see
+into a string constant, a repr, or an operator whose type is decided at run time — so a language
+defended only by an allowlist is defended only where its grammar is the whole truth.
+
 **A limit, enforced at the process.** The child sets `resource.RLIMIT_CPU` and `RLIMIT_AS` on
 itself before it executes anything, and `core` imposes a wall-clock timeout on the call; a
 generator that loops for ever is a refusal, never a hang — M0.4's rule that
@@ -217,7 +301,9 @@ configuration, named as numbers rather than as rules (ADR 0022 §3's phrasing), 
 them where it can watch a loop refused by each.
 
 **`PYTHONHASHSEED=0`** on the child, and nothing else in its environment that the DSL could
-observe: it observes nothing, by the paragraph above, and the variable is there for the
+observe: ~~it observes nothing, by the paragraph above~~ — **and until 2026-10-02 it did observe
+something, by the amendment above: `"{0.__globals__[random]._os.environ[HOME]}".format(note)`
+read the environment this sentence was relying on being unreachable.** The variable is there for the
 interpreter's own dicts and the belt-and-braces of decision 3. **Amended 2026-10-01, in M4 PR
 4: the child owns it rather than trusting its spawner.** A hash seed is fixed before any of
 the child's own code runs, so it cannot be set from inside — and a lock that works only when
@@ -242,7 +328,12 @@ same unbounded `while True`, through the console script and through
 `uv run --no-sync --project compilers/generative escribass-generative`, was refused at
 **2.04 s** either way at `--cpu-seconds 1` and at **6.05 s** at the default 5 — the budget plus
 one interpreter start, with no launcher in the way; the memory limit refused a loop allocating
-eight megabytes a turn in **0.28 s** at `--memory-mb 300`. `core` may be told either command.
+eight megabytes a turn in **0.28 s** at `--memory-mb 300` — **through the console script, which
+is corrected here on 2026-10-02: only the CPU limit was measured under `uv run`, and the sentence
+above read as though both had been.** The two limits are set by the same `setrlimit` call on the
+same process, so the measurement that matters (is there a launcher between `uv` and the
+interpreter?) is answered once by either; but "both were measured under `uv run`" was not what
+happened. `core` may be told either command.
 The limits are the child's own `setrlimit` on itself, so what the measurement actually rules
 out is a launcher that re-execs in front of the interpreter — and `uv` does not.
 
@@ -269,8 +360,14 @@ the soft `RLIMIT_CPU` is **caught** in the child, as `SIGXCPU`, and answered as 
 diagnostic carrying the line the generator was on and the number it exceeded. It reaches a
 caller as `generator_error` with that text, not as `generator_timeout`, which stays the
 wall-clock one `core` imposes (decision 7, amended). The hard limit a few seconds above it is
-what is left if answering itself runs away, and that is a child killed without answering,
-which is `generator_failed`.
+what is left if answering itself runs away ~~, and that is a child killed without answering,
+which is `generator_failed`~~ — **and it is also what is left when the soft limit cannot be
+caught at all, which this paragraph did not allow for (amended 2026-10-02, M4 PR 8).**
+`SIGXCPU` is delivered to a Python-level handler, so the handler runs only when the eval loop
+regains control: `while True` and `3 ** 10**8` give it back and get their line, and
+`x = sum(range(10**10))` never does. Measured under `--cpu-seconds 1`: no diagnostic, no answer,
+exit −9 at 6.9 s. That is **the author's to fix** — do less work per call — so decision 7 sends
+it back to the refusal it belongs in rather than reporting an operator error for a source.
 
 ### 5. A compile writes the target clip's notes and `compiled_hash`, in one entry, with ids minted by `core`
 
@@ -344,42 +441,88 @@ status word, which is a tool's answer and is asserted in the host's tests (trap 
 
 ### 7. Three kinds of failure for a compile, split where ADR 0022 §3 split them
 
-- **A refusal**, `valid = false`, caller-fixable, fed back whole to a model and counted against
-  the three (ADR 0022 §3): `generator_error` — the allowlist refusing a node or a name, an
-  exception during execution, a non-integral tick, a pitch or velocity out of range — with
-  `path` `/generators/{id}/source` and a message carrying the child's `line:column` and text, so
-  "the same text the user reads is what the LLM retries against" (Plate 3); `target_not_note_clip`;
-  `generator_unknown`. ~~`generator_timeout`, the limit or the wall clock~~ — **amended twice,
-  both on 2026-10-01**. In M4 PR 4 the *limit* left this bullet: the child's `RLIMIT_CPU` is
-  caught and crosses as a `Diagnostic`, because the wire has one refusal arm and `core` names
-  it `generator_error`, so a runaway source arrives as a `generator_error` whose message
-  carries the limit and the line. In **M4 PR 6** `generator_timeout` left it too, and moved to
-  the bullet below.
-- **An operator error**, `Err`, ending a model's turn at the host: `generator_missing` (no
-  `--generator`), `toolchain_mismatch` (ADR 0027 §2), `generator_failed` — the child would
-  not start, printed no socket line, or exited non-zero without answering, carrying the tail of
-  its stderr (ADR 0013 §3's `engine_failed`, one child over) — and, **from 2026-10-01 in M4
-  PR 6, `generator_timeout`**.
+**This section has been amended three times and the rule has moved both ways across one line, so
+it is written here as it now stands, with the three changes named after it rather than stacked
+inside it.** ADR 0006 §2's test decides every case: a refusal is something *the caller could say
+differently*; an operator error is something no retry fixes.
 
-  **Why it moved, and what showed it.** This ADR said a timeout was "the author's to fix too",
-  on the reasoning that what loops for ever is the source. M4 PR 6 is where
-  `compile_generator` is offered to a model (ADR 0026 §3), which is the first time the
-  distinction costs anything — and the test PR 5 wrote for this arm was already named
-  `a_sandbox_that_never_answers`, because **no source can reach this wall**. The child imposes
-  its own CPU and memory limits, catches the first of them and answers a `Diagnostic` with the
-  line, measured at 2.04 s, 6.05 s and 0.28 s in PR 4; §4's minute is set above all of them
-  *deliberately*, so that the diagnostic arrives as a diagnostic and keeps its line. What is
-  left after a minute is a wedged child, a machine under impossible load, or a `Generate`
-  server that is not the real one. None of those is fixed by editing a source, and the message
-  such a refusal carries has no line, no column and nothing an author could act on — so by ADR
-  0006 §2's own test ("nothing the caller can say differently would help") it was on the wrong
-  side. Feeding it to a model and charging it one of the three refusals a turn allows is M3
-  trap 2 exactly: a retry budget spent on a wall. It keeps its **own rule id** rather than
-  becoming `generator_failed`, because "it never answered" and "it died" send a person to
-  different places. Watched failing first in `core/tests/assistant.rs`,
-  `a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back`.
+- **A refusal**, `valid = false`, caller-fixable, fed back whole to a model and counted against
+  the three (ADR 0022 §3) — `path` `/generators/{id}/source`, and a message carrying the child's
+  `line:column` and its own text, so "the same text the user reads is what the LLM retries
+  against" (Plate 3):
+  - `generator_error`: the allowlist refusing a node or a name, an exception during execution, a
+    non-integral tick, a pitch or velocity out of range, **the soft CPU limit** and the memory
+    limit — each with the line it fired on — and **a child killed by its own hard CPU limit**,
+    which is the one case that carries no line at all.
+  - `target_not_note_clip`; `generator_unknown`.
+- **An operator error**, `Err`, ending a model's turn at the host: `generator_missing` (no
+  `--generator`), `toolchain_mismatch` (ADR 0027 §2), `generator_failed` — the child would not
+  start, printed no socket line, or exited without answering for any reason but its own CPU limit,
+  carrying the tail of its stderr (ADR 0013 §3's `engine_failed`, one child over) — and
+  `generator_timeout`, the wall clock `core` imposes.
 - **Nothing here is the third kind.** A provider failure is `ai`'s and a compile involves no
   provider.
+
+**Amendment 1, 2026-10-01 in M4 PR 4: the CPU *limit* stopped being its own rule id.** This
+decision had listed `generator_timeout, the limit or the wall clock` as a refusal, as though one
+id covered both. The wire has one refusal arm, a `Diagnostic` (ADR 0026 §1), so the child catches
+its own `SIGXCPU` and answers an ordinary diagnostic with its line, and `core` names that
+`generator_error` like any other. A runaway source is a refusal with a line, and the id for it is
+the one every other refusal already has.
+
+**Amendment 2, 2026-10-01 in M4 PR 6: `generator_timeout` moved to the operator's side.** This
+decision had said a timeout was "the author's to fix too", reasoning that what loops for ever is
+the source. Offering `compile_generator` to a model (ADR 0026 §3) is the first time the
+distinction costs anything, and PR 5's own test for this arm was already named
+`a_sandbox_that_never_answers` — because **no source reaches that wall.** The child's own limits
+fire at 2.04 s, 6.05 s and 0.28 s (§4), and §4's minute is set above all of them *deliberately*,
+so that a diagnostic arrives as a diagnostic and keeps its line. What is left after a minute is a
+wedged child, a machine under impossible load, or a `Generate` server that is not the real one.
+None is fixed by editing a source; the refusal carries no line, no column and nothing an author
+could act on; and feeding it to a model and charging it one of three retries is M3 trap 2 exactly
+— a retry budget spent on a wall. It keeps its **own** rule id rather than becoming
+`generator_failed`, because "it never answered" and "it died" send a person to different places.
+Watched failing first in `core/tests/assistant.rs`,
+`a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back`.
+
+**Amendment 3, 2026-10-02 in M4 PR 8: one death comes back to the refusal — a child killed by its
+own hard CPU limit** (the user's decision, after review). Amendment 1 assumed the soft limit is
+always catchable and §4 assumed the hard limit only ever fires "if answering itself runs away".
+Both are wrong about the same thing: `SIGXCPU` is delivered to a **Python-level** handler, so it
+runs only when the eval loop regains control, and a single built-in call never gives it back.
+`x = sum(range(10**10))` under `--cpu-seconds 1` produces no diagnostic and no answer and exits
+−9 after 6.9 s, and end to end through `escribass-mcp` the caller got `generator_failed` — an
+operator error, for a source whose author fixes it by doing less work per call. So that death is
+`generator_error`, and **`core` can tell it apart**: the child printed its socket line, was
+dialled, and then died by `SIGKILL` *on its own* — which is three facts and not one, because the
+`SIGKILL` `core` itself sends to a child that will not leave looks identical from the signal
+alone. The message says the limit was exceeded inside a single built-in call and that **there is
+no line**, because nothing in the child ever regained control to name one; it is the only
+`generator_error` in the system with no position, which is why `app/src/generators.ts` puts a
+positionless diagnostic at the top of the file rather than dropping it. Watched failing first in
+`core/tests/generator.rs`,
+`a_child_killed_by_its_own_hard_cpu_limit_is_the_authors_and_not_the_operators`, which before the
+fix came back as an operator error from the same source.
+
+**And the same death has two shapes, which only the end-to-end test showed.** Decision 1 says
+`core` is told a *command* and never a binary, and on a build tree that command is `uv run …`.
+So the process the kernel kills is the launcher's child: `uv` sees it die and exits **137** —
+128 plus the signal, the convention every shell and supervisor uses — and `core` reads an exit
+*code* where a bundle shipping the binary directly gives it a *signal*. A fix that read only the
+signal passed the unit test, whose fake child dies by `kill -9 $$`, and did nothing at all for
+the real command; `tests/determinism.rs`'s
+`a_runaway_inside_one_builtin_call_is_a_refusal_with_no_line_at_all` drives
+`x = sum(range(10**10))` through the real server and the real child under `--cpu-seconds 1` and
+is what caught it. The general shape is worth keeping: **"told a command, not a binary" means
+every fact `core` reads about the child is a fact about whatever is in front of it.**
+
+**What the three have in common, and it is worth writing down.** Every one of them moved a case
+across ADR 0006 §2's line *in the direction of the mechanism that was actually observed* — and
+each time the previous position had been reasoned from how the limit was meant to work rather
+than from a run. The soft limit was assumed catchable; the wall was assumed reachable by a
+source; the hard limit was assumed to be a bug in the answering path. The test for which side a
+failure belongs on is cheap and was available each time: **run it, and read what the caller
+gets.**
 
 ### 8. Where it lives, how it is tested, and what CI runs
 
@@ -400,8 +543,14 @@ exposes one console script `core` can be told as its `--generator`.
   as a check rather than a sentence.
 - In `tests/`, the determinism suite's sixth script, `generators`, driven over both transports
   and against committed bytes (M4 PR 5), whose golden carries `lock.json`'s `toolchains` block
-  (ADR 0027 §1). The staleness guard learns the third child (trap 5): a `uv sync` that was not
-  run passes every golden otherwise.
+  (ADR 0027 §1), and its seventh, `compile`, driven by the model (M4 PR 6). The staleness guard
+  learns the third child (trap 5): a `uv sync` that was not run passes every golden otherwise.
+  **A golden carries what a document gives it, and in M4 PR 8 that had to be said out loud**: all
+  four generators in the `generators` fixture carried `params: {}`, so a `core` that sent the
+  sandbox no params at all, and a window that counted none, passed both feature goldens and the
+  whole unit suite. `params` is a `compiled_hash` input *and* a name in the namespace, and the
+  worked example in the script now takes two params and reads one — which is the general shape of
+  the finding: **a field that is empty everywhere in every fixture is a field with no test.**
 - The tests join the `checks` job **in the pull request that creates the directory** (M3 trap
   17; M4 trap 6), which also adds `compilers/generative/` to the `engine` and `app` gates'
   exclusions and teaches `tests/determinism.rs`'s gate test the new line.

@@ -512,11 +512,22 @@ jobs:
       # editors draw with, neither of which a render touches: JACK, because Dexed compiles its
       # JUCE with JUCE_JACK=1 in its own CMakeLists; and xcb, xkbcommon, cairo and pango,
       # because sfizz-ui's VST3 links VSTGUI and VSTGUI's Linux backend is drawn on those.
+      # **A bound of its own, and retries** (M4 PR 8). On 2026-10-01 this step sat in apt for
+      # ninety-one minutes on the push run for #89, hit the job's `timeout-minutes` and
+      # *cancelled* it — so Cache, Configure, Build, the renders and the cross-CPU check never
+      # ran, and the job's report was "cancelled" rather than "the mirror hung", which is a
+      # failure nobody goes and looks at. The job's budget is for the build after a pin moves and
+      # not for a package index, so this step gets twenty minutes of it: a slow mirror is then a
+      # named red step with the build's hour still intact. `Acquire::Retries` is what makes a
+      # hiccup cost a retry rather than the twenty minutes.
       - name: Install build dependencies
         if: env.SKIP != '1'
+        timeout-minutes: 20
+        env:
+          APT: -o Acquire::Retries=3
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build ccache \
+          sudo apt-get $APT update
+          sudo apt-get $APT install -y --no-install-recommends ninja-build ccache \
             libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev \
             libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
             libjack-jackd2-dev \

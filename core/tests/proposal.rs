@@ -227,6 +227,21 @@ fn a_tool_the_model_was_not_offered_is_refused_and_writes_nothing() {
             "`{withheld}`: {answered}"
         );
     }
+
+    // **And the other direction**, which had nothing behind it until 2026-10-02: a gate that
+    // also withheld `define_generator` passed plain `cargo test` *and* `--features ai`, and was
+    // caught only by the `generators` golden, because the only thing reading `OFFERED` was its
+    // own membership test (M4 PR 8, mutation B39). Every name in the list reaches `core::call`:
+    // each then refuses its empty arguments, which is a **different** refusal, and the
+    // difference is the whole assertion. Nothing here spawns a sandbox — `compile_generator`
+    // with no id does not get as far as a child.
+    for offered in OFFERED {
+        let answered = proposed(&mut session, offered, json!({}), "c2");
+        assert!(
+            !answered["error"].as_str().unwrap_or_default().contains("not one of the tools"),
+            "`{offered}` is offered and the gate refused it: {answered}"
+        );
+    }
     assert_eq!(session.project().history().entries().len(), 1);
     assert_eq!(session.project().history().refs().refs.len(), 1);
 }

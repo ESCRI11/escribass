@@ -83,7 +83,8 @@ a half that way.
 | M4.4 | `compilers/generative/`: the package at DSL version `1` on 3.12.12, the AST allowlist, the DSL's namespace, the seeded `rng`, the `Compile` server, and 43 tests — forty-eight forbidden constructs each fed and watched refused with its line, each arm watched failing first, both `set` locks shown without the other, the CPU and memory limits each watched stopping a loop that cannot stop itself, and the spike's digest on five interpreters. No external dependency added. `cross-cpu` learned to count the model **and** its SIMD flags as a passenger. No golden moved | done | PR #87 |
 | M4.5 | `core`: the two tools, the sandbox spawned per compile, `compiled_hash` and `toolchains` written, the seven failure arms each watched first, and the `generators` determinism golden over both transports. The silent PR stayed silent — five determinism goldens, four WAVs and `app/tests/projection.golden.json` byte-identical. A compile is 283 ms and the **next** commit is what grows | done | PR #88 |
 | M4.6 | `ai`: `OFFERED` reads fourteen of twenty-seven, the bar view's generator line goldened over a **second** document, a compile diagnostic fed back as a refusal and counted, and a hand-written transcript in which the model defines, is refused by the real child, patches and compiles again. Three things ADR 0026 had wrong, amended in place. No paid call, the ledger unchanged | done | PR #89 |
-| M4.7 | `app`: the generator code view — CodeMirror's first consumer — Save as `apply_patch`, Compile as dry run → diff → Apply, diagnostics at the line the child named, `never · compiled · stale`, the host's `--generator`, and the projection golden extended over the `generators` fixture. Driven by hand in the window on a real X server; four defects found that way, each fixed and re-driven. **And the record below**, written here rather than at the close | done | this PR |
+| M4.7 | `app`: the generator code view — CodeMirror's first consumer — Save as `apply_patch`, Compile as dry run → diff → Apply, diagnostics at the line the child named, `never · compiled · stale`, the host's `--generator`, and the projection golden extended over the `generators` fixture. Driven by hand in the window on a real X server; four defects found that way, each fixed and re-driven. **And the record below**, written here rather than at the close | done | PR #90 |
+| M4.8 | **The whole-stack review of M4 acted on**: one blocker, four majors, nine minors, and twelve surviving mutations made to fail. The sandbox's purity claim was false — `str.format`'s field syntax reached `$HOME` and the install path past the `_`-attribute rule, `repr` put a heap address in a velocity, and `**` put `libm` in a pitch — so the DSL gains a third lock and five refusals; a child killed by its own hard CPU limit is the author's refusal and not an operator's failure; fail-closed is a committed `GRANT_USD` and no longer price arithmetic; `params` reaches a test, a golden and the window; and `lock.baseline.json` gains a guard that reads it **both ways**, which found three dependencies nobody had pinned. Every fix watched failing first; the forbidden-construct table grows from forty-eight rows to sixty-two and the generative suite from 43 tests to 49, and the sweep that followed the reviewer's fix shape found a **51st** refusal it had not: `bytes.__mod__`'s own `%a`. Eleven of the twelve survivors now fail; the twelfth is a genuine equivalent and the dead code a thirteenth mutation exposed is deleted. One golden moved, named | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -1912,7 +1913,12 @@ where a reader of this file will look:
 - **`CEILING_USD` is now exactly the ledger's spent total, and that is the point.** $0.00376174
   against three rows summing to $0.00376174, so `self._spent + worst > CEILING_USD` refuses any
   call whose worst case is above zero: **every live run fails closed until a person raises the line
-  in code.** The grant was one recording session and CLAUDE.md #7 says a previous authorisation
+  in code.** ~~Which is the whole mechanism.~~ **It is not, and M4 PR 8 corrects it (2026-10-02):
+  "any call whose worst case is above zero" is exactly the hole — a route the catalogue prices at
+  **$0** has a worst case of zero, `0.00376174 + 0 > 0.00376174` is false, and the call went out.
+  `GRANT_USD`, committed at zero and read *before* the price, is the gate now; `>` became `>=`;
+  and the sentence below about three estimates is still true and is still about one recorded body
+  on one day, which is what its test says it is.** The grant was one recording session and CLAUDE.md #7 says a previous authorisation
   does not carry, so the ceiling is the grant, spent. Deleting the ledger buys nothing back and
   that is arithmetic rather than a mechanism — each of the three calls was *estimated* above the
   new ceiling on its own, which `test_the_grant_is_spent_so_an_empty_ledger_buys_no_call_back`
@@ -2942,10 +2948,23 @@ the reason the section exists.
   and whose **merge commit** (`36742529816`) was the first thing a runner really built. That
   stays historically true of those merges however green the runs are now.
 - **Five consecutive pull requests have now had full runner validation: #85, #86, #87, #88 and
-  #89** — M4 PRs 2 to 6. In every completed run of those five, **every job executed every one of
-  its real steps**; the only `skipped` steps anywhere are two by design and only on pushes to
-  `main` (the path-gate step itself, which is `pull_request`-only, and `Wire compatibility`,
-  which is too). The `engine` job built the engine from the eight pinned submodule commits and
+  #89** — M4 PRs 2 to 6 — **and that sentence is about `pull_request` runs, which is a narrower
+  claim than it reads** (corrected 2026-10-02, M4 PR 8). In every completed **pull-request** run
+  of those five, **every job executed every one of its real steps**; the only `skipped` steps
+  anywhere are two by design and only on pushes to `main` (the path-gate step itself, which is
+  `pull_request`-only, and `Wire compatibility`, which is too). **The push run for #89 was a
+  different story**: run `36887266727`, on `b48bc3e`, spent **ninety-one minutes** in the engine
+  job's `Install build dependencies` — apt — hit the job's `timeout-minutes: 90` and was
+  *cancelled*, so Cache, Configure, Build, the renders and `cross-cpu` never ran, and **nobody
+  re-ran it for a day**. It has since been re-run and `45be933`'s own push run completed green,
+  so the present state of `main` is fine. Two things were done about it rather than one: the apt
+  step now has **twenty minutes of its own and three apt retries**, so a hung mirror is a named
+  red step with the build's hour intact instead of a cancelled job (a cache was the alternative
+  and was not chosen — apt caching on a hosted runner is a cache key nobody trusts for a step
+  that is normally ninety seconds, and the failure here was a mirror and not a cold install).
+  What is **not** fixed is the thing the walk actually found: **nothing watches push-to-`main`
+  runs.** A pull request has a required check a person is looking at; a push has a run nobody
+  opens. That is a known gap below, not a line of YAML. The `engine` job built the engine from the eight pinned submodule commits and
   ran all six of its render assertions; the three `renders` shards each downloaded that one
   51.7 MB artefact and reproduced all four committed PCM hashes, nine jobs and thirty-six
   comparisons a run; `buf breaking --against` the base branch ran on a runner once for each of
@@ -3025,6 +3044,32 @@ the reason the section exists.
   ships nothing, reaches no render, and it is the smaller half of a pair whose larger half — `uv`
   itself — CI installs unpinned.
 
+- **Nothing watches a push to `main`.** Found at M4 PR 8 (above): a pull request's run is a
+  required check somebody is looking at, and a push's run is a page nobody opens — so a
+  ninety-one-minute apt hang cancelled the engine job on `b48bc3e` and sat there for a day. The
+  step bound added at PR 8 makes that failure *legible*; it does not make anybody read it. The
+  honest position is that **`main`'s green is a person's habit and not a mechanism**, and the fix
+  — a notification, a required status on the branch, a scheduled re-run — is a decision about
+  tooling the user has not been asked for. Trigger: the next push run that fails unnoticed, or
+  M5's planning.
+- **Seven of `lock.baseline.json`'s nine blocks had no reader until 2026-10-02**, and nothing
+  compared a declared pin to the file that really pins it: `app`, `schema`, `tool_api`, `dsp`,
+  `ci` and all of `ai` but `provider`/`model`. Review compared every value by hand and **none had
+  drifted**, so this was a missing invariant and never a live bug. `tests/baseline.rs` is the
+  guard, and it reads the file **both ways** — a pin whose source disagrees, and a dependency no
+  pin names — which immediately found three dependencies in the tree that nobody had pinned:
+  `tauri-build` (declared in `app/src-tauri/Cargo.toml` since M2) and
+  `actions/upload-artifact` / `actions/download-artifact` (used since M1). All three are pinned
+  now.
+- **The two Python sidecars' environments have already drifted apart in a transitive nothing
+  names**: `multidict` is 6.9.1 in `ai/uv.lock` and in `schema/uv.lock`, and **7.0.0** in
+  `compilers/generative/uv.lock` — the same `grpclib==0.4.9` resolved twice, months apart. It
+  cannot reach a note (it is HTTP/2 header storage) and nothing has gone wrong, but it is the
+  shape of "it works on my machine", and three locks resolving the same requirements separately
+  will do it again. `tests/baseline.rs` goldens the divergence rather than forbidding it —
+  aligning it is a `uv lock` on a machine with the network — so the **next** one fails the suite.
+  Trigger: any second divergence, which the test will name.
+
 ### What this walk turned up that nobody had written down
 
 - **The status table at the top of this file had no rows for M4 PRs 4, 5 and 6, and said M4.3 was
@@ -3042,6 +3087,47 @@ the reason the section exists.
   for the one editor. It is a pinned dependency with no consumer until now (ADR 0016 §2), so
   nothing was added — but the number is worth having before M5 adds the DSP code view, which is
   the same editor and should cost nothing more.
+- **The sandbox's purity claim was false, and an `ast` allowlist is why.** Found by review at M4
+  PR 8, reproduced at the source: `f"{rng}"` compiled to velocity 45 and then to velocity 3 from
+  one source, because `object.__repr__` carries a heap address and ASLR moves it;
+  `"{0.__globals__[random]._os.environ[HOME]}".format(note)` returned `$HOME` and
+  `"{0.__globals__[__file__]}"` the install path; and `int((2 ** Fraction(1, 2)) * 10**15) % 128`
+  was pitch 103 out of `libm`. Each had a stable `compiled_hash`. The lesson is one sentence:
+  **an allowlist reads parsed source, and three things happen where a parse cannot see** — a
+  format string is a second language inside a string constant, `repr` is a function of the heap,
+  and `**` is integer arithmetic until its exponent is a `Fraction`. So the language gained a
+  third lock beside the node list and the namespace: `format` and `format_map` are refused by
+  name, `str` and an f-string refuse anything whose text is not the source's, and `**`, `%` and
+  `pow` are checked where they are made. ADR 0024 §3 and §4 and `docs/specs.md` §7.1 said "it
+  observes nothing", and all three are corrected in place.
+- **`SIGXCPU` is a Python-level handler, so a built-in call escapes the diagnostic.** `while True`
+  and `3 ** 10**8` return to the eval loop and get the line; `x = sum(range(10**10))` does not,
+  and under `--cpu-seconds 1` the child was killed by its own hard limit at 6.9 s with exit −9 and
+  no answer — which `core` reported as `generator_failed`, an operator error, for something an
+  author fixes by doing less work per call. It is `generator_error` with no line from 2026-10-02,
+  told apart by three facts (named a socket, was dialled, died by `SIGKILL` on its own). **And
+  the fix needed a second reading of the same death**: `core` is told a *command* and on a build
+  tree that is `uv run …`, so the kernel kills the launcher's child and `core` reads `uv` exiting
+  **137** rather than a signal. The version that read only the signal passed the unit test —
+  whose fake dies by `kill -9 $$` — and did nothing at all for the real command. The end-to-end
+  test written beside it is what caught that, which is the argument for having one: *told a
+  command, not a binary* means every fact `core` reads about the child is a fact about whatever
+  is in front of it.
+- **A killed child leaks its socket directory**, because a `finally` does not run on `SIGKILL`.
+  Three paths reached it. `core` sweeps the directory it dialled on both of its kill paths, with
+  `remove_dir` and not `remove_dir_all` — an empty-directory removal cannot take anything with it
+  — and the Python suite sweeps after its own `kill()`.
+- **`params` had no enforcer anywhere.** No determinism script, core test, transcript or fixture
+  gave a generator any, so `params: Default::default()` in `core` and `params: 0` in the window
+  both passed the whole suite **and both feature goldens**. It is a `compiled_hash` input and a
+  name in the DSL's namespace — two seams at once — and the worked example in
+  `tests/determinism/generators/script.json` now takes two and reads one.
+- **Fail-closed was price arithmetic and not a grant.** `CEILING_USD` equalled the ledger's total
+  and every priced call's worst case exceeded it on its own, which is fail-closed *by
+  consequence*: a route the catalogue lists at **$0** has a worst case of exactly zero,
+  `0.00376174 + 0 > 0.00376174` is false, and `ai.model` is a text field a person edits in a
+  project's `lock.json`. A hosted model at $0 is still a call to a metered account. `GRANT_USD`
+  is the gate now — committed at zero, read before the price — and the ceiling's `>` became `>=`.
 - **The window reads `compiled` after a source is saved, until Compile is pressed.** By design
   (ADR 0024 §6): `never` and `compiled` come from `compiled_hash`'s emptiness, which is the same
   field and the same rule the model's bar view prints, and `stale` is `core`'s comparison, which

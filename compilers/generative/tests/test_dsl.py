@@ -130,7 +130,56 @@ FORBIDDEN = {
         "note(60, Fraction(960, 7), 480)\n",
         "start is 960/7, which is not a whole number of ticks",
     ),
-    "a float argument": ("note(60, 0, 2 ** -1)\n", "length is a float"),
+    "a non-numeric argument": ('note(60, 0, "480")\n', "length is a str"),
+    # The two string sublanguages the AST walker cannot see into, and the operator that is the
+    # third door into the same room. All three found by review on 2026-10-02 (M4 PR 8): the
+    # `_`-attribute rule is a rule about *parsed source*, and `str.format`'s replacement fields
+    # live inside a string constant, so `{0.__globals__[random]._os.environ[HOME]}` walked
+    # straight past it and returned `$HOME`.
+    "`.format`'s field syntax": (
+        'x = "{0.__globals__[random]._os.environ[HOME]}".format(note)\n',
+        "`.format` is not in the generator DSL",
+    ),
+    "`.format_map`'s field syntax": (
+        'x = "{a.__globals__[__file__]}".format_map({"a": note})\n',
+        "`.format_map` is not in the generator DSL",
+    ),
+    "`%` formatting": ('x = "%r" % (note,)\n', "`%` on a str is not in the generator DSL"),
+    # The 51st refusal, found by sweeping the family again *after* the `str` arm was written:
+    # PEP 461 gives `bytes.__mod__` its own `%a`, so `("%a".encode() % (note,)).decode()` was
+    # velocity 53 with the str arm in place. A denial of the types that format is a list; a
+    # requirement that `%` is numeric is a rule.
+    "`%` formatting through bytes": (
+        'x = ("%a".encode() % (note,)).decode()\n',
+        "`%` on a bytes is not in the generator DSL",
+    ),
+    "`**=`": ("x = 2\nx **= 3\n", "`**=` is not in the generator DSL"),
+    "`%=`": ("x = 5\nx %= 3\n", "`%=` is not in the generator DSL"),
+    # Text out of something whose text is the host's. `f"{rng}"` compiled to velocity 45 and
+    # then to velocity 3 from one source, because `object.__repr__` carries a heap address.
+    "str() of a closure": ("x = str(note)\n", "str() of a function is not in the generator DSL"),
+    "str() of a list holding the rng": (
+        "x = str([rng])\n",
+        "str() of a Rng is not in the generator DSL",
+    ),
+    "an f-string of the rng": (
+        'x = f"{rng}"\n',
+        "formatting of a Rng is not in the generator DSL",
+    ),
+    "an f-string of a bound method": (
+        'x = f"{Fraction(1, 2).limit_denominator}"\n',
+        "formatting of a method is not in the generator DSL",
+    ),
+    # `libm` reaching a note, and `int()` laundering it before `_whole` could refuse it:
+    # `int((2 ** Fraction(1, 2)) * 10**15) % 128` was pitch 103 (ADR 0024 §3's "no libm
+    # anywhere a golden can see").
+    "a float from a negative exponent": ("note(60, 0, 2 ** -1)\n", "2 ** -1 is 0.5, a float"),
+    "a float from an irrational root": (
+        "note(int((2 ** Fraction(1, 2)) * 10**15) % 128, 0, 480)\n",
+        "a float: the DSL's numbers are int and Fraction",
+    ),
+    "a float from pow()": ("x = pow(2, Fraction(1, 2))\n", "a float"),
+    "a complex from an exponent": ("x = (0 - 8) ** Fraction(1, 3)\n", "a complex"),
     "a pitch out of range": ("note(200, 0, 480)\n", "pitch is 200, which is outside 0–127"),
     "a velocity out of range": (
         "note(60, 0, 480, 0)\n",
@@ -223,6 +272,45 @@ class EachArmIsLoadBearing(unittest.TestCase):
             # the second lock on floats and is asserted separately above.
             self.assertEqual(dsl.run(request("x = 1.5\n")), [])
 
+    def test_the_sublanguage_arm_is_what_refuses_str_format(self) -> None:
+        # With `format` and `format_map` back in the language, the same source returns `$HOME`
+        # — which is the finding this arm exists for, watched happening.
+        with mock.patch.object(dsl, "_SUBLANGUAGE", {}):
+            notes = dsl.run(
+                request(
+                    'x = "{0.__globals__[random]._os.environ[HOME]}".format(note)\n'
+                    "note(60, 0, 480, len(x) % 127 + 1)\n"
+                )
+            )
+        self.assertEqual(len(notes), 1, "the environment was not reachable after all")
+
+    def test_the_showable_arm_is_what_refuses_an_f_string_of_the_rng(self) -> None:
+        # With everything showable, `f"{rng}"` is a velocity again — and the two runs below are
+        # the whole finding: one source, two answers, from `object.__repr__`'s heap address.
+        source = 'note(60, 0, 480, len(f"{rng}") % 127 + 1)\n'
+        with mock.patch.object(dsl, "_SHOWABLE", (object,)):
+            got = dsl.run(request(source))
+        self.assertEqual(len(got), 1)
+        # Not asserted unequal across two runs: within one process the address can repeat. What
+        # is asserted is that the velocity is a function of the repr, which carries the address.
+        self.assertIn("0x", repr(dsl.namespace(request(""), [])["rng"]))
+
+    def test_a_source_cannot_shadow_the_guard_that_checks_its_f_strings(self) -> None:
+        # The guards live in the exec scope under `<show>`, `<pow>` and `<mod>` — strings
+        # `compile` accepts as a `Name`'s id and no source can write. Named `__show__` instead,
+        # the source below defines its own and the check is gone: the allowlist refuses an
+        # *attribute* beginning with `_`, never a name, so this is the hole the three odd names
+        # close. Watched both ways, here.
+        source = (
+            "def __show__(value):\n"
+            "    return value\n"
+            "\n"
+            'note(60, 0, 480, len(f"{rng}") % 127 + 1)\n'
+        )
+        self.assertIn("formatting of a Rng", refusal(source).message)
+        with mock.patch.object(dsl, "_SHOW", "__show__"):
+            self.assertEqual(len(dsl.run(request(source))), 1, "the guard was not shadowed")
+
     def test_the_namespace_is_the_builtins_even_with_no_allowlist_at_all(self) -> None:
         # The second lock, on its own: the allowlist is skipped entirely and the source is
         # executed with exactly what `namespace` returns. Nothing a sloppy author reaches for
@@ -294,6 +382,13 @@ class Namespace(unittest.TestCase):
         self.assertEqual(note.id, "")
         self.assertIsNone(note.provenance)
         self.assertEqual(note.version, 0)
+        # And the three arguments arrive where they were put, with ADR 0024 §3's table's one
+        # default: velocity 100. Nothing asserted the default, so any number passed (M4 PR 8,
+        # mutation A18) — and a velocity is audible, which makes it the one default here that a
+        # person would hear change rather than read.
+        self.assertEqual(
+            (note.pitch, note.start_tick, note.length_ticks, note.velocity), (60, 0, 480, 100)
+        )
 
     def test_bar_and_beat_are_counted_from_the_clips_own_start(self) -> None:
         notes = dsl.run(request("note(60, bar(0), 1)\nnote(61, bar(1), 1)\nnote(62, beat(3), 1)\n", start=1920))
@@ -355,6 +450,33 @@ class Namespace(unittest.TestCase):
                     "floor", "ceil", "round",
                 ]
             ),
+        )
+
+    def test_the_guarded_operators_still_mean_what_cpython_means(self) -> None:
+        # `**` and `%` are rewritten into calls to a checked function, and `str` and `pow` in
+        # the namespace are wrappers. This is the other half of that: the rewrite narrowed what
+        # is accepted and changed no answer, which is why `dsl_version` stays 1 (ADR 0027 §1).
+        # Three-argument `pow`, a negative exponent that stays exact because its base is a
+        # Fraction, a negative left operand of `%`, and `str` of each thing the DSL shows.
+        notes = dsl.run(
+            request(
+                "note(60, 0, pow(2, 5))\n"
+                "note(61, 0, pow(7, 17, 2 ** 61 - 1) % 480 + 1)\n"
+                "note(62, 0, round(Fraction(1, 2) ** -1))\n"
+                "note(63, 0, (0 - 7) % 5)\n"
+                'note(64, 0, len(str(1) + str(Fraction(1, 2)) + str("a") + str(True)'
+                ' + str(None) + str([1]) + str((2,)) + str({"k": 3})))\n'
+            )
+        )
+        self.assertEqual(
+            [n.length_ticks for n in notes],
+            [
+                32,
+                pow(7, 17, 2**61 - 1) % 480 + 1,
+                2,
+                (-7) % 5,
+                len("1" + "1/2" + "a" + "True" + "None" + "[1]" + "(2,)" + "{'k': 3}"),
+            ],
         )
 
     def test_rng_offers_the_six_draws_the_spike_measured_and_no_float(self) -> None:

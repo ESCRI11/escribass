@@ -26,8 +26,10 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from escribass_proto.escribass.generate.v1 import (
     CompileRequest,
@@ -75,6 +77,8 @@ class Started:
         environment.pop("PYTHONHASHSEED", None)
         if hash_seed is not None:
             environment["PYTHONHASHSEED"] = hash_seed
+        #: The directory the child names its socket in, once it has named one — see `__exit__`.
+        self.socket_directory: Path | None = None
         self.child = subprocess.Popen(
             [*(command or [str(SANDBOX)]), *arguments],
             stdin=subprocess.PIPE,
@@ -94,10 +98,19 @@ class Started:
             if pipe is not None and not pipe.closed:
                 pipe.close()
         self.child.wait(timeout=60)
+        # **A killed process runs no `finally`**, so the directory it made for its socket is
+        # whoever killed it's to remove — this suite for the children here, and `core` for the
+        # ones it spawns (`core/src/generator.rs`, `swept`). Three paths reach it: the hard CPU
+        # limit, `core`'s wall clock, and this line (found by review, 2026-10-02).
+        if self.socket_directory is not None:
+            shutil.rmtree(self.socket_directory, ignore_errors=True)
 
     def address(self) -> str:
         assert self.child.stdout is not None
-        return self.child.stdout.readline().strip()
+        line = self.child.stdout.readline().strip()
+        if line.startswith("unix:"):
+            self.socket_directory = Path(line[len("unix:") :]).parent
+        return line
 
     def stop(self) -> tuple[int, str]:
         """Closes its stdin, which is how the host says nobody is waiting any more."""
@@ -246,6 +259,46 @@ class TheLimitsBind(unittest.TestCase):
         self.assertIsNone(answer.notes)
         self.assertIn("CPU limit", answer.diagnostic.message)
 
+    def test_the_cpu_budget_is_counted_from_what_starting_the_interpreter_cost(self) -> None:
+        # ADR 0024 §4: `RLIMIT_CPU` counts from process start, so the budget a flag names is
+        # added to what starting this interpreter has already spent — without that, five seconds
+        # is quietly "five seconds minus however long `uv` and three imports took", and on a slow
+        # enough machine the limit fires before the call it bounds ever arrives. Nothing tested
+        # the offset, so dropping it passed (M4 PR 8, mutation A21).
+        #
+        # Driven against a stubbed `resource`, because the real reading is what the offset is for
+        # and a test that measured it would be measuring the runner.
+        spent = types.SimpleNamespace(ru_utime=4.0, ru_stime=3.0)
+        set_to: list[tuple[int, tuple[int, int]]] = []
+        self.addCleanup(
+            setattr, escribass_generative, "_measured_budget", escribass_generative.CPU_SECONDS
+        )
+        with (
+            mock.patch.object(escribass_generative.resource, "getrusage", lambda _who: spent),
+            mock.patch.object(
+                escribass_generative.resource,
+                "getrlimit",
+                lambda _what: (escribass_generative.resource.RLIM_INFINITY,) * 2,
+            ),
+            mock.patch.object(
+                escribass_generative.resource,
+                "setrlimit",
+                lambda what, pair: set_to.append((what, pair)),
+            ),
+            mock.patch.object(escribass_generative.signal, "signal", lambda *_: None),
+        ):
+            escribass_generative._impose(5, 512)
+        budget = 7 + 1 + 5
+        self.assertEqual(
+            dict(set_to)[escribass_generative.resource.RLIMIT_CPU],
+            (budget, budget + escribass_generative._CPU_GRACE),
+            "the CPU already spent was not added to the budget",
+        )
+        # And the memory limit is the flag in bytes, which is the other half of the same call.
+        self.assertEqual(
+            dict(set_to)[escribass_generative.resource.RLIMIT_AS], (512 << 20, 512 << 20)
+        )
+
     def test_a_generator_inside_the_limits_is_not_refused_by_them(self) -> None:
         # The other half of trap 1: a limit that refused everything would pass both tests
         # above.
@@ -309,6 +362,21 @@ class TheVersionIsOnePlace(unittest.TestCase):
         self.assertEqual(
             escribass_generative.python_version(), (ROOT / ".python-version").read_text().strip()
         )
+
+    def test_both_are_read_and_neither_is_a_constant_that_happens_to_agree(self) -> None:
+        # The two tests above compare each function to a file whose content it equals today —
+        # which is exactly what `return "1"` and `return "3.12.12"` also pass (M4 PR 8,
+        # mutations A14 and A15). ADR 0027 §1's claim is not that the numbers agree but that
+        # **the child states a fact about itself**, so this moves the source each one reads and
+        # watches the answer move with it. A constant does not move.
+        with mock.patch.object(escribass_generative, "_installed_version") as reading:
+            reading.return_value = "99.98.97"
+            self.assertEqual(escribass_generative.dsl_version(), "99.98.97")
+        reading.assert_called_once_with("escribass-generative")
+        with mock.patch.object(
+            escribass_generative.platform, "python_version", return_value="3.99.0"
+        ):
+            self.assertEqual(escribass_generative.python_version(), "3.99.0")
 
 
 if __name__ == "__main__":

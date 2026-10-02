@@ -477,6 +477,20 @@ test("the editor and the model's bar view read one field and say the same word",
     ],
   );
 
+  // The `params` count — a count rather than the map, for `mixer.ts`'s reason. Until 2026-10-02
+  // every generator in every fixture carried `{}`, so `params: 0` passed this golden and the two
+  // feature goldens alike (M4 PR 8, mutation C6); the script now gives the worked example two.
+  assert.deepStrictEqual(
+    view.map((held) => [held.id, held.params]),
+    [
+      ["01M1FPMP00000000000000000D", 2],
+      ["01M1FPMP000000000000000016", 0],
+      ["01M1FPMP000000000000000019", 0],
+      ["01M1FPMP00000000000000001B", 0],
+    ],
+    "the window does not count the params the document sets",
+  );
+
   // And the seed is a **string**, because `9007199254740993` is 2⁵³+1 and the first integer a
   // double cannot hold: through a `number` it would read 9007199254740992 here and in the patch
   // a save writes (trap 10).
@@ -529,8 +543,10 @@ test("a compile diagnostic is read back to the line and column the child named",
   );
   assert.equal(diagnosticAt([]), null);
 
-  // A `generator_error` with no position at all: nothing writes one today, and dropping it
-  // would lose the refusal silently, so it lands at the top of the file.
+  // A `generator_error` with no position at all, which `core` writes for exactly one thing: a
+  // child killed by its own hard CPU limit, which never regained control to name a line
+  // (ADR 0024 §7, amended 2026-10-02). Dropping it would lose the refusal silently, so it lands
+  // at the top of the file.
   assert.deepStrictEqual(
     diagnosticAt([{ rule: "generator_error", message: "something nobody formatted" }]),
     { line: 1, column: 0, message: "something nobody formatted" },

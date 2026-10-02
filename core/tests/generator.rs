@@ -122,19 +122,28 @@ fn minted(result: &ToolResult) -> String {
 }
 
 fn define(session: &mut Session, source: &str, target: Target) -> String {
-    let defined = session
+    defined(session, source, target, BTreeMap::new())
+}
+
+fn defined(
+    session: &mut Session,
+    source: &str,
+    target: Target,
+    params: BTreeMap<String, String>,
+) -> String {
+    let made = session
         .define_generator(&DefineGeneratorRequest {
             kind: GeneratorKind::Python as i32,
             source: source.to_string(),
             // Above 2^53 on purpose: a seed that passed through a double on the way would
             // still compile, to different notes, silently (docs/plan.md, M4 trap 10).
             seed: 9_007_199_254_740_993,
-            params: BTreeMap::new(),
+            params,
             target: Some(target),
             dry_run: false,
         })
         .expect("a generator");
-    minted(&defined)
+    minted(&made)
 }
 
 fn compile(session: &mut Session, id: &str, dry_run: bool) -> ToolResult {
@@ -613,7 +622,18 @@ fn a_sandbox_that_never_answers_ends_the_turn_rather_than_spending_a_models_retr
     let dir = Scratch::new();
     let (mut session, _track, clip) = opened(&dir);
     let id = define(&mut session, "while True:\n    pass", Target::ClipId(clip.clone()));
-    let (compiling, mut sandbox) = compiler(&dir, None);
+    let compiling = fake_compiler(&dir.0, None);
+    // A child that is **still there** when the wall clock runs out, and that says so if it is
+    // left alone: the two assertions below are the kill and the sweep, and neither had anything
+    // behind it before 2026-10-02 (M4 PR 8, mutation B25). Watched failing with
+    // `let _ = child.kill()` removed, where the marker arrives and this fails rather than
+    // hanging — which is why the child writes it after a sleep instead of looping.
+    let survived = dir.at("survived");
+    let command = fake_generator(
+        &dir.0,
+        &format!("{}\nsleep 2\necho alive > '{}'", compiling.address(), survived.display()),
+    );
+    let mut sandbox = Sandbox::new(command);
     // Shrunk from the minute a compile is really given, for the reason the field exists: a
     // bound nothing has ever been seen to fire is a bound nobody should believe.
     sandbox.answering = Duration::from_millis(400);
@@ -628,6 +648,56 @@ fn a_sandbox_that_never_answers_ends_the_turn_rather_than_spending_a_models_retr
     // the whole of that distinction (`core/src/generator.rs`, `verdict`).
     assert!(broken.message.contains("did not answer within"), "{}", broken.message);
     assert!(compiling.called(), "the call did reach the sandbox");
+    assert!(!survived.exists(), "the child outlived the bound that gave up on it");
+    // And the socket it was serving on goes with it: a killed process runs no `finally`, so
+    // `core` finishes the job it started (`swept`).
+    assert!(!compiling.socket.exists(), "the socket of a killed child was left behind");
+    assert_eq!(entries(&session), before);
+    assert!(notes_of(session.project().song(), &clip).notes.is_empty());
+}
+
+#[test]
+fn a_child_killed_by_its_own_hard_cpu_limit_is_the_authors_and_not_the_operators() {
+    // ADR 0024 §7, amended 2026-10-02 (the user's decision; found by review). `SIGXCPU` is a
+    // **Python-level** handler, so it runs only when the eval loop regains control — and
+    // `x = sum(range(10**10))` never gives it back. Measured: under `--cpu-seconds 1` that
+    // source produces no diagnostic and exits −9 after 6.9 s, from the hard limit
+    // `_CPU_GRACE` seconds above the soft one. Until this amendment `core` called that
+    // `generator_failed`, an operator error, for a source whose author can fix it by doing
+    // less work per call.
+    //
+    // Told apart by three facts: the child named a socket, was dialled, and died by `SIGKILL`
+    // on its own — `by_signal` is `None` for the `SIGKILL` `core` itself sends.
+    let dir = Scratch::new();
+    let (mut session, _track, clip) = opened(&dir);
+    let id = define(&mut session, "x = sum(range(10**10))", Target::ClipId(clip.clone()));
+    // A socket in a directory of its own, which is the shape the real child's `mkdtemp` makes
+    // — and what it leaves behind when it is killed before its `finally` (F7).
+    let home = dir.at("sock");
+    std::fs::create_dir_all(&home).expect("a directory for the socket");
+    let socket = home.join("generate.sock");
+    std::fs::write(&socket, b"").expect("something at the address, which is not a server");
+    session.set_sandbox(Sandbox::new(fake_generator(
+        &dir.0,
+        &format!("echo unix:{}\nkill -9 $$", socket.display()),
+    )));
+
+    let before = entries(&session);
+    let refused = compile(&mut session, &id, false);
+    assert!(!refused.valid, "a hard CPU limit is a refusal, not an operator error");
+    assert_eq!(rules(&refused), vec!["generator_error"]);
+    assert_eq!(refused.errors[0].path, format!("/generators/{id}/source"));
+    assert!(refused.errors[0].message.contains("CPU limit"), "{}", refused.errors[0].message);
+    assert!(refused.errors[0].message.contains("there is no line"));
+    // No position prefix at all, where a diagnostic would carry one: the child never regained
+    // control to name a line, and `0:` is not a position.
+    assert!(
+        refused.errors[0].message.starts_with("the generator exceeded"),
+        "{}",
+        refused.errors[0].message
+    );
+    // The socket's directory went with the child that could not tidy it up itself (F7).
+    assert!(!home.exists(), "a killed child's socket directory was left behind");
     assert_eq!(entries(&session), before);
     assert!(notes_of(session.project().song(), &clip).notes.is_empty());
 }
@@ -888,27 +958,27 @@ fn the_toolchains_block_is_written_on_the_first_compile_and_never_rewritten_by_a
 fn the_sandbox_is_handed_what_it_compiles_and_nothing_about_the_project() {
     // ADR 0026 §1 field by field, read off what the generated server decoded rather than off
     // what `core` believed it sent. The two halves of the claim are what is here — the
-    // source, the seed as an integer, the maps in tick order, the clip's bounds — and what is
-    // not: no `Song`, no clip id, no track, no `toolchain_version`, and §4.3 blank on every
-    // leaf, which is what keeps a tempo event's key out of `compiled_hash`.
+    // source, the seed as an integer, **the params**, the maps in tick order, the clip's
+    // bounds — and what is not: no `Song`, no clip id, no track, no `toolchain_version`, and
+    // §4.3 blank on every leaf, which is what keeps a tempo event's key out of `compiled_hash`.
     let dir = Scratch::new();
     let (mut session, _track, clip) = opened(&dir);
-    session
-        .add_section(&escribass_proto::tools::AddSectionRequest {
-            name: "B".to_string(),
-            start_tick: BAR,
-            end_tick: BAR * 2,
-            dry_run: false,
-        })
-        .expect("a section");
-    session
-        .add_section(&escribass_proto::tools::AddSectionRequest {
-            name: "A".to_string(),
-            start_tick: 0,
-            end_tick: BAR,
-            dry_run: false,
-        })
-        .expect("a section");
+    // Four sections whose **tick order is not their name order and not their id order**, which
+    // is what the one promise about them needs: ADR 0024 §3 says the sandbox is handed them in
+    // tick order with ties broken by name, and until 2026-10-02 the fixture was `A`@0 and
+    // `B`@BAR — identical under every ordering, so sorting by name alone, or by tick with no
+    // tie-break, passed everything (M4 PR 8, mutation B5). `AA` is inserted before `A` so that
+    // the tie at `BAR * 2` comes out differently from the id order a stable sort would leave.
+    for (name, start) in [("AA", BAR * 2), ("C", 0), ("B", BAR), ("A", BAR * 2)] {
+        session
+            .add_section(&escribass_proto::tools::AddSectionRequest {
+                name: name.to_string(),
+                start_tick: start,
+                end_tick: start + BAR,
+                dry_run: false,
+            })
+            .expect("a section");
+    }
     session
         .set_tempo(&escribass_proto::tools::SetTempoRequest {
             bpm: 90.0,
@@ -917,7 +987,19 @@ fn the_sandbox_is_handed_what_it_compiles_and_nothing_about_the_project() {
         })
         .expect("a tempo change");
 
-    let id = define(&mut session, "note(36, 0, 240)", Target::ClipId(clip));
+    // **`params`, which no test, no script, no transcript and no fixture gave a generator until
+    // 2026-10-02** — all four in `tests/determinism/generators/` carried `{}` — so a sandbox
+    // handed none at all passed the whole suite and both feature goldens (mutation B19). It is
+    // a `compiled_hash` input *and* a name in the DSL's namespace, which is two seams at once.
+    let id = defined(
+        &mut session,
+        "note(36, 0, 240)",
+        Target::ClipId(clip),
+        BTreeMap::from([
+            ("spread".to_string(), "30".to_string()),
+            ("feel".to_string(), "straight".to_string()),
+        ]),
+    );
     let (compiling, sandbox) = compiler(&dir, Some(answered(&[(36, 0)])));
     session.set_sandbox(sandbox);
     compile(&mut session, &id, false);
@@ -936,9 +1018,18 @@ fn the_sandbox_is_handed_what_it_compiles_and_nothing_about_the_project() {
     assert!(sent.signature.iter().all(|e| e.id.is_empty()));
     assert_eq!(
         sent.sections.iter().map(|s| (s.start_tick, s.name.as_str())).collect::<Vec<_>>(),
-        vec![(0, "A"), (BAR, "B")],
+        vec![(0, "C"), (BAR, "B"), (BAR * 2, "A"), (BAR * 2, "AA")],
+        "the sections did not arrive in tick order with ties broken by name",
     );
     assert!(sent.sections.iter().all(|s| s.id.is_empty() && s.provenance.is_none()));
+    assert_eq!(
+        sent.params,
+        BTreeMap::from([
+            ("spread".to_string(), "30".to_string()),
+            ("feel".to_string(), "straight".to_string()),
+        ]),
+        "the generator's params did not reach the sandbox",
+    );
 }
 
 #[test]

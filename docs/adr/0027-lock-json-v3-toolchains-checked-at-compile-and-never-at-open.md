@@ -99,7 +99,14 @@ one field over.
 because nothing else does. It is the `version` of `compilers/generative/pyproject.toml`, starting
 at **`1`**, and it is **bumped by an ADR when the meaning of any construct or name in the
 language changes** — when a source that compiled before would compile to different notes — and
-not when a name is added, since an addition moves no golden (ADR 0024 §3). The interpreter's
+not when a name is added, since an addition moves no golden (ADR 0024 §3). **Nor when the
+language refuses *more*, which is stated here because M4 PR 8 refused five more things and the
+question was asked out loud** (the user's decision, 2026-10-02): a source that compiled before
+and still compiles compiles to the same notes, and a source that stops compiling was never a
+function of its own text — `f"{rng}"` gave two velocities from one source. So `dsl_version` stayed
+`1` through the third lock, and this sentence is here so that a reader knows it was decided and
+not overlooked. The asymmetry is the same one `buf breaking` has: removing is the breaking
+direction, and refusing is not adding. The interpreter's
 version beside it is §17's Python row, `3.12.12`, and the sandbox runs on that pin exactly as
 the sidecar does: the spike measured the DSL's arithmetic stable across five CPython minors,
 which is evidence that a patch bump would move nothing, and the pin is kept anyway because a
@@ -215,6 +222,12 @@ and the file is byte-identical to `main`'s (ADR 0023 §4 says the same of M5's s
 - **What this rests on that is unmeasured**: that CPython 3.12.12 under `uv` is what the child
   reports as `python_version` on every machine the pin is installed on — a `uv`-managed
   interpreter should make it so, and the `generators` golden is the check, since its `lock.json`
-  carries the string. **The check exists from 2026-10-01** and has passed on one machine; it
-  becomes a measurement the first time CI runs it, and a claim about a second platform only
-  when there is one (ADR 0009 §1).
+  carries the string. **The check exists from 2026-10-01** and has passed on one machine; ~~it
+  becomes a measurement the first time CI runs it~~ — **and it has been one since run
+  `36867215121` (PR #88, M4 PR 5), corrected 2026-10-02: a hosted `ubuntu-latest` runner's
+  `uv`-managed 3.12.12 reported the same string the golden carries, and every `--features
+  generators` run since has repeated it.** It is a claim about a second *machine*, and a claim
+  about a second platform only when there is one (ADR 0009 §1). The phrasing is the lesson:
+  "becomes a measurement the first time CI runs it" is a sentence that stops being true without
+  anybody editing it, which is how this repository's records go stale (docs/plan.md, "M4,
+  mid-flight").

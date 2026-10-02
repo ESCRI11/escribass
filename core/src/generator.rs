@@ -41,12 +41,17 @@
 //!    answered; `generator_failed` is one that would not start, named no socket, or exited
 //!    without answering. **Both are the operator's** — amended 2026-10-01 in M4 PR 6, where
 //!    offering the tool to a model is what showed the first of them was not an author's: see
-//!    [`NotCompiled`].
+//!    [`NotCompiled`]. One death in that family *is* the author's, and it is told apart by
+//!    three facts rather than by one: a child that named its socket, was dialled, and then
+//!    died by `SIGKILL` on its own has reached its own hard CPU limit, which no diagnostic can
+//!    come back from, and answers `generator_error` with no line (amended 2026-10-02, M4 PR 8).
 //! 4. **Nothing about the child survives the call.** A fresh process per compile (ADR 0024
 //!    §1), so a compile cannot depend on the compile before it and a limit that kills the
 //!    child costs a restart and nothing else. The child is told **nothing about the project**:
 //!    no path, no `lock.json`, no `song.json`, not even the clip's id. It is handed what it
 //!    compiles (ADR 0026 §1) and hands back notes.
+//! 5. **The socket's directory is swept when the child was killed**, because a killed process
+//!    runs no `finally` — see [`swept`].
 //!
 //! Nothing here reads a clock to decide *what* is compiled (CLAUDE.md #3, which from M4 names
 //! `compilers`). The request is a pure function of the document, the notes are a function of
@@ -74,20 +79,65 @@ use tonic::transport::Endpoint;
 const NAMING_ITS_SOCKET: Duration = Duration::from_secs(60);
 
 /// How long the sandbox has to answer the one call, before the call ends the caller's turn
-/// with `generator_timeout` (ADR 0024 §7, amended twice).
+/// with `generator_timeout` (ADR 0024 §7, amended three times).
 ///
 /// **This is the imposed failure M0.4's rule asks for**: a hang is not a failure unless one is
-/// imposed, and the DSL can express a loop that never ends. The child imposes its own CPU and
-/// memory limits and catches the first of them, so a runaway generator comes back
-/// as `generator_error` naming the line and the limit it exceeded; this is what is left if
-/// answering itself never happens — which is a wedged child and not a source, and is why this
-/// is an operator error from M4 PR 6 (see [`NotCompiled`]).
+/// imposed, and the DSL can express a loop that never ends. A runaway generator comes back as
+/// `generator_error` either way, and *which* way depends on something this constant does not
+/// control: the child catches its own **soft** CPU limit and answers a diagnostic naming the
+/// line, ~~which is what every runaway does~~ — **unless the runaway is inside a single built-in
+/// call, where `SIGXCPU`'s Python handler never runs and the **hard** limit kills the child
+/// without a word (amended 2026-10-02; see [`Sandbox::compile`]).** Both are the author's.
+/// What this bound is left for is answering never happening *at all* — a wedged child and not a
+/// source, which is why it is an operator error from M4 PR 6 (see [`NotCompiled`]).
 ///
 /// A minute, so it sits far above everything the child's own limits allow — five CPU seconds
 /// soft, five more before the hard one, plus an interpreter start, measured at 6.05 s for the
-/// default budget in M4 PR 4. A wall clock below that would turn the child's own diagnostic
-/// into this refusal and lose the line number with it.
+/// default budget in M4 PR 4 and at 6.9 s for the hard limit under a one-second budget in M4
+/// PR 8. A wall clock below either would turn one of the child's own refusals into this one and
+/// lose what it carries with it.
 pub const ANSWERING: Duration = Duration::from_secs(60);
+
+/// `SIGKILL`, the one signal that means something here (see [`Sandbox::compile`]).
+///
+/// The number rather than a dependency on `libc` for one constant (CLAUDE.md #4). It is 9 on
+/// every Linux ABI and this repository claims one platform (ADR 0009 §1).
+const SIGKILL: i32 = 9;
+
+/// The same death, reported by a launcher standing in front of the child.
+///
+/// `core` is told a **command** and never a binary (see the module note), and on a build tree
+/// that command is `uv run --no-sync --project compilers/generative escribass-generative`. So
+/// the process the kernel kills is `uv`'s child, `uv` sees it die and exits `128 + 9` — the
+/// convention every shell and supervisor uses — and `core` reads an exit *code* where a bundle
+/// shipping the binary directly would give it a *signal*. One event, two shapes.
+const KILLED_BY_THE_KERNEL: i32 = 128 + SIGKILL;
+
+/// Removes the directory the socket was in, once the child that owned it is gone.
+///
+/// The child removes it itself in a `finally` — and a `finally` does not run when the process
+/// is killed, which is three of the paths it has: its own hard CPU limit, [`ANSWERING`]'s kill
+/// above, and a test's. So `/tmp/escribass-generative-*` accumulated one directory per killed
+/// compile (found by review, 2026-10-02). `core` dialled the path, so `core` can finish the job.
+///
+/// **`remove_dir`, not `remove_dir_all`**, and that is the whole safety argument: this is a
+/// path a *child* named, and an empty-directory removal cannot take anything with it. If the
+/// child already tidied up, both calls are no-ops; if it named something that is not a socket
+/// in a directory of its own, the second call fails and nothing happens. Both results are
+/// ignored, because a compile that failed must not fail differently over a leftover file.
+///
+/// **Called on the two paths where the child was killed, and on neither of the others.** A
+/// child that answered exited by itself and ran its own `finally` — [`ended`] has already
+/// waited for it, so there is no race to lose — and one that named no socket named no directory
+/// either.
+fn swept(address: &str) {
+    let Some(socket) = address.strip_prefix("unix:") else { return };
+    let socket = std::path::Path::new(socket);
+    let _ = std::fs::remove_file(socket);
+    if let Some(directory) = socket.parent() {
+        let _ = std::fs::remove_dir(directory);
+    }
+}
 
 /// Where the generative compiler is, as a command this process was told (`--generator`).
 ///
@@ -119,9 +169,10 @@ pub struct Compiled {
 ///
 /// Until M4 PR 6 this was an enum: `TimedOut` was caller-fixable, on the reasoning that what
 /// loops for ever is the source. Offering `compile_generator` to a model is what showed that
-/// wrong. **No source can reach this wall.** The child imposes its own CPU and memory limits,
-/// catches the first of them and answers a `Diagnostic` carrying the line — measured at 2.04 s
-/// and 6.05 s and 0.28 s in M4 PR 4 — and [`ANSWERING`] is set a minute out *so that* it sits
+/// wrong. **No source can reach this wall.** The child's own CPU and memory limits stop it
+/// first — either as a `Diagnostic` carrying the line, measured at 2.04 s and 6.05 s and 0.28 s
+/// in M4 PR 4, or as the hard limit's `SIGKILL` at 6.9 s, which [`Sandbox::compile`] reads and
+/// also calls the author's (M4 PR 8) — and [`ANSWERING`] is set a minute out *so that* it sits
 /// above all of them. A child that has neither answered nor died after that is wedged, and the
 /// message says so and carries no line, no column and nothing an author could edit. Feeding
 /// that to a model and charging it one of the three refusals a turn allows is M3 trap 2: a
@@ -185,14 +236,16 @@ impl Sandbox {
                 let _ = child.kill();
                 let _ = child.wait();
                 drop(tail(said));
+                swept(&address);
                 Err(self.broke(
                     "generator_timeout",
                     format!(
                         "the generator did not answer within {} seconds and was stopped. \
                          Nothing an author can write reaches this bound: the child's own CPU \
-                         and memory limits fire inside it and come back as `generator_error` \
-                         with the line, so a compiler that is silent for this long is wedged \
-                         (ADR 0024 §7, amended 2026-10-01)",
+                         and memory limits fire inside it and come back as `generator_error` — \
+                         with the line when it could be caught and without one when the kernel \
+                         had to do it — so a compiler that is silent for this long is wedged \
+                         (ADR 0024 §7, amended 2026-10-01 and 2026-10-02)",
                         self.answering.as_secs()
                     ),
                 ))
@@ -201,7 +254,34 @@ impl Sandbox {
                 // The transport's view of the failure is not read, for the engine's reason:
                 // the useful report is the one the child already wrote, which is its exit
                 // status and the last of its stderr (ADR 0013 §3).
-                Err(self.verdict(&mut child, said, "the generator did not answer the call"))
+                let gone = ended(&mut child, said, "the generator did not answer the call");
+                swept(&address);
+                // **The one failure in this family that is the author's.** A child that named
+                // its socket, was dialled, and then died by `SIGKILL` of its own accord has
+                // reached its own hard CPU limit: the soft one is a Python signal handler and
+                // a built-in call does not return to the interpreter for it to run, so
+                // `x = sum(range(10**10))` under a one-second budget produces no diagnostic
+                // and no answer — measured at exit −9 after 6.9 s (ADR 0024 §7, amended
+                // 2026-10-02, where review found it reported as `generator_failed`).
+                //
+                // Told apart by all three facts and not by the signal alone: the child got as
+                // far as naming a socket and being called, and both fields are `None` for the
+                // `SIGKILL` [`ended`] itself sends to a child that would not leave.
+                if gone.by_signal == Some(SIGKILL)
+                    || gone.exit_code == Some(KILLED_BY_THE_KERNEL)
+                {
+                    return Err(self.broke("generator_error", format!(
+                        "the generator exceeded the compiler's CPU limit inside a single \
+                         built-in call and was stopped by the kernel, so it never regained \
+                         control to say where: there is no line. A call that does not return \
+                         to the interpreter — `sum(range(10**10))`, a `Fraction` of a \
+                         thousand-digit power — cannot be interrupted by the limit's own \
+                         handler, and the hard limit a few seconds above it is what stops it. \
+                         Do less work per call (ADR 0024 §4, §7); {}",
+                        gone.message,
+                    )));
+                }
+                Err(self.broke("generator_failed", gone.message))
             }
             Ok(answer) => {
                 // **Reaped, not judged.** The answer is complete — a child killed mid-send

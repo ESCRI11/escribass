@@ -242,8 +242,11 @@
       "source": "# The hats went; the kick and the snare stay.\nfor b in range(4):\n    note(36, beat(b), beat(1) // 2, 100)\n    if b % 2 == 1:\n        note(38, beat(b), beat(1) // 2, 110)\n",
       "seed": "9007199254740993",
       "toolchain_version": "1",
-      "params": {},
-      "compiled_hash": "45d076d99bea57592ad7b8ca5c279ed316e748aae03237248ee8e6220f0a85b7",
+      "params": {
+        "feel": "straight",
+        "spread": "30"
+      },
+      "compiled_hash": "cbfe905a04bf0e438e3f807c54803f2bc61d32b67ec1f7e99466a07419fcd36a",
       "clip_id": "01M1FPMP000000000000000009"
     },
     "01M1FPMP000000000000000016": {

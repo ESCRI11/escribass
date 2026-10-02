@@ -895,6 +895,71 @@ mod through_the_sandbox {
             "it names the line the generator was on: {said}"
         );
     }
+
+    #[test]
+    fn a_runaway_inside_one_builtin_call_is_a_refusal_with_no_line_at_all() {
+        // ADR 0024 §7's **third** amendment (2026-10-02, M4 PR 8), proved the way review
+        // proved the defect: through the real child and the real server, not a shell fake.
+        // `SIGXCPU` is a Python-level handler, so it runs only when the eval loop regains
+        // control — the loop in the test above gives it back and gets its line, and
+        // `sum(range(10**10))` never does. The child is then killed by its own **hard** limit,
+        // `_CPU_GRACE` seconds above the soft one, having said nothing at all; this used to be
+        // `generator_failed`, an operator error, for a source whose author fixes it by doing
+        // less work per call.
+        //
+        // About seven seconds: one CPU second plus the grace, which is why it is outside the
+        // golden beside its sibling rather than a step in the script.
+        let directory = Scratch::new("determinism", "runaway-builtin");
+        let source = "x = sum(range(10**10))\n";
+        let requests = vec![
+            json!({
+                "jsonrpc": "2.0", "id": 0, "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                           "clientInfo": {"name": "escribass-tests", "version": "1"}}
+            }),
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                "name": "add_track",
+                "arguments": {"name": "T", "kind": "TRACK_KIND_INSTRUMENT", "ref": {"plugin": {
+                    "plugin_id": "Surge Synth Team/Surge XT", "version": "1.3.4"}}}}}),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "add_clip",
+                "arguments": {"track_id": "01M1FPMP000000000000000006",
+                              "start_tick": 0, "length_ticks": 3840}}}),
+            json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                "name": "define_generator",
+                "arguments": {"kind": "GENERATOR_KIND_PYTHON", "seed": "7", "source": source,
+                              "clip_id": "01M1FPMP000000000000000009"}}}),
+            json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+                "name": "compile_generator",
+                "arguments": {"generator_id": "01M1FPMP00000000000000000B"}}}),
+        ];
+        let frames = speak(
+            &[
+                "--create", "--manifest", MANIFEST,
+                "--seed-ids", &format!("{AT}:1"), "--fixed-clock", AT, "--author", "model",
+                "--generator", &format!("{} --cpu-seconds 1", common::generator_command()),
+            ],
+            &directory.0,
+            &requests,
+        );
+        let answer = frames.iter().find(|f| f["id"] == json!(4)).expect("an answer");
+        // A **refusal**, which is the whole amendment: before it, this came back as a
+        // JSON-RPC error because `core` called the death an operator's.
+        let content = &answer["result"]["structuredContent"];
+        assert_eq!(
+            content["valid"],
+            json!(false),
+            "the hard CPU limit did not come back as a refusal: {answer}"
+        );
+        assert_eq!(content["errors"][0]["rule"], json!("generator_error"));
+        let said = content["errors"][0]["message"].as_str().expect("a message");
+        assert!(said.contains("CPU limit"), "{said}");
+        assert!(said.contains("there is no line"), "{said}");
+        // And no position prefix, where the sibling above has one: nothing in the child ever
+        // regained control to name a line, and `0:` is not a position.
+        assert!(said.starts_with("the generator exceeded"), "{said}");
+    }
 }
 
 // ---------------------------------------------------------------------------
