@@ -79,19 +79,23 @@ use tonic::transport::Endpoint;
 const NAMING_ITS_SOCKET: Duration = Duration::from_secs(60);
 
 /// How long the sandbox has to answer the one call, before the call ends the caller's turn
-/// with `generator_timeout` (ADR 0024 §7, amended twice).
+/// with `generator_timeout` (ADR 0024 §7, amended three times).
 ///
 /// **This is the imposed failure M0.4's rule asks for**: a hang is not a failure unless one is
-/// imposed, and the DSL can express a loop that never ends. The child imposes its own CPU and
-/// memory limits and catches the first of them, so a runaway generator comes back
-/// as `generator_error` naming the line and the limit it exceeded; this is what is left if
-/// answering itself never happens — which is a wedged child and not a source, and is why this
-/// is an operator error from M4 PR 6 (see [`NotCompiled`]).
+/// imposed, and the DSL can express a loop that never ends. A runaway generator comes back as
+/// `generator_error` either way, and *which* way depends on something this constant does not
+/// control: the child catches its own **soft** CPU limit and answers a diagnostic naming the
+/// line, ~~which is what every runaway does~~ — **unless the runaway is inside a single built-in
+/// call, where `SIGXCPU`'s Python handler never runs and the **hard** limit kills the child
+/// without a word (amended 2026-10-02; see [`Sandbox::compile`]).** Both are the author's.
+/// What this bound is left for is answering never happening *at all* — a wedged child and not a
+/// source, which is why it is an operator error from M4 PR 6 (see [`NotCompiled`]).
 ///
 /// A minute, so it sits far above everything the child's own limits allow — five CPU seconds
 /// soft, five more before the hard one, plus an interpreter start, measured at 6.05 s for the
-/// default budget in M4 PR 4. A wall clock below that would turn the child's own diagnostic
-/// into this refusal and lose the line number with it.
+/// default budget in M4 PR 4 and at 6.9 s for the hard limit under a one-second budget in M4
+/// PR 8. A wall clock below either would turn one of the child's own refusals into this one and
+/// lose what it carries with it.
 pub const ANSWERING: Duration = Duration::from_secs(60);
 
 /// `SIGKILL`, the one signal that means something here (see [`Sandbox::compile`]).
@@ -165,9 +169,10 @@ pub struct Compiled {
 ///
 /// Until M4 PR 6 this was an enum: `TimedOut` was caller-fixable, on the reasoning that what
 /// loops for ever is the source. Offering `compile_generator` to a model is what showed that
-/// wrong. **No source can reach this wall.** The child imposes its own CPU and memory limits,
-/// catches the first of them and answers a `Diagnostic` carrying the line — measured at 2.04 s
-/// and 6.05 s and 0.28 s in M4 PR 4 — and [`ANSWERING`] is set a minute out *so that* it sits
+/// wrong. **No source can reach this wall.** The child's own CPU and memory limits stop it
+/// first — either as a `Diagnostic` carrying the line, measured at 2.04 s and 6.05 s and 0.28 s
+/// in M4 PR 4, or as the hard limit's `SIGKILL` at 6.9 s, which [`Sandbox::compile`] reads and
+/// also calls the author's (M4 PR 8) — and [`ANSWERING`] is set a minute out *so that* it sits
 /// above all of them. A child that has neither answered nor died after that is wedged, and the
 /// message says so and carries no line, no column and nothing an author could edit. Feeding
 /// that to a model and charging it one of the three refusals a turn allows is M3 trap 2: a
@@ -237,9 +242,10 @@ impl Sandbox {
                     format!(
                         "the generator did not answer within {} seconds and was stopped. \
                          Nothing an author can write reaches this bound: the child's own CPU \
-                         and memory limits fire inside it and come back as `generator_error` \
-                         with the line, so a compiler that is silent for this long is wedged \
-                         (ADR 0024 §7, amended 2026-10-01)",
+                         and memory limits fire inside it and come back as `generator_error` — \
+                         with the line when it could be caught and without one when the kernel \
+                         had to do it — so a compiler that is silent for this long is wedged \
+                         (ADR 0024 §7, amended 2026-10-01 and 2026-10-02)",
                         self.answering.as_secs()
                     ),
                 ))
