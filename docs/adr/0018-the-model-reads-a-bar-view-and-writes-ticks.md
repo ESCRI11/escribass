@@ -119,6 +119,16 @@ by hand from the rules above; PR 6's golden is the implementation's output, and 
 differ PR 6 says which was wrong, the rule or the hand. Spelling — separators, abbreviations,
 line breaks — is PR 6's to settle; what is carried and what is abstracted is not.
 
+**Extended 2026-10-02, at M4's close: there is a second fixture, and it is what makes the
+generator line a golden at all.** `ai/tests/test_view.py` also reads
+`tests/determinism/generators/expected/song.json`, against `ai/tests/golden/view-generators.txt`,
+added in M4 PR 6 for the reason ADR 0026 §4 records: the render fixture holds no generator, so the
+`Generator` line §1's amendment added would print `generators: none` whatever it was made to print
+and a golden over it could not fail. One fixture is not enough for a view whose job is to describe
+a document; the pattern — a golden that cannot fail because its input has nothing to say — is M3
+trap 1, and the second document is the fix. ADR 0026 §4 recorded it and this section did not,
+which is what M4's close found.
+
 ```
 song 01M1FPMP000000000000000001 · 960 ticks per quarter · 3 bars · ends at tick 9600 (@3 tick 1920)
 signature 4/4 from @1 tick 0 · a bar is 3840 ticks, a beat 960

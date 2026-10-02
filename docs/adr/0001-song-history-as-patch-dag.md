@@ -174,6 +174,15 @@ Interactive conflict *resolution* — choosing side A or side B per path, editin
 result — is deferred until there is a UI to host it (M2 at the earliest). Designing that
 API now would mean designing it against conflicts nobody has hit yet.
 
+**Delivered 2026-09-09 in M2 PR 8, and written back here 2026-10-02 at M4's close.** ADR 0015
+§3 decided it and `merge_branch` carries it: one optional per-path resolution on a second call,
+`resolution_unknown` for a path the merge did not conflict on, and no merge state held between
+calls — which is the shape ADR 0006 §5 refuses for projects, so the deferral's own worry about
+designing an API too early was answered by not designing a stateful one. It is written back
+because three milestones of this file have found the opposite failure — an ADR handing work to a
+milestone that closed without it — and this is the mirror: work a milestone *did* and no ADR
+recorded, which reads to anyone walking the ADRs as a fourth unkept promise.
+
 ### 5. Entity ids come from an injectable source
 
 §4.3 requires ULIDs. A ULID is a 48-bit millisecond timestamp plus 80 random bits, and
@@ -254,7 +263,7 @@ the architecture already committed to rather than being bolted on.
 
 ## Deferred
 
-- Interactive conflict resolution (§4 above) — waits for a UI, M2 at the earliest.
+- ~~Interactive conflict resolution (§4 above) — waits for a UI, M2 at the earliest.~~ **Closed: decided by ADR 0015 §3 and built in M2 PR 8** (struck 2026-10-02, at M4's close; see §4).
 - Garbage collection of orphaned patch entries. They are small and inert; revisit only if a
   real project's `patches/` becomes a problem.
 - Remotes, or any notion of pushing a branch anywhere. External git covers sharing.

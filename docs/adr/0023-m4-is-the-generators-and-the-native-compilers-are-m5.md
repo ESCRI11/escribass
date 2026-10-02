@@ -302,11 +302,23 @@ The fifth walk of the deferred ledger (2026-09-24) sent four rows here, and ques
   ("this repository is private on a plan where the branch-protection API answers 403") and the
   root `AGENTS.md`'s hooks paragraph ("branch protection and rulesets both require Pro on a
   private repository") stop being the reason those two are shaped as they are, and both are
-  corrected when the visibility is; `cross-cpu`, which has **never run** — `renders` and
+  corrected when the visibility is; `cross-cpu`, which ~~has **never run**~~ **had last run on
+  2026-09-09, twenty-five times before that, and whose evidence included two Intel parts nobody
+  had read** — `renders` and
   `cross-cpu` last executed on 2026-09-09 and the matrix's chance of drawing two CPU models has
   not been taken since — becomes the first place ADR 0009 §6's question can be asked again; and
   "every number is one machine's" stops being true of the next pull request that touches the
   engine, not of this one.
+
+  **Corrected 2026-10-02, at M4's close.** "Never run" was false when it was written and the
+  clause after it said so in the same breath — a job that "last executed on 2026-09-09" has run.
+  ADR 0009 §6's 2026-10-01 amendment established forty-three executions, twenty-five of them M1's
+  and M2's, and wrote the rule this bullet breaks: *before writing "for the first time" or
+  "never", list the runs.* That amendment did not propagate here, against
+  `docs/adr/AGENTS.md`'s "other ADR text that relied on the old decision changes in the same
+  commit" — so the sentence ADR 0009 corrected survived two days in the ADR beside it. The
+  decision this bullet records (U2, public) is untouched; what was wrong is a claim about this
+  repository's own evidence, for the third time in one ADR family.
 
 ## Alternatives considered
 

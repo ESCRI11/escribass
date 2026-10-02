@@ -67,10 +67,15 @@ carry at all — the PCM hash and the commits of the build that made it (ADR 000
 
 The rule as it now reads: **one `ToolResult` for every tool that produces ops**, and its own
 message for a tool that produces something else. That is a narrower claim than the one this
-decision made and it is still one contract, not sixteen — the ~~seventeen~~ **nineteen**
-op-producing tools share theirs, and nothing was added to the shape they share. (**Counted
-again 2026-09-24, at M3's close**: `undo` and `redo` joined at M2 PR 5 and this sentence was
-edited on 2026-09-15 without being recounted. The rule is unchanged; only the number was.)
+decision made and it is still one contract, not sixteen — the ~~seventeen~~ ~~nineteen~~
+**twenty-one** op-producing tools share theirs, and nothing was added to the shape they share.
+(**Counted again 2026-09-24, at M3's close**: `undo` and `redo` joined at M2 PR 5 and this
+sentence was edited on 2026-09-15 without being recounted. The rule is unchanged; only the number
+was. **And again 2026-10-02, at M4's close**: `DefineGenerator` and `CompileGenerator` joined at
+M4 PR 3 and the parenthetical written to stop this drift did not stop it a second time, which is
+the third edit to one number and the argument for counting it from the file rather than from the
+last sentence — `grep -cE '^\s*rpc .*ToolResult' proto/song_tools.proto` is twenty-one of the
+service's twenty-seven RPCs.)
 
 Changing an RPC's response type is a wire break, and `buf breaking` said so. It was taken
 because nothing spoke this wire: the gRPC surface answered `UNIMPLEMENTED` and MCP did not

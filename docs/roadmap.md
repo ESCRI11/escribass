@@ -11,12 +11,25 @@ is the widest view and the least authoritative:
 
 No dates. The repo has none; sequencing and dependency are the only claims made here.
 
-## Where we stand (2026-09-02)
+## Where we stand (2026-10-02)
 
-`schema/song.proto` and `history.proto` exist, with generated Rust, TypeScript and Python
+**M0 to M4 are complete.** The schema, `core`, the validator, the patch DAG and the tool API over
+gRPC and MCP; a C++ render engine hosting Surge XT, sfizz and Dexed, with four golden WAVs
+reproduced on six CPU models across two vendors; a Tauri app whose seven views are projections of
+the model, with preview playback; an AI loop — a Python sidecar, a proposal a person applies, and
+the panel; and the generators — a seeded Python DSL compiled in a subprocess, two tools, the
+generator code view, and `lock.json`'s `toolchains` block. `plan.md` has the step table and, in
+"M4, closed", what none of that is yet evidence for.
+
+**M5 is next and is not planned yet**, which is deliberate: planning a milestone is its own step
+here. `plan.md`'s "M5, sketched from here" holds the rows; `specs.md` §16 holds the definition.
+
+~~`schema/song.proto` and `history.proto` exist, with generated Rust, TypeScript and Python
 types, one cross-language fixture, ADR 0001 (history is a patch DAG) and ADR 0002 (schema v1).
-That is M0.1 of four M0 steps. No `core/`, no tool API, no sound, no CI, nothing pushed.
-`plan.md` has the step table.
+That is M0.1 of four M0 steps. No `core/`, no tool API, no sound, no CI, nothing pushed.~~
+(That was 2026-09-02 and stayed on the page through four milestone closes — a user-facing
+document saying this repository had no core, no sound and no CI. Struck rather than deleted, at
+M4's close, because what it shows is that a dated section is not a self-correcting one.)
 
 ## The arc
 

@@ -10,10 +10,21 @@
 //! shell, where the real sidecar would have to be broken to produce them.
 //!
 //! What the **real** sidecar does is `ai/tests/test_sidecar.py`, which drives the real process
-//! over a real socket — and the two halves meet in
-//! [`the_real_sidecar_answers_the_transcript`], which is `#[ignore]`d because it needs `ai/`'s
-//! Python environment, the way `tests/renders.rs`'s device test needs an audio output. It is
-//! run by hand, and what it prints is in the pull request.
+//! over a real socket, and the two halves meet in **`tests/determinism.rs`'s
+//! `a_scripted_turn_produces_the_same_project_twice_and_the_one_committed`** — `core`'s own
+//! client against the real `escribass-ai`, started from the same command this file fakes,
+//! behind the `ai` cargo feature and run by CI (docs/specs.md §11, seventh bullet).
+//!
+//! It used to meet them in a `the_real_sidecar_answers_the_transcript` here, **deleted at M4's
+//! close on 2026-10-02 because it had been failing since the day it was written and nothing ran
+//! it.** It drove `ai/tests/transcripts/one-answer.json`, and the token floor ADR 0022 §3 added
+//! one pull request later makes that recorded 68-prompt-token response impossible as an answer
+//! to a prompt carrying the view: the loop retries its bounded number of times and the
+//! transcript runs out, `assistant_failed` — which is what
+//! `test_the_recorded_exchange_trips_the_token_floor_the_loop_added` asserts on purpose, one
+//! language over. So `core` had an `#[ignore]`d test asserting the opposite of its sibling's
+//! deliberate claim, with a doc comment inviting a reader to run it and meet a red test. The
+//! claim it made is covered twice without it.
 
 mod common;
 use common::{fake_assistant, manifest};
@@ -866,60 +877,6 @@ fn a_second_prompt_waits_for_the_pending_proposal() {
     // written (ADR 0019 §3).
     assert!(session.reject());
     sidecar.turn(&mut session, "second", &[], |_, _| {}).expect("the next turn answers");
-}
-
-// ---- the two halves, meeting (ADR 0020 §4) ----
-
-/// The real sidecar, started the way ADR 0020 §4 says `core` starts it.
-///
-/// **`#[ignore]`d**, for `tests/renders.rs`'s reason one directory over: it needs something the
-/// machine may not have — here `uv` and a synced `ai/` environment — and a test that noticed
-/// and returned would be the quiet skip the determinism suite exists to prevent. Run it with
-///
-/// ```text
-/// cd ai && uv sync --locked
-/// cargo test -p escribass-core --test assistant -- --ignored --nocapture
-/// ```
-#[cfg(unix)]
-#[test]
-#[ignore = "needs uv and ai/'s environment: cd ai && uv sync --locked"]
-fn the_real_sidecar_answers_the_transcript() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-    let ai = root.join("ai");
-    let transcript = ai.join("tests/transcripts/one-answer.json");
-    let mut sidecar = Assistant::new(vec![
-        "uv".to_string(),
-        "run".to_string(),
-        "--project".to_string(),
-        ai.display().to_string(),
-        "escribass-ai".to_string(),
-        "--transcript".to_string(),
-        transcript.display().to_string(),
-    ])
-    .start()
-    .expect("the real sidecar starts");
-
-    println!("the sidecar named {}", sidecar.address());
-    assert!(sidecar.address().starts_with("unix:"));
-
-    let dir = Scratch::new();
-    let mut session = opened(&dir);
-    let turn = sidecar
-        .turn(&mut session, "What can you change about this song?", &[], |_, _| {})
-        .expect("the real sidecar answers");
-    println!("{:#?}", turn.recorded);
-
-    let recorded = std::fs::read_to_string(&transcript).expect("the transcript is readable");
-    assert!(
-        recorded.contains(&turn.recorded.reply),
-        "the answer is not the transcript's: {}",
-        turn.recorded.reply
-    );
-    assert_eq!(turn.end, TurnEnd::Answered);
-    assert!(turn.recorded.calls.is_empty(), "this transcript proposes nothing");
-    assert_eq!(session.project().history().entries().len(), 1, "nothing was applied");
-
-    println!("{}", sidecar.stop());
 }
 
 #[cfg(unix)]

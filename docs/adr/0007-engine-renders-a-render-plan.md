@@ -212,6 +212,27 @@ deferred-ledger row now carries it with a trigger something can produce, and the
 messages in `core/src/render.rs` stop naming a finished milestone: they say the mixer's routing
 is unplaced, which is true and stays true until someone places it.
 
+**Amended 2026-10-02, at M4's close, and this one is the same defect one milestone later —
+except that fixing it moves goldens, so it is recorded rather than done.** ADR 0023 §1 renumbered
+the "(M4)" beside `DeviceRef.cmajor`, `.faust` and `.neural` to **M5** on 2026-09-25, and that
+renumbering never reached `core/src`. Five sites still say M4: `render.rs`'s `check_device` doc
+comment and the comment above the muting arm, and four comments in `validate.rs`. The fifth is the
+one that matters, because it is not a comment — the refusal **message** reads "`{arm}` devices are
+compiled and hosted **from M4**; M1 hosts the bundled plugins and the sampler", and M4 is the
+milestone closing as this is written. It is precisely what the 2026-09-24 amendment above was
+about, arriving by the other door: there the refusal named a milestone that had finished without
+the work, here it names a milestone that is finishing without it.
+
+**Why the string is left alone until M5.** It is committed in four determinism goldens —
+`every_tool`'s and `refusals`' `responses.json` and `plan.json`, and `undo`'s and `refusals`'
+`plan.json` — so editing it moves goldens, and a close pull request that moves a golden cannot
+also be the pull request that says none moved. The fix belongs with M5's `core` change, which
+lifts these refusals for `cmajor` anyway and will move those goldens with an ADR beside them
+(M5's row 6). Until then the honest statement is the one in this paragraph: the *decision* says
+M5 and four committed bytes say M4. Comments are not corrected either, because a tree whose
+comments say M5 and whose string says M4 is harder to read than one that is uniformly behind and
+has a paragraph explaining it.
+
 **The SFZ refusal's "question for M2" was not asked.** An SFZ this engine cannot resolve is
 still refused by the engine, naming the `sample=` it could not find, and compile is still pure.
 M2 gave no reason to move it and did not; M3 does not touch the engine. The paragraph stands as

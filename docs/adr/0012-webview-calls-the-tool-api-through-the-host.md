@@ -52,6 +52,20 @@ a JSON array and never base64, and `get_song` renders through `to_canonical_json
 `serde_json::to_value`. A frontend that got either wrong would be reading a different document
 from the one on disk, and both are already someone else's test.
 
+**Amended 2026-10-02, at M4's close: "the webview's only route to the model is one command" is
+exactly true and "the webview calls one Tauri command" is not.** The host registers **six** —
+`tool, manifest, assistant, panel, prompt, settle` (`app/src-tauri/src/main.rs`) — and the
+frontend invokes all six (`app/src/tool.ts`). The claim this section is *about* survives
+untouched, because `tool` is still the only one that reaches a `Session` and the only one with a
+second dispatch to avoid: `manifest` describes the build (ADR 0014 §1, which recorded it as "a
+second Tauri command"), and `assistant`, `panel`, `prompt` and `settle` are M3's conversation
+surface, which no ADR recorded as commands at all — ADR 0019's Consequences names `panel` in
+passing and that is the whole of it. What is corrected is the count, and the heading should be
+read as "one command *for the model*". The four M3 commands going unrecorded is M3's omission
+found at M4's close, and it is the shape this repository keeps finding: the decision was right,
+the surface grew, and the sentence describing the surface was not re-read. `docs/specs.md` §3,
+§5, §9 and §15 are corrected with it.
+
 The command surface stays one command rather than one per tool for the same reason. Twenty
 `#[tauri::command]` functions are twenty places for a field to be forgotten; the argument names
 are the request message's, and the request messages are generated (PR 3 adds TypeScript for
