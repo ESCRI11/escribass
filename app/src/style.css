@@ -587,6 +587,148 @@ button.pane.on {
 
 
 /* ---------------------------------------------------------------------------
+   The generator code view (§9; ADR 0024 §5, §6; wireframes plate 3)
+   ---------------------------------------------------------------------------
+
+   The editor's own title bar, and the editor. The bar is in the pane body for the branchbar's
+   reason — nothing here is dragged, so it may wrap rather than clip — and it is the place §9
+   asks for the seed, the toolchain and the one status word. */
+.codebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.codebar select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font: inherit;
+  max-width: 320px;
+}
+
+/* Save, Discard and Compile pushed to the end, so the three controls are in one place however
+   many words the status takes. `margin-left: auto` and not a spacer element. */
+.codebar .buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.codebar button.pane:disabled,
+.codebar select:disabled {
+  opacity: 0.4;
+}
+
+/* The status words. `never` is dim because it is the absence of a fact; `stale` is the accent,
+   because it is the one word that says the notes in the song are not the ones this source would
+   write. `edited` and `the document moved` are about the buffer rather than the document, which
+   is why they are a different shape — outlined, not filled. */
+.codebar .state {
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.codebar .state.never {
+  color: var(--dim);
+  border-color: var(--line);
+}
+
+.codebar .state.compiled {
+  color: var(--audio);
+  border-color: var(--audio);
+}
+
+.codebar .state.stale {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.codebar .state.edited,
+.codebar .state.moved {
+  color: var(--refuse);
+  border-color: var(--refuse);
+}
+
+/* The editor fills what the bar leaves. `min-height: 0` because a flex item's default
+   `min-height: auto` is its content's — the defect M2 PR 7 found as a panel shrunk to 622 px of
+   1200 — and CodeMirror's content is as tall as the source, so without this a long generator
+   grows the pane instead of scrolling inside it. */
+.editor {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* CodeMirror's own classes, themed from the palette above rather than through
+   `EditorView.theme`: a colour lives in this file and nowhere else (see the head of it), and a
+   theme object in TypeScript would be the second place. Its base styles are light, so the three
+   surfaces — content, gutter, active line — are each named. */
+.editor .cm-editor {
+  height: 100%;
+  background: var(--surface);
+  color: var(--text);
+  font: 12px/1.5 ui-monospace, "DejaVu Sans Mono", monospace;
+}
+
+.editor .cm-editor.cm-focused {
+  outline: 1px solid var(--line);
+}
+
+.editor .cm-scroller {
+  overflow: auto;
+}
+
+.editor .cm-gutters {
+  background: var(--panel);
+  color: var(--dim);
+  border-right: 1px solid var(--faint);
+}
+
+.editor .cm-activeLine,
+.editor .cm-activeLineGutter {
+  background: var(--faint);
+}
+
+.editor .cm-cursor {
+  border-left-color: var(--text);
+}
+
+.editor .cm-selectionBackground,
+.editor .cm-content ::selection {
+  background: var(--block);
+}
+
+/* A diagnostic is a compile refusal, so it is drawn in the colour a refusal is drawn in
+   everywhere else in this window (`--refuse`, read by both canvases too). The panel and the
+   tooltip carry the child's own words, unrewritten (ADR 0026 §3). */
+.editor .cm-diagnostic-error {
+  border-left: 3px solid var(--refuse);
+}
+
+.editor .cm-tooltip,
+.editor .cm-panels {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.editor .cm-lintRange-error {
+  /* CodeMirror draws its squiggle as a background image whose colour is baked in, so the
+     underline is replaced rather than recoloured. */
+  background: none;
+  text-decoration: underline wavy var(--refuse);
+  text-underline-offset: 3px;
+}
+
+
+/* ---------------------------------------------------------------------------
    The AI panel (§9; ADR 0019 §2, §3; wireframes plate 1, pane 6)
    ---------------------------------------------------------------------------
 

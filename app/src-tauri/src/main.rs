@@ -48,7 +48,21 @@
 //!                          window still edits and the dot says there is none. The key is
 //!                          **not** here: `OPENROUTER_API_KEY` is inherited from this
 //!                          process's environment, because `ps` shows flags (U3)
+//! --generator <command>    the command that starts the generative compiler — on a build tree
+//!                          `"uv run --no-sync --project compilers/generative escribass-generative"`
+//!                          — told and never searched, as the other two children are (ADR 0024
+//!                          §1). Absent, the window still edits and the code view still opens:
+//!                          pressing Compile says `generator_missing` and names this flag, the
+//!                          way pressing play without an engine says `engine_unset`
 //! ```
+//!
+//! And, from M4 PR 7, a third child this process can be told how to start: `--generator`, the
+//! generative compiler `core` spawns per compile (ADR 0024 §1). It arrives with the window's
+//! Compile button and not before it — M4 PR 5 gave the flag to both server binaries and
+//! deliberately left it off this one, because a host with no way to ask for a compile would have
+//! been carrying an argument nothing could reach. Like `--engine`, it is optional and never
+//! searched for: a session that only edits starts on a machine with no Python environment at
+//! all, and the one call that needs it is refused as an operator error rather than skipped.
 //!
 //! No `--create`, and no File · Open yet. The project is a launch argument, as it is for both
 //! server binaries; a menu that opens a second one wants a session per project directory and a
@@ -63,9 +77,9 @@
 mod panel;
 
 use escribass_core::call::call;
-use escribass_core::{Halt, 
-    Assistant, Clock, Engine, Health, Manifest, Project, ProjectLock, Session, Sidecar,
-    SystemClock, UlidSource,
+use escribass_core::{
+    Assistant, Clock, Engine, Halt, Health, Manifest, Project, ProjectLock, Sandbox, Session,
+    Sidecar, SystemClock, UlidSource,
 };
 use escribass_schema::song::Author;
 use panel::{Live, Outcome, Panel};
@@ -458,6 +472,12 @@ fn run() -> Result<i32, String> {
     if let Some(engine) = &options.engine {
         session.set_engine(Engine::new(engine, &options.manifest));
     }
+    // Told or absent, never searched, for the engine's reason one child over (ADR 0024 §1). It
+    // is handed no project path and no manifest: a compiler is handed what it compiles, and
+    // `compile_generator` refuses `generator_missing` when this window was told nothing.
+    if let Some(generator) = &options.generator {
+        session.set_sandbox(Sandbox::new(generator.clone()));
+    }
 
     // The sidecar, started as the engine is and by the same code in `core` (ADR 0020 §4). A
     // failure to start is **not** a failure to open: the window edits, renders and previews
@@ -586,6 +606,8 @@ struct Options {
     /// The sidecar's command, as argv. `core` is told a command and does not inspect it
     /// (ADR 0020 §4).
     ai: Option<Vec<String>>,
+    /// The generative compiler's command, as argv, on the same terms (ADR 0024 §1).
+    generator: Option<Vec<String>>,
 }
 
 impl Options {
@@ -594,6 +616,7 @@ impl Options {
         let mut manifest = None;
         let mut engine = None;
         let mut ai = None;
+        let mut generator = None;
         let mut arguments = arguments.peekable();
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
@@ -619,6 +642,18 @@ impl Options {
                     }
                     ai = Some(words);
                 }
+                // The same bargain as `--ai` above and as both server binaries' own
+                // `--generator`: one string split on whitespace, so a path containing a space
+                // cannot be expressed, and the upgrade path is the flag repeated once per word.
+                "--generator" => {
+                    let command = arguments.next().ok_or("--generator needs a value")?;
+                    let words: Vec<String> =
+                        command.split_whitespace().map(str::to_string).collect();
+                    if words.is_empty() {
+                        return Err("--generator needs a command to run".to_string());
+                    }
+                    generator = Some(words);
+                }
                 "--help" | "-h" => return Err(USAGE.to_string()),
                 flag if flag.starts_with('-') => return Err(format!("unknown flag `{flag}`")),
                 path => project = Some(PathBuf::from(path)),
@@ -639,12 +674,13 @@ impl Options {
             })?,
             engine,
             ai,
+            generator,
         })
     }
 }
 
 const USAGE: &str = "usage: escribass-app --manifest <manifest.json> \
-[--engine <escribass_engine>] [--ai <command>] <project.escri>";
+[--engine <escribass_engine>] [--ai <command>] [--generator <command>] <project.escri>";
 
 #[cfg(test)]
 mod tests {
@@ -677,6 +713,35 @@ mod tests {
         assert!(parse(&["--manifest", "m.json", "p.escri"]).unwrap().ai.is_none());
         assert!(parse(&["--manifest", "m.json", "p.escri", "--ai"]).is_err());
         assert!(parse(&["--manifest", "m.json", "--ai", "  ", "p.escri"]).is_err());
+        // And the generative compiler, on exactly the sidecar's terms (ADR 0024 §1): a whole
+        // command, optional, and told rather than searched for — a window with none still edits
+        // and still opens the code view, and pressing Compile says `generator_missing`.
+        let compiling = parse(&[
+            "--manifest",
+            "m.json",
+            "--generator",
+            "uv run --no-sync --project compilers/generative escribass-generative",
+            "p.escri",
+        ])
+        .unwrap();
+        assert_eq!(
+            compiling.generator.as_deref(),
+            Some(
+                [
+                    "uv",
+                    "run",
+                    "--no-sync",
+                    "--project",
+                    "compilers/generative",
+                    "escribass-generative"
+                ]
+                .map(String::from)
+                .as_slice()
+            )
+        );
+        assert!(parse(&["--manifest", "m.json", "p.escri"]).unwrap().generator.is_none());
+        assert!(parse(&["--manifest", "m.json", "p.escri", "--generator"]).is_err());
+        assert!(parse(&["--manifest", "m.json", "--generator", " ", "p.escri"]).is_err());
     }
 
     #[test]

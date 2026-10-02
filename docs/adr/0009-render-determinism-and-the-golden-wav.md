@@ -277,7 +277,9 @@ claim is not a goal" this ADR already refuses in its alternatives table.
 **Amended 2026-09-30, in M4 PR 3. The experiment finally sampled real hardware variety, and one
 of the draws was an Intel part.** The repository is public (plan, U2, decided 2026-09-25), CI
 executed steps again on 2026-09-30 after a milestone and a half of refused runs, and `cross-cpu` —
-written in PR 11 on 2026-09-07 — **ran for the first time ever**. It has now run three times:
+written in PR 11 on 2026-09-07 — ~~**ran for the first time ever**~~ **ran for the first time
+since 2026-09-09** (corrected 2026-10-01 in M4 PR 7; see the amendment below, which also
+corrects the Intel sentence further down). It has now run three times:
 
 | Run | Pull request | Runner | CPU | SIMD its dispatchers could pick from |
 |---|---|---|---|---|
@@ -302,14 +304,15 @@ three runs that existed when it was written.
 
 **Two things in the table that were not expected, one in each direction.**
 
-The first is `Intel(R) Xeon(R) 6973P-C` on the last run. Until it appeared, this section could
+The first is `Intel(R) Xeon(R) 6973P-C` on the last run. ~~Until it appeared, this section could
 say that no Intel part had ever executed a golden render for this repository, and an earlier
 draft of this amendment said exactly that, as a limit, two hours before the run that disproved
-it. **The cross-vendor x86-64 case has now been exercised, and it agreed**: an Intel Xeon and two
-AMD EPYCs, in one run, from one binary all three downloaded, produced the committed PCM for all
-four fixtures. That is the half of §6's question this repository has carried as unanswerable
-since M1, and it is answered in the direction the goldens needed. It is also **one run with one
-Intel part**, which is a sample and not a rate, and the table is how it stays one.
+it.~~ **That sentence was false when it was written, and the amendment below has the runs that
+disprove it.** **The cross-vendor x86-64 case has now been exercised, and it agreed**: an Intel
+Xeon and two AMD EPYCs, in one run, from one binary all three downloaded, produced the committed
+PCM for all four fixtures. ~~That is the half of §6's question this repository has carried as
+unanswerable since M1~~ — it was exercised at M1 and nobody read the log. It is also **one run
+with one Intel part**, which is a sample and not a rate, and the table is how it stays one.
 
 The second is `AMD EPYC 9V74` appearing twice on run `36750716757` with **different feature sets**
 — one runner advertising `avx512f` and one not, masked by the hypervisor. A model name is
@@ -346,6 +349,67 @@ not appear. The fixture that would make the test conclusive is still the one thi
 something that reaches a live dispatcher, the `strings` effect or a sfizz bump that fills the AVX
 switch in.
 
+**Amended 2026-10-01, in M4 PR 7, which walked the run history instead of the last three runs.
+Two of the sentences above are wrong, and they are wrong in opposite directions.**
+
+`cross-cpu` has executed — both of its gated steps `success` — in **thirty-seven** runs, not
+three. Twenty-five of them are M1's and M2's, from run `34120276911` (PR #50, `m1.11-goldens`,
+2026-09-07, the run that wrote the job) to run `34392687932` (the push of `17356bd`,
+2026-09-09, the last green run on `main` before the blackout). Their model counts, in order,
+are 1, 1, 1, 2, 3, 1, 1, 3, 1, 2, 3, 1, 2, 2, 2, 2, 2, 2, 3, 2, 2, 1, 1, 3, 2. So the job ran
+for the first time **since 2026-09-09**, not for the first time ever, and "the first time since
+it was written" is the sentence that should have been written.
+
+**And an Intel part had rendered these goldens three weeks before the row that says none had.**
+Run `34124486045` (PR #51, `m1.12-locality`, 2026-09-07, *the day after* the job was written)
+drew `AMD EPYC 7763 64-Core Processor` and `Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz` and
+reported "CPU models seen: 2"; run `34390985402` (PR #62, `m2.8-history`, 2026-09-09) drew three,
+including `INTEL(R) XEON(R) PLATINUM 8573C`. Every one of those runs compared the four committed
+PCM hashes with no tolerance and every one agreed. **So the cross-vendor x86-64 case was
+exercised at M1 and the evidence sat in a run log nobody read**, while this section, the plan and
+`specs.md` §11 all went on calling it unanswerable for two milestones. What was true in the
+2026-09-07 amendment is narrower and survives: *PR 11's own run* drew one model three times, and
+that is what it said.
+
+That is the finding, and it is not about CPUs. **A claim this repository makes about its own
+evidence is worth exactly as much as the last walk of the evidence**, and the walks here have
+been of the last three runs rather than of the record. The rule §6a already states — a
+cross-CPU claim names the runs it rests on — is what makes the correction possible at all, and
+it is now also the rule for *reading*: before writing "for the first time" or "never", list the
+runs.
+
+**The record, completed.** Six model strings have executed a golden render for this repository,
+across two vendors: `AMD EPYC 7763 64-Core Processor`, `AMD EPYC 9V74 80-Core Processor`,
+`AMD EPYC 9V45 96-Core Processor`, `Intel(R) Xeon(R) 6973P-C`,
+`Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz` and `INTEL(R) XEON(R) PLATINUM 8573C`. The twelve
+executions since CI came back, in order, with the pull request and the count:
+
+| Run | Ref | Models |
+|---|---|---|
+| `36742529816` | `main`, #84's merge | 2 — EPYC 7763, EPYC 9V74 |
+| `36744002164` | #85, M4 PR 2 | 2 — EPYC 7763, EPYC 9V45 |
+| `36748500385` | `main`, #85's merge | **1** — EPYC 7763 ×3, warned |
+| `36750716757` | #86, M4 PR 3 | 2 — EPYC 7763, EPYC 9V74 ×2 (the pair with different flags) |
+| `36753140163` | #86, M4 PR 3 | 3 — EPYC 7763, EPYC 9V74, **Xeon 6973P-C** |
+| `36754774610` | #86, M4 PR 3 | 2 — EPYC 7763 ×2, EPYC 9V74 |
+| `36830201753` | `main`, #86's merge | 3 — EPYC 7763, EPYC 9V74, **Xeon Platinum 8573C** |
+| `36834898970` | #87, M4 PR 4 | 3 — EPYC 7763 `[avx avx2 sse4_2]`, EPYC 9V74 same, **Xeon 6973P-C `[avx avx2 avx512f sse4_2]`** |
+| `36860277354` | `main`, #87's merge | 3 — the same three lines |
+| `36867215121` | #88, M4 PR 5 | 2 — EPYC 7763 ×2 `[avx avx2 sse4_2]`, **Xeon Platinum 8370C `[… avx512f …]`** |
+| `36871836825` | `main`, #88's merge | **1** — EPYC 7763 ×3, warned |
+| `36876840013` | #89, M4 PR 6 | 3 — EPYC 7763, and **two EPYC 9V74s split by their flags**, one with `avx512f` and one without |
+
+From `36834898970` the line carries the flags as well as the model (M4 PR 4 closed the ledger
+row §6a left open), which is why the AVX-512 column only exists from there — and why
+`36876840013` reads 3 where the old counter would have read 2. **AVX-512 against non-AVX-512 in
+one run, from one binary, is recorded four times** (`36834898970`, `36860277354`, `36867215121`,
+`36876840013`), the last of them between two runners bearing the *same* model name. Nothing
+moved: every render job in every run reproduced all four committed hashes.
+
+The limits in the paragraph below are unchanged by any of this, and one is sharper for it:
+every part in the whole record, M1's included, is an **x86-64 server processor on GitHub's
+hosted Ubuntu pool**, and the goldens are still blessed on one developer machine.
+
 ### 6a. The job warns rather than fails on a one-model draw, and that stays
 
 `cross-cpu` passes with a `::warning` when every runner draws the same model, so a **green
@@ -361,6 +425,13 @@ until it drew two models — which is selecting the evidence rather than collect
 "a claim is not a goal" this ADR refuses in its own alternatives table. A required check that goes
 red for reasons unrelated to the change is also the check people learn to ignore, and this one has
 exactly one job: to be believed the day it disagrees.
+
+**Confirmed 2026-10-01, in M4 PR 7, with the rate.** Of the twelve executions since CI came back,
+**two drew one model and warned** (`36748500385` and `36871836825`, both pushes to `main`), and
+of M1's and M2's twenty-five, **eight** did. So a green `cross-cpu` means "compared" about four
+times in five and the exception is not rare. The decision stands for the reason above; the
+warning is loud in the run's annotations and the table in §6 is where a reader finds out which
+runs were which.
 
 What keeps "green" from being read as "compared" is a rule about writing rather than a rule about
 CI: **a cross-CPU claim in this repository names the runs it rests on.** The table above gives

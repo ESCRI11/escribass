@@ -33,6 +33,7 @@ import { devices, editor } from "../src/params.js";
 import type { Manifest } from "../src/params.js";
 import { patchLog } from "../src/history.js";
 import type { HistoryAnswer, LogEntry } from "../src/history.js";
+import { diagnosticAt, generators, status } from "../src/generators.js";
 import { assistant as aiPanel, dashed, dashedNotes, moved, refusalLine } from "../src/assistant.js";
 import type { Called, PanelAnswer } from "../src/assistant.js";
 import { bars, seconds } from "../src/time.js";
@@ -67,6 +68,25 @@ const MANIFEST = new URL("../../tests/fixtures/manifest.json", import.meta.url);
 // answers with (`core/src/call.rs`, `history_json`), because `entry_to_json` writes the wire
 // shape and the file shape from one function — the files *are* the answer.
 const LOG = new URL("../../tests/determinism/branches/expected/", import.meta.url);
+
+// The code view needs a song with **generators in it**, and `render`'s has none — `"generators":
+// {}`, as every determinism golden but one does. A golden cannot fail for an input it has never
+// been given, which is the finding M4 PR 6 made one reader over when ADR 0026 §4 predicted the
+// bar view's golden would move and it could not. So the generators come from a second document,
+// and it is the same one `ai/tests/test_view.py` reads for the same reason: PR 5's `generators`
+// golden, built through the tool API like every other (CLAUDE.md #2), whose four generators are
+// two compiled and two never, with a seed above 2⁵³ beside one that fits in a byte, a target
+// that is a **track** rather than a clip, and a source that cannot compile at all.
+const GENERATORS = new URL(
+  "../../tests/determinism/generators/expected/song.json",
+  import.meta.url,
+);
+
+// What `ai` prints about those same four generators, as committed bytes (ADR 0026 §4). The
+// editor's status word and the bar view's are read from one field by two readers in two
+// languages, and this file is where they are compared: trap 3's shape is two readers of one
+// hash disagreeing, and a status word is how it would show.
+const BAR_VIEW = new URL("../../ai/tests/golden/view-generators.txt", import.meta.url);
 
 // The AI panel needs a **turn**, and a model's log row needs an entry a model wrote. Both come
 // from the `proposal` determinism golden, which is the end-to-end run of M3 PR 8: a real
@@ -107,6 +127,8 @@ function readLog(): HistoryAnswer {
 }
 
 const logged: unknown = readLog();
+const written: unknown = JSON.parse(read(GENERATORS));
+const writing: Song = fromJson(SongSchema, written as never);
 
 /** The `proposal` golden's own log: three entries a person wrote and one a model did. */
 function readModelLog(): HistoryAnswer {
@@ -230,6 +252,7 @@ function project(
   hosts: Manifest,
   history: HistoryAnswer,
   modelHistory: HistoryAnswer,
+  generating: Song,
 ) {
   const view = arrangement(from);
   return {
@@ -251,6 +274,12 @@ function project(
     // instrument whose `ref` this build resolves to no plugin — so `rows` is empty there, and
     // that emptiness is the projection agreeing with the validator rather than a gap.
     editors: devices(from).map((held) => editor(from, hosts, held.id)),
+    // The code view, over the **second** document — see `GENERATORS` above. What it carries is
+    // the source, the seed as the string a `uint64` crosses JSON as, the toolchain and whether
+    // `compiled_hash` is empty; what it deliberately does not carry is the status word, which
+    // is a tool's answer rather than a projection (ADR 0024 §6). So the four rows below are
+    // exactly what a title bar can say without asking `core` anything.
+    generators: generators(generating),
     // The one view whose input is not the song. It is here rather than in a golden of its own
     // because what §11's fifth bullet claims is about *every* view, and a second file would
     // be a second place to forget one (ADR 0012 §5).
@@ -276,8 +305,9 @@ test("every view is a pure function of the model", () => {
   const manifestBefore = JSON.stringify(declared);
   const logBefore = JSON.stringify(logged);
   const modelLogBefore = JSON.stringify(modelLogged);
+  const writingBefore = toJson(SongSchema, writing);
   const actual = `${JSON.stringify(
-    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer, writing),
     null,
     2,
   )}\n`;
@@ -301,8 +331,13 @@ test("every view is a pure function of the model", () => {
   assert.equal(JSON.stringify(logged), logBefore, "a projection wrote to the log");
   assert.equal(JSON.stringify(modelLogged), modelLogBefore, "a projection wrote to the log");
   assert.deepStrictEqual(
-    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
-    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
+    toJson(SongSchema, writing),
+    writingBefore,
+    "a projection wrote to the generators' document",
+  );
+  assert.deepStrictEqual(
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer, writing),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer, writing),
     "two projections of one song differ",
   );
 });
@@ -397,6 +432,111 @@ test("a proposal whose patch will not prepare offers nothing and says what moved
   ]);
 });
 
+// The status word, and the one thing about it that cannot be goldened: that two readers of
+// `compiled_hash` in two languages say the same word about the same generator. The editor's is
+// `status()` in `generators.ts`; the model's is the `generators:` line of `ai`'s bar view, which
+// is committed bytes. If either ever grows a rule of its own — a hash recomputed here, a
+// `stale` guessed there — this is what notices (trap 3; ADR 0026 §4).
+test("the editor and the model's bar view read one field and say the same word", () => {
+  const line = read(BAR_VIEW)
+    .split("\n")
+    .find((held) => held.startsWith("generators: "))!
+    .slice("generators: ".length);
+  // `<id> python → <target> seed <n> compiled|never`, in id order, separated by ` · `.
+  const printed = line.split(" · ").map((held) => {
+    const parts = held.split(" ");
+    return { id: parts[0], kind: parts[1], target: parts[3], seed: parts[5], word: parts[6] };
+  });
+  assert.equal(printed.length, 4, "the bar view's golden no longer holds four generators");
+
+  const view = generators(writing).generators;
+  assert.deepStrictEqual(
+    view.map((held) => ({
+      id: held.id,
+      kind: held.kind,
+      target: held.target.id,
+      seed: held.seed,
+      // Nothing standing from `core`, which is what a window shows when it opens: exactly what
+      // the model is told, by construction.
+      word: status(held, null),
+    })),
+    printed,
+    "the window and the bar view disagree about a generator, its seed or whether it has compiled",
+  );
+
+  // Two compiled and two never, with `never` winning over an answer: a dry run of a generator
+  // that has never compiled *does* come back with a patch, and the word is still `never`,
+  // because that patch is its first compile rather than a refresh (`generators.ts`).
+  assert.deepStrictEqual(
+    view.map((held) => [status(held, "stale"), status(held, "compiled")]),
+    [
+      ["stale", "compiled"],
+      ["stale", "compiled"],
+      ["never", "never"],
+      ["never", "never"],
+    ],
+  );
+
+  // And the seed is a **string**, because `9007199254740993` is 2⁵³+1 and the first integer a
+  // double cannot hold: through a `number` it would read 9007199254740992 here and in the patch
+  // a save writes (trap 10).
+  assert.equal(view[0].seed, "9007199254740993");
+  assert.equal(Number(view[0].seed).toString(), "9007199254740992", "the reason it is a string");
+
+  // A generator whose target is a **track** is a generator M4 refuses to compile,
+  // `target_not_note_clip` — and the view still shows it, because a document that holds one is
+  // valid and the editor is where a person would fix it (ADR 0024 §5).
+  assert.deepStrictEqual(
+    view.filter((held) => held.target.kind === "track").map((held) => held.id),
+    ["01M1FPMP000000000000000019"],
+  );
+});
+
+// What the editor puts in the margin, from what `core` puts in a refusal. The string is the one
+// `tests/determinism/compile/` drove through the real child in M4 PR 6, so this is the same
+// sentence the model was handed, read by the window.
+test("a compile diagnostic is read back to the line and column the child named", () => {
+  const said = diagnosticAt([
+    {
+      rule: "generator_error",
+      message:
+        "4:24: `/` (Div) is not in the generator DSL: write a // b, or Fraction(a, b) for an " +
+        "exact ratio (ADR 0024 §3)",
+    },
+  ]);
+  assert.equal(said?.line, 4);
+  assert.equal(said?.column, 24);
+  // The child's words, whole and unrewritten: the message is the whole fix (ADR 0026 §3).
+  assert.equal(
+    said?.message,
+    "`/` (Div) is not in the generator DSL: write a // b, or Fraction(a, b) for an exact ratio " +
+      "(ADR 0024 §3)",
+  );
+
+  // A column of 0 is how `core` says the child had no position, and it writes the line alone
+  // (`core/src/session.rs`). The whole line is then what the editor marks.
+  const whole = diagnosticAt([{ rule: "generator_error", message: "7: the CPU limit of 5 s" }]);
+  assert.deepStrictEqual(whole, { line: 7, column: 0, message: "the CPU limit of 5 s" });
+
+  // The two refusals that are about the document rather than the source carry no line, so
+  // nothing goes in the margin — they are shown where every refusal is, in the pane head.
+  assert.equal(
+    diagnosticAt([
+      { rule: "target_not_note_clip", message: "`…` is a track, and a compile writes a clip" },
+      { rule: "generator_unknown", message: "`x` is not a generator in this song" },
+    ]),
+    null,
+  );
+  assert.equal(diagnosticAt([]), null);
+
+  // A `generator_error` with no position at all: nothing writes one today, and dropping it
+  // would lose the refusal silently, so it lands at the top of the file.
+  assert.deepStrictEqual(
+    diagnosticAt([{ rule: "generator_error", message: "something nobody formatted" }]),
+    { line: 1, column: 0, message: "something nobody formatted" },
+  );
+});
+
 test("a view is a function of the document, not of how its maps iterated", () => {
   const backwards = fromJson(SongSchema, reversed(document) as never);
   assert.deepStrictEqual(
@@ -405,8 +545,9 @@ test("a view is a function of the document, not of how its maps iterated", () =>
       reversed(declared) as Manifest,
       reversed(logged) as HistoryAnswer,
       reversed(modelLogged) as HistoryAnswer,
+      fromJson(SongSchema, reversed(written) as never),
     ),
-    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer),
+    project(song, build, logged as HistoryAnswer, modelLogged as HistoryAnswer, writing),
     "an order came from the map's iteration rather than from the model (ADR 0001 §3)",
   );
 });

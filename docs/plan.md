@@ -1,9 +1,15 @@
 # Delivery plan
 
-Status as of 2026-09-25. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-10-01. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
+
+**Where M4 stands, and what is still unverified: "M4, mid-flight" below**, written at PR 7
+rather than at the close. The reason is this repository's own history: the gap that mattered
+most in M2 and M3 — that no runner had executed a step since 2026-09-09 — was flagged in an
+agent's report and in nothing a reader of this file would open, and it survived a milestone and
+a half that way.
 
 ## Where we are
 
@@ -73,7 +79,11 @@ stale.
 | M4.0 | The spike: `cmaj` built under the engine's flags, the export pipeline run end to end, the JIT and the export compared to the bit, the ONNX converter and runtime exercised, airwin2rack built and scanned, the DSL's arithmetic hashed on five interpreters — nine of ten measurements, its code unmerged, its findings carried onto `main` by M4.1 | done | PR #83, never merged |
 | M4.1 | The user's ten answers and the seventeen defaults decided: ADRs 0023–0027 — the split at the native seam, no JIT in v1 on the spike's measurement, the converter alone as v1's neural path, M5's pin set approved, the sandbox as a child `core` spawns and the DSL as a Python subset, `Generator.compiled_hash`, the compile wire and fourteen tools, `lock.json`'s `toolchains` block checked at compile — with their §15 rows, §3/§7/§8/§9/§12/§13/§16/§17/§18.2 amended, eleven earlier ADRs amended in place, `roadmap.md` and `CLAUDE.md` moved to the split. Nothing pinned, no golden moved | done | PR #84 |
 | M4.2 | `Generator.compiled_hash`, field 11, a `string` and not `optional`; the three generated trees and `proto/gen/descriptor.binpb`; `tests/fixtures/song/minimal.json` gains one line and its three round-trip suites one assertion each. `schema_version` stays 1 and `buf breaking` has nothing to report. The replay hazard ADR 0025 §1 recorded is now a test that runs. No determinism golden moved, the four WAVs did not, and `app/tests/projection.golden.json` did not | done | PR #85 |
-| M4.3 | `proto/generate.proto` whole — `Compile`, `CompileRequest`, `CompileResponse` with an unset `result` that is not zero notes, `Notes` and `Diagnostic` — and `DefineGenerator` and `CompileGenerator` on `SongTools`, with `proto/`'s Rust, TypeScript and Python regenerated in the one change. `buf breaking --against .git#branch=main` reported nothing. Two things the row did not predict: the service gaining RPCs is a `tonic` trait gaining required methods, so `core/src/grpc.rs` answers both `UNIMPLEMENTED` until PR 5; and the identity check covered the new module's imports but not its **server**, which is what PR 4 implements — both now asserted. No golden moved | done | this PR |
+| M4.3 | `proto/generate.proto` whole — `Compile`, `CompileRequest`, `CompileResponse` with an unset `result` that is not zero notes, `Notes` and `Diagnostic` — and `DefineGenerator` and `CompileGenerator` on `SongTools`, with `proto/`'s Rust, TypeScript and Python regenerated in the one change. `buf breaking --against .git#branch=main` reported nothing. Two things the row did not predict: the service gaining RPCs is a `tonic` trait gaining required methods, so `core/src/grpc.rs` answers both `UNIMPLEMENTED` until PR 5; and the identity check covered the new module's imports but not its **server**, which is what PR 4 implements — both now asserted. No golden moved | done | PR #86 |
+| M4.4 | `compilers/generative/`: the package at DSL version `1` on 3.12.12, the AST allowlist, the DSL's namespace, the seeded `rng`, the `Compile` server, and 43 tests — forty-eight forbidden constructs each fed and watched refused with its line, each arm watched failing first, both `set` locks shown without the other, the CPU and memory limits each watched stopping a loop that cannot stop itself, and the spike's digest on five interpreters. No external dependency added. `cross-cpu` learned to count the model **and** its SIMD flags as a passenger. No golden moved | done | PR #87 |
+| M4.5 | `core`: the two tools, the sandbox spawned per compile, `compiled_hash` and `toolchains` written, the seven failure arms each watched first, and the `generators` determinism golden over both transports. The silent PR stayed silent — five determinism goldens, four WAVs and `app/tests/projection.golden.json` byte-identical. A compile is 283 ms and the **next** commit is what grows | done | PR #88 |
+| M4.6 | `ai`: `OFFERED` reads fourteen of twenty-seven, the bar view's generator line goldened over a **second** document, a compile diagnostic fed back as a refusal and counted, and a hand-written transcript in which the model defines, is refused by the real child, patches and compiles again. Three things ADR 0026 had wrong, amended in place. No paid call, the ledger unchanged | done | PR #89 |
+| M4.7 | `app`: the generator code view — CodeMirror's first consumer — Save as `apply_patch`, Compile as dry run → diff → Apply, diagnostics at the line the child named, `never · compiled · stale`, the host's `--generator`, and the projection golden extended over the `generators` fixture. Driven by hand in the window on a real X server; four defects found that way, each fixed and re-driven. **And the record below**, written here rather than at the close | done | this PR |
 
 ## M0.2 — `core/`
 
@@ -1866,7 +1876,15 @@ where a reader of this file will look:
 
 - **Nothing in M3 was ever validated on a runner. Not one job, not one step.** GitHub Actions has
   refused every run on billing since `17356bd` (M2 PR 8, 2026-09-09, run `34392687932`, the last
-  success on `main` and the last time `renders` and `cross-cpu` ran at all). Every run since fails
+  success on `main` and the last time `renders` and `cross-cpu` ran at all). **Sharpened
+  2026-10-01 in M4 PR 7, which read the runs rather than the summary**: `34392687932` itself was
+  green, and three later runs on PR #63 executed real steps — `34398221066` (cancelled
+  mid-build), `34402068488` (a genuine test failure) and `34408024010`, whose `engine` job built
+  for forty minutes and passed. The first job billing refused is *that* run's three render
+  shards, which queued for nine and a half hours and died in two seconds each at 2026-09-10
+  07:18. The fully dark window is **46 runs**, `34898149161` (2026-09-14) to `36123097467`
+  (2026-09-25) — 138 refused jobs and 92 skipped behind them — so the sentence that is exactly
+  true is "every merge from M2 PR 9 onwards", which still covers all of M3. Every run since fails
   the same way and it is worth stating exactly, because "CI is red" reads like a test failure and
   this is not one: `checks`, `app` and `engine` each report `failure` with **zero steps executed**,
   and `renders` and `cross-cpu` are `skipped` because they need `engine`. Twenty runs across M3,
@@ -1920,7 +1938,10 @@ where a reader of this file will look:
   dispatcher again and found the AVX switch empty — and the `cross-cpu` job has not run since
   2026-09-09 either way. M3 moved no plugin pin, so nothing about any CPU other than this x86-64
   one is claimed, exactly as M1 and M2. **Amended 2026-09-30, in M4 PR 3: the job ran, for the
-  first time since it was written, three times, and the third drew an Intel part.** Runs
+  first time ~~since it was written~~ since 2026-09-09** — corrected 2026-10-01 in M4 PR 7, which
+  found it had executed twenty-five times in M1 and M2 and that an Intel part had rendered these
+  goldens on 2026-09-07; see "M4, mid-flight" below and ADR 0009 §6, amended — **three times, and
+  the third drew an Intel part.** Runs
   `36744002164` (#85, `m4.2-schema`), `36750716757` and `36753140163` (#86, `m4.3-proto`):
   **four model strings — `AMD EPYC 7763`, `9V45`, `9V74` and `Intel(R) Xeon(R) 6973P-C` — two
   vendors, nine render jobs, thirty-six golden comparisons, every one identical**, each run from
@@ -1982,7 +2003,13 @@ where a reader of this file will look:
   the pin.
 - ~~**The repository was still private when M4 PR 1 opened, and no runner has executed a step since
   2026-09-09.**~~ **Closed 2026-09-30, in M4 PR 2's run.** The user decided on 2026-09-25 that the
-  repository goes public (U2; ADR 0023 §7) and it took effect on 2026-09-30: run `36126952156`
+  repository goes public (U2; ADR 0023 §7) and it took effect on 2026-09-30 — **though going
+  public is not what unblocked the runners, which M4 PR 7 established on 2026-10-01 and which
+  matters because it is the thing that could silently come back**: every refused job carries the
+  annotation "The job was not started because recent account payments have failed or your
+  spending limit needs to be increased", and jobs began executing at 16:10:13Z while the
+  repository's own `PublicEvent` sits between 16:24:43Z and 17:01:55Z. The billing cleared about
+  fifteen minutes before the repository went public, on the same day — run `36126952156`
   (PR #84) is the first since M2 PR 8 whose jobs executed at all, and run `36744002164` (PR #85)
   is the first to execute *work* — `engine` for 32 minutes, `checks`, `app`, three `renders` and
   `cross-cpu`, all green — and runs `36750716757` and `36753140163` (PR #86) did it again, twice,
@@ -2878,6 +2905,149 @@ exactly what PR 6 offers the model. One tension is worth one sentence for whoeve
 third item: §7.3's "non-real-time models live in `ai`" and CLAUDE.md #6's "the AI process is
 audio-agnostic" cannot both hold for a model that produces audio, and U6's neural process is
 where such a model would run — not `ai`.
+
+## M4, mid-flight — what is verified now, and what is not
+
+Written at **PR 7**, not at the close, at the user's instruction and for a reason this
+repository can point at: the largest unverified thing in M2 and M3 — that no runner had executed
+a step since 2026-09-09 — existed in agents' reports and in no document a reader of this file
+would open, and it survived a milestone and a half that way. So the position is written down
+where "M3, closed" is, while the milestone is still running, and the close will update it rather
+than discover it.
+
+Every claim below was checked against the repository or against the run logs on 2026-10-01.
+Three of them corrected something this repository already said about itself, and those three are
+the reason the section exists.
+
+### What changed, and is now better than the record said
+
+- **CI executes steps again, from 2026-09-30 — and what unblocked it was the billing, not the
+  repository going public.** Both happened that day and the plan's own bullet above attributed it
+  to the wrong one. The evidence is in the runs: every refused job of the blackout carries the
+  annotation *"The job was not started because recent account payments have failed or your
+  spending limit needs to be increased"*, jobs began executing at **16:10:13Z** on run
+  `36126952156`, and the repository's `PublicEvent` falls between PR #85's open at 16:24:43Z and
+  its merge at 17:01:55Z — about fifteen minutes **after** the runners came back. It matters
+  because the two have different failure modes: a public repository stays public, and a spending
+  limit can be reached again without anybody deciding anything.
+- **The blackout's edges were also one pull request out**, and the corrected version is in the
+  bullet above: `17356bd` was itself green, three later runs on PR #63 executed real steps — the
+  last of them, `34408024010`, built the engine and passed — and the first job billing refused is
+  that run's three render shards, queued nine and a half hours and killed in two seconds each on
+  2026-09-10. The **fully dark window is 46 runs**, `34898149161` (2026-09-14) to `36123097467`
+  (2026-09-25): 138 jobs that reported `failure` with `steps: []`, no runner ever assigned, and
+  92 skipped behind them. So the true sentence is **everything from M2 PR 9's merge through M4
+  PR 1 merged on one machine's word** — M2 PRs 9–12, all eleven of M3, and M4 PR 1, whose own
+  pull-request run reported success with every substantive step skipped behind the path gates
+  and whose **merge commit** (`36742529816`) was the first thing a runner really built. That
+  stays historically true of those merges however green the runs are now.
+- **Five consecutive pull requests have now had full runner validation: #85, #86, #87, #88 and
+  #89** — M4 PRs 2 to 6. In every completed run of those five, **every job executed every one of
+  its real steps**; the only `skipped` steps anywhere are two by design and only on pushes to
+  `main` (the path-gate step itself, which is `pull_request`-only, and `Wire compatibility`,
+  which is too). The `engine` job built the engine from the eight pinned submodule commits and
+  ran all six of its render assertions; the three `renders` shards each downloaded that one
+  51.7 MB artefact and reproduced all four committed PCM hashes, nine jobs and thirty-six
+  comparisons a run; `buf breaking --against` the base branch ran on a runner once for each of
+  the five.
+- **The `generators` determinism golden reproduced off this machine for the first time in run
+  `36867215121`** — PR #88, which is M4 PR 5 — as a third line in the `Rust` step, 24 tests
+  including `a_compiled_project_reopens_in_a_fresh_process`. M4 PR 6 then collapsed the two
+  feature runs into one invocation, `--features ai,generators`, because run separately the turn
+  that needs both children would compile out of both and execute nowhere; run `36876840013`
+  reports 33 tests, 32 passed and 1 ignored — the live model run, which says on every run that it
+  spends money.
+- **`cross-cpu` has far more evidence than this repository had been claiming, and the claim that
+  it had none was wrong twice over.** It has executed — both gated steps `success` — in
+  **thirty-seven** runs, of which **twenty-five are M1's and M2's**, from the run that wrote the
+  job (`34120276911`, 2026-09-07) to the last green run before the blackout. An **Intel** part has
+  rendered these goldens since **2026-09-07**: run `34124486045` (M1 PR 12) drew `AMD EPYC 7763`
+  and `Intel(R) Xeon(R) Platinum 8370C` and reported two models, and run `34390985402` (M2 PR 8)
+  drew three including `INTEL(R) XEON(R) PLATINUM 8573C`. Six model strings have executed a
+  golden render in total, across two vendors, and **AVX-512 against non-AVX-512 from one binary
+  is recorded four times** — once between two runners bearing the *same* model name, which only
+  became visible when M4 PR 4 made the job count the model **and** its SIMD flags. Not one of the
+  hashes has ever moved.
+  **ADR 0009 §6's 2026-09-30 amendment said "ran for the first time ever" and said that no Intel
+  part had ever rendered these goldens**, and both sentences are struck and corrected there, in
+  place and dated, with the whole run table beside them. The finding is not about CPUs. **A
+  claim about one's own evidence is worth what the last walk of the evidence was worth**, and
+  the walks here had been of the last three runs rather than of the record. ADR 0009 §6a's rule
+  for writing a cross-CPU claim — name the runs — is now also the rule for reading one.
+
+### What is still not verified, and is not softened by any of the above
+
+- **ARM and consumer silicon are untested, and every CPU in the whole record is an x86-64 server
+  part** on GitHub's hosted Ubuntu 24.04 pool. Nothing here is about macOS or Windows. And the
+  goldens themselves are still blessed on **one developer machine** — what the runners prove is
+  that other machines reproduce them, which is the half that was missing and not the whole.
+  ADR 0009 §1's claim does not move, and §6 says the reason is the mechanism: sfizz's AVX switch
+  is empty at this pin, so every row in that table is the *same* code path on different silicon.
+- **A preview has never reached a real speaker.** Carried unchanged since M2 and untouched by M4,
+  which does not go near `engine/`. `a_preview_plays_on_this_machines_audio_device` is `#[ignore]`d
+  and says so on every run; the thread shape was measured against ALSA's `null` PCM, which does
+  not pace. Sound, real-time pacing and underruns are measured nowhere.
+- **No evidence exists that a real model writes this DSL.** U10, and deliberately so. M4 PR 6's
+  transcript is **hand-written** and says in its own file that it is not evidence of that; the
+  user's recording grant was one session, it was spent on M3 PR 8, and `CEILING_USD` equals the
+  ledger's spent total of **$0.00376174** across three rows, so every live call fails closed
+  until a person raises the number in a commit. What the loop *is* evidence of is the loop:
+  `tests/determinism/compile/` drives a define, a real refusal from the real child, a patch and a
+  second compile, and the sentence the model is handed is asserted as a string in the three
+  places that must agree.
+- **`cross-cpu` warns rather than fails when every runner draws the same CPU, so a green
+  `cross-cpu` does not mean two CPUs were compared.** That is **decided, not deferred** (ADR 0009
+  §6a, 2026-09-30): failing would have the job re-run until it drew two models, which is
+  selecting the evidence rather than collecting it, and a required check that goes red for
+  reasons unrelated to the change is the check people learn to ignore. What the walk adds is the
+  **rate**: of the twelve executions since CI came back, **two** drew one model and warned, and
+  of M1's and M2's twenty-five, **eight** did. So the exception is about one run in five, and the
+  thing that keeps "green" from being read as "compared" is a rule about writing — a cross-CPU
+  claim names its runs — rather than a rule about CI.
+- **`Project::write` rewrites every entry file on every commit, and a compiler is the first
+  author that can make one entry big.** Measured in M4 PR 5: the compile is cheap (283 ms at one
+  note, 360 ms at a thousand, 994 ms at ten thousand, most of it the interpreter start) and what
+  it costs is **the next ordinary call on the same project** — 2.5 ms, 29 ms and 426 ms as the
+  entry grows — for the life of the project. Trap 12 pointed at the compile and the real cost is
+  one commit later. The known gap carries it with a second trigger beside a long history: a large
+  entry. (The number is written in two places and they disagreed by six milliseconds; `specs.md`
+  §15 said 420 and the gap said 426, which is the measurement. Corrected in `specs.md`.)
+- **A compile inside a proposal writes `Generator.toolchain_version` and does not write
+  `lock.json`'s `toolchains` block** — accepted deliberately by the user on 2026-10-01, not
+  tolerated: the version is in the patch a person applies and the block is not, because a pin no
+  entry in the log explains is the defect ADR 0010 §2 is about, arriving by another door. ADR
+  0027 §1 carries the reasoning and `tests/determinism/compile/expected/lock.json` is the
+  committed shape a reader can open. What it costs is one sentence: a project whose compiles have
+  all been a model's is unpinned until a person compiles once.
+- **`uv_build>=0.10.2,<0.11.0` is still the one entry in `lock.baseline.json` that is not an
+  exact version**, against CLAUDE.md #4. Re-checked by walking every version string in the file
+  on 2026-10-01: it is still the only one, and it still says so in its own note. Build-time only,
+  ships nothing, reaches no render, and it is the smaller half of a pair whose larger half — `uv`
+  itself — CI installs unpinned.
+
+### What this walk turned up that nobody had written down
+
+- **The status table at the top of this file had no rows for M4 PRs 4, 5 and 6, and said M4.3 was
+  "this PR".** Three merged pull requests — the compiler, the tools and the model's half of the
+  milestone — were invisible in the one table a reader opens first, which is the same failure
+  mode this section exists to prevent, one table up. The rows are now there.
+- **⌘Z inside a text field reached the document's `undo`.** Found by driving the window by hand
+  in M4 PR 7: one keypress in the code editor undid the keystroke *and* reversed the last entry
+  in the log, leaving the buffer and the document two different things with no way to tell which
+  half had happened. The handler is on the `window` and tested nothing about its target, so the
+  prompt box and the new-branch box have had the same hole since they existed — M3 PR 9 and M2
+  PR 8 — and nobody had met it because nobody presses ⌘Z in a one-line input. Fixed once, in the
+  handler, for all three.
+- **CodeMirror doubles the frontend bundle**: 388 kB to 777 kB raw, 115 kB to 240 kB gzipped,
+  for the one editor. It is a pinned dependency with no consumer until now (ADR 0016 §2), so
+  nothing was added — but the number is worth having before M5 adds the DSP code view, which is
+  the same editor and should cost nothing more.
+- **The window reads `compiled` after a source is saved, until Compile is pressed.** By design
+  (ADR 0024 §6): `never` and `compiled` come from `compiled_hash`'s emptiness, which is the same
+  field and the same rule the model's bar view prints, and `stale` is `core`'s comparison, which
+  the window learns by asking. A second hasher in the frontend is trap 3 with a status word as
+  the symptom. What it costs is one honest sentence on the hover, and one click buys the truth —
+  on an up-to-date generator `core` answers without spawning anything.
 
 ## After M0
 

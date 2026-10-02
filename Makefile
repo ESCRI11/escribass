@@ -61,6 +61,16 @@ ENGINE ?=
 # environment, because `ps` shows flags (U3).
 AI ?=
 
+# The generative compiler the code view's Compile button starts, and the same rule again: told,
+# never searched (ADR 0024 §1). Empty by default, and Compile then says `generator_missing` and
+# names this flag while everything else works. On a build tree:
+#
+#   make run GENERATOR="uv run --no-sync --project compilers/generative escribass-generative"
+#
+# `--no-sync` because the environment is synced by `make deps`, and a compile that re-resolved
+# the lock on every click is a compile whose toolchain nobody pinned.
+GENERATOR ?=
+
 # A prefix for the launch itself, empty by default. It exists because the webview a Tauri app
 # renders in belongs to the operating system (ADR 0016 §5), and a machine whose WebKitGTK is
 # not where the loader expects needs the binary wrapped rather than the recipe changed. The
@@ -106,6 +116,7 @@ help:
 	@echo 'MANIFEST = $(MANIFEST)'
 	@echo 'ENGINE   = $(ENGINE)'
 	@echo 'AI       = $(AI)'
+	@echo 'GENERATOR = $(GENERATOR)'
 	@echo 'LAUNCH   = $(LAUNCH)'
 
 # `--features custom-protocol` is not optional and not a detail: without it the host builds in
@@ -113,7 +124,7 @@ help:
 # the binary serves the `app/dist` it embedded, which is why the frontend is built first.
 run: webkit project app/dist
 	cargo build --release -p escribass-app --features custom-protocol
-	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(PROJECT)
+	$(LAUNCH) ./target/release/escribass-app --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(if $(GENERATOR),--generator '$(GENERATOR)') $(PROJECT)
 
 # The iteration loop: Vite serves the frontend, the debug host loads it from there, and an edit
 # to `app/src` reloads the window. No `--features custom-protocol` here — dev mode is exactly
@@ -141,7 +152,7 @@ dev: webkit project app/node_modules
 	vite=$$!; \
 	trap 'kill $$vite 2>/dev/null' EXIT INT TERM; \
 	until curl -sf http://localhost:5173/ >/dev/null 2>&1; do sleep 0.3; done; \
-	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(PROJECT)
+	$(LAUNCH) cargo run -p escribass-app -- --manifest $(MANIFEST) $(if $(ENGINE),--engine $(ENGINE)) $(if $(AI),--ai '$(AI)') $(if $(GENERATOR),--generator '$(GENERATOR)') $(PROJECT)
 
 # A project to look at. `escribass-mcp --create` makes one and serves it, which is the whole
 # of it — `app` has no File · New yet, and creating a project is not a tool (ADR 0006 §5).
