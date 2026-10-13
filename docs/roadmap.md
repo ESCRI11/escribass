@@ -11,7 +11,7 @@ is the widest view and the least authoritative:
 
 No dates. The repo has none; sequencing and dependency are the only claims made here.
 
-## Where we stand (2026-10-02)
+## Where we stand (2026-10-13)
 
 **M0 to M4 are complete.** The schema, `core`, the validator, the patch DAG and the tool API over
 gRPC and MCP; a C++ render engine hosting Surge XT, sfizz and Dexed, with four golden WAVs
@@ -21,8 +21,9 @@ the panel; and the generators — a seeded Python DSL compiled in a subprocess, 
 generator code view, and `lock.json`'s `toolchains` block. `plan.md` has the step table and, in
 "M4, closed", what none of that is yet evidence for.
 
-**M5 is next and is not planned yet**, which is deliberate: planning a milestone is its own step
-here. `plan.md`'s "M5, sketched from here" holds the rows; `specs.md` §16 holds the definition.
+**M5 is next, with a proposed plan** in `plan.md`'s M5 section. It recommends one milestone,
+with working Cmajor export and playback as a checkpoint before the converter and Airwindows.
+Its user questions still need answers; `specs.md` §16 continues to hold the definition.
 
 ~~`schema/song.proto` and `history.proto` exist, with generated Rust, TypeScript and Python
 types, one cross-language fixture, ADR 0001 (history is a patch DAG) and ADR 0002 (schema v1).

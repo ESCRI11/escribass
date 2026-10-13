@@ -31,10 +31,11 @@ fourth bundled plugin, built from `baconpaul/airwin2rack` as a JUCE plugin needi
 where ADR 0003 §3's "`lock.json` completed" now falls; and `SourceRef.export_hash`, which finally
 has a producer. Interop, polish and the installer are **M6**.
 
-**M5 is not planned yet, and that is deliberate**: planning it is its own step, as M1's, M2's,
-M3's and M4's were, and it is the step after M4's close. `docs/plan.md`'s "M5, sketched from here"
-is the rows a planner would otherwise rediscover — twelve of them, sized by the M4 spike's own
-native measurements — and it is a sketch, not a plan.
+**M5's plan is proposed, 2026-10-13**: `docs/plan.md`'s M5 section has eleven user questions,
+twenty-two agent defaults, six proposed ADRs and the PR sequence. It recommends one milestone
+with a working-export checkpoint. The new user questions are not answered by the plan; the
+2026-09-25 and 2026-10-02 decisions below stand. "M5, sketched from here" is M4's historical
+sketch, superseded by that section. Read the plan before starting an implementation step.
 
 **What M5's planning owes.** ADR 0003 §7's `[OPEN]` item is **answered and its detail is paid**:
 the neural runtime is a separate process that never links into `engine`, decided by the user on
@@ -60,9 +61,11 @@ SDK row it does not have at all** — §17 calls it "a new row" and the baseline
 and `bundled_plugins.airwindows`, still upstream `ab0d1df871b8` with a note that reads "deferred to
 M4 with clap-wrapper", a sentence four documents have struck. **A person reads Cmajor's licence
 before M5's first export** and confirms or corrects §12's "generated code carries no copyleft"
-(U9). **The plugin manifest has not been rebuilt since 2026-09-09** and M5's Airwindows pull
-request is the first that must, with `libjack-jackd2-dev` installed rather than JACK compiled out.
-And **a push to `main` is watched by nobody**: `main` has no branch protection, there is one
+(U9). **The plugin manifest has not been rebuilt since 2026-09-09**: the proposed native
+hosting steps rebuild and guard it, and the Airwindows step adds its row. M5's planning verified
+that the installed `libjack-jackd2-dev` lets unmodified Cmajor build; no JACK source edits remain
+necessary on this image, and that scratch check exported nothing. And **a push to `main` is
+watched by nobody**: `main` has no branch protection, there is one
 workflow and no schedule, so a push run that fails is a page nobody opens — #89's sat cancelled for
 a day (docs/plan.md, "M4, closed").
 

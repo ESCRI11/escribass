@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status as of 2026-10-02. This file tracks **state**: what is done, what is next, and what
+Status as of 2026-10-13. This file tracks **state**: what is done, what is next, and what
 was deliberately put off. It does not define the milestones — `docs/specs.md` §16 does — and
 it does not set rules — `CLAUDE.md` does. When they disagree, they win and this file is
 stale.
@@ -12,9 +12,10 @@ that no runner had executed a step since 2026-09-09 — was flagged in an agent'
 nothing a reader of this file would open, and it survived a milestone and a half that way.
 Writing it early worked: this close had to *correct* what was there rather than discover it.
 
-**M5 is not planned yet, and that is deliberate** — planning it is its own step, as M1's, M2's,
-M3's and M4's were. "M5, sketched from here" is the rows a planner would otherwise rediscover,
-not a plan.
+**M5's plan is proposed below** — eleven questions for the user, twenty-two agent defaults,
+six ADRs and a further spike limited to the interfaces M4 did not measure. The recommendation
+is one milestone with a working-export checkpoint; the user has not answered its new questions.
+"M5, sketched from here" remains M4's historical sketch, superseded by the M5 section.
 
 ## Where we are
 
@@ -92,6 +93,7 @@ not a plan.
 | M4.8 | **The whole-stack review of M4 acted on**: one blocker, four majors, nine minors, and ~~twelve surviving mutations made to fail~~ **twelve of forty-five mutations surviving, of which eleven were made to fail** (the row said both and they are not the same sentence; corrected 2026-10-02). The sandbox's purity claim was false — `str.format`'s field syntax reached `$HOME` and the install path past the `_`-attribute rule, `repr` put a heap address in a velocity, and `**` put `libm` in a pitch — so the DSL gains a third lock and five refusals; a child killed by its own hard CPU limit is the author's refusal and not an operator's failure; fail-closed is a committed `GRANT_USD` and no longer price arithmetic; `params` reaches a test, a golden and the window; and `lock.baseline.json` gains a guard that reads it **both ways**, which found three dependencies nobody had pinned. Every fix watched failing first; the forbidden-construct table grows from forty-eight rows to sixty-two and the generative suite from 43 tests to 49, and the sweep that followed the reviewer's fix shape found a **51st** refusal it had not: `bytes.__mod__`'s own `%a`. Eleven of the twelve survivors now fail; the twelfth is a genuine equivalent — **`request.params` cleared after `dsl.run` has returned, which nothing reads: the DSL takes it once, into the namespace, and the answer carries notes, a diagnostic and two versions** (named here 2026-10-02 so a later reader can re-judge it; the row had said only "a genuine equivalent") — and the dead code a thirteenth mutation exposed is deleted. ~~One golden moved, named~~ **Two moved**: the `generators` determinism golden (`expected/song.json` and `expected/responses.json`, driven by a `script.json` that now takes two params) **and `app/tests/projection.golden.json`**, `"params": 0` → `"params": 2` — the same pair M3 PR 9's row calls "Two goldens moved", counted as one here until 2026-10-02 | done | PR #91 |
 | M4.9 | §11 walked bullet by bullet with the enforcer named and **run** for each, the first bullet's new `compilers` half included; every ADR walked against the code and thirteen corrected; the ledger walked a **seventh** time; `CLAUDE.md` to M5 — and what M4 leaves unverified written where a reader will find it, completing "M4, mid-flight". No golden moved and no paid call was made | done | PR #92 |
 | — | **M4 complete.** A seeded Python DSL behind an `ast` allowlist, compiled in a subprocess `core` spawns per compile; two tools, `Generator.compiled_hash` and `lock.json`'s `toolchains` block checked at compile and never at open; the generator code view; fourteen tools offered to the model — with **no `song.proto` change but one field**, no new external dependency in any lock, and the first milestone every pull request of which a runner validated end to end. See "M4, closed" | done | — |
+| M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | proposed | `m5.0-plan` |
 
 ## M0.2 — `core/`
 
@@ -2644,6 +2646,10 @@ carries.
 
 ### M5, sketched from here
 
+**Superseded 2026-10-13 by [M5's plan](#m5--dsp-compilers-and-the-neural-path).** This is
+M4's sketch and keeps its original row numbers; in particular, the neural packaging decision
+its row 1 anticipated was already paid by ADR 0023 §3. M5 does not reopen it.
+
 Not a plan — M5's plan is written at M4's close, against a `main` that has the compiler tier in
 it — but the rows a reader would otherwise have to rediscover, so that U1's "one milestone"
 answer has something to concatenate and its "two" answer has a shape to expect. **U1 said two
@@ -3472,6 +3478,564 @@ is the finding. The first group is the close's own.
   the symptom. What it costs is one honest sentence on the hover, and one click buys the truth —
   on an up-to-date generator `core` answers without spawning anything.
 
+## M5 — DSP compilers and the neural path
+
+Planned 2026-10-13 against `main` at `ab348dc`, after M4's close. **A plan, not a set of
+decisions taken**: the user questions below still need answers, the defaults are the agent's
+recommendations, and the ADRs are written when the milestone runs. No dependency is added by
+this step, no pin moves, and no golden changes.
+
+§16 and ADR 0003, as amended by ADR 0023, give this milestone **Cmajor compilation,
+CLAP→VST3 export and loading, the neural converter, Airwindows, the DSP code view, and
+`lock.json`'s `artefacts` and `models` blocks**. M4 delivered the compiler boundary: a child
+`core` spawns, a diagnostic the caller can fix, a compile whose result becomes one patch, and
+a project that renders without its compiler. M5 has to keep that last sentence true when the
+result is a native plugin rather than notes.
+
+The proof point is a saved project, copied to another directory on a machine with the supported
+runtime libraries and **no Cmajor compiler**, rendering its exported instrument to the same PCM.
+The source travels with it. Editing that source, compiling, reviewing the diff and applying
+changes which binary it names. Undo names the old one again. Neither opening the project nor
+rendering it runs a compiler, reaches the network, or asks a model anything.
+
+### What is already decided
+
+These are the user's decisions of 2026-09-25 and 2026-10-02, not questions for another vote.
+The M4 spike's findings remain the measurements; its branch, `m4.0-spike`, was never merged.
+
+| Decision | What M5 inherits |
+|---|---|
+| **The native seam** — ADR 0023 §1 | M4 is closed. M5 is this native half; M6 is interop, polish and the installer. Faust is import-only on the first requested source, not a second compiler slipped into the plural in this milestone's title |
+| **No JIT in v1** — ADR 0023 §2 | Export and load, at the measured ≈20 s per edit. JIT, generated C++ and the built CLAP agreed in all 96,000 samples at the default `-O`; `-O4` differed by −162.6 dBFS. Neither measurement is an invitation to put LLVM in the audio process. The optimisation setting belongs in the export's recipe |
+| **The native pin choices** — ADR 0023 §4 | Cmajor `024a208`, sparse LLVM `c6380f9` at `release/linux/x64`, CLAP **1.2.10** (`195b42a`), clap-wrapper v0.16.0 (`1cca996`), VST3 SDK `v3.8.0_build_66` (`9fad9770`) and its four submodules. Cmajor's CLAP `df8f16c` is **1.2.0**, not the approved SDK; its wrapper fork is not the approved wrapper |
+| **Converter only** — ADR 0003 §7 resolved, ADR 0023 §3 | A future neural runtime is a separate process and never links into `engine`. In v1 there is **no runtime process, no runtime transport and no shipped model**. The converter lives at `compilers/neural/`, under §13's existing `/compilers`; its output uses the DSP pipeline's wrapper. No directory ADR and no packaging question remain to answer. `onnx`, unlike ONNX Runtime, is an extra package still awaiting approval |
+| **Airwindows is airwin2rack** — ADR 0023 §4–§5 | `b6eef0a`, with the named Airwindows and sst-rackhelpers sub-pins, a separate JUCE 8.0.4 and a commit override for `clap-juce-extensions`. One JUCE VST3, **not** clap-wrapper. One plugin whose `Replace` parameter selects the algorithm, not fourteen plugins and not a stable set of control meanings |
+| **U9 has a trigger** — ADR 0023 §7 | A person reads the licence before M5's first export, including the helpers linked beside generated C++. §12's “generated code carries no copyleft” is unverified until then. It is U9 below and a gate on export work, not a legal conclusion this plan can make |
+| **No paid call is authorised** — CLAUDE.md #7 | `GRANT_USD` is `0.0`, checked before even fetching a price. Every live route fails closed, including one priced at zero. Scripted compiler turns need no grant |
+
+### One milestone, with a checkpoint that can stand on its own
+
+**Recommendation: keep M5 one milestone.** M4's split removed a runtime, a JIT, an inference
+transport and an unbounded model choice from this half. The converter now ends in the same
+Cmajor export, the same parameter record and the same loader; Airwindows uses the engine and
+pin recovery this milestone must touch anyway. Splitting again would chiefly move two consumers
+of that work, and move interop another number, without removing the risk in the export itself.
+
+There is nevertheless a real seam: **after PR 8, a Cmajor instrument and effect compile,
+persist and render, with the first compiled-device goldens and no compiler needed at playback**.
+That is the checkpoint, not a promise to leave tests until the end. Neural conversion and
+Airwindows must not hold its PRs open. PRs 9–13 finish recovery, the editor, the model's path and
+the two remaining consumers; review and close follow.
+
+The alternative is two milestones: native export, recovery and its user flows first (through
+PR 11), neural conversion plus Airwindows second, each with its own review and close. PR 8 is
+a technical checkpoint; stopping there would leave the native user flows unfinished. A split
+is defensible **if the follow-up measurement finds that a useful neural adapter or a deterministic Airwindows selection needs a subsystem rather
+than a small wrapper**. U1 asks for the choice and states the cost. This plan sizes one M5; it
+does not silently change §16, turn M6 into something else, or call a partial M5 complete.
+
+### What “the same input” means for a compiled plugin
+
+There are three comparisons, and a passing one does not stand in for the others.
+
+**1. Build the same artefact.** The input is the exact source bytes and every declared source
+or model asset; the entry processor and patch metadata; the generated adapter and our build
+recipe; the Cmajor, LLVM, choc, CLAP, wrapper and VST3 commits, including the submodules actually
+used; the converter and its Python package closure when present; the target OS/architecture,
+C and C++ compiler and linker identities, build type, flags, Cmajor optimisation and relevant
+SDK/runtime ABI. A recipe identifies actual checked-out and built inputs, not a second copy of
+the baseline somebody could fill in regardless of what ran. Working directory, temporary name,
+timestamp, machine hostname and the order a filesystem returns files are **not** inputs.
+
+For the same recipe and inputs, compare the generated C++, the loadable bundle's complete file
+set and bytes, and the canonical export record. The spike established byte identity across
+processes, block sizes and independently named build directories on one machine. PR 7 makes it
+a standing check; the native CI build repeats it on two independently built trees, including a
+developer-to-runner comparison. Do not require independently built binaries to have one hash
+when their recorded linker or system-library inputs differ, and do not call that the same
+recipe. Do require the difference to be reported rather than hidden by stripping arbitrary bytes.
+
+**2. Render the same artefact.** ADR 0009 §1 remains the claim: the same song, asset bytes,
+engine, plugin, OS and CPU give the same PCM. Add the exported bundle and its verified interface
+to the plugin inputs. The engine keeps fresh processes for offline renders, fixed blocks,
+single-threaded processing, FTZ/DAZ and the existing floating-point flags. Source-defined noise
+must have an explicit, repeatable initial state; a host clock, an ambient file, a random seed
+chosen at load or a previous instance's state is not an input this contract admits. The first
+DSP audit names the Cmajor facilities and wrapper callbacks that could reach them and either
+fixes their inputs or refuses them. Merely finding no `rand()` in our Python would prove nothing.
+
+**3. Exercise another machine.** CI has executed the real steps since #85 and on the pushes to
+`main`; public visibility and the billing fix are historical facts, not work M5 still owes.
+ADR 0009's dated record already has six x86-64 server model strings, two vendors and comparisons
+of AVX-512 against non-AVX-512 from one binary. Add the new render fixtures to those comparisons,
+keeping the model-and-SIMD report and the **inconclusive** result when all legs draw one model.
+Those runs compare **one uploaded binary**. They do not prove independent compilation, ARM,
+consumer-runner coverage, macOS or Windows, and the existing goldens still originate from one
+developer machine. Report both experiments by name; neither widens the claim by implication.
+
+The GTK3/WebKit2GTK closure is part of this account. The exported helper pulled in **129 shared
+objects**, including gstreamer and enchant. That they do not affect a headless render is an
+**assumption**, with source tracing and independent-build/render evidence owed in PRs 7–8; two
+matching WAVs are evidence for the exercised path, not proof that all 129 libraries are inert.
+The native build image and the machines that load the plugin both need the measured closure.
+
+### The source, the export and the cache are three different things
+
+`SourceRef` today is **only `source_hash`**. `ModelRef` is **only `model_hash`**. Neither
+carries an entry point or toolchain version waiting to be filled in. Sources and ONNX graphs are
+assets already; putting the source into a new frontend store or the model's topology into
+`lock.json` would give the song a second representation (CLAUDE.md #1).
+
+**Default: `SourceRef.export_hash` and `ModelRef.export_hash` each name an immutable export
+record asset.** The record names its exact input asset hashes, target, recipe, bundle members
+by relative name and content hash, actual plugin class identity, ports, and the mapping from
+stable source endpoint identifiers to the wrapped VST3 parameters. The record is derived data,
+never editable musical state. `core` hashes it with the project store's existing hasher and
+canonical writer after inspecting the built output. Every bundle member is another blob in
+the existing flat `assets/`; the source, record and members are retained with the project.
+No tar or zip dependency and no archive timestamp problem are needed for a Linux VST3 bundle.
+
+What the engine loads is a **disposable reconstruction** in the application's cache, under the
+export hash, with the `.vst3/Contents/...` layout and extension the loader expects. Rebuild that
+directory from the verified record and blobs, atomically, with no compiler involved. Reject
+absolute member names, `..`, duplicate names, symlinks and anything escaping the owned staging
+directory; v1's measured Linux bundle needs ordinary files and directories. Delete this cache
+and the project still renders. Delete a referenced blob from the project and it does not:
+derived does not mean disposable when the promise is playback without a compiler. Missing or
+corrupt assets are named, never quietly rebuilt under whatever toolchain is installed today.
+
+`lock.json` gains the two reserved, content-hash-keyed maps (ADR 0027 §3), absent when unused.
+**`artefacts[export_hash]` records the build provenance of that export**, not paths, parameter
+values or another copy of its interface. **`models[conversion_hash]` records a conversion**:
+the hash names an immutable conversion record asset binding the original ONNX hash, converted
+Cmajor hash, adapter and converter recipe, and the export record reaches it. It is not a
+mutable `model_hash → latest plugin` lookup: one graph compiled under two toolchains must be
+able to survive on two branches without one entry replacing the other. Both maps are written
+on first retained reference and kept monotonically, as plugin pins are. The ADR must make this
+key choice explicit; “models” alone does not decide it.
+
+The native expected recipe comes from the approved build configuration and baseline; compare
+the worker's actual recipe with that request **at compile**. Unlike the generator hash, an
+export's identity already includes its recipe. Do not add a second project-wide “current DSP
+toolchain” selector: different retained exports may legitimately carry different recipes.
+Recompiling under a changed recipe produces a new record and a diff that shows the recipe
+change before Apply; it never rewrites the old record's provenance. `toolchains.generator`
+keeps ADR 0027's existing compare-at-compile rule and its accepted proposal exception.
+
+A saved source may still name its previous, now stale export. **That is a valid editable
+song**, not a reason for the source-save tool to refuse; preview/render of that device refuses.
+Record verification establishes what the binary was actually built from, and a separate
+comparison with the current source establishes freshness. Only a successful compile candidate
+whose inputs still match may claim it made the device current. Conflating integrity with
+freshness would make U10's proposed stale state impossible to save.
+
+All song changes still end in one JSON Patch through `Session::run`. A compiler returns files
+and facts, never a patch. A dry run may build in **session-owned scratch**, but writes no project
+asset, lock or log; its candidate holds the precise input and base values it was made against.
+Apply verifies those values, verifies the result again, installs the immutable blobs and lock
+records, then records the patch. Reject drops the scratch. A crash may leave unreferenced blobs
+or a monotone lock row, never a committed reference to half a bundle. That is ADR 0004's commit
+point extended to assets, not a new transactional store. The store's common retained-reference
+path also covers a raw patch, proposal, undo and branch switch; putting it only in
+`compile_instrument` would miss the paths that actually apply a preview.
+
+**The schema step cannot repeat M4's “no old project has one” argument.** `every_tool` and
+`undo` already log Cmajor `SourceRef`s, and `every_tool` keeps a Faust one. A plain proto3 string
+would emit a new empty key and make a valid old replay disagree with its materialised song.
+The proposed fields are **optional**, with absence meaning no export and a present empty hash
+invalid. Old absent fields therefore stay absent. PR 3 proves that on the *existing logs*,
+including intermediate `get_song_at` states and undo, in all three serialisations. Keep
+`schema_version = 1` only if that proof holds; otherwise stop for an explicit migration ADR,
+not a relaxed `song_diverged` check or regenerated history. Faust remains compile-refused.
+
+### The questions that have to be answered before code — the user's
+
+These are M5's U1–U11; U9 deliberately keeps the inherited licence number.
+Eleven rows, including that gate and two dependency inventories. **New choices
+are not settled by this plan.** Existing approvals in U2 and U3 persist: these rows return the
+named set and its missing closure to the person who approved it, not the choice of compiler
+or SDK for a second vote. A new dependency
+outside that set comes back by name before installation. The defaults size the PR table; a
+different answer changes the affected rows before implementation begins.
+
+| # | Question | Recommended default | What getting it wrong costs; where it gates |
+|---|---|---|---|
+| U1 | **One M5, or a further split at the working export?** The M4/M5 split itself stands | **One**, with PR 8 as the checkpoint above. Split only if PR 1 establishes a second substantial subsystem | A second scope ADR and another move of interop if split; a milestone that never closes if the converter's bounds or the Airwindows audit are allowed to grow without limit. Settle after PR 1 and before PR 2 |
+| U2 | **The approved native set's complete checkout and build closure**: Cmajor `024a208`, sparse `cmajor-lang/llvm` `c6380f9`, choc `a08bfd8`, CLAP SDK 1.2.10 `195b42a`, clap-wrapper v0.16.0 `1cca996`, VST3 SDK `v3.8.0_build_66` `9fad9770`, `base`, `public.sdk`, `pluginterfaces`, `cmake` | **Carry the approvals forward exactly.** Resolve short SHAs to full commits from the approved parents; present the submodule inventory and any additional source dependency by name. Fill the missing baseline entries only when vendored | An implicit SDK download changes the binary under an unchanged pin; wrapping an export against Cmajor's CLAP 1.2.0 does not build. An unexpected dependency is a new question, not permission inherited from its parent. Gate PR 5; approved checkout inspection may precede it |
+| U3 | **Airwindows' complete pin set**: airwin2rack `b6eef0a`, `libs/airwindows` `d22a25b`, `libs/sst-rackhelpers` `f5f3332`, its JUCE **8.0.4**, and `clap-juce-extensions` | **Use the approved wrapper and resolve the nested commits; name and approve the two override commits before fetching them.** Prefer the spike's exact resolved checkout, if recoverable; otherwise present candidates against that pinned source, never today's `main`. Keep Tracktion's JUCE untouched | A moving `GIT_TAG main`, an accidental JUCE upgrade, or an ABI choice nobody reviewed. The tag alone is not a JUCE pin and the extension commit is still owed. Gate PR 13 and any spike build needing an unapproved override |
+| U4 | **The converter's extra Python dependency**: `onnx`, at an exact version with hashes, and the packages that resolution adds | **Approve `onnx` for conversion only**, with its resolved closure shown before install and pinned at first use. No `onnxruntime`. Inspect whether that version introduces `numpy`, Python `protobuf`, `ml_dtypes` or anything else; those names are candidates for the inventory, not approvals or asserted requirements | A hidden numerical stack, a second protobuf runtime mistaken for the engine's, or a Python lock re-resolving packages the other environments pin. Gate the ONNX measurements in PR 1 and PR 12; no invented version in a planning document |
+| U5 | **The Linux build and loading cost**: JACK development files, GTK3, WebKit2GTK 4.1 and the helper's measured runtime closure | **Accept the measured closure for this Linux milestone**, inventory it in the build instructions and CI, and keep builds and renders headless. Existing OS packages are not new repository source pins; additions to the image are still named | A plugin that builds but cannot load on a render runner or a user's supported system; ≈129 shared objects mistaken for eleven direct dependencies. Gate PR 5's CI image and PR 8's compiler-free playback check. This is not an installer/platform commitment |
+| U6 | **What ONNX shape does v1 promise to turn into an effect?** Converter-only and the synthetic golden are settled | **A bounded, self-contained float32 graph with static shapes and an explicit mono/stereo audio adapter**, starting with the measured feed-forward subset. No implicit tensor-to-audio mapping. Support a recurrent shape only when PR 1 demonstrates its state/reset semantics; otherwise name it as refused | Claiming DDSP support because GRU compiled, shipping a 64-input/16-output tensor as though it were stereo, or silently changing `Gemm` semantics. Gate ADR 0032 and PR 12. No arbitrary-model or runtime commitment |
+| U7 | **How much of Airwindows is claimed deterministic?** One selectable plugin is settled | **Expose only algorithm/control combinations whose reset, RNG and selector behaviour the audit can account for**, with at least one useful non-bypass effect and its golden. Keep `Replace` fixed for an instance and refuse its automation. Broader access is a later explicit decision | Hundreds of algorithms claimed from one golden, or an automation lane changing meaning when `Replace` moves. If even the first useful selection cannot meet #3, PR 13 stops for a decision; it does not weaken #3 |
+| U8 | **May the bundled model invoke the native compile tools?** This is code execution with an observable ≈20 s cost | **Yes, once proposal staging and cancellation are proved**, using the same two source/compile tools a person uses, with caller-fixable diagnostics counted by the existing three-refusal budget. No file path, compiler flags, shell command or native binary supplied by the model | A rejected proposal leaving assets or pins behind, compiler grandchildren surviving a cancelled turn, or several minutes spent on valid compiles. Gate PR 11; scripted turns suffice. `set_param` and the general plugin catalogue remain withheld |
+| U9 | **Inherited U9: has a person read Cmajor's licence for the actual exported bundle?** ADR 0023 §7 and §12 | **Read it before the first M5 export, record the conclusion and confirm or correct §12**, covering generated C++, `cmaj_CLAPPlugin.h`, helpers and linked wrapper/SDK code. No agent default on the legal answer | An export offered under a claim the licence does not support. Blocks the first export PR and any new export made for PR 1; build/checkout inspection and planning can proceed. A green compiler is not licence approval |
+| U10 | **What happens after a saved source changes but its export has not?** | **Keep the last export for history, mark it stale and refuse new preview/render of that device until an export is applied.** No automatic compile on open, no silent last-good sound, no compilation per keystroke | Twenty seconds of friction, versus a saved source and the sound a person hears disagreeing without a word. Gate PRs 8 and 10. Undo remains the way back to the old source/export pair; any “play last export” override would need its own visible contract |
+| U11 | **Is a live model measurement wanted at the end?** Nothing in M5 requires one | **No paid run in the milestone's acceptance path.** Offer a separately capped recording only if the user wants evidence that the model can write Cmajor; keep `GRANT_USD = 0.0` until a new grant is committed | A scripted transcript called efficacy evidence, or a prior grant treated as money available now. No implementation PR waits on this; any live call needs its own confirmation, cap, ledger and reconciliation |
+
+### The questions an agent can answer — defaults, with their tests
+
+These are proposed answers, not extra user gates. Each is small enough to change when its named
+measurement contradicts it. The architectural ones are recorded by PR 2; a changed answer is
+written back rather than left in the table as a decision the code quietly ignored.
+
+| # | Question | Default, and the thing that would disprove it |
+|---|---|---|
+| 1 | **Where does the compiler tier run?** | `compilers/dsp/`, a Python driver using the already pinned interpreter, generated server and `grpclib`, in a fresh child `core` is explicitly told as `--dsp <cmd>`. It orchestrates `cmaj`, CMake and the C++ compiler; it is neither in `engine` nor in `ai`. `compilers/neural/` is a small conversion package used by that driver, not a runtime process or another service. One DSP `uv` environment can own both at PR 12, with a path dependency and no second lock for the conversion library. A real subprocess test through both host transports proves the boundary |
+| 2 | **What crosses?** | One new `Export.Compile` RPC, source or self-contained model input and the explicit recipe options in, a success or diagnostic out. Success carries the bundle's relative file names and bytes plus compiler endpoint metadata and actual toolchain identity. `core` owns hashes and publication. A bounded unary answer avoids paths whose owning child has already deleted them; measure its size before fixing configurable source/model/output limits. No `Song`, project path, patch, audio or `Jobs` service crosses. An unset result and an empty bundle are errors, not successful exports |
+| 3 | **What source can be built?** | Start with one UTF-8 Cmajor source, one unambiguous entry processor derived from that source, and deterministic patch metadata made by our recipe. No entry-point choice lives only in a dialog or process argument. Permit the pinned standard library; refuse undeclared file imports, external resources, native additions, user CMake and network resolution. If multiple user files become necessary, their complete content-addressed closure must become an input first. The refusal tests use a source whose undeclared import exists on the build machine, so absence of the file cannot be the guard |
+| 4 | **What is cached, and who hashes it?** | The export-record and member-blob design above, hashed once by `core`. A compile candidate can be reused only for the same input, recipe and inspected output; no timestamp-based freshness. A missing staging directory reconstructs without compilation, while a changed source changes the input digest. Two isolated builds, a moved project and deliberately corrupted members distinguish those cases |
+| 5 | **How does the schema stay compatible?** | Optional `export_hash` on **both** reference messages, own early schema PR, no default-emitting string. Absence remains a valid unexported device; a present empty or malformed export is not. Do not tighten legacy placeholder `source_hash` validation as an unrelated change. Reopen the existing M0/M2 logs and their historical source refs without rewriting a byte; `buf breaking` alone cannot answer replay compatibility |
+| 6 | **Which tools change the source and compile it?** | Implement §5's `define_instrument_source` and `compile_instrument` for instruments and effects, retaining those public names. Definition takes source text and either an existing device id, or a track plus instrument/effect target for creation (with an effect index); it installs the source asset and patches the reference in one gesture. Reuse `set_track_instrument`/`add_effect` construction and ordering rules, not a second set of them. Compilation names the saved device. No tool compiles an unsaved editor buffer. Neural import uses `add_asset` and the existing neural ref; the same compile dispatch selects the converter by device kind |
+| 7 | **What does Apply approve after twenty seconds?** | The precise input/base values and export hash shown in the dry run, not a second unobserved build. Keep one candidate with its scratch assets. Check the touched paths as proposals do (`document_moved`), including an edit of just one version, branch switches and toolchain changes. Apply the held patch only while its verified assets remain available; otherwise refuse and ask for another compile. A successful dry run followed by changed source must never attach the old binary to the new source |
+| 8 | **What happens inside a model proposal?** | Stage assets outside the real project, promote only those reached by the approved final patch, and clean up on Reject, Edit dropping a ref, failure and cancellation. A proposal is a clone sharing the project root today; `add_asset` is withheld precisely because that alone is not isolation (ADR 0019). Keep M4's accepted generator-toolchain exception unchanged. Native export records carry their own provenance and are pinned on retained reference, including proposal apply; there must be no approved export whose pin waits for a later manual compile |
+| 9 | **What is a compiled device's parameter identity?** | Use the **source endpoint identifier**, not its ordinal and not its display label, for compiled-device `params` and `ParamRef.param`. The export record maps it to the **actual wrapped VST3 ParamID**, its normalised domain and interface properties; PR 1 measures that mapping rather than assuming CLAP and VST3 ids agree. Reordering declarations preserves a lane; deleting/renaming a referenced endpoint or changing its type/range/step contract refuses replacement until the same patch explicitly repairs/removes the affected references. Bundled plugins keep numeric ids |
+| 10 | **What reaches the engine?** | Resolved bundle path, verified class identity, concrete VST3 parameter ids and ordinary render data. `core` lowers symbolic endpoint names into the plan using a required verified artefact index, keeping `render::compile` pure. The engine inspects/loads a binary; it reads no source, `lock.json`, song history or model graph. Add a generic artefact-inspection path instead of lying to `--scan` with `surge_xt` as the component. Distinct exports with the same vendor/name must coexist; the current `byId` cache cannot key them correctly |
+| 11 | **How is live replacement done?** | Immutable paths per export, and a fresh preview process when the export identity changes; preserve the requested transport tick, not opaque plugin state. Never overwrite a mapped `.so`. Two versions on different tracks, then repeated replacement of one, must sound like the expected versions and leave no old child. Parameter-only compiled devices in v1: refuse non-empty opaque `state` until a producer and compatibility contract exist. This does not fire the deferred preset/state-storage work |
+| 12 | **What does a lock mismatch prevent?** | Compare the worker's actual recipe with the requested approved recipe when compiling; never require a compiler at open. Keep generator pins' existing rule. Check source/export freshness, target ABI and referenced asset integrity before loading or rendering; no fallback to a system plugin or rebuild. A stale source is the caller's `export_pending`/stale refusal; a corrupt retained export or missing runtime is the operator's. Build the verified asset context outside the pure validator/compiler and require it wherever compiled parameters resolve |
+| 13 | **How can a refused open offer re-pin?** | A narrow recovery handle under the same kernel `ProjectLock`, reachable before `Session::open` succeeds, with dry-run old/new pin details and explicit apply. Apply a reviewed RFC 6902 patch to only the selected lock fields, atomically and against the exact prior lock hash; leave the song/log alone, then reopen through normal checks. The CLI and the window use the same core operation, withheld from the model. Its response is the old/new receipt, printed by the CLI and displayed by the window; no second audit journal. ADR 0030 explicitly supersedes ADR 0010's “never by a tool” and records why this lock mutation has no song-log entry. A wrong plugin identity, missing binary, bad assets or a moved lock must still refuse; no “ignore all mismatches” open mode |
+| 14 | **Which failures are retried?** | A source diagnostic or unsupported graph is `valid=false` with stage and source position, or graph node/domain/operator; the existing model budget counts it. Missing compiler, pin mismatch, missing runtime, invalid output, infrastructure crash or wall timeout is an operator error. Read status **and** diagnostics **and** expected outputs; Cmajor's exit 0 proves none of them. Do not copy the generator's `SIGKILL means CPU limit` classification into a driver running several native grandchildren |
+| 15 | **What bounds and cancels a compile?** | One in flight per session, a configurable **five-minute wall timeout** as the initial export bound, and a bounded native build parallelism selected from PR 5's CI memory measurement. The toolchain itself is built at setup, outside this bound. Kill and reap the entire owned child tree on timeout, host EOF and user cancellation, with scratch cleanup. Limits govern success/failure, never the output bytes. Exercise the actual launcher and a compiler grandchild that ignores shutdown; the generator's five CPU seconds/512 MiB are not a native build budget |
+| 16 | **What does the DSP editor cost?** | Reuse `app/src/code.tsx`, CodeMirror and the pinned lint package. A draft is local text; Save is the source tool, Export is dry run → diff → Apply, diagnostics retain their stage and location. A read of status is **read-only**, never a twenty-second compile triggered by selecting a device. `core` derives pending/current/stale from the stored hashes and record; no hasher in TypeScript or Python's bar view. Test a real source, an effect and a branch change, and drive the actual window as M4 did |
+| 17 | **How is ONNX refused and adapted?** | Preflight node **domain, operator, opset, dtype, attributes, rank and static shape**, before invoking the converter, recursively inspecting any graph-valued attributes/functions or refusing them explicitly. Name the offending node and operator, including `Softmax`. The sixteen converter names are a ceiling, not a support claim for every shape of all sixteen. Reject external tensor files in the first version; no implicit model download. Accept `Gemm` only for a measured correct shape or a semantics-preserving lowering; test alpha/beta, transpose and bias broadcasting, otherwise refuse with `Gemm` named. No general optimiser |
+| 18 | **How is neural output checked without a runtime?** | A committed synthetic graph and a specified audio adapter: named ports, channel/tensor ordering, sample/frame cadence, sample-rate contract, latency and state/reset rule. Compare a small analytical reference for its graph against converted output with a stated numerical tolerance, **separately** from exact repeat-render and golden PCM tests. Change weights and input and require the sound to change. GRU compilation alone earns no recurrent-render claim; ONNX Runtime's thread experiment and unmeasured CPU mask remain outside v1 |
+| 19 | **How is `Replace` made safe?** | Store the selected Airwindows algorithm as the measured `Replace` value in ordinary `Effect.params`, with a pinned selector-to-algorithm table derived from that build. Set the selector **before** dependent controls in the engine; a protobuf map's order must not choose the effect. The editor and validator resolve slots against that selection. Refuse `Replace` automation, unsupported selections, opaque state and selection changes retaining incompatible slot overrides/lanes unless the same patch repairs them. Audit and test each supported algorithm's RNG/reset path; no global claim from one example |
+| 20 | **What keeps pins and CI honest?** | Move each now-vendored leaf out of `tests/baseline.rs::NO_SOURCE_YET` to a real reader, including nested source commits and the new Python manifest/lock. Extend both directions and the shared-environment comparison; do not turn a missing reader into prose or a permanent exception. Compile-time provenance comes from checkouts, compared with the baseline. Gate compiler source/recipe, core asset resolution and new wire changes into native build/render jobs. A mutation of each pin or recipe input must fail a named check |
+| 21 | **What is the acceptance suite?** | New instrument, effect, synthetic-neural and supported-Airwindows fixtures, all projects built by tools. Non-zero, finite, correct-length PCM first; repeat processes and independent builds next; committed PCM last. Include actual parameters, automation, input audio and multiple same-named exports. Feature-gate native tests where prerequisites do not exist, fail loudly where enabled, and guard compiler/install/build staleness. Keep current four WAVs and the generator/AI/projection suites as regressions; any later intentional moved byte belongs to its capability/pin PR and ADR, never this plan |
+| 22 | **Who watches the push to `main`?** | The person or agent merging each implementation PR waits on the **merge SHA's push run**, verifies real steps executed and records the result before the next step. PR green is not that run. No new notification service, paid runner or scheduled workflow is needed to answer the known gap. This planning run opens a PR and stops, so it performs no merge or post-merge claim |
+
+### A further spike, smaller than M4's
+
+**Yes — for the unanswered interfaces, not to repeat the ten measurements.** PR 1 is a
+throwaway branch, never merged, and its findings are copied into this section before ADRs are
+accepted. No JIT comparison, ONNX Runtime benchmark or search for a different compiler. U9
+precedes any new export it makes; U4 precedes an `onnx` install; U3 precedes an unapproved
+Airwindows override. A blocked item is reported as blocked, with the other measurements kept.
+If the first export is on this branch, write the dated human U9 answer and §12's confirmation
+or correction **on the branch before that export**; PR 2 carries them onto `main`. ADR 0031
+then cites that answer before PR 5 exports, rather than making the licence reading wait for
+an ADR whose number puts it after the spike.
+
+**The JACK check was taken while planning, and changes the answer.** On 2026-10-13 the
+approved Cmajor `024a208` checkout, with **all three JACK lines intact**, configured and built
+`cmaj` successfully. `libjack-jackd2-dev` is `1.9.21~dfsg-3ubuntu3`; pkg-config found JACK
+**1.9.21**, GTK3 and WebKit2GTK **4.1**. The source and all 32 gitlinks were unchanged; LLVM
+was sparse to `release/linux/x64` at the parent-pinned
+`c6380f9b8818b666a264399d330f31f55e806b74`. Only local git configuration redirected SSH
+submodule URLs to HTTPS. Nothing was vendored into this repository and **nothing was exported**.
+
+The build used Ninja, Release, `BUILD_CMAJ=ON`, `BUILD_CMAJ_LIB=OFF`, `BUILD_EXAMPLES=OFF`,
+eight jobs and `-march=x86-64 -mtune=generic -ffp-contract=off` for C and C++. All 19 compile
+commands carry those flags and the engine's existing flag guard passes. The executable reports
+**1.0.3177**; it also prints a build date, which must not be copied into a canonical export
+record as though the whole stdout were a version. The build returned 0, with peak process RSS
+2,434,192 KiB. **Its wall time is not a usable performance measurement**: the counter reports
+12:08:09 across the overnight interval, against 1,077.82 s of CPU. Retain M4's latency figures;
+measure active time and total concurrent memory again in PR 5's CI build. The missing JACK
+package no longer requires any of the spike's source deviations.
+
+| Measurement | What is held fixed, and what changes | Decision it unblocks |
+|---|---|---|
+| **Endpoints through the actual VST3 wrapper** | Two named controls with distinct defaults/ranges; insert one above them, reorder them, rename one, change its range, and remove one. Inspect CLAP and **wrapped VST3** ids, endpoint metadata and class ids, then automate the intended control through the real engine. Include an instrument and an effect | ADR 0029's mapping and compatibility rules. If the generated metadata cannot establish an unambiguous mapping, source inspection and a narrowly owned recipe/helper change come before a promise of stable names; matching labels is not a fallback |
+| **Two exports alive at once** | Two versions reporting the same vendor/name, at immutable paths; two tracks in one render, then successive preview replacements and a fresh export while preview exists. Measure which class/binary actually ran and the stopped child's status | The loader's cache key and whether deriving distinct class identities in our generated patch metadata is needed. Restarting preview fixes stale residence, not two versions colliding inside one render |
+| **A graph becomes audio, not merely Cmajor** | Self-contained synthetic feed-forward graph with known weights; explicit mono/stereo adapter; non-zero input; changed weights and changed input. Exercise `Gemm` scalar/vector/full-rank biases and flags. Separately inspect/reset a small recurrent case; an unsupported operator must be identified by our preflight | U6 and ADR 0032's supported shape/adapter. Measure numerical correctness against the small graph's independently computed reference; exact repeatability is a separate comparison. Refuse unsupported shapes rather than expanding into a general ONNX implementation |
+| **Airwindows selection and initial state** | The approved wrapper with named overrides; the actual selector table and parameter ids; at least one useful candidate algorithm. Fresh processes, multiple instances, reversed construction order with the same final graph, non-default wet controls, and repeated reset. Read the reachable RNG/dither code and measure `Replace` before/after dependent values | U7 and ADR 0033: the first supported selection, required initialisation and safe control mapping. A selected but bypassed instance is not the measurement; an unseedable reachable path is a refusal or an explicitly reviewed deterministic wrapper change, not a tolerance |
+
+The repeat-build comparison on another machine belongs to PRs 7–8's standing CI, where the
+pipeline exists. The spike may give it evidence, but does not replace it. The generated CMake's
+Linux VST3 omission, download flags, absolute include path and PIC requirement are **known**
+inputs to that pipeline already, not open questions to spend a second spike finding.
+
+### The pins that really move
+
+Read against `lock.baseline.json` and `tests/baseline.rs`, not reconstructed from an approval
+date. The three existing DSP rows are byte-identical since 2026-09-02. An approval of a row is
+not evidence that the row was added by that approval.
+
+| Component | State at `ab348dc` | Proposed work, on first vendoring |
+|---|---|---|
+| Cmajor | **Already present**, `024a208515f15e43271d9b2ea85ee22a2233384b` | Keep it. Add the missing **LLVM sub-pin**, `c6380f9b8818b666a264399d330f31f55e806b74`, read from the approved parent, recording the `release/linux/x64` selection. Record/check choc `a08bfd8` and the rest of the used submodule closure. The LLVM archives are upstream prebuilt binaries under a commit; our `-ffp-contract=off` does not reach inside them |
+| clap-wrapper | **Already present**, `1cca996e96f29ab2be7ae9f8cfe532bbc92e1dd6` | Keep it; vendor and pass `CLAP_WRAPPER_PATH`, never Cmajor's `fd24bbe` fork |
+| CLAP SDK | **Version 1.2.10 already present; commit is null** | Fill the full commit resolving `195b42a`, provide that include tree to `cmaj generate`, and verify that the generated `clap` target and wrapper use **one** SDK. `CLAP_SDK_ROOT` being ignored is a measured trap, not a reason to trust that flag |
+| VST3 SDK | **No baseline row at all**, despite §17's “new row” | Add `v3.8.0_build_66` at `9fad9770f2ae8542ab1a548a68c1ad1ac690abe0` with the actual `base`, `public.sdk`, `pluginterfaces`, `cmake` gitlinks. Vendor only the required closure and disable downloads; do not replace JUCE's separate hosting SDK |
+| Airwindows | Old upstream `ab0d1df871b8`, `ref: main`, and the stale “M4 with clap-wrapper” note | Replace with the **full** airwin2rack `b6eef0a` commit, the full `d22a25b` and `f5f3332` sub-pins, and the approved JUCE 8.0.4/`clap-juce-extensions` override commits. Update the note in that same pin PR; do not bust ccache to edit prose here |
+| ONNX converter | Script belongs to the Cmajor commit; **`onnx` has no approved package pin** | U4, then exact direct versions and lockfile integrity hashes in the DSP environment, with the converter's package/source recorded separately from generated Cmajor. Reuse Python 3.12.12 and the existing generated-wire stack. Any additional direct package is named to the user first |
+| ONNX Runtime / Faust | Recorded but unbuilt; Faust commit remains unresolved | **No change.** Neither has a v1 consumer in this milestone. A source-less exception remains an honest exception for these, not for Cmajor after it has a build |
+
+U2's parent-pinned Cmajor inventory includes **28 Boost gitlinks**: `align`, `asio`, `assert`,
+`beast`, `bind`, `config`, `core`, `date_time`, `endian`, `intrusive`, `io`, `logic`, `move`,
+`mp11`, `mpl`, `numeric_conversion`, `optional`, `predef`, `preprocessor`, `regex`, `smart_ptr`,
+`static_assert`, `static_string`, `system`, `throw_exception`, `type_traits`, `utility` and
+`winapi`. They are inherited through the approved Cmajor commit, not independently upgraded.
+The other four are choc, LLVM, Cmajor's own CLAP and its wrapper fork. Distinguish the tool's
+internal checkout from the **export recipe's approved CLAP 1.2.10 and wrapper v0.16.0**; an
+internal gitlink does not replace either export pin. PR 5 inventories which vendored sources
+actually enter each target, including source copied directly into the parent tree, and gives
+the baseline guard a reader for that closure. Anything outside it returns to U2 by name.
+
+`tests/baseline.rs` classifies every leaf, checks declared pins against their source and checks
+manifest dependencies back against the baseline. Vendoring changes all three obligations:
+remove the relevant `NO_SOURCE_YET` entries, give every new leaf an actual reader, and teach
+the reverse scan about the new Python manifest and native gitlinks/overrides. A source tree
+whose build reports a commit copied from the baseline can agree with it while compiling
+something else; compare checkout facts instead. The known `multidict` 6.9.1/7.0.0 divergence
+does not authorise a new one when `onnx` gets its environment.
+
+### The ADRs, before the things they decide
+
+Numbers are proposed from the next free number, **0028**. PR 2 records the contracts after
+the spike and user answers; the dependency ADRs land **with first vendoring and its pins**,
+as the repository convention requires. No ADR is written or accepted by this planning PR.
+
+| Order | ADR | Decides |
+|---|---|---|
+| 1 | **0028 — A source names its retained export** | The two optional schema fields, their presence and replay semantics; what `export_hash` hashes; source/model asset closure, the canonical export and conversion records, file members and the disposable VST3 loading cache; pending/stale/current and compiler-free playback. Amend ADR 0002, 0025 and the model/storage/spec sections before PR 3 |
+| 2 | **0029 — Native compilation is a bounded child, and compiled parameters keep their names** | `Export.Compile` and the device-scoped source/compile tools; exact inputs, output validation, candidate lifetime and proposal staging; diagnostics/cancellation; endpoint→VST3 identity and incompatible edit refusals; plan lowering, generic inspection and loader keys; preview replacement and the DSP editor. Amend ADRs 0007, 0008, 0013, 0015, 0019, 0022 and 0026 where their meaning changes, including the source-read/status surface. No neural-runtime transport |
+| 3 | **0030 — Export provenance is pinned on reference, and re-pin works before open** | `artefacts`/`models`, their content-hash keys and first-reference writes on every apply path, crash ordering, compile-time recipe checks (per export, no second project-wide DSP selector) and load-time asset/ABI checks; recovery's narrow handle, reviewed lock diff, old/new receipt, atomic write and UI. Amend ADR 0010's no-tool rule deliberately and extend 0027 without undoing the generator proposal decision. Close ADR 0003 §3's remaining lock scope only when the implementation exists |
+| 4 | **0031 — The native export recipe uses the approved pins without downloads** | The completed pin closure, sparse upstream LLVM binaries, JACK and GTK/WebKit build/runtime needs, Linux VST3 generation, PIC, fixed optimisation/compiler/ISA flags and actual-build provenance. Record U9's human conclusion in §12 before the first export. Lands with PR 5's vendoring/baseline change; amend ADR 0009's determinism notes and ADR 0023's measured assumptions as measurements arrive |
+| 5 | **0032 — A bounded ONNX conversion shares the DSP export** | U4's exact `onnx` dependency set; supported domains/opsets/operators/attributes/shapes, named refusals, `Gemm` handling, the explicit audio adapter, recurrent scope if proved, conversion records and synthetic semantic/PCM tests. Lands with PR 12. Builds on **already resolved** ADR 0003 §7 and ADR 0023 §3; no runtime or directory decision to reopen |
+| 6 | **0033 — An Airwindows selection fixes what its controls mean** | airwin2rack and all overrides at full commits, the supported algorithm/control envelope, deterministic initialisation, `Replace` semantics/order, guarded selection changes, manifest and effect golden. Lands with PR 13 after re-pin recovery, amending ADR 0010 §5, ADR 0023 §5 and §8's DSP notes |
+
+Each accepted ADR gets its §15 row, every affected specs section, dependent ADR amendment and
+index entry in the same change. The table is not permission to amend a decision by leaving a
+contradictory later paragraph. A further split, if U1 takes it, additionally amends ADR 0003,
+ADR 0023 and §16 **before** these steps are renumbered; the default needs no new scope ADR.
+
+### PRs
+
+One branch and one PR per step, independently mergeable in this order. Each implementation
+row carries its own tests; “review” and “close” are not where an untested pipeline becomes
+tested. `m5.0-plan` is this step. The spike's code is not merged; its findings are carried into
+the next documentation change.
+
+| # | Branch | Adds |
+|---|---|---|
+| 0 | `m5.0-plan` | This plan, its user questions and defaults, and the dispositions of the inherited ledger. Documentation only; no pin or golden moves |
+| 1 | `m5.1-spike` (**never merged**) | The four bounded measurements above, with U9/U4/U3 gates on the measurements that need them. Answers the interfaces the ADRs cannot honestly guess; reports any unmeasured item and its cause |
+| 2 | `m5.2-adrs` | User answers (including U9 and §12 if the spike exported), spike findings, ADRs 0028–0030 and their specs/index/dependent-ADR amendments. No code and no pre-emptive baseline edits. Resolve tool target selectors, record schemas and failure kinds here, before generated wire types exist |
+| 3 | `m5.3-export-ref` | **The schema change, alone**: optional export fields on SourceRef and ModelRef, generated Rust/TS/Python and the dependent descriptor, schema fixture and all round trips. Old projects and historical refs replay unchanged; `buf breaking` and the explicit absence tests both run. No default-key mass rewrite |
+| 4 | `m5.4-export-proto` | `Export` whole, source/compile/read-status interfaces, the re-pin recovery request/response contract, and `render.proto`'s resolved artefact description, in all generated consumers. Inspect/provenance messages describe binaries, not song state. `buf breaking` against the actual base; required tonic methods may answer `UNIMPLEMENTED`, but unimplemented tools do not join `IMPLEMENTED` or `OFFERED` |
+| 5 | `m5.5-native-build` | ADR 0031 and the approved native trees under `compilers/dsp/`, missing pins, sparse/HTTPS checkout recipe, unmodified `cmaj`, CI setup and flag/provenance checks. A fresh configure with dependencies already present and the network **unreachable** succeeds; deliberately removing a required SDK fails instead of fetching it. Own the Linux VST3 CMake adaptation, downloads OFF, relative/explicit SDK resolution and PIC, with a guard that notices upstream template drift. Pin `CMAJ_VERSION` explicitly instead of deriving it from mutable tags; measure active setup/export time and total concurrent memory on the runner. U9 is required before its first export, including a test export |
+| 6 | `m5.6-artefact-host` | `engine`'s generic inspection and resolved-path hosting, separately from bundled `--scan`; actual class/port/parameter facts, identity keyed by export and class, and two same-named versions in one plan. Build-manifest production for bundled plugins remains strict. Tests drive real generated bundles from PR 5's recipe; no project compiler or song traversal enters C++ |
+| 7 | `m5.7-dsp-export` | The fresh Python compiler driver and `Export.Compile`, Cmajor generation→CLAP→VST3 through the pinned recipe, diagnostic/output validation, resource bounds, descendant cancellation and bounded result bytes. Unit and socket tests plus independent generation/build comparisons, wired into CI at directory/package creation. Actual source/recipe/toolchain staleness guarded; invalid source exiting 0 and an empty output each watched failing |
+| 8 | `m5.8-compiled-devices` | `core`'s tools, source assets, held candidates, retained export records and lock entries; verified artefact context, symbolic parameter validation/lowering, pending/stale refusals, atomic apply and compiler-free reopen/render. The **instrument and effect** PCM goldens, with live controls and automation, plus API scripts over both transports. Test undo, historical replay, branch switch, corruption and two versions together. Retire the five stale M4 sites in `core` and name the four refusal-golden changes. **The working-export checkpoint** |
+| 9 | `m5.9-repin` | The one core recovery operation, CLI access and the window's `lock_mismatch` recovery view **before normal open**, showing precisely which old pins become which new pins. Dry run changes nothing; explicit apply changes only reviewed lock fields and normal open checks run again. Exercise a real mismatched project under the kernel lock, cancellation, concurrent changes and a missing/replaced plugin. Test with a deliberately changed fixture pin: first reference to a newly bundled Airwindows does not by itself produce a mismatch |
+| 10 | `m5.10-dsp-view` | The DSP editor using the existing CodeMirror component, source read/save, cheap status, Export→diff→Apply and diagnostics, compiled controls keyed by endpoint. Fresh-preview replacement when the binary changes. Pure projections over real compiled fixtures and their reversed-key twins; drive the window, including text undo, stale source, refusal and branch change. Measure the export wait and report actual audio-device coverage |
+| 11 | `m5.11-model` | The source and compile tools offered only after scratch promotion is safe; the smallest source read needed for a model to edit an existing asset, rather than handing over all project JSON or every source in every prompt. Bar-view export presence, not a second hasher's “stale”. A **hand-written, labelled** transcript defining, failing, repairing and compiling through the real driver, then applying/rejecting/editing. Golden the resulting project and prove a rejected turn leaves assets, lock and log unchanged. No paid call |
+| 12 | `m5.12-neural` | ADR 0032, `compilers/neural/`, approved `onnx` pin/lock closure and baseline readers, graph preflight with named refusals, bounded correct lowering/adapter and conversion provenance through the existing export worker. Synthetic graph→effect→engine, analytical semantics and exact PCM golden; changed weights/input, bad operator/domain/opset/shape, missing weights and state reset exercised. No runtime, transport, downloaded model or model browser |
+| 13 | `m5.13-airwindows` | ADR 0033, airwin2rack and approved overrides as the fourth bundled plugin, real build provenance/manifest, supported `Replace` selection and dependent controls, RNG/reset treatment and its non-bypass golden. Re-pin recovery already exists. Take §17's full golden pass, including existing and new DSP/neural fixtures; no configure-time fetches and no changes to Tracktion's JUCE |
+| 14 | `m5.14-review-fixes` | Whole-stack review against the contracts and the traps below: schema/history, compiler purity/closure, native lifecycle, parameter identity, pin/recovery, proposal/assets, ONNX semantics and Airwindows state. Break each load-bearing check before trusting it, record survivors and distinguish equivalent mutations from missing coverage. Each fix gets its observed failing case; a review finding does not silently expand a user-approved scope |
+| 15 | `m5.15-close` | §11 walked bullet by bullet with named enforcers and actual results, every new/dependent ADR read against code, ledger walked again, pin surface checked both ways, and **“M5, closed” written with everything still unverified**. Record compiler-free playback, independent-build and cross-CPU evidence separately. Move `CLAUDE.md` to M6 only when all scoped rows are done or explicitly dispositioned by the user |
+
+PRs 3 and 4 separate the model from the wire; PRs 6 and 7 separate hosting from compiling;
+PR 8 is the silent concern — what a kept export changes in the song, log and lock. Combining
+them would make a replay or pinning error look like plumbing behind a successful sound, which
+is M0.2's lesson in a fourth milestone. PRs 12 and 13 add their tests with their dependencies,
+not as a final “goldens” PR after nobody can remember which pin changed the sound.
+
+**CI costs are part of the schedule.** A cold engine build takes about 15–25 minutes, and the
+key hashes all of `lock.baseline.json`; PRs 5, 12 and 13 each pay that cost. Keep each coherent
+pin closure in its consumer's PR, do not sprinkle note edits through the baseline, and retain
+the full render pass for every pin that can reach audio. Keep the existing path gates narrow:
+`compilers/generative/` may stay excluded from the engine job; `compilers/dsp/`,
+`compilers/neural/`, their recipes and any new core asset/plan boundary must run it. The gate
+test needs positive cases for those files, including a compiler-only change. A native job
+that builds tools but runs none of their tests is not coverage. Do not redesign ccache or buy
+different runners merely to make this plan's table shorter.
+
+### Traps
+
+1. **Exit 0 having done nothing, again.** `cmaj play --dry-run --stop-on-error` exits 0 on a
+   compile error; `cmaj render` can leave an empty data chunk. `--scan` refuses an unknown
+   provenance component before opening the file. Assert the specific work happened, the
+   expected non-empty output was newly produced, and the diagnostics were read. A successful
+   exit is necessary where the tool supplies one and never sufficient.
+2. **Three tests against zeros.** `cmaj render` prepends **20,000 frames**, rounded up to the
+   block; at 128 that is 20,096 and at 512/1024 it is 20,480. It is not a duration in seconds.
+   Test active windows, length, finite samples and energy, and change the input/source/weights
+   to demand changed output. Use distinct destinations and test replacing an existing WAV:
+   M1's append bug made two runs compare the first run to itself.
+3. **The generated CMake is an Apple export recipe on Linux.** Its VST3 target is inside
+   `if (APPLE)`; its download flag is forced TRUE; its CLAP include path is absolute. Own the
+   minimal Linux adaptation under our recipe, with assertions on what is adapted. `sed` that
+   matches nothing cannot be allowed to “fix” an updated template. PIC is required for the
+   wrapper's static libraries or `Steinberg::FUnknown::iid` fails at link.
+4. **A pin has a moving dependency inside it.** Cmajor's vendored CLAP is the wrong version;
+   `guarantee_clap` can ignore an SDK flag because a target already exists; airwin2rack fetches
+   the extension at `main`. A configure with cached downloads and working internet proves
+   nothing about offline closure. Test both a populated offline build and a deliberately
+   missing dependency that must fail.
+5. **Flags stop at `ExternalProject`.** The parent engine's flags reach neither the nested
+   plugin project nor upstream's prebuilt LLVM. Read every relevant compile database, assert
+   required flags are present as well as forbidden ones absent, and scope ISA exceptions to
+   their justified sources. The existing sfizz/abseil exceptions are not permission for an
+   exported processor to gain AVX or fast math. Pin Cmajor's optimisation separately from the
+   host C++ compiler's Release flags.
+6. **A source edit renumbers somebody else's automation.** An inserted endpoint changes CLAP
+   ordinals. A label can be duplicated; a wrapped VST3 id is not assumed to equal CLAP's. The
+   fixture needs a parameter inserted before the one a lane names, not merely a renamed file,
+   and its rendered control must still be the intended one. Range/type changes matter even
+   when a name stays the same.
+7. **Two plugins with one display name become the first one loaded.** `Plugins::byId` currently
+   keys by vendor/name, and Tracktion also keeps its own known-plugin list. A new path alone
+   does not prove a new class was used. Test two versions in one render and a swapped source
+   producing a different sound; if class identity must be generated, make it deterministic
+   and an input to the export recipe, never a ULID minted during a build.
+8. **A mapped binary is overwritten.** The spike's live overwrite happened to leave old mapped
+   pages sounding; that is not reload semantics. Immutable hash paths and process replacement
+   avoid it. Read the stopped preview's exit status on this new path — `Preview::drop`'s
+   known discarded status is not a lifecycle mechanism to copy.
+9. **Derived becomes disposable, and the song needs its compiler to open.** The staging cache
+   is disposable; retained record/member assets are not. A model's missing external tensor,
+   missing dynamic library or wrong-target bundle is not repaired by downloading or building
+   something. The compiler-free copy test removes the compiler command and staging cache,
+   rather than leaving both available and asserting they were unnecessary.
+10. **An additive field strands an old log.** Existing SourceRefs make the replay hazard real
+    this time. A wire-breaking check passes an additive field regardless of JSON default
+    emission. Reopen the old commits, including a source later replaced by a plugin, before
+    claiming compatibility. Do not regenerate the log to make the comparison agree.
+11. **A hash is set, therefore an export happened.** `apply_patch` can write an export field
+    directly. Every retained reference must resolve to a verified record binding its actual
+    inputs, members, interface and recipe; a different current source means stale, never current. A fixture with an empty `params` map everywhere
+    will not detect a dropped parameter; M4's review found exactly that in three places.
+12. **A proposal shares the real asset directory.** Its `Project` clone shares its root today.
+    Dry run, Apply of the held patch, Edit, Reject, a failed final validator and an interrupted
+    turn each need a test of the directory and lock as well as the song. A pristine `song.json`
+    beside leaked pins is still a rejected proposal that wrote something.
+13. **The model moved once, and the version number accepts it.** M3's proposal review already
+    established that hole. A native compile holds its result long enough for it to be ordinary.
+    Compare the source, target and touched base values; never attach an old candidate merely
+    because a version claim fits. Apply must not secretly rebuild a different export either.
+14. **Only the Python driver died.** CMake, ninja and compiler grandchildren can outlive it;
+    a full stderr pipe can stop them all. Drain output, bound the call, cancel the tree, reap,
+    and watch it happen through the actual launcher. A missing diagnostic after `SIGKILL`
+    does not tell us whether the source, host timeout or OOM killer caused it.
+15. **Sixteen operator names are called ONNX support.** `Softmax` already slipped through;
+    `Gemm` already failed bias broadcasting; GRU compiled without proving an audio contract.
+    An allowed operator with an unsupported domain, opset, attribute or shape is a refusal too.
+    Name it before conversion. Exact repeatability of the wrong equation does not establish
+    semantics; the analytical comparison and PCM golden have different jobs.
+16. **The tensor dimensions are treated as audio channels.** A 64-in/16-out graph is not a
+    stereo plugin. State, reset, channel order, frame cadence and latency are adapter inputs,
+    not a compiler author's guesses. Refuse unspecified shapes and test a changed input; a
+    constant-output graph can pass a render golden while reading no audio at all.
+17. **`Replace` arrives after the controls it reinterprets.** Generic parameter iteration is
+    not an initialisation order, and the default scan's `Brightness` does not describe every
+    Airwindows selection. Bind the selector first, then resolve/apply supported slots and
+    their lanes. Include two selections with different meanings; refuse a live selector lane
+    rather than allowing it to turn one automation curve into another control halfway through.
+18. **A new bundled pin never tests re-pin.** Airwindows was not bundled before, so its first
+    reference normally writes a pin and produces no mismatch. The recovery test must open a
+    project with a deliberately different **existing** referenced pin. A recovery command
+    implemented only on a successfully opened `Session` is unreachable in the case it exists
+    for, and an “ignore locks” flag would solve it by deleting the guarantee.
+19. **The manifest came from the wrong build.** M4's close found a local engine predating the
+    schema and a manifest last rebuilt on 2026-09-09. Rebuild and guard the actual binaries,
+    generated recipe and installed Python closure, not just vendored HEADs. An Airwindows row
+    in the baseline, provenance array, scan invocation, manifest fixture and CI comparison
+    list are five places to keep honest; the baseline's two-way check must cover the new ones.
+20. **CI agrees with itself, and the prose claims another platform.** One uploaded binary
+    across three runners is a render experiment, not independent compilation. Six server
+    model strings are not ARM or consumer coverage. The same binary in preview and export is
+    not identical playback when the device rate, live state or processing mode differs. State
+    precisely what ran, and read the push-to-main run after each implementation merge.
+21. **The code view compiles on selection, or saves the wrong draft.** M4's status dry run is
+    cheap enough to look like a read until its hash differs; native export costs twenty seconds.
+    Status and compilation must be separate here. Key the buffer to its device and source
+    hash, re-read on branch change, keep text undo out of document undo, and drive the window:
+    a projection golden cannot catch an editor that sent its neighbour's source.
+22. **A synthetic graph or scripted turn becomes a product claim.** No real model is shipped,
+    no live Cmajor-authoring success rate is measured, and no successful scan establishes
+    every Airwindows algorithm's determinism. The first export's licence gate is a person's,
+    however green the build. None of those gaps is closed by a new golden file.
+
+### The ledger, walked for this plan
+
+This is the **eighth walk**, after M4's seven, and it assigns work rather than declaring it
+done. Three rows fire in M5, with their order made explicit:
+
+| Row | Disposition in this plan |
+|---|---|
+| **Re-pin tool and `lock_mismatch` UI**, promised by ADR 0010 to M2 | ADR 0030, PR 9, **before** Airwindows in PR 13. It must recover a refused open and remain explicit. Airwindows' arrival supplies the deadline, not by itself the mismatched-project test |
+| **Compiled-device `ParamID`**, ADR 0015 §1 and ADR 0026 Consequences | PR 1 measures the mapping, ADR 0029 decides it, PRs 6 and 8 enforce it **before** any compiled-device automation is offered. Stable endpoint names and an explicit incompatible-edit refusal are the default |
+| **U9's licence reading**, ADR 0023 §7 | User U9, recorded by ADR 0031 and §12 **before the first export**, including one in the follow-up spike. Remains open until a person supplies the reading; planning does not satisfy it |
+
+The two split obligations also now have producers: **`SourceRef.export_hash`**, with the neural
+counterpart the current model lacks, goes to PR 3 after ADR 0028; **`lock.json`'s remaining
+blocks** go to PRs 8 and 12 under ADR 0030. The generator half stays closed, including the
+accepted absence of `toolchains` after a model-only generator compile.
+
+The **user-VST3** row is approached by a real feature this time: the engine can load a binary
+the build did not bundle. Disposition: compiler-produced exports have a separate verified
+record and exact content hashes; the bundled build manifest does not become an arbitrary
+plugin catalogue. General scanning/importing of user binaries remains deferred to an explicit
+request for that catalogue, with its provenance problem intact. **The model source-read** row
+also has a consumer: PR 11 must edit an existing DSP source asset. Provide that narrow read;
+do not use it to reopen raw `get_song` or to put every generator's source into every prompt.
+
+Everything else keeps its event: `FormRule`/`set_form`, Faust import, Strudel after M5, the
+runtime for a requested model the converter refuses, generator track targets, plugin preset
+state, routing, render tails, dense-index tools, live display strings and transport/device UI
+have acquired no implementation merely by being reread. The unseedable-parameter audit and
+`list_params` remain tied to offering general `set_param`; native compiler tools do not do
+that. Its known raw-patch/automation escape is still not a completeness or security claim.
+If an Airwindows selection audit finds a reachable RNG, its own supported envelope must answer
+it now, without promising the old plugins' full audit too.
+
+**The known gaps carried from “M4, closed”, and where each ends up:**
+
+- Real speaker output, real-time pacing and underruns are still unmeasured. PR 10 exercises a
+  real device if available and records whether it did; the null PCM proves control flow only.
+  The new preview-replacement path must read its child's result even while the general
+  `Preview::drop` gap remains named.
+- No live DSL efficacy was measured in M4. M5's scripted native turn does not repair that or
+  measure Cmajor efficacy. The zero grant, spent ceiling and labelled transcripts remain.
+- `Project::write` is O(history); M4 measured the next commit at about 426 ms after 10,000
+  notes, against 29 ms after 1,000 and 2.5 ms after one. Source and binary **hashes**, not their
+  contents, enter patches. Measure one export apply with history; no storage-engine rewrite
+  is planned before that measurement shows a need.
+- The `uv_build` range is still the one stated build-backend exception. The known `multidict`
+  divergence and unvendored/nested pin gaps stay named. PRs 5/12/13 remove the exceptions they
+  actually give readers to; they do not bless new exceptions merely to make a test green.
+- The generator's exception text can carry an address, but its output notes and hash cannot;
+  that accepted boundary stays as recorded. Native diagnostic paths/text are also not hashed
+  as musical output; successful record and bundle bytes must still be path-independent.
+- The old M4 render-refusal wording and the Airwindows baseline note are corrected with their
+  producers in PRs 8 and 13. The local stale engine/manifest are rebuilt where native checks
+  need them; this documentation PR does not touch a pin or refresh a render fixture.
+- Independent-build evidence, ARM/other-platform coverage and the single-machine origin of
+  goldens remain bounded as above. The push-to-main watching gap gets default 22, not a claim
+  that a PR run watched it. The genuine equivalent mutation from M4 remains equivalent; a
+  plan does not create a test for dead work.
+
+### What M5 will not claim
+
+- A JIT, Faust compiler, neural runtime, neural transport, shipped weights, arbitrary ONNX
+  compatibility, DDSP support inferred from a `GRU` compile, or an inference benchmark. The
+  converter's supported shapes and each refusal are what is claimed.
+- Instant source editing, compilation on a keystroke, an old export silently standing in for
+  changed source, state migration across native versions, a preset browser or arbitrary user
+  plugin import. The measured export wait remains a cost and the JIT ledger trigger remains.
+- A security sandbox for hostile Cmajor, ONNX parsers or native plugins. Process isolation and
+  bounded compilation are failure containment; they are not a promise that arbitrary native
+  code is safe. The accepted input closure and no-user-build-script rule keep ambient inputs
+  out of reproducibility without making a security claim.
+- Bit identity for every source on every CPU, independence from all 129 runtime libraries,
+  or every Airwindows algorithm/control combination. The claim stays ADR 0009's, with named
+  supported surfaces, fresh-process tests and explicit evidence where it has been measured.
+- Identical preview and export PCM on different device rates or processing states; real-time
+  pacing or audible output proved by a null device; ARM, macOS, Windows or consumer-runner
+  coverage that the CI sample does not contain.
+- A live model success rate, an LLM that is deterministic, or authority to spend a previous
+  grant. A hand-written transcript proves the loop it drives and says it is hand-written.
+- MIDI I/O, REAPER export, schema publishing, an installer, minimum OS commitments, routing,
+  render-tail policy, or the still-unplaced analysis/symbolic-generation features. Those keep
+  §16's M6 placement or their existing explicit trigger, rather than joining this milestone
+  because a compiler can already be asked to do something adjacent.
+- Licence clearance supplied by an agent, or a milestone complete because an export exists.
+  U9, the converter, Airwindows, recovery, the editor, the model path and the close all retain
+  their rows; any narrowing needs the user's recorded decision.
+
+
 ## After M0
 
 One line each; §16 has the definitions, and ADR 0003 placed what §16 had left out. M1 render engine and first golden render · M2 Tauri UI
@@ -3593,6 +4157,11 @@ a trigger that fired and was ignored, and none was silently dropped.** The PR ta
 said "a sixth time", which was written at M4's planning before the planning pass took that number;
 a close that believed the row would have numbered its pass over the one before it, and the row is
 corrected.
+
+**Walked an eighth time at M5's planning, 2026-10-13.** The [M5 ledger disposition](#the-ledger-walked-for-this-plan)
+assigns the three triggered rows to concrete gates and PRs, carries the two split producers
+forward, and accounts for the source-read and user-plugin boundaries. No deferred work is
+called complete by the plan. The seventh walk below remains the record of M4's close.
 
 What the seventh walk found, row by row. The four that came due at M4's planning were all
 dispositioned there and all four held through the milestone: `FormRule` re-deferred on an event and
