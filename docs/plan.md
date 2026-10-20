@@ -105,7 +105,8 @@ here" remains M4's historical sketch, superseded by the M5 section.
 | M4.9 | §11 walked bullet by bullet with the enforcer named and **run** for each, the first bullet's new `compilers` half included; every ADR walked against the code and thirteen corrected; the ledger walked a **seventh** time; `CLAUDE.md` to M5 — and what M4 leaves unverified written where a reader will find it, completing "M4, mid-flight". No golden moved and no paid call was made | done | PR #92 |
 | — | **M4 complete.** A seeded Python DSL behind an `ast` allowlist, compiled in a subprocess `core` spawns per compile; two tools, `Generator.compiled_hash` and `lock.json`'s `toolchains` block checked at compile and never at open; the generator code view; fourteen tools offered to the model — with **no `song.proto` change but one field**, no new external dependency in any lock, and the first milestone every pull request of which a runner validated end to end. See "M4, closed" | done | — |
 | M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | done | PR #93 |
-| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. **And the user's five decisions on it, taken 2026-10-20 and recorded with what each closes**: both overrides approved and ADR 0010 §1's `GIT_TAG main` breach closed; airwin2rack's CLAP target not built, so the third CLAP SDK a recursive resolution found is avoided rather than managed; `onnx` approved with all four packages given baseline rows by name and the `reference` extra refused; the environment constrained to `ai/`'s `pydantic` and `multidict`, which is three divergence lines instead of eleven and is decided apart from the drift `onnx` does not cause; and CPM.cmake vendored, because a hash makes a download safe and not reproducible. **U9 stays open and the spike therefore runs the Airwindows measurement only.** Approved candidates, still not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | proposed | `m5.1-gates` |
+| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. **And the user's five decisions on it, taken 2026-10-20 and recorded with what each closes**: both overrides approved and ADR 0010 §1's `GIT_TAG main` breach closed; airwin2rack's CLAP target not built, so the third CLAP SDK a recursive resolution found is avoided rather than managed; `onnx` approved with all four packages given baseline rows by name and the `reference` extra refused; the environment constrained to `ai/`'s `pydantic` and `multidict`, which is three divergence lines instead of eleven and is decided apart from the drift `onnx` does not cause; and CPM.cmake vendored, because a hash makes a download safe and not reproducible. **U9 stays open and the spike therefore runs the Airwindows measurement only.** Approved candidates, still not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | done | PR #94 |
+| M5.2 | **The spike, the Airwindows measurement only** — U9 unread, so no `cmaj generate`, no Cmajor build, no `.clap`, no wrapped VST3 and no ONNX conversion: measurements 1–3 are blocked and reported as blocked. airwin2rack `b6eef0a` built as a JUCE VST3 under the engine's three flags with both approved override commits as local sources, and driven through a throwaway JUCE VST3 host. **`Replace` is Galactic's own reverb control and not the selector; there is no selector, no program and no parameter for selection at all** — only a name in the opaque state chunk. The fourteen parameter ids read, twice, agreeing with `engine --scan`. **The render is not reproducible across fresh processes**: `srand ((size_t)this)` in the VST3 SDK's `FUID::generate()`, called from a static initialiser, seeds the process PRNG from an address, and 502 of 529 Airwindows effects take their dither from it — 100% of samples differ at −18.8 to −22.3 dBFS, and a fully dry instance still differs at −156.5 dBFS, so no tolerance closes it. 28 effects never call `rand()`; **`Channel5` is identical across processes, instances and reversed construction order** and is the proposed first supported selection. `reset()` and `releaseResources()`+`prepareToPlay()` are byte-identical no-ops. `sst-rackhelpers` confirmed never compiled; **CLAP 1.2.7 enters the VST3 regardless of the CLAP target**, which decision 2 did not expect; a no-network configure succeeds with CPM's bootstrap pre-seeded and fails without it. Nothing exported, nothing pinned, `lock.baseline.json` byte-identical, no golden moved, 500 tests pass, the ledger unchanged and no paid call made | done | `m5.1-spike`, never merged |
 
 ## M0.2 — `core/`
 
@@ -3772,6 +3773,258 @@ The repeat-build comparison on another machine belongs to PRs 7–8's standing C
 pipeline exists. The spike may give it evidence, but does not replace it. The generated CMake's
 Linux VST3 omission, download flags, absolute include path and PIC requirement are **known**
 inputs to that pipeline already, not open questions to spend a second spike finding.
+
+### What the spike found (PR 1, run 2026-10-20)
+
+Run on this machine and no other — WSL2, Ubuntu 24.04.1, x86-64, **AMD Ryzen AI 9 HX PRO 370**,
+24 logical cores, 47 GiB, g++ 13.3.0, CMake 3.28.3, Ninja 1.11.1 — against `main` at `418dfb2`,
+with `engine/build/escribass_engine_artefacts/Release/escribass_engine` as it was built on
+2026-09-17. **Every number below is one machine's**, which is what U2 leaves it as; M3's trap 16
+applies to a compiler and to an address space. The spike's tree lives outside the repository,
+`m5.1-spike` is not merged, and nothing it built is vendored, pinned or committed.
+
+**Measurements 1, 2 and 3 did not run, and the reason is U9 and nothing else.** A person has not
+read Cmajor's licence, the user's decision of 2026-10-20 was the fourth measurement only, and all
+three of the others export something Cmajor generated. So **no `cmaj generate` was run, no Cmajor
+tree was configured or built, no `.clap` and no wrapped VST3 were produced, and no ONNX graph was
+converted** — endpoints through the wrapper, two exports alive at once and a graph becoming audio
+are **blocked, not deferred**, and stand exactly as the table above describes them. Nothing below
+is evidence about any of them. The Airwindows go-ahead was not the gate clearing, and neither is
+this paragraph.
+
+**The finding that matters, and it is the opposite of what the record says.** `Replace` is **not**
+the effect selector. It is the first of **Galactic**'s five controls — the reverb's
+feedback-replace amount — and M4's spike read the boot effect's parameter names off `--scan` and
+took the first of them for a selector. Swept in five fresh processes, slot 0 moves the sound
+monotonically and continuously: rms 3.1e-08, 0.00964, 0.0166, 0.0221 and 0.0268 at 0, 0.25, 0.5,
+0.75 and 1.0. That is a reverb control, not a 506-way enumeration. **There is no selector at
+all.** The fourteen parameters are ten anonymous slots plus Bypass, Input Level, Output Level and
+Mono Behaviour; `getNumPrograms()` is compiled out unless `USE_JUCE_PROGRAMS=ON`, which is `OFF`
+by default, and JUCE's VST3 host accordingly reports **0** programs; and the selection lives only
+in the opaque plugin state chunk, as `currentProcessorName` — **a name, not an index**. So
+`add_effect` over Airwindows is neither a plugin id nor a parameter value: it is a string in a
+state blob that no `ParamRef` can reach and no automation lane can carry. ADR 0033's "supported
+`Replace` selection" has to be rewritten before it is written.
+
+**The actual parameter ids, read twice — once through this spike's host and once through
+`engine --scan`, which agreed exactly.** They are JUCE 8's hash of the `ParameterID` string, so
+the ten slots come out consecutive and the four named ones do not:
+
+| idx | VST3 `ParamID` | `ParameterID` | name at Galactic | name at Channel5 |
+|---|---|---|---|---|
+| 0–4 | 797433692–797433696 | `ctrl_0`…`ctrl_4` | Replace, Brightness, Detune, Bigness, Dry/Wet | Console Type, Drive, Output, `-`, `-` |
+| 5–9 | 797433697–797433701 | `ctrl_5`…`ctrl_9` | `-` | `-` |
+| 10 | 773352680 | `bypass` | Bypass | Bypass |
+| 11 | 100353752 | `inlev` | Input Level | Input Level |
+| 12 | 1141966863 | `outlev` | Output Level | Output Level |
+| 13 | 690425114 | `monoBehaviour` | Mono Behaviour | Mono Behaviour |
+
+The ids are stable across a selection change and the **names, the reported defaults and the
+meaning are not** — so ADR 0010 §4's manifest keyed on the id and ADR 0015's `ParamRef` resolving
+through it are both still correct and both now carry a value whose units a different field
+decides. Mono Behaviour is a three-valued `AudioParameterInt` that reaches the host as
+`automatable=0` with `numSteps` 2,147,483,647. Channel5's Console Type is a four-way discrete
+control on a *continuous* slot: swept at 0, 0.25, 0.5, 0.75 and 1.0 it gives **three** distinct
+renders, 0 and 0.25 agreeing and 0.75 and 1.0 agreeing, so a fader at 0.74 and one at 0.75 are
+different consoles while 0.75 and 1.0 are the same one — with no step count declared anywhere.
+
+**`Replace` before and after, taken on the thing that actually changes the dependent values: the
+selection.** With every slot driven to 0.75 under Galactic and then nothing but the selection
+changed to Channel5, all ten slots **keep the number 0.75**, the names change, the reported
+defaults change, the two slots that become inactive still hold 0.75, and the render goes from a
+reverb (rms 0.0329) to a saturator (rms 0.1411). The incoming effect's own defaults are computed
+and then **overwritten** by the stored values, because `setStateInformation` applies
+`setupParamDisplaysFromDisplayProcessor`'s defaults and then loops `awp_0…awp_9` on top of them.
+The UI path, `pushResetTypeFromUI`, does only the first half — so **the window and a restored
+project initialise the same selection to different numbers.** That is a second initialisation,
+not a second rendering of one.
+
+**The nondeterminism is real, it is not the dither, and it is located to a line.** The built
+Airwindows VST3, driven through `juce_audio_processors` at 48 kHz in 512-frame blocks over 48,128
+frames of fixed-seed noise with Galactic selected, **does not render the same PCM twice in two
+fresh processes**: 100.00% of samples differ, peak 0.077–0.098, **−22.3 to −20.1 dBFS**. Disabling
+address randomisation with `setarch -R` makes three fresh processes **bit-identical**, so the
+variable is the address space. The chain, interposed on `srand`/`rand` rather than inferred:
+
+1. `modules/juce_audio_processors/format_types/VST3_SDK/pluginterfaces/base/funknown.cpp:181`,
+   Steinberg's own `FUID::generate()`, is on Linux `srand ((size_t)this); for (int32 i = 0; i < 16;
+   i++) data[i] = rand ();`, and it is called from the **static initialiser**
+   `FObjectIIDInitializer` at `base/source/fobject.cpp:72`. Every module that links the SDK
+   reseeds the process-global libc PRNG with the address of a static object as it loads.
+2. The interposed log shows exactly two `srand` calls per run, sixteen `rand()` draws apart, with
+   pointer-valued seeds whose low twelve bits are constant and whose page base is not:
+   `0xfeacb790`/`0x56e16f50`, then `0x89d54790`/`0xe3c16f50`, then `0x55e8e790`/`0xf7616f50`.
+3. **502 of the 529 Airwindows sources seed their dither from it**, with one idiom and no `srand`
+   of their own: `fpdL = 1.0; while (fpdL < 16386) fpdL = rand()*UINT32_MAX;`, twice per effect,
+   under the author's own comment "values being initialized only once. Startup values, whatever
+   they are." There is no `srand`, `time()`, `getpid`, `random_device` or `<chrono>` anywhere in
+   the 1,058 generated files.
+4. In Galactic the seed is not a −140 dB dither. `GalacticProc.cpp:59–62` drives the **Detune
+   LFO** from it — `vibM += (oldfpd*drift)` with `oldfpd = 0.4294967295+(fpdL*0.0000000000618)`
+   after the first wrap, and at the default Detune the first wrap happens on sample one — so the
+   modulation rate varies by up to 60% with where the module landed in memory. That is a
+   different reverb, not a different noise floor.
+
+Taken apart, the effect is innocent and the wrapper is not: the same Galactic constructed straight
+out of the registry with no JUCE in the process is **bit-identical in four fresh processes, and
+under `setarch -R` too**, because unseeded glibc `rand()` is deterministic. It is the SDK's reseed
+that makes it otherwise. What the effect does carry on its own is a draw-count dependence, which
+the measurement's list predicted:
+
+| Held fixed, changed once | Galactic | Channel5 |
+|---|---|---|
+| Three fresh processes, one instance | 100.00% differ, peak −22.3 / −20.1 dBFS | **identical**, `a93e2fae…`, and identical again under `setarch -R` |
+| Two instances in one process, same settings, same input | 100.00% differ, peak −18.8 dBFS | **identical** |
+| Reversed construction order, same final graph | 100.00% differ, peak −18.8 / −18.3 dBFS | **identical** |
+| `reset()` between two passes over the same input | 100.00% differ, peak −18.4 dBFS | 99.99% differ, peak −47.5 dBFS |
+| `releaseResources()` + `prepareToPlay()` between passes | not taken separately | 99.99% differ, and **byte-identical to the `reset()` result** |
+| Bypass on | — | the output is **the input, exactly** |
+| Dry/Wet at 0 rather than 1 | 45.40% of samples still differ from the input, peak **−156.5 dBFS** | the slot is inactive and changes nothing |
+| The effect engaged at all | rms 0.0165 against the input's 0.144 | rms 0.0818, 100.00% of samples changed, peak 0.119 |
+
+Three of those rows each want a sentence. **Repeated reset does not reset.**
+`AWConsolidatedAudioProcessor` does not override `juce::AudioProcessor::reset()`, and
+`releaseResources()` frees only a mono scratch buffer, so both calls return having done nothing to
+the effect — byte for byte the same no-op, measured. A golden over a compiled device therefore
+**constructs a fresh instance per render** and never trusts a reset. **Turning the wet control
+down does not remove the hazard**: a fully dry Galactic still differs from its input in 45% of
+samples, because `fpd` reaches the dry path through the denormal substitution
+`inputSampleL = fpdL * 1.18e-17` and through the float-path dither, so the address dependence
+survives at −156.5 dBFS — and a golden hashes samples, so −156.5 dBFS fails a hash exactly as
+−18.8 dBFS does. There is no epsilon at which this becomes a rounding difference rather than a
+different file, which is what the row's last clause is about. **And a bypassed instance really is
+not the measurement**: bypass returns the input bit for bit, which is worth having as the control
+case and worth nothing as evidence.
+
+**The first supported selection, and why it needs no source change.** 28 of the 529 generated
+effects never call `rand()`: `AtmosphereBuss`, `AtmosphereChannel`, `BitDualPan`, `BitShiftGain`,
+`BitShiftPan`, `BuildATPDF`, `Channel4`, `Channel5`, `DCVoltage`, `DitherMeDiskers`,
+`DitherMeTimbers`, `Ditherbox`, `DoublePaul`, `DustBunny`, `FathomFive`, `HighGlossDither`,
+`LRFlipTimer`, `LeftoMono`, `MSFlipTimer`, `NaturalizeDither`, `NodeDither`, `NotJustAnotherCD`,
+`RightoMono`, `Slew`, `Slew2`, `SlewOnly`, `StudioTan` and `SubsOnly`. **`Channel5` is the
+candidate**: a three-control console tone colour — Console Type, Drive, Output — in the Tone Color
+category, every member initialised to a constant, no `fpd` and no array in the class at all. It is
+useful rather than bypassed, since engaged it changes 100.00% of samples and takes the rms from
+0.144 to 0.0818, and it is the only column of the table above that is identical everywhere it was
+asked to be. `Channel4`, `AtmosphereChannel`, `Slew2`, `BitShiftGain` and `FathomFive` were
+checked the same way and are stable across processes and instances too; `ToTape6`, `Pressure5`,
+`Console8BussIn`, `Density2` and `PocketVerbs`, sampled from the other 502, every one of them
+differs between instance 0 and instance 1 of one process. The hazard is general and the remedy is a named
+allowlist — which is **a refusal and not a tolerance**, and costs no change to anyone's source.
+
+**If more than 28 effects are ever wanted, the wrapper change is one line and its ceiling belongs
+beside it.** `std::srand (k)` immediately before each `rg.generator()` call — the two in
+`setAWProcessorTo` and the one in `pushResetTypeFromUI` — makes every instance's `fpd` identical
+and independent of both the address space and the construction order. That is three lines in
+airwin2rack's `src-juce/AWConsolidatedProcessor.cpp`, a **source modification to a bundled
+plugin**, and so the user's decision rather than an agent's. Its ceiling is that libc `rand()` is
+process-global: reseeding it perturbs every other consumer in the engine's process, so the
+precondition is a measurement that the engine's own render path reads nothing from it. The
+evidence there is one-sided and should be recorded as such — the four golden WAVs have not moved
+across many runs in many processes, which is strong indirect evidence that Surge XT, sfizz and
+Dexed take no audio from libc `rand()`, but **the engine already links the same `fobject.cpp` and
+is therefore already reseeded by an address at startup**, and nobody had written that down.
+Patching the SDK instead is not available: PR 13's own text forbids changing Tracktion's JUCE and
+CLAUDE.md #4 forbids moving it.
+
+**Decision 2 is not true of the tree as it stands, and that is a finding rather than a workaround.**
+A JUCE-VST3-only configure of airwin2rack `b6eef0a` **cannot complete** without
+`clap-juce-extensions`' two recursive gitlinks on disk: its `CMakeLists.txt:48–49`
+`add_subdirectory`s `clap-libs/clap` and `clap-libs/clap-helpers` unconditionally, and with both
+missing the configure fails there — measured, 36.0 s to the error. Nor is the extension optional
+for the VST3. `src-juce/CMakeLists.txt:20` adds the package and `:136` calls
+`clap_juce_extensions_plugin`, neither under a guard; `AWConsolidatedProcessor.h:7` includes
+`clap-juce-extensions/clap-juce-extensions.h`, which includes `<clap/events.h>`, `<clap/plugin.h>`
+and `<clap/helpers/plugin.hh>`; the processor **inherits** `clap_juce_extensions::clap_properties`
+and reads `is_clap` in `prepareToPlay`; and `libclap_juce_extensions.a` is on the VST3's link line
+with both CLAP include trees on its compile line. So **CLAP 1.2.7 enters the Airwindows VST3.**
+What "the CLAP target is not built" actually buys is narrower and still worth having: with the two
+gitlinks present at `29ffcc273be7c7c651f6c9953b99e69700e2387a` — `version.h` read as 1.2.7 — and
+`a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc`, building only `airwin-consolidated_VST3` compiled
+**zero** CLAP-wrapper objects and produced no `.clap`. Making decision 2 literally true needs
+`src-juce/CMakeLists.txt` and `AWConsolidatedProcessor.{h,cpp}` edited to drop the extension, which
+is the same class of decision as the reseed above and is likewise the user's. Until it is taken,
+the M5 tree holds a third CLAP SDK and ADR 0033 says so rather than claiming otherwise.
+
+**`sst-rackhelpers` really is never compiled** — PR #94 read it right. Under
+`BUILD_JUCE_PLUGIN=ON` the string appears **zero** times in the configure log and zero times in
+`build.ninja`. It is a checkout nothing opens, and what needs pinning is a tree the build never
+reads.
+
+**A configure with the network unreachable succeeds, once CPM's bootstrap is pre-seeded.** In a
+network namespace with no resolution, with `CPM_SOURCE_CACHE` holding `cpm/CPM_0.40.2.cmake` and
+`CPM_JUCE_SOURCE` / `CPM_clap-juce-extensions_SOURCE` pointing at local checkouts, a fresh
+configure **returned 0 in 27.6 s**. With that cache empty it fails at `cmake/CPM.cmake:19` — "file
+DOWNLOAD cannot compute hash on failed download" — so the fetch is unconditional exactly as
+decision 5 says, and `file(DOWNLOAD … EXPECTED_HASH)` skips the transfer when the file is already
+present and hashes right. That is PR 5's test passing today, and it means decision 5's vendoring
+can be a pre-seeded cache rather than a patched file. The hash the plan records was confirmed by
+letting it download once: `c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d`.
+
+**Four smaller things, each of which would have cost a pull request.** The plugin's reported
+**version is the build date**: the root `CMakeLists.txt` computes it with `string(TIMESTAMP)` as
+`1.${YEAR}.${DAY_OF_YEAR}+1`, and today's build reports **`1.2026.294`** where M4's spike reported
+`1.2026.269` from the same commit — so ADR 0010 §4's manifest records a different `version` for a
+rebuild of an unchanged pin, and the installer names its zip
+`AirwindowsConsolidated-2026-10-20-b6eef0a-Linux.zip` the same way. **The boot effect is read out
+of the user's home directory**: `AWConsolidatedProcessor.cpp:92` takes `startupEffect` from a
+`juce::PropertiesFile` under `~/.config/AirwindowsConsolidated/`, and writing `Channel5` there
+changed a freshly loaded plugin's slot 0 from `Replace` to `Console Type` before any state was
+restored — the file does not exist on this machine and was removed again after the measurement,
+but a selection only a local file implies is a selection a render cannot reproduce. **A selection
+id cannot be an index**: the registry is built in one translation unit, since
+`AirwinRegistry.cpp:98` includes `ModuleAdd.h`, so its order is declaration order and
+deterministic, but 524 `registerAirwindow` calls yield **506** rows because 18 are dropped for an
+empty description, the processor's own `nParams > 10` filter removes 2 more and **renumbers the
+rest** — Galactic 209 → 208, Channel5 70 → 69 — and only the name and the alphabetical `ordering`
+survive it. **And the engine's flag guard has nothing to complain about**: all **1,639** compile
+commands carry `-march=x86-64 -mtune=generic -ffp-contract=off`, the build emitted four warnings
+and none of them is ours, and `JUCE_JACK=1` was left exactly as upstream sets it — **M4's
+`-DJUCE_JACK=0` deviation is no longer needed**, because `libjack-jackd2-dev` 1.9.21 is installed,
+which is the same sentence the 2026-10-13 JACK check wrote about `cmaj`.
+
+**Two "exit 0 having done nothing", and the first one was ours.** `setStateInformation` handed a
+bare JUCE chunk rather than a VST3 `<VST3PluginState>` envelope **accepts it, returns void,
+changes nothing and reports nothing**: the first run of this spike's matrix measured "Channel5"
+four times and was measuring Galactic every time, which is how close trap 1 came to eating the
+whole measurement. The selection is only safe because the host now reads `currentProcessorName`
+back and refuses when it did not move. `reset()` is the second, above. Read rather than measured,
+because a VST3 host cannot reach them: `pushResetTypeFromUI` indexes
+`AirwinRegistry::registry[index]` and `setCurrentProgram` indexes `fxAlphaOrdering[index]` with
+**no bounds check**, so an out-of-range selection is an out-of-range read and not a refusal —
+`setStateInformation` is the one path that validates, and it validates a name. The engine's
+`--scan` behaved correctly and is worth recording as checked: with no `pluginCommits` row for
+`airwindows` it **exits 5** with "no submodule commit is compiled in for 'airwindows'" and writes
+no file, so M4's finding holds and the engine PR adds the row in the same change that adds the
+plugin. Passed `surge_xt` as a stand-in it opened the bundle headlessly, instantiated it at
+48 kHz, exited 0 and wrote `Airwindows/Airwindows Consolidated`, version `1.2026.294`, fourteen
+parameters under the ids above — **against Surge XT's commit**, which is a spike artefact and not
+a result.
+
+**Cost, on this machine.** `airwin2rack` at `b6eef0a` with its two gitlinks is 30 MiB, JUCE
+`51d11a2b` is 102 MiB, and `clap-juce-extensions` `55525c98` with its two CLAP gitlinks is 8.5 MiB
+(those submodules took 4 s). Configure 30 s; **building `airwin-consolidated_VST3` alone took
+110 s wall and 1,573 s CPU over 2,171 edges, peak RSS 1.53 GiB**, and the bundle is 25 MiB. The
+spike's own VST3 host — a JUCE console app, the only way to take these numbers before PR 6 exists
+— cost 89 s to configure and build. Peak scratch **1.1 GiB**, a quarter of the M4 spike's 4.6 GiB,
+all of it outside the repository and all of it removed. The clones themselves were not timed.
+
+**What was not measured, and why.** Measurements 1–3, for U9, above. Anything on a second machine
+or a second CPU, because U2. Whether the three existing bundled plugins read libc `rand()`
+directly — the goldens' stability is the evidence and it is indirect. Whether the `srand` reseed
+reaches a *Tracktion* render rather than this spike's host, which is PR 6's to answer with the real
+loader. Whether `USE_JUCE_PROGRAMS=ON` would give a usable selection surface, because turning it
+on changes the plugin and that is a decision rather than a measurement. And the repeat-build
+comparison, which stays PRs 7–8's.
+
+**What this hands the user, and none of it is an agent's to decide.** Airwindows' supported set is
+either the 28 `rand()`-free effects, which needs no source change and refuses the rest, or more
+than that, which needs `std::srand` before each effect construction in airwin2rack's own wrapper
+plus an answer about `rand()` being process-global. Making "the CLAP target is not built" mean what
+decision 2 says needs airwin2rack's `src-juce` edited to drop `clap-juce-extensions` entirely;
+leaving it unedited means a third CLAP SDK in the tree, named in ADR 0033. The date-derived plugin
+version needs either `CMAJ_VERSION`'s treatment — an explicit pin instead of a derivation — or a
+manifest that does not compare it. And U9 is still open, with three measurements waiting behind it.
 
 ### The pins that really move
 
