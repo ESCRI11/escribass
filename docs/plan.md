@@ -14,8 +14,14 @@ Writing it early worked: this close had to *correct* what was there rather than 
 
 **M5's plan is proposed below** — eleven questions for the user, twenty-two agent defaults,
 six ADRs and a further spike limited to the interfaces M4 did not measure. The recommendation
-is one milestone with a working-export checkpoint; the user has not answered its new questions.
-"M5, sketched from here" remains M4's historical sketch, superseded by the M5 section.
+is one milestone with a working-export checkpoint. **The user answered all eleven on
+2026-10-20, each at the plan's own default**, which leaves three gates standing before PR 1
+rather than removing them: U2's resolved inventory to present, U3's two override commits to
+name before anything fetches them, and U4's closure to show before anything installs it. Two of
+the three are now answerable without another approval, and "What U2, U3 and U4 resolve to"
+below is that answer — candidates, not pins. U9's licence reading is the third, it is a
+person's, and it is still owed. "M5, sketched from here" remains M4's historical sketch,
+superseded by the M5 section.
 
 ## Where we are
 
@@ -93,7 +99,8 @@ is one milestone with a working-export checkpoint; the user has not answered its
 | M4.8 | **The whole-stack review of M4 acted on**: one blocker, four majors, nine minors, and ~~twelve surviving mutations made to fail~~ **twelve of forty-five mutations surviving, of which eleven were made to fail** (the row said both and they are not the same sentence; corrected 2026-10-02). The sandbox's purity claim was false — `str.format`'s field syntax reached `$HOME` and the install path past the `_`-attribute rule, `repr` put a heap address in a velocity, and `**` put `libm` in a pitch — so the DSL gains a third lock and five refusals; a child killed by its own hard CPU limit is the author's refusal and not an operator's failure; fail-closed is a committed `GRANT_USD` and no longer price arithmetic; `params` reaches a test, a golden and the window; and `lock.baseline.json` gains a guard that reads it **both ways**, which found three dependencies nobody had pinned. Every fix watched failing first; the forbidden-construct table grows from forty-eight rows to sixty-two and the generative suite from 43 tests to 49, and the sweep that followed the reviewer's fix shape found a **51st** refusal it had not: `bytes.__mod__`'s own `%a`. Eleven of the twelve survivors now fail; the twelfth is a genuine equivalent — **`request.params` cleared after `dsl.run` has returned, which nothing reads: the DSL takes it once, into the namespace, and the answer carries notes, a diagnostic and two versions** (named here 2026-10-02 so a later reader can re-judge it; the row had said only "a genuine equivalent") — and the dead code a thirteenth mutation exposed is deleted. ~~One golden moved, named~~ **Two moved**: the `generators` determinism golden (`expected/song.json` and `expected/responses.json`, driven by a `script.json` that now takes two params) **and `app/tests/projection.golden.json`**, `"params": 0` → `"params": 2` — the same pair M3 PR 9's row calls "Two goldens moved", counted as one here until 2026-10-02 | done | PR #91 |
 | M4.9 | §11 walked bullet by bullet with the enforcer named and **run** for each, the first bullet's new `compilers` half included; every ADR walked against the code and thirteen corrected; the ledger walked a **seventh** time; `CLAUDE.md` to M5 — and what M4 leaves unverified written where a reader will find it, completing "M4, mid-flight". No golden moved and no paid call was made | done | PR #92 |
 | — | **M4 complete.** A seeded Python DSL behind an `ast` allowlist, compiled in a subprocess `core` spawns per compile; two tools, `Generator.compiled_hash` and `lock.json`'s `toolchains` block checked at compile and never at open; the generator code view; fourteen tools offered to the model — with **no `song.proto` change but one field**, no new external dependency in any lock, and the first milestone every pull request of which a runner validated end to end. See "M4, closed" | done | — |
-| M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | proposed | `m5.0-plan` |
+| M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | done | PR #93 |
+| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. Candidates awaiting the user, not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | proposed | `m5.1-gates` |
 
 ## M0.2 — `core/`
 
@@ -3651,7 +3658,12 @@ not a relaxed `song_diverged` check or regenerated history. Faust remains compil
 ### The questions that have to be answered before code — the user's
 
 These are M5's U1–U11; U9 deliberately keeps the inherited licence number.
-Eleven rows, including that gate and two dependency inventories. **New choices
+Eleven rows, including that gate and two dependency inventories. **All eleven were answered on
+2026-10-20, each at the recommended default**, so the table below reads as the decisions rather
+than as the questions — with the qualification that U2, U3 and U4's defaults are each a
+*procedure* and not a blanket yes: the resolved commits, the two Airwindows overrides and
+`onnx`'s closure are presented in "What U2, U3 and U4 resolve to" below and wait there for the
+user, and U9 waits for a person to read a licence. **New choices
 are not settled by this plan.** Existing approvals in U2 and U3 persist: these rows return the
 named set and its missing closure to the person who approved it, not the choice of compiler
 or SDK for a second vote. A new dependency
@@ -3778,7 +3790,244 @@ remove the relevant `NO_SOURCE_YET` entries, give every new leaf an actual reade
 the reverse scan about the new Python manifest and native gitlinks/overrides. A source tree
 whose build reports a commit copied from the baseline can agree with it while compiling
 something else; compare checkout facts instead. The known `multidict` 6.9.1/7.0.0 divergence
-does not authorise a new one when `onnx` gets its environment.
+does not authorise a new one when `onnx` gets its environment. **Every commit this table calls
+for is resolved in the section that follows**, read from its approved parent on 2026-10-20 —
+and so is the divergence that last sentence predicted, which turned out to be three packages
+rather than one.
+
+### What U2, U3 and U4 resolve to — candidates, not pins
+
+**The user answered all eleven questions on 2026-10-20, each at this plan's own default.** Three
+of those answers are gates on PR 1 rather than decisions it can proceed past: U2 asks for the
+approved native set's resolved inventory to be **presented**, U3 for Airwindows' two override
+commits to be **named and approved before they are fetched**, and U4 for `onnx`'s closure to be
+**shown before it is installed**. This section is that presentation, taken on 2026-10-20 by
+reading public repository metadata — gitlinks, tags and commit dates — through the GitHub
+read-only API, and by resolving `onnx` with `uv`'s resolver in a scratch directory outside this
+repository.
+
+**Nothing below is a pin, and nothing below is an approval.** `lock.baseline.json` is
+byte-identical; no source was cloned into the tree, no package was installed, no `cmaj generate`
+was run and no native tree was configured or built — U9's licence reading is still a person's and
+is still owed before the first export, and three of the spike's four measurements wait behind it.
+A row here becomes a pin when its vendoring pull request lands with its ADR — PR 5 for the native
+recipe, PR 12 for the converter, PR 13 for Airwindows — and not before. Every commit is given in
+full beside the place it was read from, so that a reader can re-derive it rather than trust this
+table.
+
+#### U2 — the export recipe's own pins
+
+| Component | What is approved | Full commit | Date | Read from |
+|---|---|---|---|---|
+| Cmajor | `024a208`, already `dsp.cmajor.commit` | `024a208515f15e43271d9b2ea85ee22a2233384b` | 2026-07-28 | `cmajor-lang/cmajor`, "Updated embedded files". **Verified identical to the baseline's existing row**, which is what §17's "the three DSP rows are byte-identical since 2026-09-02" should mean |
+| LLVM, sparse | `cmajor-lang/llvm` `c6380f9` | `c6380f9b8818b666a264399d330f31f55e806b74` | 2025-09-12 | the Cmajor parent's `3rdParty/llvm` gitlink, "Updated to LLVM 20". `release/linux/x64` exists at that commit — `bin`, `include`, `lib`, `share` and a `cmake_platforms` file — which is the selection ADR 0031 records |
+| choc | `a08bfd8` | `a08bfd84494921700703a8433b9d1a304edfafd2` | 2026-07-07 | the Cmajor parent's gitlink. Its **path is `include/choc`** while the submodule is *named* `3rdParty/choc`; a vendoring step that trusts the name puts it in the wrong directory |
+| CLAP SDK | 1.2.10, `195b42a`; `dsp.clap_sdk.commit` is `null` | `195b42a004144fab0b3cf95e9c067187d15365b7` | 2026-07-13 | `free-audio/clap`, where tag `1.2.10` points at exactly that commit, message "CLAP 1.2.10" |
+| clap-wrapper | v0.16.0 `1cca996`, already `dsp.clap_wrapper.commit` | `1cca996e96f29ab2be7ae9f8cfe532bbc92e1dd6` | 2026-08-08 | `free-audio/clap-wrapper`, tag `v0.16.0`, "Version 0.16.0 (#504)". **It has no submodules at all**, so it adds no nested source pin |
+| VST3 SDK | `v3.8.0_build_66`, `9fad9770`; **no baseline row exists** | `9fad9770f2ae8542ab1a548a68c1ad1ac690abe0` | 2025-10-20 | `steinbergmedia/vst3sdk`, tag `v3.8.0_build_66`, "VST SDK 3.8.0" |
+
+The VST3 SDK records **seven** gitlinks at that tag, not four. The four U2 names are the four
+clap-wrapper's own CPM declaration asks for (`GIT_SUBMODULES base public.sdk pluginterfaces
+cmake`), so "the required closure" is the wrapper's own list rather than a guess:
+
+| Gitlink | Commit the tag records | Upstream | Required |
+|---|---|---|---|
+| `base` | `3d2e82f8e6bff59c1d8b7a27491a29c2286b5206` | `steinbergmedia/vst3_base` | yes |
+| `public.sdk` | `a3911a4615dabbfdfd9d181ee26b05c70c289a95` | `steinbergmedia/vst3_public_sdk` | yes |
+| `pluginterfaces` | `31d6eeba6daaa3e2a8bfbe3e7a90ca0b7fbfbc1c` | `steinbergmedia/vst3_pluginterfaces` | yes |
+| `cmake` | `de6e54eeaaab35b7145f5c32c279b5e892146e04` | `steinbergmedia/vst3_cmake` | yes |
+| `doc` | `6d4737c9e70750056e731d88d49aa06eefc8a1a4` | `steinbergmedia/vst3_doc` | no |
+| `tutorials` | `33b73dfbb87f3fde3bce8c0a10cae934dc66ad34` | `steinbergmedia/vst3_tutorials` | no |
+| `vstgui4` | `76823bdbe286e4bdb9f79ab8986af5ce7202336c` | `steinbergmedia/vstgui` | no — the editor framework; a wrapped Cmajor export has no VSTGUI editor |
+
+All four required submodules carry the same 2025-10-20 "VST SDK 3.8.0" commit as their parent.
+
+#### U2 — Cmajor's own 32 gitlinks at the approved parent
+
+Twenty-eight are Boost, inherited through the approved Cmajor commit and not independently
+chosen. The twenty-eight names in the paragraph above were checked against the parent's tree and
+match exactly — no more, no fewer. Each `path commit`, all under `3rdParty/boost/`, from
+`boostorg/<name>`:
+
+```
+align                5ad7df63cd792fbdb801d600b93cad1a432f0151
+asio                 e65367991cb5fbdb8a7cf218ae38f69ca9a0a9f5
+assert               e4142c28337657832b253cd8e85cc1ede8f69831
+beast                98b8be489fa7a74753a724d8d0772d90bcbed0fc
+bind                 9fbfdcb3577e9427815d4f8cc25b3a25d5b9696b
+config               2bd6f0dfc52ff1fb1bd502361f4d0c750ce51d93
+core                 965508d9e187d589070c5cd1853cc035b51ea3cf
+date_time            85e637cb325208c2af9af791c3a1948b4888c6cd
+endian               900fe18a117daa9ce023529b006f122ad4116749
+intrusive            07ba0e376177409c396c109807c13b7181a98ebe
+io                   342e4c6d10d586058818daa84201a2d301357a53
+logic                145778490c2d332c1411df6a5274a4b53ec3e091
+move                 7c01072629d83a7b54c99de70ef535d699ebd200
+mp11                 d0f3481b210a3baf49ce16d7b595ba5f4bee8ce6
+mpl                  b440c45c2810acbddc917db057f2e5194da1a199
+numeric_conversion   50a1eae942effb0a9b90724323ef8f2a67e7984a
+optional             c60db27762ff9cc16529e069c3c15f2fa898f994
+predef               9aca7f5b609a731106a6d70e8dca9a4196dca968
+preprocessor         c4ea7e40d365ba28faecef8917d5c3f1e0121bf9
+regex                4cbcd3078e6ae10d05124379623a1bf03fcb9350
+smart_ptr            c4ae5e0c429f2792b45e51a19c2153bf975b38ae
+static_assert        ba72d3340f3dc6e773868107f35902292f84b07e
+static_string        ac84c4f40ec38f7a7237255738e3e5259aa4a1a8
+system               8f319f30c6988b9a54b761e6ddb97aed23f7996c
+throw_exception      7c8ec2114bc1f9ab2a8afbd629b96fbdd5901294
+type_traits          cc6fc3daa8e20c4a70b563d67ceb4c34d8c1c4d7
+utility              e0ecf927643b13c63dfd9a38741315ea8b845135
+winapi               39396bd78254053f3137510478e8f956bd2b83d4
+```
+
+The other four are where the tool's **internal** checkout has to be told apart from the export
+recipe's pins, which is the distinction the paragraph above insists on:
+
+| Gitlink | Commit | What it is, and whether it is an export pin |
+|---|---|---|
+| `include/choc` | `a08bfd84494921700703a8433b9d1a304edfafd2` | Tracktion's header library. The same commit as the export recipe's choc above — one thing, read twice |
+| `3rdParty/llvm` | `c6380f9b8818b666a264399d330f31f55e806b74` | the sub-pin above: upstream prebuilt binaries under a commit, which `-ffp-contract=off` does not reach inside |
+| `3rdParty/clap` | `df8f16c69ba1c1a15fb105f0c5a2e5b9ac6be742` | **CLAP 1.2.0** — `free-audio/clap` tag `1.2.0`, 2024-01-22. The tool's **internal** checkout. It is **not** the export pin and does not replace it: clap-wrapper v0.16.0 does not compile against it, which is the M4 spike's own measurement |
+| `3rdParty/clap-wrapper` | `fd24bbefdc377d9d29fea6cccfd0d28dd52ed7fc` | `cmajor-lang/clap-wrapper`, 2024-08-19, "Better clap wrapper mono support" — Cmajor's **fork**, internal to the tool. The export passes upstream v0.16.0 as `CLAP_WRAPPER_PATH` instead, and this row is the thing it must not silently get |
+
+#### U3 — Airwindows, and the two override commits a person has to approve
+
+| Component | What is approved | Full commit | Date | Read from |
+|---|---|---|---|---|
+| airwin2rack | `b6eef0a` | `b6eef0af60cd32641b09837096e41bbcdb030341` | 2026-09-19 | `baconpaul/airwin2rack`, "Update to Latest Airwin" |
+| `libs/airwindows` | `d22a25b` | `d22a25b7f7c0c8c05e9f3ae480e7f1da9769f49d` | 2026-09-19 | that parent's gitlink, `airwindows/airwindows`, "Ultralight2" |
+| `libs/sst-rackhelpers` | `f5f3332` | `f5f3332aa6cb68ee10977ed8f9442b375ee3fcd5` | 2024-01-12 | that parent's gitlink, `surge-synthesizer/sst-rackhelpers`. **The JUCE build never compiles it**: `add_subdirectory(libs/sst-rackhelpers)` sits inside `if (${BUILD_RACK_PLUGIN})`, so under `BUILD_JUCE_PLUGIN=ON` it is a checkout the build does not read |
+
+**The two overrides, named for approval.** Both are what `src-juce/CMakeLists.txt` fetches with
+CPM at configure time at the approved `b6eef0a`, which is the construction ADR 0010 §1 forbids:
+
+1. **JUCE `8.0.4` → `51d11a2be6d5c97ccf12b4e5e827006e19f0555a`**, dated **2024-11-18**, message
+   "JUCE version 8.0.4", read from `juce-framework/JUCE`'s tag `8.0.4`. It carries **no
+   submodules of its own**. The tag is what airwin2rack hard-codes (`set(AWCO_JUCETAG 8.0.4)`,
+   the non-JUCE-7 arm), and a tag is not a pin — this commit is. It is a **separate tree** from
+   the engine's JUCE 8.0.13 `37c894f83d379179b2070d437ccd0f1cd9af9576`, which stays exactly
+   where `tracktion_engine` puts it (CLAUDE.md #4).
+2. **`clap-juce-extensions` `GIT_TAG main` → `55525c9858d4b25687be7759a5e0f70eccef218e`**, dated
+   **2026-09-12**, message "Round, don't truncate, the seconds-to-samples conversion in the play
+   head (#187)". This is the **M4 spike's own resolved checkout**, recovered by date rather than
+   from a record: nothing on `m4.0-spike` or on `main` wrote the commit down, and no scratch tree
+   survives on this machine, so it is `main` as it stood when the spike configured on 2026-09-25
+   at 12:16 +0200 — the commit `main` pointed at from 2026-09-12 until 2026-10-06.
+   **For contrast and not for approval**, today's `main` is
+   `7adee3a1bd4684d4caa5601100e364abccff4b4d`, 2026-10-06, three commits later:
+   `07c5f2a82e29` (transport of `CLAP_EVENT_TRANSPORT` in split blocks), `e2631957694c` (latency
+   changes made during `activate()`) and `7adee3a1bd46` (`guiRequestResize` guarded by
+   `canUseGui`). All three change behaviour a host observes, which is why the plan's "never
+   today's `main`" is a rule and not a formality.
+
+**`clap-juce-extensions` brings two gitlinks of its own, and U3's list does not name them.**
+It is fetched `SUBMODULE_RECURSIVE ON`, and at **both** the spike commit and today's `main` it
+records `clap-libs/clap` at `29ffcc273be7c7c651f6c9953b99e69700e2387a` — **CLAP 1.2.7**, tag
+`1.2.7`, 2025-11-26 — and `clap-libs/clap-helpers` at
+`a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc`, 2025-11-28. So the M5 tree would hold **three
+different CLAP SDKs**: 1.2.0 inside Cmajor, the approved 1.2.10 for the export, and 1.2.7 under
+Airwindows' extension. The third reaches only airwin2rack's CLAP target, which the VST3 build
+does not need; whether it is vendored at all, or the CLAP format is simply not built, is a
+question for ADR 0033 and returns to U2 by name either way.
+
+#### Three configure-time fetches that are not submodules
+
+These are source the build downloads rather than records, so they are neither in a `.gitmodules`
+nor in any baseline row today. All three are inside the approved parents.
+
+| What | Where | What it does |
+|---|---|---|
+| **CPM.cmake 0.40.2** | `cmake/CPM.cmake` in airwin2rack, `cmake/external/CPM.cmake` in clap-wrapper | `file(DOWNLOAD)` from a GitHub release URL, `EXPECTED_HASH SHA256=c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d`. Hash-pinned, so it cannot change under the pin, but it is a network fetch at configure time and airwin2rack's is **unconditional** — `include("../cmake/CPM.cmake")` is the second line of `src-juce/CMakeLists.txt`. The hash is byte-identical in both files |
+| **clap-wrapper's own SDK defaults** | `cmake/base_sdks.cmake` | Under `CLAP_WRAPPER_DOWNLOAD_DEPENDENCIES` it CPM-fetches CLAP at **`GIT_TAG "1.2.6"`** and the VST3 SDK at `v3.8.0_build_66`. Left on, the wrapper silently builds against a **fourth** CLAP — 1.2.6, approved nowhere — which is exactly U2's "an implicit SDK download changes the binary under an unchanged pin". Off, it takes `CLAP_SDK_ROOT` and `VST3_SDK_ROOT`, asserting a signal file in each and failing hard when it is missing |
+| **nothing in Cmajor itself** | `CMakeLists.txt` at `024a208` | No `FetchContent`, no `CPMAddPackage`, no `file(DOWNLOAD)`, no `ExternalProject`. `cmaj` builds from its 32 gitlinks alone, which is what the 2026-10-13 JACK check already demonstrated |
+
+One naming trap for PR 5, measured here rather than in a build: Cmajor's generated CLAP project
+takes **`CLAP_INCLUDE_PATH`** (`modules/plugin/include/clap/CMakeLists.txt` fails fatally without
+it), while clap-wrapper takes **`CLAP_SDK_ROOT`**. Two variables, one SDK, and the plan's
+"`CLAP_SDK_ROOT` being ignored is a measured trap" is this difference seen from the other side.
+
+#### U4 — `onnx`, resolved and not installed
+
+**Proposed version: `onnx==1.23.2`**, for conversion only. Resolved on 2026-10-20 with `uv`
+0.10.2 against `requires-python = "==3.12.*"` — the interpreter `ai/` and
+`compilers/generative/` already pin, 3.12.12 — in a scratch directory outside this repository.
+`uv lock` resolves and writes a lockfile; it installs nothing, and nothing was installed.
+
+The closure is **four packages**, all of which have a `cp312` manylinux x86-64 wheel, so nothing
+in it compiles at install time:
+
+| Package | Version | sdist `sha256` | Linux x86-64 cp312 wheel `sha256` |
+|---|---|---|---|
+| `onnx` | 1.23.2 | `008cb0467b2bbee41448acc7da8b6f4e704624cb0d327a2d5adafc7ce19bc5b8` | `7abf381d278f31ac62487fddedc9dd42da842dce94d5d43536836ee3efdf4a2b` (`onnx-1.23.2-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`) |
+| `numpy` | 2.5.4 | `9a94cf751c9ad8ebaa835bcd3d40dacf8534ad086b88c38029b65123c7999d2a` | `fbde6962867ee75b48b0ee29b2b9372ec5d617799dbaf38e82dc0596f2f7738a` |
+| `protobuf` | 7.36.2 | `497d0463ff3316681da6c0b9e8d06cb465d61abce00b613ab42226175644d1bb` | `89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2` (`manylinux2014_x86_64`) |
+| `ml-dtypes` | 0.6.0 | `5e60251d32ced5598972e4d5e06a2f044341f9291402551a3f6f0ec44f9299b0` | `3b4a480aa8fd54a1805b8ac10f3f91763926a74f73c0c364c10f9231854f4170` |
+
+`typing-extensions` is the fifth name in the resolution and the one thing `onnx` needs that this
+repository **already holds at the same version**: 4.16.0 in all three existing `uv.lock`s.
+`onnx`'s declared requirements are `numpy>=1.23.2`, `protobuf>=6.31.1`,
+`typing_extensions>=4.7.1` and `ml_dtypes>=0.5.4`; `ml-dtypes` in turn requires `numpy>=2.0.0`.
+So **four packages are genuinely new to this repository**, and `protobuf` is new in a way worth
+saying out loud: it is the **Python** protobuf runtime, nothing to do with the engine's C++
+`protobuf` 21.12, and nothing in this repository has ever imported it — the Python model tier is
+`betterproto2`, which is a pure-Python implementation. Two runtimes with one name, in two
+languages, neither reaching the other.
+
+**No `onnxruntime` appears in any resolution.** Not in `onnx`'s closure, not in the shared-stack
+resolution, not under any extra. The one thing in the approved Cmajor tree that wants it is
+`tools/onnx/test.py`, upstream's own harness, which imports `onnxruntime` and `numpy` — and v1
+does not run it. The converter this milestone actually uses, `tools/onnx/onnxToCmajor.py`, imports
+**`onnx`, `onnx.numpy_helper`, `onnx.shape_inference` and the standard library, and nothing
+else**; its operator table is exactly the sixteen names ADR 0023 §3 counts (`Tanh`, `Reshape`,
+`MatMul`, `Gemm`, `Add`, `Unsqueeze`, `Squeeze`, `Conv`, `GRU`, `Pad`, `Transpose`, `Constant`,
+`LSTM`, `Slice`, `Gather`, `Concat`). `numpy` is therefore a real runtime requirement of the
+converter and not a resolver artefact — `numpy_helper` is how a tensor becomes weights. One extra
+to refuse by name: `onnx[reference]` pulls `Pillow>=12.2.0`, and the reference implementation is
+not what v1 converts with.
+
+**The divergence finding, which is the part that needs a decision.** A fourth `uv` environment
+resolved today does not re-resolve to what the other three hold, and `onnx` is not the reason:
+
+| Package | `ai/` | `compilers/generative/` | `schema/` | A fresh resolve today |
+|---|---|---|---|---|
+| `multidict` | 6.9.1 | 7.0.0 | 6.9.1 | **7.1.0** |
+| `pydantic` | 2.13.5 | 2.13.5 | 2.13.5 | **2.14.1** |
+| `pydantic-core` | 2.46.5 | 2.46.5 | 2.46.5 | **2.50.1** |
+
+Resolving the prospective DSP environment's own requirements — `betterproto2[pydantic,grpclib]`
+0.10.0 and `grpclib` 0.4.9, which is what agent default #1 says the driver reuses — **with
+`onnx` removed** gives the same three movements, so they are the cost of resolving a new
+environment on 2026-10-20 and not of approving `onnx`. Left alone they would add **nine** lines to
+`the_three_python_environments_agree_about_their_interpreter`'s goldened divergence list, taking
+it from two to eleven, and `lock.baseline.json`'s `pydantic` row would say 2.13.5 while a fourth
+lock said 2.14.1. Constraining the shared stack to what `ai/` already holds —
+`pydantic==2.13.5` and `multidict==6.9.1`, declared as `[tool.uv] constraint-dependencies` so
+that `onnx` stays the one new *dependency* — resolves cleanly, keeps `pydantic-core` at 2.46.5,
+and adds exactly **one** divergence line, which is the known 6.9.1/7.0.0 one seen from a third
+side. That is the shape the plan's "does not authorise a new one" asks for, and the choice
+between the two is the user's.
+
+**What `tests/baseline.rs` then obliges**, read against the file rather than described from
+memory. A new Python environment is not one change there but four:
+
+- `every_dependency_a_manifest_declares_is_declared_here_too` reads a **hard-coded list of four
+  `pyproject.toml` paths**. A new `compilers/dsp/` or `compilers/neural/` manifest must be added
+  to it, or the reverse scan is blind to exactly the environment it was written for; the scan
+  matches any line starting with `"`, so a `constraint-dependencies` entry is caught too and
+  needs its own baseline row.
+- `every_declared_pin_is_what_its_source_says` needs a `pin(…)` row per new leaf, reading the
+  version out of a real file — for `onnx`, the new environment's `uv.lock` by the two-line
+  `name` / `version` form `locked()` builds. Whether `numpy`, `protobuf` and `ml-dtypes` get rows
+  of their own or stay transitive is a second question for the user: `httpx2` was declared and
+  pinned **because U4 named it**, while `openai`'s five transitives are deliberately not rows.
+- `every_leaf_of_the_baseline_is_classified` asserts `NO_SOURCE_YET` is **exactly** the leaves
+  with no source, so first vendoring must *remove* `/dsp/cmajor/version`, `/dsp/cmajor/commit`,
+  `/dsp/clap_wrapper/version`, `/dsp/clap_wrapper/commit`, `/dsp/clap_sdk/version`,
+  `/dsp/clap_sdk/commit` and `/bundled_plugins/airwindows/commit` in the same change that gives
+  each a reader — not later, or the suite fails either way.
+- `the_three_python_environments_agree_about_their_interpreter` names its three lockfiles in an
+  array and asserts the divergence list by value. A fourth environment is a fourth entry there
+  and a rewritten expectation, which is where the table above lands.
 
 ### The ADRs, before the things they decide
 
