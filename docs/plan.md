@@ -15,13 +15,18 @@ Writing it early worked: this close had to *correct* what was there rather than 
 **M5's plan is proposed below** — eleven questions for the user, twenty-two agent defaults,
 six ADRs and a further spike limited to the interfaces M4 did not measure. The recommendation
 is one milestone with a working-export checkpoint. **The user answered all eleven on
-2026-10-20, each at the plan's own default**, which leaves three gates standing before PR 1
-rather than removing them: U2's resolved inventory to present, U3's two override commits to
-name before anything fetches them, and U4's closure to show before anything installs it. Two of
-the three are now answerable without another approval, and "What U2, U3 and U4 resolve to"
-below is that answer — candidates, not pins. U9's licence reading is the third, it is a
-person's, and it is still owed. "M5, sketched from here" remains M4's historical sketch,
-superseded by the M5 section.
+2026-10-20, each at the plan's own default as written**, which left three gates standing before
+PR 1 rather than removing them: U2's resolved inventory to present, U3's two override commits to
+name before anything fetches them, and U4's closure to show before anything installs it. Two
+were satisfied the same day and the user took **five decisions** on what the resolution found —
+both Airwindows overrides approved at their commits, airwin2rack's CLAP target not built so no
+third CLAP SDK enters the tree, `onnx` 1.23.2 approved with four baseline rows by name, the new
+environment constrained to what `ai/` holds, and CPM.cmake vendored rather than downloaded. They
+are recorded in "What U2, U3 and U4 resolve to, and the five decisions that followed", with what
+each closes. **U9 is the third gate, it is a person's, and it is still open**: the licence is
+unread, so the spike runs the Airwindows measurement only and the three Cmajor exports wait.
+Nothing is pinned by any of it — `lock.baseline.json` moves when M5 vendors. "M5, sketched from
+here" remains M4's historical sketch, superseded by the M5 section.
 
 ## Where we are
 
@@ -100,7 +105,7 @@ superseded by the M5 section.
 | M4.9 | §11 walked bullet by bullet with the enforcer named and **run** for each, the first bullet's new `compilers` half included; every ADR walked against the code and thirteen corrected; the ledger walked a **seventh** time; `CLAUDE.md` to M5 — and what M4 leaves unverified written where a reader will find it, completing "M4, mid-flight". No golden moved and no paid call was made | done | PR #92 |
 | — | **M4 complete.** A seeded Python DSL behind an `ast` allowlist, compiled in a subprocess `core` spawns per compile; two tools, `Generator.compiled_hash` and `lock.json`'s `toolchains` block checked at compile and never at open; the generator code view; fourteen tools offered to the model — with **no `song.proto` change but one field**, no new external dependency in any lock, and the first milestone every pull request of which a runner validated end to end. See "M4, closed" | done | — |
 | M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | done | PR #93 |
-| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. Candidates awaiting the user, not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | proposed | `m5.1-gates` |
+| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. **And the user's five decisions on it, taken 2026-10-20 and recorded with what each closes**: both overrides approved and ADR 0010 §1's `GIT_TAG main` breach closed; airwin2rack's CLAP target not built, so the third CLAP SDK a recursive resolution found is avoided rather than managed; `onnx` approved with all four packages given baseline rows by name and the `reference` extra refused; the environment constrained to `ai/`'s `pydantic` and `multidict`, which is three divergence lines instead of eleven and is decided apart from the drift `onnx` does not cause; and CPM.cmake vendored, because a hash makes a download safe and not reproducible. **U9 stays open and the spike therefore runs the Airwindows measurement only.** Approved candidates, still not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | proposed | `m5.1-gates` |
 
 ## M0.2 — `core/`
 
@@ -3727,6 +3732,17 @@ or correction **on the branch before that export**; PR 2 carries them onto `main
 then cites that answer before PR 5 exports, rather than making the licence reading wait for
 an ADR whose number puts it after the spike.
 
+**What the spike may run as of 2026-10-20, and what it may not.** U4 and U3 are satisfied:
+`onnx` 1.23.2 is approved with its closure, and the two Airwindows overrides are approved at
+their commits (decisions 1, 3 and 4 below). **U9 is not.** A person has not read Cmajor's
+licence, and the user's decision of 2026-10-20 is that the spike runs **the fourth measurement
+only** — Airwindows selection and initial state, which builds a JUCE VST3 and exports no
+Cmajor at all, so §12's claim about generated code is not in its path. The first three
+measurements each export something Cmajor generated and are **blocked, not deferred**:
+endpoints through the wrapper, two exports alive at once, and a graph becoming audio wait for
+the reading. Nobody should read the Airwindows go-ahead as the gate clearing, and a blocked
+measurement is reported as blocked with the Airwindows result kept.
+
 **The JACK check was taken while planning, and changes the answer.** On 2026-10-13 the
 approved Cmajor `024a208` checkout, with **all three JACK lines intact**, configured and built
 `cmaj` successfully. `libjack-jackd2-dev` is `1.9.21~dfsg-3ubuntu3`; pkg-config found JACK
@@ -3791,29 +3807,50 @@ the reverse scan about the new Python manifest and native gitlinks/overrides. A 
 whose build reports a commit copied from the baseline can agree with it while compiling
 something else; compare checkout facts instead. The known `multidict` 6.9.1/7.0.0 divergence
 does not authorise a new one when `onnx` gets its environment. **Every commit this table calls
-for is resolved in the section that follows**, read from its approved parent on 2026-10-20 —
-and so is the divergence that last sentence predicted, which turned out to be three packages
-rather than one.
+for is resolved in the section that follows**, read from its approved parent on 2026-10-20, with
+the user's five decisions of that day beside it — and so is the divergence that last sentence
+predicted, which turned out to be three packages rather than one and to be caused by the date
+rather than by `onnx`.
 
-### What U2, U3 and U4 resolve to — candidates, not pins
+### What U2, U3 and U4 resolve to, and the five decisions that followed
 
-**The user answered all eleven questions on 2026-10-20, each at this plan's own default.** Three
-of those answers are gates on PR 1 rather than decisions it can proceed past: U2 asks for the
-approved native set's resolved inventory to be **presented**, U3 for Airwindows' two override
-commits to be **named and approved before they are fetched**, and U4 for `onnx`'s closure to be
-**shown before it is installed**. This section is that presentation, taken on 2026-10-20 by
-reading public repository metadata — gitlinks, tags and commit dates — through the GitHub
-read-only API, and by resolving `onnx` with `uv`'s resolver in a scratch directory outside this
-repository.
+**The user answered all eleven questions on 2026-10-20, each at this plan's own default as
+written.** The defaults are in the table above and are not restated here. Three of those answers
+were gates on PR 1 rather than decisions it could proceed past: U2 asked for the approved native
+set's resolved inventory to be **presented**, U3 for Airwindows' two override commits to be
+**named and approved before they are fetched**, and U4 for `onnx`'s closure to be **shown before
+it is installed**. This section is that presentation, taken on 2026-10-20 by reading public
+repository metadata — gitlinks, tags and commit dates — through the GitHub read-only API, and by
+resolving `onnx` with `uv`'s resolver in a scratch directory outside this repository. **The user
+then took five decisions on what it found, the same day**, which the next table records and the
+subsections carry at the rows they govern.
 
-**Nothing below is a pin, and nothing below is an approval.** `lock.baseline.json` is
-byte-identical; no source was cloned into the tree, no package was installed, no `cmaj generate`
-was run and no native tree was configured or built — U9's licence reading is still a person's and
-is still owed before the first export, and three of the spike's four measurements wait behind it.
-A row here becomes a pin when its vendoring pull request lands with its ADR — PR 5 for the native
-recipe, PR 12 for the converter, PR 13 for Airwindows — and not before. Every commit is given in
-full beside the place it was read from, so that a reader can re-derive it rather than trust this
-table.
+**Nothing below is a pin, approved or not.** `lock.baseline.json` moves when M5 vendors and not
+before, and it is byte-identical today: no source was cloned into the tree, no package was
+installed, no `cmaj generate` was run and no native tree was configured or built. What the five
+decisions change is that the commits and packages they name are now **approved, pending first
+vendoring** — PR 5 for the native recipe, PR 12 for the converter, PR 13 for Airwindows — rather
+than candidates waiting for a person; anything they do not name stays a candidate, and U9 stays
+open. Every commit is given in full beside the place it was read from, so that a reader can
+re-derive it rather than trust this table.
+
+#### Decisions taken, 2026-10-20
+
+| # | Decision | Why, and what it closes |
+|---|---|---|
+| 1 | **Both Airwindows override commits are approved**: JUCE `8.0.4` at `51d11a2be6d5c97ccf12b4e5e827006e19f0555a` (2024-11-18) and `clap-juce-extensions` at `55525c9858d4b25687be7759a5e0f70eccef218e` (2026-09-12). Today's `main`, `7adee3a1bd4684d4caa5601100e364abccff4b4d`, is **explicitly not approved** | The JUCE commit is the tag airwin2rack `b6eef0a` hard-codes, resolved to the thing a pin can actually name. The extension commit is **provably what the M4 spike built against**, not a reconstruction: `main` sat there from 2026-09-12 to 2026-10-06, a 24-day window spanning the spike day, so any configure that day resolved to it. The three commits since are all host-observable. **This closes ADR 0010 §1's breach** — a `GIT_TAG main` becomes two commits — and the engine's own JUCE 8.0.13 `37c894f8…` stays exactly where `tracktion_engine` puts it |
+| 2 | **airwin2rack's CLAP target is not built.** `clap-juce-extensions`' recursive `clap-libs/clap` (CLAP 1.2.7, `29ffcc27…`) and `clap-libs/clap-helpers` (`a61bcdf0…`) therefore **do not enter the tree at all** | Airwindows ships as the JUCE VST3 it already is, which is all ADR 0023 §5 asks of it. The export recipe keeps **exactly one** CLAP SDK. The three-CLAP situation this walk found is **avoided rather than managed**: no version juggling, no second include tree, nothing to get wrong at link time. It was found only because the resolution followed `SUBMODULE_RECURSIVE ON` down a level — U3's own list names neither gitlink, so a resolution that stopped at the named set would have vendored a third SDK without a sentence anywhere |
+| 3 | **`onnx==1.23.2` and its closure are approved**, and **all four get `lock.baseline.json` rows by name**: `onnx` 1.23.2, `numpy` 2.5.4, Python `protobuf` 7.36.2, `ml-dtypes` 0.6.0. The **`reference` extra is refused by name** | The converter genuinely imports `onnx` and, through `numpy_helper`, `numpy`, so neither is a resolver artefact that a transitive row could honestly describe. `httpx2` set the precedent at M3: a package U4 names gets a row, because a transitive pin is one nobody is asked about. `onnx[reference]` pulls `Pillow>=12.2.0` for the reference implementation, which is not what v1 converts with. **No `onnxruntime` appears in any resolution, under any extra** — that stands as a measurement, not an intention |
+| 4 | **The new environment is constrained to what `ai/` already holds**: `[tool.uv] constraint-dependencies = ["pydantic==2.13.5", "multidict==6.9.1"]`, leaving `onnx` the only genuinely new dependency | The goldened divergence list goes to **3 lines instead of 11**, and the one addition is the known 6.9.1/7.0.0 divergence seen from a third side rather than a new one. The causation matters more than the count and is the finding: resolving the same requirement set **with `onnx` removed** produces the identical `pydantic`, `pydantic-core` and `multidict` movements, so the drift is the price of resolving *any* lock on 2026-10-20 and not of approving `onnx`. A decision that confused the two would either refuse a dependency for someone else's drift or accept the drift as if a dependency had required it |
+| 5 | **CPM.cmake 0.40.2 is vendored, not fetched** | Both airwin2rack and clap-wrapper `file(DOWNLOAD)` it with an identical SHA256, and airwin2rack's fetch is **unconditional**. A hash makes a download safe but **not reproducible**: a release asset can be replaced, and then the hash fails the build rather than reproducing it. That is the same argument that made this project pin Cmajor by commit instead of by release binary (M4's planning, U4), and it is what PR 5's "a fresh configure with the network unreachable succeeds" requires. A configure should need no network |
+
+**U9 is still open, and one measurement proceeds without it.** The user has **not** read Cmajor's
+licence, and chose on 2026-10-20 to run **the Airwindows measurement only** — the fourth row of
+the spike table, which builds a JUCE VST3 and exports no Cmajor, so §12's claim about generated
+code is not in its path. **Measurements 1, 2 and 3 wait**: endpoints through the VST3 wrapper,
+two exports alive at once and a graph becoming audio each export something Cmajor generated, and
+none of them may be started on the reading of this paragraph. ADR 0031 still records the human
+conclusion in §12 before PR 5 exports.
 
 #### U2 — the export recipe's own pins
 
@@ -3898,8 +3935,10 @@ recipe's pins, which is the distinction the paragraph above insists on:
 | `libs/airwindows` | `d22a25b` | `d22a25b7f7c0c8c05e9f3ae480e7f1da9769f49d` | 2026-09-19 | that parent's gitlink, `airwindows/airwindows`, "Ultralight2" |
 | `libs/sst-rackhelpers` | `f5f3332` | `f5f3332aa6cb68ee10977ed8f9442b375ee3fcd5` | 2024-01-12 | that parent's gitlink, `surge-synthesizer/sst-rackhelpers`. **The JUCE build never compiles it**: `add_subdirectory(libs/sst-rackhelpers)` sits inside `if (${BUILD_RACK_PLUGIN})`, so under `BUILD_JUCE_PLUGIN=ON` it is a checkout the build does not read |
 
-**The two overrides, named for approval.** Both are what `src-juce/CMakeLists.txt` fetches with
-CPM at configure time at the approved `b6eef0a`, which is the construction ADR 0010 §1 forbids:
+**The two overrides, approved on 2026-10-20 (decision 1), pending first vendoring in PR 13.**
+Both are what `src-juce/CMakeLists.txt` fetches with CPM at configure time at the approved
+`b6eef0a`, which is the construction ADR 0010 §1 forbids — and naming them as commits is what
+closes it:
 
 1. **JUCE `8.0.4` → `51d11a2be6d5c97ccf12b4e5e827006e19f0555a`**, dated **2024-11-18**, message
    "JUCE version 8.0.4", read from `juce-framework/JUCE`'s tag `8.0.4`. It carries **no
@@ -3913,7 +3952,7 @@ CPM at configure time at the approved `b6eef0a`, which is the construction ADR 0
    from a record: nothing on `m4.0-spike` or on `main` wrote the commit down, and no scratch tree
    survives on this machine, so it is `main` as it stood when the spike configured on 2026-09-25
    at 12:16 +0200 — the commit `main` pointed at from 2026-09-12 until 2026-10-06.
-   **For contrast and not for approval**, today's `main` is
+   **Explicitly not approved**, and shown only for contrast, today's `main` is
    `7adee3a1bd4684d4caa5601100e364abccff4b4d`, 2026-10-06, three commits later:
    `07c5f2a82e29` (transport of `CLAP_EVENT_TRANSPORT` in split blocks), `e2631957694c` (latency
    changes made during `activate()`) and `7adee3a1bd46` (`guiRequestResize` guarded by
@@ -3924,11 +3963,15 @@ CPM at configure time at the approved `b6eef0a`, which is the construction ADR 0
 It is fetched `SUBMODULE_RECURSIVE ON`, and at **both** the spike commit and today's `main` it
 records `clap-libs/clap` at `29ffcc273be7c7c651f6c9953b99e69700e2387a` — **CLAP 1.2.7**, tag
 `1.2.7`, 2025-11-26 — and `clap-libs/clap-helpers` at
-`a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc`, 2025-11-28. So the M5 tree would hold **three
-different CLAP SDKs**: 1.2.0 inside Cmajor, the approved 1.2.10 for the export, and 1.2.7 under
-Airwindows' extension. The third reaches only airwin2rack's CLAP target, which the VST3 build
-does not need; whether it is vendored at all, or the CLAP format is simply not built, is a
-question for ADR 0033 and returns to U2 by name either way.
+`a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc`, 2025-11-28. Left alone the M5 tree would hold
+**three different CLAP SDKs**: 1.2.0 inside Cmajor, the approved 1.2.10 for the export, and
+1.2.7 under Airwindows' extension. **Decision 2 avoids that rather than managing it**:
+airwin2rack's CLAP target is not built, so neither gitlink enters the tree and the export recipe
+keeps exactly one SDK. Airwindows is the JUCE VST3 ADR 0023 §5 asks for, and ADR 0033 records
+the non-build rather than a version reconciliation. Worth keeping for the next inventory:
+**this was found only by following `SUBMODULE_RECURSIVE ON` one level down**, since U3's own list
+names neither gitlink — a resolution that had stopped at the named set would have vendored a
+third CLAP SDK with nothing written down anywhere.
 
 #### Three configure-time fetches that are not submodules
 
@@ -3937,7 +3980,7 @@ nor in any baseline row today. All three are inside the approved parents.
 
 | What | Where | What it does |
 |---|---|---|
-| **CPM.cmake 0.40.2** | `cmake/CPM.cmake` in airwin2rack, `cmake/external/CPM.cmake` in clap-wrapper | `file(DOWNLOAD)` from a GitHub release URL, `EXPECTED_HASH SHA256=c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d`. Hash-pinned, so it cannot change under the pin, but it is a network fetch at configure time and airwin2rack's is **unconditional** — `include("../cmake/CPM.cmake")` is the second line of `src-juce/CMakeLists.txt`. The hash is byte-identical in both files |
+| **CPM.cmake 0.40.2** — **vendored, by decision 5** | `cmake/CPM.cmake` in airwin2rack, `cmake/external/CPM.cmake` in clap-wrapper | `file(DOWNLOAD)` from a GitHub release URL, `EXPECTED_HASH SHA256=c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d` — byte-identical in both files. A hash makes the download **safe but not reproducible**: a release asset can be replaced, and then the hash fails the build rather than reproducing it, which is why this project pins Cmajor by commit and not by release binary. airwin2rack's fetch is **unconditional** — `include("../cmake/CPM.cmake")` is the second line of `src-juce/CMakeLists.txt` — so no option switches it off and the file is vendored instead. PR 5's "a fresh configure with the network unreachable succeeds" is the test that holds this |
 | **clap-wrapper's own SDK defaults** | `cmake/base_sdks.cmake` | Under `CLAP_WRAPPER_DOWNLOAD_DEPENDENCIES` it CPM-fetches CLAP at **`GIT_TAG "1.2.6"`** and the VST3 SDK at `v3.8.0_build_66`. Left on, the wrapper silently builds against a **fourth** CLAP — 1.2.6, approved nowhere — which is exactly U2's "an implicit SDK download changes the binary under an unchanged pin". Off, it takes `CLAP_SDK_ROOT` and `VST3_SDK_ROOT`, asserting a signal file in each and failing hard when it is missing |
 | **nothing in Cmajor itself** | `CMakeLists.txt` at `024a208` | No `FetchContent`, no `CPMAddPackage`, no `file(DOWNLOAD)`, no `ExternalProject`. `cmaj` builds from its 32 gitlinks alone, which is what the 2026-10-13 JACK check already demonstrated |
 
@@ -3948,10 +3991,11 @@ it), while clap-wrapper takes **`CLAP_SDK_ROOT`**. Two variables, one SDK, and t
 
 #### U4 — `onnx`, resolved and not installed
 
-**Proposed version: `onnx==1.23.2`**, for conversion only. Resolved on 2026-10-20 with `uv`
-0.10.2 against `requires-python = "==3.12.*"` — the interpreter `ai/` and
-`compilers/generative/` already pin, 3.12.12 — in a scratch directory outside this repository.
-`uv lock` resolves and writes a lockfile; it installs nothing, and nothing was installed.
+**`onnx==1.23.2`, approved on 2026-10-20 (decision 3) and pending first install in PR 12**, for
+conversion only. Resolved on 2026-10-20 with `uv` 0.10.2 against
+`requires-python = "==3.12.*"` — the interpreter `ai/` and `compilers/generative/` already pin,
+3.12.12 — in a scratch directory outside this repository. `uv lock` resolves and writes a
+lockfile; it installs nothing, and nothing was installed.
 
 The closure is **four packages**, all of which have a `cp312` manylinux x86-64 wheel, so nothing
 in it compiles at install time:
@@ -3981,9 +4025,10 @@ does not run it. The converter this milestone actually uses, `tools/onnx/onnxToC
 else**; its operator table is exactly the sixteen names ADR 0023 §3 counts (`Tanh`, `Reshape`,
 `MatMul`, `Gemm`, `Add`, `Unsqueeze`, `Squeeze`, `Conv`, `GRU`, `Pad`, `Transpose`, `Constant`,
 `LSTM`, `Slice`, `Gather`, `Concat`). `numpy` is therefore a real runtime requirement of the
-converter and not a resolver artefact — `numpy_helper` is how a tensor becomes weights. One extra
-to refuse by name: `onnx[reference]` pulls `Pillow>=12.2.0`, and the reference implementation is
-not what v1 converts with.
+converter and not a resolver artefact — `numpy_helper` is how a tensor becomes weights, which is
+why decision 3 gives all four a baseline row by name rather than leaving three of them
+transitive. One extra is **refused by name** by that same decision: `onnx[reference]` pulls
+`Pillow>=12.2.0`, and the reference implementation is not what v1 converts with.
 
 **The divergence finding, which is the part that needs a decision.** A fourth `uv` environment
 resolved today does not re-resolve to what the other three hold, and `onnx` is not the reason:
@@ -4004,8 +4049,11 @@ lock said 2.14.1. Constraining the shared stack to what `ai/` already holds —
 `pydantic==2.13.5` and `multidict==6.9.1`, declared as `[tool.uv] constraint-dependencies` so
 that `onnx` stays the one new *dependency* — resolves cleanly, keeps `pydantic-core` at 2.46.5,
 and adds exactly **one** divergence line, which is the known 6.9.1/7.0.0 one seen from a third
-side. That is the shape the plan's "does not authorise a new one" asks for, and the choice
-between the two is the user's.
+side. That is the shape the plan's "does not authorise a new one" asks for, and **decision 4
+takes it**: the constraint block is declared when the environment is created, three lines
+instead of eleven, with `onnx` the only genuinely new dependency in it. The causation above is
+the reason the two halves are decided separately — a dependency is not refused for drift it did
+not cause, and drift is not accepted because a dependency happened to arrive beside it.
 
 **What `tests/baseline.rs` then obliges**, read against the file rather than described from
 memory. A new Python environment is not one change there but four:
@@ -4016,10 +4064,10 @@ memory. A new Python environment is not one change there but four:
   matches any line starting with `"`, so a `constraint-dependencies` entry is caught too and
   needs its own baseline row.
 - `every_declared_pin_is_what_its_source_says` needs a `pin(…)` row per new leaf, reading the
-  version out of a real file — for `onnx`, the new environment's `uv.lock` by the two-line
-  `name` / `version` form `locked()` builds. Whether `numpy`, `protobuf` and `ml-dtypes` get rows
-  of their own or stay transitive is a second question for the user: `httpx2` was declared and
-  pinned **because U4 named it**, while `openai`'s five transitives are deliberately not rows.
+  version out of a real file — for all four of `onnx`, `numpy`, `protobuf` and `ml-dtypes`, the
+  new environment's `uv.lock` by the two-line `name` / `version` form `locked()` builds, because
+  decision 3 gives each a row by name on `httpx2`'s precedent. The two constrained packages need
+  rows of the same kind: a `constraint-dependencies` line is a line this guard reads.
 - `every_leaf_of_the_baseline_is_classified` asserts `NO_SOURCE_YET` is **exactly** the leaves
   with no source, so first vendoring must *remove* `/dsp/cmajor/version`, `/dsp/cmajor/commit`,
   `/dsp/clap_wrapper/version`, `/dsp/clap_wrapper/commit`, `/dsp/clap_sdk/version`,
@@ -4044,6 +4092,13 @@ as the repository convention requires. No ADR is written or accepted by this pla
 | 5 | **0032 — A bounded ONNX conversion shares the DSP export** | U4's exact `onnx` dependency set; supported domains/opsets/operators/attributes/shapes, named refusals, `Gemm` handling, the explicit audio adapter, recurrent scope if proved, conversion records and synthetic semantic/PCM tests. Lands with PR 12. Builds on **already resolved** ADR 0003 §7 and ADR 0023 §3; no runtime or directory decision to reopen |
 | 6 | **0033 — An Airwindows selection fixes what its controls mean** | airwin2rack and all overrides at full commits, the supported algorithm/control envelope, deterministic initialisation, `Replace` semantics/order, guarded selection changes, manifest and effect golden. Lands with PR 13 after re-pin recovery, amending ADR 0010 §5, ADR 0023 §5 and §8's DSP notes |
 
+**Where the five decisions of 2026-10-20 land.** ADR 0031 carries CPM.cmake's vendoring and the
+no-network configure it makes testable; ADR 0032 carries `onnx` 1.23.2, its four named rows, the
+refused `reference` extra and the constraint block; ADR 0033 carries both override commits, the
+closure of ADR 0010 §1's `GIT_TAG main`, and the decision that airwin2rack's CLAP target is not
+built — which is why no CLAP version reconciliation appears in it. None of the three may restate
+a decision differently from the table above; a changed answer is written back there first.
+
 Each accepted ADR gets its §15 row, every affected specs section, dependent ADR amendment and
 index entry in the same change. The table is not permission to amend a decision by leaving a
 contradictory later paragraph. A further split, if U1 takes it, additionally amends ADR 0003,
@@ -4059,7 +4114,7 @@ the next documentation change.
 | # | Branch | Adds |
 |---|---|---|
 | 0 | `m5.0-plan` | This plan, its user questions and defaults, and the dispositions of the inherited ledger. Documentation only; no pin or golden moves |
-| 1 | `m5.1-spike` (**never merged**) | The four bounded measurements above, with U9/U4/U3 gates on the measurements that need them. Answers the interfaces the ADRs cannot honestly guess; reports any unmeasured item and its cause |
+| 1 | `m5.1-spike` (**never merged**) | The four bounded measurements above, with U9/U4/U3 gates on the measurements that need them. **As of 2026-10-20 the gate state is: U4 and U3 satisfied, U9 open, so this branch runs the Airwindows measurement only** — the other three export Cmajor-generated code and are blocked until a person reads the licence. Answers the interfaces the ADRs cannot honestly guess; reports any unmeasured item and its cause |
 | 2 | `m5.2-adrs` | User answers (including U9 and §12 if the spike exported), spike findings, ADRs 0028–0030 and their specs/index/dependent-ADR amendments. No code and no pre-emptive baseline edits. Resolve tool target selectors, record schemas and failure kinds here, before generated wire types exist |
 | 3 | `m5.3-export-ref` | **The schema change, alone**: optional export fields on SourceRef and ModelRef, generated Rust/TS/Python and the dependent descriptor, schema fixture and all round trips. Old projects and historical refs replay unchanged; `buf breaking` and the explicit absence tests both run. No default-key mass rewrite |
 | 4 | `m5.4-export-proto` | `Export` whole, source/compile/read-status interfaces, the re-pin recovery request/response contract, and `render.proto`'s resolved artefact description, in all generated consumers. Inspect/provenance messages describe binaries, not song state. `buf breaking` against the actual base; required tonic methods may answer `UNIMPLEMENTED`, but unimplemented tools do not join `IMPLEMENTED` or `OFFERED` |
