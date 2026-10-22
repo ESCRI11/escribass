@@ -84,6 +84,11 @@ and writes the fork's clip. The thirteen withheld are unchanged, with their reas
 Consequences' sentence that these twelve were not claimed to be the right twelve for M4 is
 answered rather than deleted.
 
+**Noted 2026-10-22 (ADR 0029 §8):** `define_instrument_source`, `compile_instrument` and the read
+`get_device_source` join `OFFERED` in M5 PR 11, once proposal staging and cancellation are
+proved (U8), and not before. Until then they are implemented and withheld, as `compile_generator`
+was between M4 PRs 5 and 6. `add_asset` and `set_param` stay withheld.
+
 ### 2. No `list_params`; a `ParamID` reaches the model only as the document carries it
 
 With `set_param` and `get_song` withheld, the one offered tool that takes a `ParamRef` is
@@ -187,6 +192,13 @@ nothing — this decision's own wall, met from the inside. The two tests are
 `a_compile_diagnostic_is_fed_back_whole_and_three_of_them_end_the_turn` and
 `a_compile_the_model_cannot_fix_ends_the_turn_at_the_host_and_is_never_fed_back`, which drive
 the **same** four calls and differ only in what the sandbox does.
+
+**Extended 2026-10-22 (ADR 0029 §4)** to a native compile, split where this section splits
+everything. `source_error` carries its stage and the source's line and column, and is the first
+kind, fed back whole and counted, as `generator_error` is. So are `graph_unsupported`,
+`param_incompatible`, `export_pending`, `export_stale` and `state_unsupported`. A compiler that is
+missing, dies, times out, answers nothing usable, or ran a recipe that was not approved ends the
+turn at the host and is never fed back: no source change can reach any of them.
 
 ### 4. Tested by a scripted provider; the project goldened end to end; no key in CI, ever
 
@@ -321,6 +333,10 @@ needs a plugin pin to have moved", and M3 moves no plugin pin. `lock_mismatch` i
 person can, and the answer is ADR 0010 §3's — edit the text — until the trigger fires. The row
 stands, and this ADR says so rather than letting a second milestone's silence read as a second
 promise (plan, trap 5).
+
+**Placed 2026-10-22 (ADR 0030 §5):** it is M5 PR 9's, and it is not a tool. It is one `core`
+operation, reachable before a project opens, called by the window and by `escribass-repin`, and
+never offered to the model — which has nothing to review a lock diff against.
 
 ## Alternatives considered
 

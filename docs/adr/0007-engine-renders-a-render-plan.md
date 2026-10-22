@@ -98,6 +98,12 @@ own name, and that is a `song.proto` question with an ADR of its own. Refused *l
 drops a region whose sample it cannot find and reports nothing (ADR 0009 §4), so the
 alternative is a track of silence that exits zero.
 
+**Extended 2026-10-22 (ADR 0029 §6):** a compiled device crosses as the **path** of its
+reconstructed bundle (ADR 0028 §3), its VST3 class id, and concrete `ParamID`s with normalised
+values — lowered by `core` from the source's endpoint identifiers through a verified artefact
+index that `compile` takes as an argument, as it takes the asset index. No source, export record,
+`lock.json` or model graph crosses. `compile` stays pure: the verification is done outside it.
+
 ### 3. Time crosses as ticks plus tempo events; the engine converts
 
 `Note.start_tick`, clip positions, fade lengths and automation ticks cross as the integers the
@@ -239,6 +245,13 @@ M2 gave no reason to move it and did not; M3 does not touch the engine. The para
 a description of what the code does, and the question is retired rather than re-dated: moving
 it would mean giving compile file access its signature was defined not to have, and that
 argument is not a milestone's to settle but an ADR's, whenever someone wants it settled.
+
+**Amended 2026-10-22 (ADR 0028 §4; ADR 0029 §4):** for a Cmajor or neural device, M5 PR 8
+replaces `render_unsupported` with the reasons the device cannot play — `export_pending` with no
+export, `export_stale` with one built from another source — and the operator's `export_missing`,
+`export_corrupt` and `target_unsupported`. That is the pull request that retires the five stale
+"M4" sites above and moves the four goldens that hold the message, named. A Faust device stays
+`render_unsupported`, because Faust compiles nothing in v1.
 
 ## Alternatives considered
 

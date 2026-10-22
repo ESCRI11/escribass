@@ -115,6 +115,12 @@ The `engine` block holds submodule commits rather than a version string because 
 ADR 0008 §5 has the engine report about itself, and a comparison between two things is easier
 when both are the same thing.
 
+**Extended 2026-10-22 (ADR 0030 §1, §2):** "no entry for `SourceRef` or `ModelRef`" stays true of
+the *source* and the *model*, whose hashes are their pins. What M5 adds is keyed by something
+else: `artefacts` by an **export record's** hash, carrying the record's target and recipe, and
+`models` by a **conversion record's**. Neither holds a path or a parameter list, for this
+section's own reasons.
+
 ### 2. A pin is written on first reference, never removed, and by no tool
 
 A pin appears the first time a song references the plugin it pins. The mechanism is not a new
@@ -140,6 +146,15 @@ the side effect decision 3 exists to prevent. Monotone is one sentence and has n
 The cost of monotone is a stale pin: a project that once used Surge and no longer does still
 carries the entry. That is why **the load check reads only the pins the song currently
 references** (decision 3). An inert pin is a record of history, not a hostage.
+
+**Superseded in part 2026-10-22 (ADR 0030 §5): re-pinning gains one operation.** "By no tool"
+was right while nothing re-pinned a bundled plugin under existing projects. M5 re-pins Airwindows,
+and the plugin manifest has not been rebuilt since 2026-09-09. `core::repin` reads `lock.json`
+before any session exists and previews the old and new pins as an RFC 6902 patch over exactly
+those fields. Applied, it writes them atomically against the hash of the file as read; the CLI
+and the window both call it, and the model never does. **Writing a pin on first reference is
+unchanged**, and extends to the two new blocks on every path that applies a reference (ADR
+0030 §3).
 
 ### 3. A referenced plugin this build cannot match refuses to open, with `lock_mismatch`
 
@@ -195,6 +210,12 @@ one project at a time.
 
 A plugin entry is still never rewritten (decision 2), so this is one block behaving differently
 for a stated reason, not a general softening.
+
+**Amended 2026-10-22 (ADR 0030 §5):** "the operator edits `lock.json`" is no longer the only way.
+The refusal is unchanged — there is still no "open anyway" — and what a person can do on meeting
+it is the recovery view the window shows **before** normal open, or `escribass-repin`. Each shows
+what changes and applies only on request. The "M2, where a UI can show what changes" this section
+waited for arrived three milestones late, and arrived at the milestone that first needed it.
 
 ### 4. M1 produces a build manifest; `plugin_unknown` and `param_unknown` become validator rules
 

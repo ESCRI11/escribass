@@ -156,6 +156,12 @@ one call that blocks for its length, bounded by the timeout; a progress stream f
 takes tens of milliseconds to a few seconds is the `Jobs` service ADR 0020 §3 refused. If a
 generator ever takes long enough to want progress, the limit is what says so first.
 
+**The M5 tools have their shapes, 2026-10-22 (ADR 0029 §3).** `define_instrument_source` installs
+a source and points a device at it in one entry, targeting an existing device, an instrument
+track or a new effect slot. `compile_instrument` compiles what a saved device holds, and a dry
+run holds the candidate Apply commits. `get_device_source` reads. "Wait for M5" in the proto
+comment is answered by M5 PR 4.
+
 ### 3. `OFFERED` gains two — fourteen of twenty-seven — and a diagnostic is a refusal fed back and counted
 
 `define_generator` and `compile_generator` join `OFFERED` in `IMPLEMENTED`'s order (ADR 0022

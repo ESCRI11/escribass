@@ -93,6 +93,14 @@ what lets `param_unknown` resolve for a compiled device without instantiating an
 question 17; `core/src/validate.rs`'s `ponytail:` at the parameter check). One hash naming one
 thing is the shape; which thing is M5's.
 
+**Answered 2026-10-22 by ADR 0028, on what the M5 spike measured.** It names the **export
+record**. A compiled device's VST3 `ParamID` is its endpoint handle, which an insert, a reorder or
+a removal moves, and the binary's own parameter names are labels rather than identifiers — so the
+interface that lets `param_unknown` resolve has to live in something the binary is not. And the
+field is **`optional`**, which this decision's own reasoning did not foresee: the "no such project
+exists" argument decision 1 made for `Generator` is not available for a `SourceRef`, which four
+committed logs already add (ADR 0028 §1).
+
 ### 3. Nothing else changes in `song.proto`
 
 `FormRule` gains no message (ADR 0023 §6; ADR 0002 §7 amended). `Generator.params` stays

@@ -247,6 +247,15 @@ The re-pin tool's ledger row is **retriggered to that pull request** (question 1
 is the first that moves a plugin pin since M1; ADR 0022 §5 said the same for M3 and this ADR
 says it for M4 rather than letting a fourth milestone's silence read as a promise.
 
+**Corrected 2026-10-22, on the M5 spike's measurement of 2026-10-20 — and the correction is of a
+fact, not of the decision.** `Replace` is **not** an effect selector. It is the first of
+Galactic's five controls, read off `--scan` at the plugin's boot effect and taken for a selector,
+and **there is no selector at all**: no parameter, no program, only a name inside the opaque
+state chunk. That airwin2rack is M5's, as one JUCE plugin with no clap-wrapper, stands. How a
+selection is represented, which of the 28 effects that never call `rand()` are supported
+(decision 7 of 2026-10-22) and how the third CLAP SDK its build carries is named (decision 8) are
+ADR 0033's, with PR 13.
+
 ### 6. The ledger rows due at this planning are decided, and each says how
 
 The fifth walk of the deferred ledger (2026-09-24) sent four rows here, and question 7, 15 and
@@ -319,6 +328,12 @@ The fifth walk of the deferred ledger (2026-09-24) sent four rows here, and ques
   commit" — so the sentence ADR 0009 corrected survived two days in the ADR beside it. The
   decision this bullet records (U2, public) is untouched; what was wrong is a claim about this
   repository's own evidence, for the third time in one ADR family.
+
+**U9 answered 2026-10-22, before the first export, as this section required.** The user read
+Cmajor's licence: the generated C++ is the user's, and the helpers an export compiles beside it
+are GPLv3 or commercial, except `cmaj_CLAPPlugin.h`, which is ISC. So a distributed exported
+plugin is a **GPLv3 combined work**, compatible with this application's AGPL-3.0. §12 is corrected
+to say so, and ADR 0031 cites the reading when PR 5 exports.
 
 ## Alternatives considered
 

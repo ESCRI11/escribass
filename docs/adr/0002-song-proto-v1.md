@@ -117,6 +117,12 @@ and this list was not revised with it, so one ADR listed a field its own later s
 deleted.) Not used where the zero value is the meaningful
 default — `Note.microtonal_cents` absent and `0.0` are the same statement.
 
+**Extended 2026-10-22 (ADR 0028 §1):** `SourceRef.export_hash` and `ModelRef.export_hash` join the
+list, and for a reason this section did not have: **replay**. Four committed determinism logs add
+a `SourceRef`, and a plain field emitted at its default would make each replay one key short of
+its own song. Absent means "never exported" and a present empty value is refused, so absent and
+present are the only two states, and the rule above still holds.
+
 ### 6. Two files, two packages
 
 `schema/song.proto` is `escribass.song.v1`. `schema/history.proto` is
@@ -246,3 +252,11 @@ established for the id source, and for the same §11 reason.
 a producer and a consumer in the same milestone; `SourceRef.export_hash` waits for the export
 pipeline that would produce one, which is M5's under ADR 0023 §1 — §7's own rule applied to the
 half of this sentence whose consumer is a milestone away.
+
+**And its producer arrived 2026-10-22 (ADR 0028).** `SourceRef.export_hash` and
+`ModelRef.export_hash` are added in M5 PR 3 — **`optional`**, unlike `compiled_hash`, because
+four committed determinism logs already add a `SourceRef`, and a plain string would make each
+replay one key short of its own song. The field names an export record rather than the binary,
+which is the question ADR 0025 §2 left. §5's list of `optional` fields gains the two, and its
+rule holds in the form ADR 0028 §1 gives it: absent and present are the only meaningful states,
+because a present empty value is refused.
