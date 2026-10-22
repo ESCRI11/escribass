@@ -4026,6 +4026,19 @@ leaving it unedited means a third CLAP SDK in the tree, named in ADR 0033. The d
 version needs either `CMAJ_VERSION`'s treatment — an explicit pin instead of a derivation — or a
 manifest that does not compare it. And U9 is still open, with three measurements waiting behind it.
 
+#### Decisions taken, 2026-10-22
+
+Written on this branch **before** the first export, as "A further spike" requires, and carried onto
+`main` by PR 2. The first three are the user's; the fourth is an agent default, recorded so that it
+is not mistaken for one of them.
+
+| # | Decision | Why, and what it closes |
+|---|---|---|
+| 6 | **U9: a distributed exported Cmajor plugin is a GPLv3 combined work.** The generated C++ is the user's; the helpers an export compiles beside it are GPLv3 or commercial, except `cmaj_CLAPPlugin.h`, which is ISC. Compatible with the application's AGPL-3.0. §12 is **corrected** on this branch, with a §15 row | The user read Cmajor's `LICENSE.md` at `024a208` and the license header of each file a `--target=clap` export compiles, traced through `tools/command/Source/cmaj_command_GeneratePlugin.h`: it unzips the `clap` and `common` plugin helpers and the whole `include/` tree; `cmaj_CLAPPlugin.h` includes `cmaj_PluginHelpers.h`, `cmaj_PatchHelpers.h`, `cmaj_Patch.h` and `cmaj_PatchWebView.h`; the entry point is `createGeneratedCppPluginEntryPoint`, over `cmaj_GeneratedCppEngine.h`. Of the 30 headers under `include/cmajor/`, one is ISC (`cmaj_EmbeddedWebAssets.h`) and the other 29 are GPLv3. The rest of an export is permissive — CLAP SDK `195b42a` MIT, clap-wrapper `1cca996` MIT, VST3 SDK `9fad9770` and `base` **MIT** (Steinberg relicensed at 3.8.0), choc `a08bfd8` ISC. `EULA.md` governs Cmajor's binary tools, and this project builds `cmaj` from source. **This clears the gate on measurements 1–3**, and they run on this branch from here |
+| 7 | **Airwindows' supported set is the 28 effects that never call `rand()`**, with `Channel5` the first supported selection; the other 501 are refused by name | No change to anyone's source. The reseed alternative opens all 529 by reseeding the process-global libc PRNG inside the engine, which the engine's own `fobject.cpp` already reseeds at startup |
+| 8 | **CLAP 1.2.7 is named in ADR 0033 rather than edited out of airwin2rack.** `clap-juce-extensions` and its two CLAP gitlinks (`29ffcc27…`, `a61bcdf0…`) enter the **Airwindows** build tree; the CLAP target is still not built | The VST3 cannot configure or link without them (above). Decision 2's purpose — one CLAP SDK in the **export recipe** — still holds, because that recipe is a separate tree that sees only 1.2.10. Decision 2's wording is corrected to say what is true, rather than a bundled plugin carrying a second source edit across every re-pin |
+| — | *Agent default, not a user decision:* **Airwindows' version is fixed with `SOURCE_DATE_EPOCH`** set to `b6eef0a`'s commit date, 2026-09-19, so it reports `1.2026.263` on every rebuild of that pin | CMake's `string(TIMESTAMP)` honours the variable — checked on 3.28.3, which gave `2026.262` for that date, with airwin2rack's `+1` making it 263. That is `CMAJ_VERSION`'s treatment, a pin rather than a derivation, with no source edit and a manifest that keeps comparing versions |
+
 ### The pins that really move
 
 Read against `lock.baseline.json` and `tests/baseline.rs`, not reconstructed from an approval
