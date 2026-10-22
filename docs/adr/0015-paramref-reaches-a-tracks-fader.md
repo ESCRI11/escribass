@@ -62,6 +62,14 @@ first `ParamRef` that names one. The trigger is M5's export record deciding what
 for a Cmajor device *is* — the ordinal, or a name the record maps to one — before `add_automation`
 can target it; written here so M5's plan inherits the hazard rather than rediscovers it.
 
+**Hazard answered 2026-10-22 (ADR 0029 §5).** A compiled device's parameter is its **source
+endpoint identifier**, mapped by the export record to the VST3 `ParamID` that build happens to
+have. The M5 spike measured the hazard this section recorded: one unchanged song with a lane on
+`ParamID` 2 drove Drive after an insert, Tilt after a reorder, and twice the level after a range
+edit, through the real engine, with no refusal. A new export whose referenced identifiers are
+missing, or whose ranges changed, is refused, `param_incompatible`, until the song is repaired.
+Bundled plugins keep their numeric ids.
+
 ### 2. A mix lane's values are in the model's own units, and `PlanTrack` gains `mix_lanes`
 
 ADR 0010 §4, extended, settled that a plan parameter's value is the plugin's **normalised**

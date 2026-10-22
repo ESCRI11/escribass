@@ -41,6 +41,10 @@ compilers do.
   reserves. "Checked at load" was true of the engine and the plugins and is not true of a
   toolchain, and §11 now says so.
 
+**Noted 2026-10-22 (ADR 0030 §6):** the blocks that complete it — `artefacts` and `models` — are
+decided, and this section stays open until code writes them: M5 PR 8 writes the first `artefacts`
+entry and PR 12 the first `models` entry, and M5's close records the completion then.
+
 ### 4. M1 carries the remaining bundled instruments
 
 §16 said "one bundled synth". §8 names Surge XT, sfizz, Dexed and Airwindows as what makes a

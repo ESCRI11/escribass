@@ -69,6 +69,14 @@ crash — is an operator error, and `render_export` surfaces it as one. A `Rende
 a violation would put it back on the side of the line ADR 0006 §2 keeps for things a model can
 retry into, and no retry fixes a segfault.
 
+**Amended 2026-10-22 (ADR 0029 §4): a render has a wall clock.** "Failure is an exit code"
+assumed the engine exits. The M5 spike's first render of a wrapped Cmajor plugin deadlocked
+JUCE's headless VST3 host in `prepareToPlay`, and `core` waited until a person killed the engine.
+From M5 PR 8 a render is bounded by one minute plus ten times the plan's own length, held as a
+field; past it the engine's process group is killed and the call answers `engine_timeout`, an
+operator error, with the tail of what the engine said. The verdict is still the child's, and a
+child that never gives one is now a verdict too.
+
 ### 2. One render, one process. No engine is kept alive between renders
 
 M1 spawns the engine, hands it a plan, takes a WAV, and lets it die. Nothing is pooled, warmed

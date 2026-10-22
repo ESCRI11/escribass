@@ -184,6 +184,13 @@ session holds the one live preview; a seek, loop or stop with none is refused, `
 the caller to fix by playing first, and a preview that ends instead of answering is reported as an
 operator error and forgotten, so the next play starts another.
 
+**Extended 2026-10-22 (ADR 0029 §7):** a replacement plan that changes an **export's identity** —
+a device compiled again, or a branch switched to another export — is played by a **fresh preview
+process**, started at the transport tick asked for, rather than sent to the one playing. A loaded
+`.so` is never replaced under a host, and a cache path names one export for ever (ADR 0028 §3).
+An equal plan still builds nothing. Unmeasured: preview has never reached a device on any machine
+this repository has run on, so this rests on the in-process measurement of ADR 0029 §6.
+
 ### 3. Two lifetimes in one binary, one transport: a live process for preview, a fresh one per export
 
 The engine is launched in one of two modes and the caller dials the socket it serves on. In

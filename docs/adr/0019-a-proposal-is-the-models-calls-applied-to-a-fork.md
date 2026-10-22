@@ -324,3 +324,10 @@ carries (ADR 0021 §3), which is where a reader also finds the prompt they answe
   unchanged, because every gesture the window makes still follows its decisions 1–3.
 - "What M3 will not claim" gains a line: not per-call approval, and not that a person sees the
   model's steps in the log — they see the change, and the conversation holds the steps.
+- **Extended 2026-10-22 (ADR 0029 §8; ADR 0030 §3): a compile inside a proposal stages its
+  assets.** The fork shares the real project's root, which is why `add_asset` is withheld. A
+  `compile_instrument` made inside a proposal therefore builds into scratch the session owns, and
+  nothing reaches `assets/` or `lock.json` while it is a proposal. Apply promotes the assets the
+  final patch reaches, before the entry, and the common write pins them. Reject, an Edit that
+  drops the reference, a failure and a cancelled turn remove the scratch. Reachable from M5 PR 11,
+  when the tool is offered.

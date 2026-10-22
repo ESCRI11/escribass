@@ -170,6 +170,13 @@ are M5's schema ADR's to write against the export record it designs (ADR 0025 §
 sketched here: a shape reserved against no producer is ADR 0002 §7's mistake in a lock file.
 ADR 0003 §3's "completed at M4" reads "completed at M5" (ADR 0023 §1).
 
+**Filled 2026-10-22 (ADR 0030 §1, §2), against the record this section waited for (ADR 0028).**
+`artefacts[export_hash]` is the export record's `target` and `recipe`, copied once.
+`models[conversion_hash]` is the conversion record's recipe, keyed by the conversion and not the
+model. Both are written on first retained reference by the common write, on every path that
+applies one; never removed; absent until used. Neither is compared at open: a recipe is compared
+at compile, and integrity before a load.
+
 ### 4. `lock.baseline.json` gains nothing
 
 The DSL is not an external dependency: it is this repository's own package, versioned by a

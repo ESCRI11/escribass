@@ -31,11 +31,22 @@ fourth bundled plugin, built from `baconpaul/airwin2rack` as a JUCE plugin needi
 where ADR 0003 §3's "`lock.json` completed" now falls; and `SourceRef.export_hash`, which finally
 has a producer. Interop, polish and the installer are **M6**.
 
-**M5's plan is proposed, 2026-10-13**: `docs/plan.md`'s M5 section has eleven user questions,
-twenty-two agent defaults, six proposed ADRs and the PR sequence. It recommends one milestone
-with a working-export checkpoint. The new user questions are not answered by the plan; the
-2026-09-25 and 2026-10-02 decisions below stand. "M5, sketched from here" is M4's historical
-sketch, superseded by that section. Read the plan before starting an implementation step.
+**M5 is under way, with its decisions written before its code.** The plan of 2026-10-13
+(`docs/plan.md`'s M5 section) had all eleven user questions answered on 2026-10-20, each at its
+default. Nine decisions followed on what was found, recorded in the plan's two "Decisions taken"
+tables:
+
+- **the pins** (2026-10-20, PR #94);
+- **U9's licence reading** — a distributed export is a GPLv3 combined work, and §12 is corrected;
+- **Airwindows' supported set** — the 28 effects that never call `rand()`;
+- **two edits to each export's own copy of Cmajor's CLAP helper.**
+
+PR 1, the spike, ran all four measurements on `m5.1-spike`, which is never merged. **PR 2
+accepted ADRs 0028–0030 on 2026-10-22**: the export record and its `optional` reference, native
+compilation as a bounded child with parameters keyed by source endpoint identifier, and export
+provenance pinned on reference with re-pin before open. The next step is **PR 3, the schema change
+alone**. "M5, sketched from here" is M4's historical sketch, superseded. Read the plan before
+starting an implementation step.
 
 **What M5's planning owes.** ADR 0003 §7's `[OPEN]` item is **answered and its detail is paid**:
 the neural runtime is a separate process that never links into `engine`, decided by the user on
@@ -45,23 +56,36 @@ ships; what else would be pinned is the `onnx` PyPI package the converter import
 to a person before M5 installs it** (CLAUDE.md #4); §7.3's CLAP wrapper is the DSP pipeline's,
 since a converted model *is* a Cmajor patch; and the directory is `compilers/neural/`, under §13's
 existing `/compilers` line, so it is **not** a top-level directory and needs no ADR of its own.
-Do not reopen any of that. What is genuinely owed is M5's own: its ADRs — the export record and
-`SourceRef.export_hash` (schema before the `.proto`, CLAUDE.md #5), the export pipeline as a
-subprocess with a timeout and diagnostics, the engine loading an artefact from a path, the
-`artefacts` and `models` blocks extending ADR 0027 §3, Airwindows re-pinned and its
-effect-selecting `Replace` parameter decided **before `add_effect` names one**, and U9's licence
-reading recorded; a `ParamID` for a compiled device — an endpoint ordinal or a name mapped to one —
-which is due before the first `add_automation` can target one (ADR 0015 §1's hazard); and §11's own
-M5 bullet, a golden per compiled device kind.
+Do not reopen any of that. What is genuinely owed is M5's own, and ADRs 0028–0030 have paid the
+first half. The export record and the schema field are decided, before the `.proto` (CLAUDE.md
+#5). So are the export pipeline as a bounded child, the engine loading an export by path, the
+`artefacts` and `models` blocks, and a compiled device's parameter key — its **source endpoint
+identifier**, not the ordinal the spike measured moving (ADR 0015 §1's hazard, answered). Three
+ADRs remain, each landing with its pull request:
+
+- **0031**, the recipe, with decision 9's two helper edits and the symbol flags;
+- **0032**, the converter's envelope;
+- **0033**, Airwindows. **`Replace` is not a selector and there is none**, so it decides how a
+  name in the state chunk is represented before `add_effect` names one.
+
+And §11's own M5 bullet, a golden per compiled device kind.
 
 **Four things to carry into every M5 step.** **`lock.baseline.json` moves when M5 vendors, and the
 first pull request that touches it should expect a cold engine build**, because the ccache key
 hashes that file. What it owes: Cmajor's `3rdParty/llvm` sub-pin, the CLAP SDK's commit, a **VST3
 SDK row it does not have at all** — §17 calls it "a new row" and the baseline has no counterpart —
 and `bundled_plugins.airwindows`, still upstream `ab0d1df871b8` with a note that reads "deferred to
-M4 with clap-wrapper", a sentence four documents have struck. **A person reads Cmajor's licence
-before M5's first export** and confirms or corrects §12's "generated code carries no copyleft"
-(U9). **The plugin manifest has not been rebuilt since 2026-09-09**: the proposed native
+M4 with clap-wrapper", a sentence four documents have struck. **No Cmajor export plays in this
+engine as `cmaj generate` leaves it**:
+
+- the unedited CLAP helper deadlocks JUCE's VST3 host in `prepareToPlay`, and `render_export` has
+  no wall clock to notice;
+- its instruments declare no MIDI input;
+- a second export of one processor runs the first's code unless built
+  `-fvisibility=hidden -fvisibility-inlines-hidden -fno-gnu-unique` and linked `-z nodelete`.
+
+A test that scans a bundle and does not render it proves none of this (trap 23). **The plugin
+manifest has not been rebuilt since 2026-09-09**: the proposed native
 hosting steps rebuild and guard it, and the Airwindows step adds its row. M5's planning verified
 that the installed `libjack-jackd2-dev` lets unmodified Cmajor build; no JACK source edits remain
 necessary on this image, and that scratch check exported nothing. And **a push to `main` is

@@ -105,7 +105,9 @@ here" remains M4's historical sketch, superseded by the M5 section.
 | M4.9 | §11 walked bullet by bullet with the enforcer named and **run** for each, the first bullet's new `compilers` half included; every ADR walked against the code and thirteen corrected; the ledger walked a **seventh** time; `CLAUDE.md` to M5 — and what M4 leaves unverified written where a reader will find it, completing "M4, mid-flight". No golden moved and no paid call was made | done | PR #92 |
 | — | **M4 complete.** A seeded Python DSL behind an `ast` allowlist, compiled in a subprocess `core` spawns per compile; two tools, `Generator.compiled_hash` and `lock.json`'s `toolchains` block checked at compile and never at open; the generator code view; fourteen tools offered to the model — with **no `song.proto` change but one field**, no new external dependency in any lock, and the first milestone every pull request of which a runner validated end to end. See "M4, closed" | done | — |
 | M5.0 | The M5 plan: eleven user questions, twenty-two agent defaults, six ADRs, a bounded follow-up spike, and one milestone with a working-export checkpoint; the inherited ledger walked an eighth time. No code, pin or golden changes | done | PR #93 |
-| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. **And the user's five decisions on it, taken 2026-10-20 and recorded with what each closes**: both overrides approved and ADR 0010 §1's `GIT_TAG main` breach closed; airwin2rack's CLAP target not built, so the third CLAP SDK a recursive resolution found is avoided rather than managed; `onnx` approved with all four packages given baseline rows by name and the `reference` extra refused; the environment constrained to `ai/`'s `pydantic` and `multidict`, which is three divergence lines instead of eleven and is decided apart from the drift `onnx` does not cause; and CPM.cmake vendored, because a hash makes a download safe and not reproducible. **U9 stays open and the spike therefore runs the Airwindows measurement only.** Approved candidates, still not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | proposed | `m5.1-gates` |
+| M5.1 | **The user's eleven answers recorded, and the two gates they leave that need no further approval satisfied**: every commit of the approved native set resolved in full from its approved parent — Cmajor's 32 gitlinks, the VST3 SDK's seven, airwin2rack's two — with the tool's internal CLAP 1.2.0 and wrapper fork told apart from the export recipe's 1.2.10 and v0.16.0; the **two Airwindows override commits named with their dates**, the `clap-juce-extensions` one recovered as the M4 spike's own checkout rather than today's `main`, which is three behaviour commits ahead; and `onnx` 1.23.2 resolved with hashes and a four-package closure, no `onnxruntime` anywhere, against a measured divergence the other three environments do not have. **And the user's five decisions on it, taken 2026-10-20 and recorded with what each closes**: both overrides approved and ADR 0010 §1's `GIT_TAG main` breach closed; airwin2rack's CLAP target not built, so the third CLAP SDK a recursive resolution found is avoided rather than managed; `onnx` approved with all four packages given baseline rows by name and the `reference` extra refused; the environment constrained to `ai/`'s `pydantic` and `multidict`, which is three divergence lines instead of eleven and is decided apart from the drift `onnx` does not cause; and CPM.cmake vendored, because a hash makes a download safe and not reproducible. **U9 stays open and the spike therefore runs the Airwindows measurement only.** Approved candidates, still not pins: nothing vendored, installed, exported or pinned, `lock.baseline.json` byte-identical, no golden moved and no paid call made | done | PR #94 |
+| M5.2 | **The spike, the Airwindows measurement only** — U9 unread, so no `cmaj generate`, no Cmajor build, no `.clap`, no wrapped VST3 and no ONNX conversion: measurements 1–3 are blocked and reported as blocked. airwin2rack `b6eef0a` built as a JUCE VST3 under the engine's three flags with both approved override commits as local sources, and driven through a throwaway JUCE VST3 host. **`Replace` is Galactic's own reverb control and not the selector; there is no selector, no program and no parameter for selection at all** — only a name in the opaque state chunk. The fourteen parameter ids read, twice, agreeing with `engine --scan`. **The render is not reproducible across fresh processes**: `srand ((size_t)this)` in the VST3 SDK's `FUID::generate()`, called from a static initialiser, seeds the process PRNG from an address, and 502 of 529 Airwindows effects take their dither from it — 100% of samples differ at −18.8 to −22.3 dBFS, and a fully dry instance still differs at −156.5 dBFS, so no tolerance closes it. 28 effects never call `rand()`; **`Channel5` is identical across processes, instances and reversed construction order** and is the proposed first supported selection. `reset()` and `releaseResources()`+`prepareToPlay()` are byte-identical no-ops. `sst-rackhelpers` confirmed never compiled; **CLAP 1.2.7 enters the VST3 regardless of the CLAP target**, which decision 2 did not expect; a no-network configure succeeds with CPM's bootstrap pre-seeded and fails without it. Nothing exported, nothing pinned, `lock.baseline.json` byte-identical, no golden moved, 500 tests pass, the ledger unchanged and no paid call made **Then measurements 1–3, 2026-10-22, after the user's U9 reading (decision 6) and two Airwindows decisions (7, 8)**: the approved Cmajor built unmodified and 36 exports taken through `core` and the engine. **No Cmajor export rendered as the recipe stood**: every wrapped VST3 deadlocks JUCE's headless host in `prepareToPlay`, because Cmajor's CLAP `activate` notifies the host unconditionally, and every wrapped instrument has no event bus, because the AOT constructor never fills the note-port cache. Two edits to the export's own ISC-licensed copy of the helper fix both, **approved by the user (decision 9)**. A `ParamID` is the endpoint's 1-based handle, mapped unambiguously by the generated code; one unchanged song plays wrong against an insert, a reorder or a range edit with no refusal. Two exports of one processor name run the first one's code in one process through a `GNU_UNIQUE` factory, fixed by `-fvisibility=hidden -fvisibility-inlines-hidden -fno-gnu-unique` with `-z nodelete`. A converted feed-forward graph is within 1.2–1.9 LSB of 24-bit through the engine; `Gemm`'s `alpha`, `beta` and `transB` are silently ignored and the `GRU` matches no ONNX semantics. Preview replacement unmeasured (no audio device). Nothing vendored or pinned, `lock.baseline.json` byte-identical, no golden moved, no paid call made | done | `m5.1-spike`, never merged |
+| M5.3 | **The decisions, written before the code they govern: ADRs 0028–0030, and the spike carried onto `main`.** 0028 makes `SourceRef.export_hash` and `ModelRef.export_hash` `optional` — four committed logs add a `SourceRef`, so a plain string would strand them — and has the field name a content-addressed export record holding the parameters by source endpoint identifier, with the loaded bundle a disposable reconstruction and pending, stale and current derived by `core`. 0029 makes native compilation a bounded child over one `Export.Compile`, gives §5's two tools and a read their shapes with a dry run that holds the candidate Apply commits, keys a compiled parameter by endpoint identifier with `param_incompatible` on an unsafe replacement, loads by export with the symbol flags the spike found necessary, and gives `render_export` the wall clock a deadlocked engine showed it lacked. 0030 pins `artefacts` and `models` on first retained reference by the common write, checks them at compile and before a load and never at open, and makes re-pin one `core` operation reachable before open, deliberately superseding ADR 0010's no-tool rule. Eleven earlier ADRs amended in place, `docs/specs.md` §4.2, §5, §7.2, §7.3, §8, §9, §10, §11, §13 and §15, and the index to `0031`. Both spike sections, decisions 6–9 and four new traps reach `main`; the spike's scripts stay on `m5.1-spike`. No code, no pin and no golden moved, and no paid call was made | done | `m5.2-adrs` |
 
 ## M0.2 — `core/`
 
@@ -3521,7 +3523,7 @@ The M4 spike's findings remain the measurements; its branch, `m4.0-spike`, was n
 | **No JIT in v1** — ADR 0023 §2 | Export and load, at the measured ≈20 s per edit. JIT, generated C++ and the built CLAP agreed in all 96,000 samples at the default `-O`; `-O4` differed by −162.6 dBFS. Neither measurement is an invitation to put LLVM in the audio process. The optimisation setting belongs in the export's recipe |
 | **The native pin choices** — ADR 0023 §4 | Cmajor `024a208`, sparse LLVM `c6380f9` at `release/linux/x64`, CLAP **1.2.10** (`195b42a`), clap-wrapper v0.16.0 (`1cca996`), VST3 SDK `v3.8.0_build_66` (`9fad9770`) and its four submodules. Cmajor's CLAP `df8f16c` is **1.2.0**, not the approved SDK; its wrapper fork is not the approved wrapper |
 | **Converter only** — ADR 0003 §7 resolved, ADR 0023 §3 | A future neural runtime is a separate process and never links into `engine`. In v1 there is **no runtime process, no runtime transport and no shipped model**. The converter lives at `compilers/neural/`, under §13's existing `/compilers`; its output uses the DSP pipeline's wrapper. No directory ADR and no packaging question remain to answer. `onnx`, unlike ONNX Runtime, is an extra package still awaiting approval |
-| **Airwindows is airwin2rack** — ADR 0023 §4–§5 | `b6eef0a`, with the named Airwindows and sst-rackhelpers sub-pins, a separate JUCE 8.0.4 and a commit override for `clap-juce-extensions`. One JUCE VST3, **not** clap-wrapper. One plugin whose `Replace` parameter selects the algorithm, not fourteen plugins and not a stable set of control meanings |
+| **Airwindows is airwin2rack** — ADR 0023 §4–§5 *(its `Replace` premise corrected 2026-10-22: there is no selector; ADR 0023 §5, amended)* | `b6eef0a`, with the named Airwindows and sst-rackhelpers sub-pins, a separate JUCE 8.0.4 and a commit override for `clap-juce-extensions`. One JUCE VST3, **not** clap-wrapper. One plugin whose `Replace` parameter selects the algorithm, not fourteen plugins and not a stable set of control meanings |
 | **U9 has a trigger** — ADR 0023 §7 | A person reads the licence before M5's first export, including the helpers linked beside generated C++. §12's “generated code carries no copyleft” is unverified until then. It is U9 below and a gate on export work, not a legal conclusion this plan can make |
 | **No paid call is authorised** — CLAUDE.md #7 | `GRANT_USD` is `0.0`, checked before even fetching a price. Every live route fails closed, including one priced at zero. Scripted compiler turns need no grant |
 
@@ -3677,15 +3679,15 @@ different answer changes the affected rows before implementation begins.
 
 | # | Question | Recommended default | What getting it wrong costs; where it gates |
 |---|---|---|---|
-| U1 | **One M5, or a further split at the working export?** The M4/M5 split itself stands | **One**, with PR 8 as the checkpoint above. Split only if PR 1 establishes a second substantial subsystem | A second scope ADR and another move of interop if split; a milestone that never closes if the converter's bounds or the Airwindows audit are allowed to grow without limit. Settle after PR 1 and before PR 2 |
+| U1 | **One M5, or a further split at the working export?** The M4/M5 split itself stands | **One**, with PR 8 as the checkpoint above. Split only if PR 1 establishes a second substantial subsystem | A second scope ADR and another move of interop if split; a milestone that never closes if the converter's bounds or the Airwindows audit are allowed to grow without limit. Settle after PR 1 and before PR 2 **Re-read 2026-10-22 against measurements 1–3: still one.** Each finding lands in an existing pull request, and none is a subsystem |
 | U2 | **The approved native set's complete checkout and build closure**: Cmajor `024a208`, sparse `cmajor-lang/llvm` `c6380f9`, choc `a08bfd8`, CLAP SDK 1.2.10 `195b42a`, clap-wrapper v0.16.0 `1cca996`, VST3 SDK `v3.8.0_build_66` `9fad9770`, `base`, `public.sdk`, `pluginterfaces`, `cmake` | **Carry the approvals forward exactly.** Resolve short SHAs to full commits from the approved parents; present the submodule inventory and any additional source dependency by name. Fill the missing baseline entries only when vendored | An implicit SDK download changes the binary under an unchanged pin; wrapping an export against Cmajor's CLAP 1.2.0 does not build. An unexpected dependency is a new question, not permission inherited from its parent. Gate PR 5; approved checkout inspection may precede it |
 | U3 | **Airwindows' complete pin set**: airwin2rack `b6eef0a`, `libs/airwindows` `d22a25b`, `libs/sst-rackhelpers` `f5f3332`, its JUCE **8.0.4**, and `clap-juce-extensions` | **Use the approved wrapper and resolve the nested commits; name and approve the two override commits before fetching them.** Prefer the spike's exact resolved checkout, if recoverable; otherwise present candidates against that pinned source, never today's `main`. Keep Tracktion's JUCE untouched | A moving `GIT_TAG main`, an accidental JUCE upgrade, or an ABI choice nobody reviewed. The tag alone is not a JUCE pin and the extension commit is still owed. Gate PR 13 and any spike build needing an unapproved override |
 | U4 | **The converter's extra Python dependency**: `onnx`, at an exact version with hashes, and the packages that resolution adds | **Approve `onnx` for conversion only**, with its resolved closure shown before install and pinned at first use. No `onnxruntime`. Inspect whether that version introduces `numpy`, Python `protobuf`, `ml_dtypes` or anything else; those names are candidates for the inventory, not approvals or asserted requirements | A hidden numerical stack, a second protobuf runtime mistaken for the engine's, or a Python lock re-resolving packages the other environments pin. Gate the ONNX measurements in PR 1 and PR 12; no invented version in a planning document |
 | U5 | **The Linux build and loading cost**: JACK development files, GTK3, WebKit2GTK 4.1 and the helper's measured runtime closure | **Accept the measured closure for this Linux milestone**, inventory it in the build instructions and CI, and keep builds and renders headless. Existing OS packages are not new repository source pins; additions to the image are still named | A plugin that builds but cannot load on a render runner or a user's supported system; ≈129 shared objects mistaken for eleven direct dependencies. Gate PR 5's CI image and PR 8's compiler-free playback check. This is not an installer/platform commitment |
-| U6 | **What ONNX shape does v1 promise to turn into an effect?** Converter-only and the synthetic golden are settled | **A bounded, self-contained float32 graph with static shapes and an explicit mono/stereo audio adapter**, starting with the measured feed-forward subset. No implicit tensor-to-audio mapping. Support a recurrent shape only when PR 1 demonstrates its state/reset semantics; otherwise name it as refused | Claiming DDSP support because GRU compiled, shipping a 64-input/16-output tensor as though it were stereo, or silently changing `Gemm` semantics. Gate ADR 0032 and PR 12. No arbitrary-model or runtime commitment |
-| U7 | **How much of Airwindows is claimed deterministic?** One selectable plugin is settled | **Expose only algorithm/control combinations whose reset, RNG and selector behaviour the audit can account for**, with at least one useful non-bypass effect and its golden. Keep `Replace` fixed for an instance and refuse its automation. Broader access is a later explicit decision | Hundreds of algorithms claimed from one golden, or an automation lane changing meaning when `Replace` moves. If even the first useful selection cannot meet #3, PR 13 stops for a decision; it does not weaken #3 |
+| U6 | **What ONNX shape does v1 promise to turn into an effect?** Converter-only and the synthetic golden are settled | **A bounded, self-contained float32 graph with static shapes and an explicit mono/stereo audio adapter**, starting with the measured feed-forward subset. No implicit tensor-to-audio mapping. Support a recurrent shape only when PR 1 demonstrates its state/reset semantics; otherwise name it as refused | Claiming DDSP support because GRU compiled, shipping a 64-input/16-output tensor as though it were stereo, or silently changing `Gemm` semantics. Gate ADR 0032 and PR 12. No arbitrary-model or runtime commitment **Measured 2026-10-22:** the feed-forward subset and `Gemm` at `alpha` = `beta` = 1 with no transpose and `C` absent, vector or full-rank are correct. `alpha`, `beta` and `transB` are silently ignored, `transA` and a scalar `C` fail unnamed, and the converted `GRU` matches no ONNX semantics tried — so recurrence is **refused**, as this default said it would be |
+| U7 | **How much of Airwindows is claimed deterministic?** One selectable plugin is settled | **Expose only algorithm/control combinations whose reset, RNG and selector behaviour the audit can account for**, with at least one useful non-bypass effect and its golden. Keep `Replace` fixed for an instance and refuse its automation. Broader access is a later explicit decision | Hundreds of algorithms claimed from one golden, or an automation lane changing meaning when `Replace` moves. If even the first useful selection cannot meet #3, PR 13 stops for a decision; it does not weaken #3 **Premise corrected 2026-10-20 and answered 2026-10-22:** `Replace` is Galactic's control, not a selector, and there is none; the selection is a name in the state chunk. The supported set is the 28 effects that never call `rand()`, `Channel5` first (decision 7) |
 | U8 | **May the bundled model invoke the native compile tools?** This is code execution with an observable ≈20 s cost | **Yes, once proposal staging and cancellation are proved**, using the same two source/compile tools a person uses, with caller-fixable diagnostics counted by the existing three-refusal budget. No file path, compiler flags, shell command or native binary supplied by the model | A rejected proposal leaving assets or pins behind, compiler grandchildren surviving a cancelled turn, or several minutes spent on valid compiles. Gate PR 11; scripted turns suffice. `set_param` and the general plugin catalogue remain withheld |
-| U9 | **Inherited U9: has a person read Cmajor's licence for the actual exported bundle?** ADR 0023 §7 and §12 | **Read it before the first M5 export, record the conclusion and confirm or correct §12**, covering generated C++, `cmaj_CLAPPlugin.h`, helpers and linked wrapper/SDK code. No agent default on the legal answer | An export offered under a claim the licence does not support. Blocks the first export PR and any new export made for PR 1; build/checkout inspection and planning can proceed. A green compiler is not licence approval |
+| U9 | **Inherited U9: has a person read Cmajor's licence for the actual exported bundle?** ADR 0023 §7 and §12 | **Read it before the first M5 export, record the conclusion and confirm or correct §12**, covering generated C++, `cmaj_CLAPPlugin.h`, helpers and linked wrapper/SDK code. No agent default on the legal answer | An export offered under a claim the licence does not support. Blocks the first export PR and any new export made for PR 1; build/checkout inspection and planning can proceed. A green compiler is not licence approval **Answered 2026-10-22 (decision 6):** a distributed export is a GPLv3 combined work, and §12 is corrected |
 | U10 | **What happens after a saved source changes but its export has not?** | **Keep the last export for history, mark it stale and refuse new preview/render of that device until an export is applied.** No automatic compile on open, no silent last-good sound, no compilation per keystroke | Twenty seconds of friction, versus a saved source and the sound a person hears disagreeing without a word. Gate PRs 8 and 10. Undo remains the way back to the old source/export pair; any “play last export” override would need its own visible contract |
 | U11 | **Is a live model measurement wanted at the end?** Nothing in M5 requires one | **No paid run in the milestone's acceptance path.** Offer a separately capped recording only if the user wants evidence that the model can write Cmajor; keep `GRANT_USD = 0.0` until a new grant is committed | A scripted transcript called efficacy evidence, or a prior grant treated as money available now. No implementation PR waits on this; any live call needs its own confirmation, cap, ledger and reconciliation |
 
@@ -3705,17 +3707,17 @@ written back rather than left in the table as a decision the code quietly ignore
 | 6 | **Which tools change the source and compile it?** | Implement §5's `define_instrument_source` and `compile_instrument` for instruments and effects, retaining those public names. Definition takes source text and either an existing device id, or a track plus instrument/effect target for creation (with an effect index); it installs the source asset and patches the reference in one gesture. Reuse `set_track_instrument`/`add_effect` construction and ordering rules, not a second set of them. Compilation names the saved device. No tool compiles an unsaved editor buffer. Neural import uses `add_asset` and the existing neural ref; the same compile dispatch selects the converter by device kind |
 | 7 | **What does Apply approve after twenty seconds?** | The precise input/base values and export hash shown in the dry run, not a second unobserved build. Keep one candidate with its scratch assets. Check the touched paths as proposals do (`document_moved`), including an edit of just one version, branch switches and toolchain changes. Apply the held patch only while its verified assets remain available; otherwise refuse and ask for another compile. A successful dry run followed by changed source must never attach the old binary to the new source |
 | 8 | **What happens inside a model proposal?** | Stage assets outside the real project, promote only those reached by the approved final patch, and clean up on Reject, Edit dropping a ref, failure and cancellation. A proposal is a clone sharing the project root today; `add_asset` is withheld precisely because that alone is not isolation (ADR 0019). Keep M4's accepted generator-toolchain exception unchanged. Native export records carry their own provenance and are pinned on retained reference, including proposal apply; there must be no approved export whose pin waits for a later manual compile |
-| 9 | **What is a compiled device's parameter identity?** | Use the **source endpoint identifier**, not its ordinal and not its display label, for compiled-device `params` and `ParamRef.param`. The export record maps it to the **actual wrapped VST3 ParamID**, its normalised domain and interface properties; PR 1 measures that mapping rather than assuming CLAP and VST3 ids agree. Reordering declarations preserves a lane; deleting/renaming a referenced endpoint or changing its type/range/step contract refuses replacement until the same patch explicitly repairs/removes the affected references. Bundled plugins keep numeric ids |
-| 10 | **What reaches the engine?** | Resolved bundle path, verified class identity, concrete VST3 parameter ids and ordinary render data. `core` lowers symbolic endpoint names into the plan using a required verified artefact index, keeping `render::compile` pure. The engine inspects/loads a binary; it reads no source, `lock.json`, song history or model graph. Add a generic artefact-inspection path instead of lying to `--scan` with `surge_xt` as the component. Distinct exports with the same vendor/name must coexist; the current `byId` cache cannot key them correctly |
-| 11 | **How is live replacement done?** | Immutable paths per export, and a fresh preview process when the export identity changes; preserve the requested transport tick, not opaque plugin state. Never overwrite a mapped `.so`. Two versions on different tracks, then repeated replacement of one, must sound like the expected versions and leave no old child. Parameter-only compiled devices in v1: refuse non-empty opaque `state` until a producer and compatibility contract exist. This does not fire the deferred preset/state-storage work |
+| 9 | **What is a compiled device's parameter identity?** | Use the **source endpoint identifier**, not its ordinal and not its display label, for compiled-device `params` and `ParamRef.param`. The export record maps it to the **actual wrapped VST3 ParamID**, its normalised domain and interface properties; PR 1 measures that mapping rather than assuming CLAP and VST3 ids agree. Reordering declarations preserves a lane; deleting/renaming a referenced endpoint or changing its type/range/step contract refuses replacement until the same patch explicitly repairs/removes the affected references. Bundled plugins keep numeric ids **Measured 2026-10-22:** a `ParamID` is the endpoint's 1-based handle — inputs in declaration order, then outputs, streams and events included — and an insert, reorder or removal moves it while a range change moves the meaning of every stored value. The generated `EndpointHandles` and `programDetailsJSON` give the mapping unambiguously, so this default holds without a helper change |
+| 10 | **What reaches the engine?** | Resolved bundle path, verified class identity, concrete VST3 parameter ids and ordinary render data. `core` lowers symbolic endpoint names into the plan using a required verified artefact index, keeping `render::compile` pure. The engine inspects/loads a binary; it reads no source, `lock.json`, song history or model graph. Add a generic artefact-inspection path instead of lying to `--scan` with `surge_xt` as the component. Distinct exports with the same vendor/name must coexist; the current `byId` cache cannot key them correctly **Measured 2026-10-22:** keying is worse than a cache. Two exports of one processor name loaded in one process run the **first** one's code, whatever their ids, through a `GNU_UNIQUE` factory. The recipe compiles with `-fvisibility=hidden -fvisibility-inlines-hidden -fno-gnu-unique` and links with `-z nodelete`, and the loader still keys by export identity |
+| 11 | **How is live replacement done?** | Immutable paths per export, and a fresh preview process when the export identity changes; preserve the requested transport tick, not opaque plugin state. Never overwrite a mapped `.so`. Two versions on different tracks, then repeated replacement of one, must sound like the expected versions and leave no old child. Parameter-only compiled devices in v1: refuse non-empty opaque `state` until a producer and compatibility contract exist. This does not fire the deferred preset/state-storage work **Not measured 2026-10-22:** preview needs ALSA's default PCM and this machine defines none; the in-process collision under #10 is what this default protects against, and it is measured |
 | 12 | **What does a lock mismatch prevent?** | Compare the worker's actual recipe with the requested approved recipe when compiling; never require a compiler at open. Keep generator pins' existing rule. Check source/export freshness, target ABI and referenced asset integrity before loading or rendering; no fallback to a system plugin or rebuild. A stale source is the caller's `export_pending`/stale refusal; a corrupt retained export or missing runtime is the operator's. Build the verified asset context outside the pure validator/compiler and require it wherever compiled parameters resolve |
 | 13 | **How can a refused open offer re-pin?** | A narrow recovery handle under the same kernel `ProjectLock`, reachable before `Session::open` succeeds, with dry-run old/new pin details and explicit apply. Apply a reviewed RFC 6902 patch to only the selected lock fields, atomically and against the exact prior lock hash; leave the song/log alone, then reopen through normal checks. The CLI and the window use the same core operation, withheld from the model. Its response is the old/new receipt, printed by the CLI and displayed by the window; no second audit journal. ADR 0030 explicitly supersedes ADR 0010's “never by a tool” and records why this lock mutation has no song-log entry. A wrong plugin identity, missing binary, bad assets or a moved lock must still refuse; no “ignore all mismatches” open mode |
-| 14 | **Which failures are retried?** | A source diagnostic or unsupported graph is `valid=false` with stage and source position, or graph node/domain/operator; the existing model budget counts it. Missing compiler, pin mismatch, missing runtime, invalid output, infrastructure crash or wall timeout is an operator error. Read status **and** diagnostics **and** expected outputs; Cmajor's exit 0 proves none of them. Do not copy the generator's `SIGKILL means CPU limit` classification into a driver running several native grandchildren |
+| 14 | **Which failures are retried?** | A source diagnostic or unsupported graph is `valid=false` with stage and source position, or graph node/domain/operator; the existing model budget counts it. Missing compiler, pin mismatch, missing runtime, invalid output, infrastructure crash or wall timeout is an operator error. Read status **and** diagnostics **and** expected outputs; Cmajor's exit 0 proves none of them. Do not copy the generator's `SIGKILL means CPU limit` classification into a driver running several native grandchildren **Measured 2026-10-22:** `cmaj generate` exits 1 with `file:line:col` but leaves files behind; `cmaj render` exits 1 saying nothing; `cmaj play --dry-run` prints the error and exits 0; the converter exits 0 on an invalid model. And `render_export` has **no wall clock** — it waited on a deadlocked engine until it was killed by hand |
 | 15 | **What bounds and cancels a compile?** | One in flight per session, a configurable **five-minute wall timeout** as the initial export bound, and a bounded native build parallelism selected from PR 5's CI memory measurement. The toolchain itself is built at setup, outside this bound. Kill and reap the entire owned child tree on timeout, host EOF and user cancellation, with scratch cleanup. Limits govern success/failure, never the output bytes. Exercise the actual launcher and a compiler grandchild that ignores shutdown; the generator's five CPU seconds/512 MiB are not a native build budget |
 | 16 | **What does the DSP editor cost?** | Reuse `app/src/code.tsx`, CodeMirror and the pinned lint package. A draft is local text; Save is the source tool, Export is dry run → diff → Apply, diagnostics retain their stage and location. A read of status is **read-only**, never a twenty-second compile triggered by selecting a device. `core` derives pending/current/stale from the stored hashes and record; no hasher in TypeScript or Python's bar view. Test a real source, an effect and a branch change, and drive the actual window as M4 did |
-| 17 | **How is ONNX refused and adapted?** | Preflight node **domain, operator, opset, dtype, attributes, rank and static shape**, before invoking the converter, recursively inspecting any graph-valued attributes/functions or refusing them explicitly. Name the offending node and operator, including `Softmax`. The sixteen converter names are a ceiling, not a support claim for every shape of all sixteen. Reject external tensor files in the first version; no implicit model download. Accept `Gemm` only for a measured correct shape or a semantics-preserving lowering; test alpha/beta, transpose and bias broadcasting, otherwise refuse with `Gemm` named. No general optimiser |
-| 18 | **How is neural output checked without a runtime?** | A committed synthetic graph and a specified audio adapter: named ports, channel/tensor ordering, sample/frame cadence, sample-rate contract, latency and state/reset rule. Compare a small analytical reference for its graph against converted output with a stated numerical tolerance, **separately** from exact repeat-render and golden PCM tests. Change weights and input and require the sound to change. GRU compilation alone earns no recurrent-render claim; ONNX Runtime's thread experiment and unmeasured CPU mask remain outside v1 |
-| 19 | **How is `Replace` made safe?** | Store the selected Airwindows algorithm as the measured `Replace` value in ordinary `Effect.params`, with a pinned selector-to-algorithm table derived from that build. Set the selector **before** dependent controls in the engine; a protobuf map's order must not choose the effect. The editor and validator resolve slots against that selection. Refuse `Replace` automation, unsupported selections, opaque state and selection changes retaining incompatible slot overrides/lanes unless the same patch repairs them. Audit and test each supported algorithm's RNG/reset path; no global claim from one example |
+| 17 | **How is ONNX refused and adapted?** | Preflight node **domain, operator, opset, dtype, attributes, rank and static shape**, before invoking the converter, recursively inspecting any graph-valued attributes/functions or refusing them explicitly. Name the offending node and operator, including `Softmax`. The sixteen converter names are a ceiling, not a support claim for every shape of all sixteen. Reject external tensor files in the first version; no implicit model download. Accept `Gemm` only for a measured correct shape or a semantics-preserving lowering; test alpha/beta, transpose and bias broadcasting, otherwise refuse with `Gemm` named. No general optimiser **Measured 2026-10-22:** a preflight prototype refusing everything outside the measured envelope accepts exactly the five graphs measured correct and refuses the other six by node and operator |
+| 18 | **How is neural output checked without a runtime?** | A committed synthetic graph and a specified audio adapter: named ports, channel/tensor ordering, sample/frame cadence, sample-rate contract, latency and state/reset rule. Compare a small analytical reference for its graph against converted output with a stated numerical tolerance, **separately** from exact repeat-render and golden PCM tests. Change weights and input and require the sound to change. GRU compilation alone earns no recurrent-render claim; ONNX Runtime's thread experiment and unmeasured CPU mask remain outside v1 **Measured 2026-10-22:** within 1.2–1.9 LSB of 24-bit through the engine against numpy on the dry render, with exact repeat renders as a separate comparison — the two checks this default keeps apart, kept apart |
+| 19 | **How is `Replace` made safe?** | Store the selected Airwindows algorithm as the measured `Replace` value in ordinary `Effect.params`, with a pinned selector-to-algorithm table derived from that build. Set the selector **before** dependent controls in the engine; a protobuf map's order must not choose the effect. The editor and validator resolve slots against that selection. Refuse `Replace` automation, unsupported selections, opaque state and selection changes retaining incompatible slot overrides/lanes unless the same patch repairs them. Audit and test each supported algorithm's RNG/reset path; no global claim from one example **Premise wrong, found 2026-10-20:** there is no selector parameter to store, so this default cannot be implemented as written. ADR 0033 decides how a name in the state chunk is represented, within decisions 7 and 8 |
 | 20 | **What keeps pins and CI honest?** | Move each now-vendored leaf out of `tests/baseline.rs::NO_SOURCE_YET` to a real reader, including nested source commits and the new Python manifest/lock. Extend both directions and the shared-environment comparison; do not turn a missing reader into prose or a permanent exception. Compile-time provenance comes from checkouts, compared with the baseline. Gate compiler source/recipe, core asset resolution and new wire changes into native build/render jobs. A mutation of each pin or recipe input must fail a named check |
 | 21 | **What is the acceptance suite?** | New instrument, effect, synthetic-neural and supported-Airwindows fixtures, all projects built by tools. Non-zero, finite, correct-length PCM first; repeat processes and independent builds next; committed PCM last. Include actual parameters, automation, input audio and multiple same-named exports. Feature-gate native tests where prerequisites do not exist, fail loudly where enabled, and guard compiler/install/build staleness. Keep current four WAVs and the generator/AI/projection suites as regressions; any later intentional moved byte belongs to its capability/pin PR and ADR, never this plan |
 | 22 | **Who watches the push to `main`?** | The person or agent merging each implementation PR waits on the **merge SHA's push run**, verifies real steps executed and records the result before the next step. PR green is not that run. No new notification service, paid runner or scheduled workflow is needed to answer the known gap. This planning run opens a PR and stops, so it performs no merge or post-merge claim |
@@ -3772,6 +3774,498 @@ The repeat-build comparison on another machine belongs to PRs 7–8's standing C
 pipeline exists. The spike may give it evidence, but does not replace it. The generated CMake's
 Linux VST3 omission, download flags, absolute include path and PIC requirement are **known**
 inputs to that pipeline already, not open questions to spend a second spike finding.
+
+### What the spike found (PR 1, run 2026-10-20)
+
+Run on this machine and no other — WSL2, Ubuntu 24.04.1, x86-64, **AMD Ryzen AI 9 HX PRO 370**,
+24 logical cores, 47 GiB, g++ 13.3.0, CMake 3.28.3, Ninja 1.11.1 — against `main` at `418dfb2`,
+with `engine/build/escribass_engine_artefacts/Release/escribass_engine` as it was built on
+2026-09-17. **Every number below is one machine's**, which is what U2 leaves it as; M3's trap 16
+applies to a compiler and to an address space. The spike's tree lives outside the repository,
+`m5.1-spike` is not merged, and nothing it built is vendored, pinned or committed.
+
+**Measurements 1, 2 and 3 did not run, and the reason is U9 and nothing else.** A person has not
+read Cmajor's licence, the user's decision of 2026-10-20 was the fourth measurement only, and all
+three of the others export something Cmajor generated. So **no `cmaj generate` was run, no Cmajor
+tree was configured or built, no `.clap` and no wrapped VST3 were produced, and no ONNX graph was
+converted** — endpoints through the wrapper, two exports alive at once and a graph becoming audio
+are **blocked, not deferred**, and stand exactly as the table above describes them. Nothing below
+is evidence about any of them. The Airwindows go-ahead was not the gate clearing, and neither is
+this paragraph. **All three ran on 2026-10-22, after decision 6 answered U9**; what they found is
+"What the spike found, measurements 1–3" below, and nothing in this section changes because of it.
+
+**The finding that matters, and it is the opposite of what the record says.** `Replace` is **not**
+the effect selector. It is the first of **Galactic**'s five controls — the reverb's
+feedback-replace amount — and M4's spike read the boot effect's parameter names off `--scan` and
+took the first of them for a selector. Swept in five fresh processes, slot 0 moves the sound
+monotonically and continuously: rms 3.1e-08, 0.00964, 0.0166, 0.0221 and 0.0268 at 0, 0.25, 0.5,
+0.75 and 1.0. That is a reverb control, not a 506-way enumeration. **There is no selector at
+all.** The fourteen parameters are ten anonymous slots plus Bypass, Input Level, Output Level and
+Mono Behaviour; `getNumPrograms()` is compiled out unless `USE_JUCE_PROGRAMS=ON`, which is `OFF`
+by default, and JUCE's VST3 host accordingly reports **0** programs; and the selection lives only
+in the opaque plugin state chunk, as `currentProcessorName` — **a name, not an index**. So
+`add_effect` over Airwindows is neither a plugin id nor a parameter value: it is a string in a
+state blob that no `ParamRef` can reach and no automation lane can carry. ADR 0033's "supported
+`Replace` selection" has to be rewritten before it is written.
+
+**The actual parameter ids, read twice — once through this spike's host and once through
+`engine --scan`, which agreed exactly.** They are JUCE 8's hash of the `ParameterID` string, so
+the ten slots come out consecutive and the four named ones do not:
+
+| idx | VST3 `ParamID` | `ParameterID` | name at Galactic | name at Channel5 |
+|---|---|---|---|---|
+| 0–4 | 797433692–797433696 | `ctrl_0`…`ctrl_4` | Replace, Brightness, Detune, Bigness, Dry/Wet | Console Type, Drive, Output, `-`, `-` |
+| 5–9 | 797433697–797433701 | `ctrl_5`…`ctrl_9` | `-` | `-` |
+| 10 | 773352680 | `bypass` | Bypass | Bypass |
+| 11 | 100353752 | `inlev` | Input Level | Input Level |
+| 12 | 1141966863 | `outlev` | Output Level | Output Level |
+| 13 | 690425114 | `monoBehaviour` | Mono Behaviour | Mono Behaviour |
+
+The ids are stable across a selection change and the **names, the reported defaults and the
+meaning are not** — so ADR 0010 §4's manifest keyed on the id and ADR 0015's `ParamRef` resolving
+through it are both still correct and both now carry a value whose units a different field
+decides. Mono Behaviour is a three-valued `AudioParameterInt` that reaches the host as
+`automatable=0` with `numSteps` 2,147,483,647. Channel5's Console Type is a four-way discrete
+control on a *continuous* slot: swept at 0, 0.25, 0.5, 0.75 and 1.0 it gives **three** distinct
+renders, 0 and 0.25 agreeing and 0.75 and 1.0 agreeing, so a fader at 0.74 and one at 0.75 are
+different consoles while 0.75 and 1.0 are the same one — with no step count declared anywhere.
+
+**`Replace` before and after, taken on the thing that actually changes the dependent values: the
+selection.** With every slot driven to 0.75 under Galactic and then nothing but the selection
+changed to Channel5, all ten slots **keep the number 0.75**, the names change, the reported
+defaults change, the two slots that become inactive still hold 0.75, and the render goes from a
+reverb (rms 0.0329) to a saturator (rms 0.1411). The incoming effect's own defaults are computed
+and then **overwritten** by the stored values, because `setStateInformation` applies
+`setupParamDisplaysFromDisplayProcessor`'s defaults and then loops `awp_0…awp_9` on top of them.
+The UI path, `pushResetTypeFromUI`, does only the first half — so **the window and a restored
+project initialise the same selection to different numbers.** That is a second initialisation,
+not a second rendering of one.
+
+**The nondeterminism is real, it is not the dither, and it is located to a line.** The built
+Airwindows VST3, driven through `juce_audio_processors` at 48 kHz in 512-frame blocks over 48,128
+frames of fixed-seed noise with Galactic selected, **does not render the same PCM twice in two
+fresh processes**: 100.00% of samples differ, peak 0.077–0.098, **−22.3 to −20.1 dBFS**. Disabling
+address randomisation with `setarch -R` makes three fresh processes **bit-identical**, so the
+variable is the address space. The chain, interposed on `srand`/`rand` rather than inferred:
+
+1. `modules/juce_audio_processors/format_types/VST3_SDK/pluginterfaces/base/funknown.cpp:181`,
+   Steinberg's own `FUID::generate()`, is on Linux `srand ((size_t)this); for (int32 i = 0; i < 16;
+   i++) data[i] = rand ();`, and it is called from the **static initialiser**
+   `FObjectIIDInitializer` at `base/source/fobject.cpp:72`. Every module that links the SDK
+   reseeds the process-global libc PRNG with the address of a static object as it loads.
+2. The interposed log shows exactly two `srand` calls per run, sixteen `rand()` draws apart, with
+   pointer-valued seeds whose low twelve bits are constant and whose page base is not:
+   `0xfeacb790`/`0x56e16f50`, then `0x89d54790`/`0xe3c16f50`, then `0x55e8e790`/`0xf7616f50`.
+3. **502 of the 529 Airwindows sources seed their dither from it**, with one idiom and no `srand`
+   of their own: `fpdL = 1.0; while (fpdL < 16386) fpdL = rand()*UINT32_MAX;`, twice per effect,
+   under the author's own comment "values being initialized only once. Startup values, whatever
+   they are." There is no `srand`, `time()`, `getpid`, `random_device` or `<chrono>` anywhere in
+   the 1,058 generated files.
+4. In Galactic the seed is not a −140 dB dither. `GalacticProc.cpp:59–62` drives the **Detune
+   LFO** from it — `vibM += (oldfpd*drift)` with `oldfpd = 0.4294967295+(fpdL*0.0000000000618)`
+   after the first wrap, and at the default Detune the first wrap happens on sample one — so the
+   modulation rate varies by up to 60% with where the module landed in memory. That is a
+   different reverb, not a different noise floor.
+
+Taken apart, the effect is innocent and the wrapper is not: the same Galactic constructed straight
+out of the registry with no JUCE in the process is **bit-identical in four fresh processes, and
+under `setarch -R` too**, because unseeded glibc `rand()` is deterministic. It is the SDK's reseed
+that makes it otherwise. What the effect does carry on its own is a draw-count dependence, which
+the measurement's list predicted:
+
+| Held fixed, changed once | Galactic | Channel5 |
+|---|---|---|
+| Three fresh processes, one instance | 100.00% differ, peak −22.3 / −20.1 dBFS | **identical**, `a93e2fae…`, and identical again under `setarch -R` |
+| Two instances in one process, same settings, same input | 100.00% differ, peak −18.8 dBFS | **identical** |
+| Reversed construction order, same final graph | 100.00% differ, peak −18.8 / −18.3 dBFS | **identical** |
+| `reset()` between two passes over the same input | 100.00% differ, peak −18.4 dBFS | 99.99% differ, peak −47.5 dBFS |
+| `releaseResources()` + `prepareToPlay()` between passes | not taken separately | 99.99% differ, and **byte-identical to the `reset()` result** |
+| Bypass on | — | the output is **the input, exactly** |
+| Dry/Wet at 0 rather than 1 | 45.40% of samples still differ from the input, peak **−156.5 dBFS** | the slot is inactive and changes nothing |
+| The effect engaged at all | rms 0.0165 against the input's 0.144 | rms 0.0818, 100.00% of samples changed, peak 0.119 |
+
+Three of those rows each want a sentence. **Repeated reset does not reset.**
+`AWConsolidatedAudioProcessor` does not override `juce::AudioProcessor::reset()`, and
+`releaseResources()` frees only a mono scratch buffer, so both calls return having done nothing to
+the effect — byte for byte the same no-op, measured. A golden over a compiled device therefore
+**constructs a fresh instance per render** and never trusts a reset. **Turning the wet control
+down does not remove the hazard**: a fully dry Galactic still differs from its input in 45% of
+samples, because `fpd` reaches the dry path through the denormal substitution
+`inputSampleL = fpdL * 1.18e-17` and through the float-path dither, so the address dependence
+survives at −156.5 dBFS — and a golden hashes samples, so −156.5 dBFS fails a hash exactly as
+−18.8 dBFS does. There is no epsilon at which this becomes a rounding difference rather than a
+different file, which is what the row's last clause is about. **And a bypassed instance really is
+not the measurement**: bypass returns the input bit for bit, which is worth having as the control
+case and worth nothing as evidence.
+
+**The first supported selection, and why it needs no source change.** 28 of the 529 generated
+effects never call `rand()`: `AtmosphereBuss`, `AtmosphereChannel`, `BitDualPan`, `BitShiftGain`,
+`BitShiftPan`, `BuildATPDF`, `Channel4`, `Channel5`, `DCVoltage`, `DitherMeDiskers`,
+`DitherMeTimbers`, `Ditherbox`, `DoublePaul`, `DustBunny`, `FathomFive`, `HighGlossDither`,
+`LRFlipTimer`, `LeftoMono`, `MSFlipTimer`, `NaturalizeDither`, `NodeDither`, `NotJustAnotherCD`,
+`RightoMono`, `Slew`, `Slew2`, `SlewOnly`, `StudioTan` and `SubsOnly`. **`Channel5` is the
+candidate**: a three-control console tone colour — Console Type, Drive, Output — in the Tone Color
+category, every member initialised to a constant, no `fpd` and no array in the class at all. It is
+useful rather than bypassed, since engaged it changes 100.00% of samples and takes the rms from
+0.144 to 0.0818, and it is the only column of the table above that is identical everywhere it was
+asked to be. `Channel4`, `AtmosphereChannel`, `Slew2`, `BitShiftGain` and `FathomFive` were
+checked the same way and are stable across processes and instances too; `ToTape6`, `Pressure5`,
+`Console8BussIn`, `Density2` and `PocketVerbs`, sampled from the other 502, every one of them
+differs between instance 0 and instance 1 of one process. The hazard is general and the remedy is a named
+allowlist — which is **a refusal and not a tolerance**, and costs no change to anyone's source.
+
+**If more than 28 effects are ever wanted, the wrapper change is one line and its ceiling belongs
+beside it.** `std::srand (k)` immediately before each `rg.generator()` call — the two in
+`setAWProcessorTo` and the one in `pushResetTypeFromUI` — makes every instance's `fpd` identical
+and independent of both the address space and the construction order. That is three lines in
+airwin2rack's `src-juce/AWConsolidatedProcessor.cpp`, a **source modification to a bundled
+plugin**, and so the user's decision rather than an agent's. Its ceiling is that libc `rand()` is
+process-global: reseeding it perturbs every other consumer in the engine's process, so the
+precondition is a measurement that the engine's own render path reads nothing from it. The
+evidence there is one-sided and should be recorded as such — the four golden WAVs have not moved
+across many runs in many processes, which is strong indirect evidence that Surge XT, sfizz and
+Dexed take no audio from libc `rand()`, but **the engine already links the same `fobject.cpp` and
+is therefore already reseeded by an address at startup**, and nobody had written that down.
+Patching the SDK instead is not available: PR 13's own text forbids changing Tracktion's JUCE and
+CLAUDE.md #4 forbids moving it.
+
+**Decision 2 is not true of the tree as it stands, and that is a finding rather than a workaround.**
+A JUCE-VST3-only configure of airwin2rack `b6eef0a` **cannot complete** without
+`clap-juce-extensions`' two recursive gitlinks on disk: its `CMakeLists.txt:48–49`
+`add_subdirectory`s `clap-libs/clap` and `clap-libs/clap-helpers` unconditionally, and with both
+missing the configure fails there — measured, 36.0 s to the error. Nor is the extension optional
+for the VST3. `src-juce/CMakeLists.txt:20` adds the package and `:136` calls
+`clap_juce_extensions_plugin`, neither under a guard; `AWConsolidatedProcessor.h:7` includes
+`clap-juce-extensions/clap-juce-extensions.h`, which includes `<clap/events.h>`, `<clap/plugin.h>`
+and `<clap/helpers/plugin.hh>`; the processor **inherits** `clap_juce_extensions::clap_properties`
+and reads `is_clap` in `prepareToPlay`; and `libclap_juce_extensions.a` is on the VST3's link line
+with both CLAP include trees on its compile line. So **CLAP 1.2.7 enters the Airwindows VST3.**
+What "the CLAP target is not built" actually buys is narrower and still worth having: with the two
+gitlinks present at `29ffcc273be7c7c651f6c9953b99e69700e2387a` — `version.h` read as 1.2.7 — and
+`a61bcdf0ecc2c8db1e80bfe8bf9cb7e8d9fd2bbc`, building only `airwin-consolidated_VST3` compiled
+**zero** CLAP-wrapper objects and produced no `.clap`. Making decision 2 literally true needs
+`src-juce/CMakeLists.txt` and `AWConsolidatedProcessor.{h,cpp}` edited to drop the extension, which
+is the same class of decision as the reseed above and is likewise the user's. Until it is taken,
+the M5 tree holds a third CLAP SDK and ADR 0033 says so rather than claiming otherwise.
+
+**`sst-rackhelpers` really is never compiled** — PR #94 read it right. Under
+`BUILD_JUCE_PLUGIN=ON` the string appears **zero** times in the configure log and zero times in
+`build.ninja`. It is a checkout nothing opens, and what needs pinning is a tree the build never
+reads.
+
+**A configure with the network unreachable succeeds, once CPM's bootstrap is pre-seeded.** In a
+network namespace with no resolution, with `CPM_SOURCE_CACHE` holding `cpm/CPM_0.40.2.cmake` and
+`CPM_JUCE_SOURCE` / `CPM_clap-juce-extensions_SOURCE` pointing at local checkouts, a fresh
+configure **returned 0 in 27.6 s**. With that cache empty it fails at `cmake/CPM.cmake:19` — "file
+DOWNLOAD cannot compute hash on failed download" — so the fetch is unconditional exactly as
+decision 5 says, and `file(DOWNLOAD … EXPECTED_HASH)` skips the transfer when the file is already
+present and hashes right. That is PR 5's test passing today, and it means decision 5's vendoring
+can be a pre-seeded cache rather than a patched file. The hash the plan records was confirmed by
+letting it download once: `c8cdc32c03816538ce22781ed72964dc864b2a34a310d3b7104812a5ca2d835d`.
+
+**Four smaller things, each of which would have cost a pull request.** The plugin's reported
+**version is the build date**: the root `CMakeLists.txt` computes it with `string(TIMESTAMP)` as
+`1.${YEAR}.${DAY_OF_YEAR}+1`, and today's build reports **`1.2026.294`** where M4's spike reported
+`1.2026.269` from the same commit — so ADR 0010 §4's manifest records a different `version` for a
+rebuild of an unchanged pin, and the installer names its zip
+`AirwindowsConsolidated-2026-10-20-b6eef0a-Linux.zip` the same way. **The boot effect is read out
+of the user's home directory**: `AWConsolidatedProcessor.cpp:92` takes `startupEffect` from a
+`juce::PropertiesFile` under `~/.config/AirwindowsConsolidated/`, and writing `Channel5` there
+changed a freshly loaded plugin's slot 0 from `Replace` to `Console Type` before any state was
+restored — the file does not exist on this machine and was removed again after the measurement,
+but a selection only a local file implies is a selection a render cannot reproduce. **A selection
+id cannot be an index**: the registry is built in one translation unit, since
+`AirwinRegistry.cpp:98` includes `ModuleAdd.h`, so its order is declaration order and
+deterministic, but 524 `registerAirwindow` calls yield **506** rows because 18 are dropped for an
+empty description, the processor's own `nParams > 10` filter removes 2 more and **renumbers the
+rest** — Galactic 209 → 208, Channel5 70 → 69 — and only the name and the alphabetical `ordering`
+survive it. **And the engine's flag guard has nothing to complain about**: all **1,639** compile
+commands carry `-march=x86-64 -mtune=generic -ffp-contract=off`, the build emitted four warnings
+and none of them is ours, and `JUCE_JACK=1` was left exactly as upstream sets it — **M4's
+`-DJUCE_JACK=0` deviation is no longer needed**, because `libjack-jackd2-dev` 1.9.21 is installed,
+which is the same sentence the 2026-10-13 JACK check wrote about `cmaj`.
+
+**Two "exit 0 having done nothing", and the first one was ours.** `setStateInformation` handed a
+bare JUCE chunk rather than a VST3 `<VST3PluginState>` envelope **accepts it, returns void,
+changes nothing and reports nothing**: the first run of this spike's matrix measured "Channel5"
+four times and was measuring Galactic every time, which is how close trap 1 came to eating the
+whole measurement. The selection is only safe because the host now reads `currentProcessorName`
+back and refuses when it did not move. `reset()` is the second, above. Read rather than measured,
+because a VST3 host cannot reach them: `pushResetTypeFromUI` indexes
+`AirwinRegistry::registry[index]` and `setCurrentProgram` indexes `fxAlphaOrdering[index]` with
+**no bounds check**, so an out-of-range selection is an out-of-range read and not a refusal —
+`setStateInformation` is the one path that validates, and it validates a name. The engine's
+`--scan` behaved correctly and is worth recording as checked: with no `pluginCommits` row for
+`airwindows` it **exits 5** with "no submodule commit is compiled in for 'airwindows'" and writes
+no file, so M4's finding holds and the engine PR adds the row in the same change that adds the
+plugin. Passed `surge_xt` as a stand-in it opened the bundle headlessly, instantiated it at
+48 kHz, exited 0 and wrote `Airwindows/Airwindows Consolidated`, version `1.2026.294`, fourteen
+parameters under the ids above — **against Surge XT's commit**, which is a spike artefact and not
+a result.
+
+**Cost, on this machine.** `airwin2rack` at `b6eef0a` with its two gitlinks is 30 MiB, JUCE
+`51d11a2b` is 102 MiB, and `clap-juce-extensions` `55525c98` with its two CLAP gitlinks is 8.5 MiB
+(those submodules took 4 s). Configure 30 s; **building `airwin-consolidated_VST3` alone took
+110 s wall and 1,573 s CPU over 2,171 edges, peak RSS 1.53 GiB**, and the bundle is 25 MiB. The
+spike's own VST3 host — a JUCE console app, the only way to take these numbers before PR 6 exists
+— cost 89 s to configure and build. Peak scratch **1.1 GiB**, a quarter of the M4 spike's 4.6 GiB,
+all of it outside the repository and all of it removed. The clones themselves were not timed.
+
+**What was not measured, and why.** Measurements 1–3, for U9, above. Anything on a second machine
+or a second CPU, because U2. Whether the three existing bundled plugins read libc `rand()`
+directly — the goldens' stability is the evidence and it is indirect. Whether the `srand` reseed
+reaches a *Tracktion* render rather than this spike's host, which is PR 6's to answer with the real
+loader. Whether `USE_JUCE_PROGRAMS=ON` would give a usable selection surface, because turning it
+on changes the plugin and that is a decision rather than a measurement. And the repeat-build
+comparison, which stays PRs 7–8's.
+
+**What this hands the user, and none of it is an agent's to decide.** Airwindows' supported set is
+either the 28 `rand()`-free effects, which needs no source change and refuses the rest, or more
+than that, which needs `std::srand` before each effect construction in airwin2rack's own wrapper
+plus an answer about `rand()` being process-global. Making "the CLAP target is not built" mean what
+decision 2 says needs airwin2rack's `src-juce` edited to drop `clap-juce-extensions` entirely;
+leaving it unedited means a third CLAP SDK in the tree, named in ADR 0033. The date-derived plugin
+version needs either `CMAJ_VERSION`'s treatment — an explicit pin instead of a derivation — or a
+manifest that does not compare it. And U9 is still open, with three measurements waiting behind it.
+**All four were settled on 2026-10-22**: decisions 6, 7 and 8 below, and the version by an agent
+default beside them.
+
+#### Decisions taken, 2026-10-22
+
+Written on this branch **before** the first export, as "A further spike" requires, and carried onto
+`main` by PR 2. Decisions 6, 7 and 8 are the user's, and so is 9, taken the same evening on what
+measurements 1–3 found; the unnumbered row is an agent default, recorded so that it is not mistaken
+for one of them.
+
+| # | Decision | Why, and what it closes |
+|---|---|---|
+| 6 | **U9: a distributed exported Cmajor plugin is a GPLv3 combined work.** The generated C++ is the user's; the helpers an export compiles beside it are GPLv3 or commercial, except `cmaj_CLAPPlugin.h`, which is ISC. Compatible with the application's AGPL-3.0. §12 is **corrected** on this branch, with a §15 row | The user read Cmajor's `LICENSE.md` at `024a208` and the license header of each file a `--target=clap` export compiles, traced through `tools/command/Source/cmaj_command_GeneratePlugin.h`: it unzips the `clap` and `common` plugin helpers and the whole `include/` tree; `cmaj_CLAPPlugin.h` includes `cmaj_PluginHelpers.h`, `cmaj_PatchHelpers.h`, `cmaj_Patch.h` and `cmaj_PatchWebView.h`; the entry point is `createGeneratedCppPluginEntryPoint`, over `cmaj_GeneratedCppEngine.h`. Of the 30 headers under `include/cmajor/`, one is ISC (`cmaj_EmbeddedWebAssets.h`) and the other 29 are GPLv3. The rest of an export is permissive — CLAP SDK `195b42a` MIT, clap-wrapper `1cca996` MIT, VST3 SDK `9fad9770` and `base` **MIT** (Steinberg relicensed at 3.8.0), choc `a08bfd8` ISC. `EULA.md` governs Cmajor's binary tools, and this project builds `cmaj` from source. **This clears the gate on measurements 1–3**, and they run on this branch from here |
+| 7 | **Airwindows' supported set is the 28 effects that never call `rand()`**, with `Channel5` the first supported selection; the other 501 are refused by name | No change to anyone's source. The reseed alternative opens all 529 by reseeding the process-global libc PRNG inside the engine, which the engine's own `fobject.cpp` already reseeds at startup |
+| 8 | **CLAP 1.2.7 is named in ADR 0033 rather than edited out of airwin2rack.** `clap-juce-extensions` and its two CLAP gitlinks (`29ffcc27…`, `a61bcdf0…`) enter the **Airwindows** build tree; the CLAP target is still not built | The VST3 cannot configure or link without them (above). Decision 2's purpose — one CLAP SDK in the **export recipe** — still holds, because that recipe is a separate tree that sees only 1.2.10. Decision 2's wording is corrected to say what is true, rather than a bundled plugin carrying a second source edit across every re-pin |
+| 9 | **The export recipe applies two edits to each export's own copy of `cmaj_CLAPPlugin.h`**: the note-port cache is filled in the AOT constructor, and an AOT plugin's `activate` does not notify the host. The vendored Cmajor tree stays unmodified, and the recipe **fails loudly** when either anchor text is not found exactly once | Without them no Cmajor export can be rendered by this engine: every wrapped VST3 deadlocks JUCE's headless host in `prepareToPlay`, and every wrapped instrument has no event bus (measurements 1–3, below). The header is ISC-licensed and `cmaj generate` copies it into each export, so the edit is to the recipe's output and not to a pin. Patching clap-wrapper instead would move an approved pin and leave instruments deaf; waiting for upstream would block PR 5 on a new Cmajor pin. **ADR 0031 records the two edits and their anchors** |
+| — | *Agent default, not a user decision:* **Airwindows' version is fixed with `SOURCE_DATE_EPOCH`** set to `b6eef0a`'s commit date, 2026-09-19, so it reports `1.2026.263` on every rebuild of that pin | CMake's `string(TIMESTAMP)` honours the variable — checked on 3.28.3, which gave `2026.262` for that date, with airwin2rack's `+1` making it 263. That is `CMAJ_VERSION`'s treatment, a pin rather than a derivation, with no source edit and a manifest that keeps comparing versions |
+
+### What the spike found, measurements 1–3 (run 2026-10-22, after U9)
+
+Run the same day as decision 6 and after it, on the same machine as the Airwindows measurement,
+with the same engine binary of 2026-09-17. **Every number is one machine's.** The approved checkouts
+were taken into scratch space outside the repository at the commits "What U2, U3 and U4 resolve
+to" records:
+
+- **Cmajor `024a208`** with all 31 other gitlinks and LLVM sparse to `release/linux/x64` at
+  `c6380f9`, built from **unmodified source** in 115 s wall and 766 s CPU, with a peak RSS of
+  2.33 GiB and zero warnings. It reports 1.0.3177. The only local change was `.gitmodules`' SSH
+  URLs.
+- **The export pins:** CLAP SDK `195b42a` (`version.h` reads 1.2.10), clap-wrapper `1cca996`, and
+  the VST3 SDK at `9fad9770` with `base`, `public.sdk`, `pluginterfaces` and `cmake` at the
+  gitlinks recorded above.
+- **`onnx`'s closure, installed into a scratch environment under `--require-hashes`.** It is five
+  packages, and every hash this plan recorded matched.
+
+Nothing was vendored or pinned, and `lock.baseline.json` is byte-identical. The scripts that took
+these numbers are in `tests/spike/cmajor/` on this branch, which is not merged. Every export
+below was driven through `core`'s own tools and the real engine unless a row says otherwise.
+
+**The finding that matters: as the recipe stood, the engine could render no Cmajor export at
+all.** Every wrapped Cmajor VST3 — instrument, effect or converted graph — **hangs the engine's
+render forever**, in `prepareToPlay`, before a sample is written. `--scan` opens the same bundles
+cleanly, because a scan does not prepare one, and M4's spike rendered through its own CLAP host,
+so neither had reached this path. A `gdb` built into scratch space (`ptrace_scope` is 1 here, so it
+ran as the engine, with the engine as its child) named the frames:
+
+1. Tracktion's `EditRenderer::render` builds the graph and calls JUCE's
+   `VST3PluginInstanceHeadless::prepareToPlay`.
+2. That calls clap-wrapper's `ClapAsVst3::setActive(true)`, which enters Cmajor's CLAP
+   `activate`.
+3. Cmajor's `activate` tells the host that four things changed — latency, note ports, audio
+   ports and parameters — **unconditionally**: `cmaj_CLAPPlugin.h:468` says so in its own
+   comment, "currently notifying unconditionally, but ought to figure out explicitly what
+   changed".
+4. clap-wrapper turns that into a **synchronous** VST3 `restartComponent`.
+5. JUCE 8.0.13's `VST3HostContextHeadless::restartComponentOnMessageThread` spins on a `SpinLock`
+   that its own caller already holds. 127 s of CPU on the main thread, for ever.
+
+**Nor does the call ever give up**: `render_export` has no wall clock, and `core` waited on the
+spinning engine until it was killed by hand. That is a gap of its own, whatever the plugin.
+
+**A second defect in the same helper makes every wrapped instrument deaf.** For a generated (AOT)
+plugin, the constructor fills the parameter cache and the audio-port cache, but **not the
+note-port cache** (`cmaj_CLAPPlugin.h:152–153`, against `:459–460` in `activate`). So until a host
+activates it, the plugin declares no note input. The VST3 wrapper reads its buses before then,
+and the VST3 SDK's own interfaces confirm that the wrapped instrument has **no event input bus**.
+Separately, the helper offers a note port only for an endpoint typed `std::midi::Message`
+(`:723`). An instrument written against `std::notes` events gets none by construction, and its
+export exits 0 regardless.
+
+**Two edits to the export's own copy of that header fix both, approved by the user the same
+evening (decision 9).** `cmaj generate` copies the helpers into every export's own `helpers/clap/`, and
+`cmaj_CLAPPlugin.h` is **ISC**-licensed, so the recipe can amend that copy as it already
+replaces the generated CMake tail:
+
+1. Fill the note-port cache in the AOT constructor, beside the other two caches.
+2. Skip the change notification in the AOT case. For a generated plugin nothing can change
+   between construction and activation, which is the comment's own point.
+
+With both edits, the instrument alone, the effect alone and the two chained each render in
+**0.67–0.70 s**, and the instrument's event bus exists (`midiIn`, 16 channels). The output is
+what the arithmetic says: the instrument is 440 Hz at the default Level of 0.5; the effect on an
+audio clip gives L 0.375 and R 0.5; the chain gives L 0.375 and R 0.625. It changes code compiled into
+every export — the same class of decision as the Airwindows reseed — so it went to the user rather
+than being adopted here. The alternatives were all worse: patching clap-wrapper moves an approved
+pin, patching JUCE is forbidden, and hosting CLAP directly is a new engine path.
+
+**Measurement 1 — endpoints through the actual VST3 wrapper.** The chain is three facts, each read
+from the code and confirmed by measurement:
+
+- **A CLAP parameter id is the Cmajor endpoint handle** (`cmaj_CLAPPlugin.h:524`).
+- **A VST3 `ParamID` is that CLAP id with its top bit cleared** (clap-wrapper
+  `src/detail/vst3/parameter.cpp:69`).
+- **Handles are 1-based: inputs in declaration order, then outputs, every endpoint taking one.**
+  A stereo effect's first parameter is 2 because its audio input is 1; an instrument's first
+  parameter is 2 because its MIDI input is 1.
+
+Three views agreed for every one of ten exports — seven effect variants and three instrument
+variants: the generated `EndpointHandles` enum in `entry.cpp`, the CLAP params extension, and the
+VST3 SDK's `IEditController`. A fourth, JUCE's view through `engine --scan`, agreed for the nine
+that were scanned; the label-only rename was not. A parameter's display
+**name** is its annotation's `name`, not its endpoint identifier, so the binary alone cannot
+recover an identifier. The generated code can, though: `EndpointHandles` and
+`getEndpointHandleForName` map identifier to handle, and `programDetailsJSON` carries each
+endpoint's annotation (`min`, `max`, `init`). So **the mapping from generated metadata is
+unambiguous**, and no helper change is needed to establish it.
+
+What each edit does to the identity, and then what it does to **one unchanged song** — a lane on
+`ParamID` 2 rising from 0 to 1 over 4 s — rendered through `core` and the engine against each
+export. The song was written against v0, and peaks are |L|, |R| at 1, 2 and 3 s:
+
+| Edit to the source | Identity after the edit | The unchanged song, through the engine |
+|---|---|---|
+| none (v0): `gain`, `tilt` | `gain`=2, `tilt`=3 | (0.063, 0.188) → (0.125, 0.375) → (0.188, 0.563): exactly the computed Gain ramp |
+| insert `drive` above | `drive`=2, `gain`=3, `tilt`=4 | the lane drives **Drive** and "3" now means Gain: (0.282, 0.47) → (0.563, 0.939) → (0.844, **1.0**), clipped. No refusal |
+| reorder | `tilt`=2, `gain`=3 | the lane drives **Tilt**: (0.563, 0.188) → (0.376, 0.375) → (0.188, 0.563). No refusal |
+| rename the identifier `gain`→`level`, label kept | `level`=2, still titled "Gain" | **identical to v0**: numeric ids cannot see this edit, and a symbolic reference would have to refuse it |
+| rename the label only | `gain`=2, titled "Level" | the title changes and nothing else does |
+| change `gain`'s range 0–2 → 0–4 | `gain`=2, default **0.25** where it was 0.5 | Gain at **twice** the level: (0.125, 0.376) → (0.25, 0.751) → (0.375, 1.0). No refusal |
+| remove `gain` | `tilt`=2 | the engine refuses, **at render**: `'Escribass/Spike Fx' declares no parameter '3'`, exit 2, an operator error. Caught only because the song had set "3"; the lane on "2" would otherwise have driven Tilt in silence |
+| instrument, insert `drive` above `level` | `drive`=2, `level`=3 | the Level lane drives **Drive**: 0.5 → 1.0 → 1.0, clipped |
+| instrument, reorder | `pan`=2, `level`=3 | the Level lane **pans**: (0.751, 0.251) → (0.501, 0.501) → (0.251, 0.751) |
+
+The wrapper maps an annotation's range linearly onto 0–1, so Gain's default of 1.0 in 0–2 reads
+0.5. **ADR 0010 §4's manifest cannot see a range change at all**: the range-changed export's
+manifest entry is byte-identical to v0's, because the manifest records only id → name. Agent
+default #9 is therefore measured rather than assumed. A stored numeric `ParamID` survives no
+structural edit, and a stored normalised value survives no range edit. Ranges belong in the
+export record, and an incompatible edit is refused before it reaches the engine.
+
+**Measurement 2 — two exports alive at once.** First, what identifies an export:
+
+- **A VST3 class id is a SHA-1 name GUID of the patch's `"ID"`** (clap-wrapper
+  `wrapasvst3_entry.cpp:274`, unless `CLAP_VST3_TUID_STRING` overrides it).
+- Two exports with one `ID` therefore share a class id (`73159FE5…`); a third with another `ID`
+  gets its own (`59685ECD…`).
+- All three are `Escribass/Spike Two` to the manifest and to the engine's `byId`.
+- JUCE gives all three **the same** `uniqueId` (−235352137) and `deprecatedUid` (1622023579).
+
+JUCE's identifier string does include a hash of the file path, and its `KnownPluginList` keeps
+both types and looks each up to its own file, so Tracktion's `findMatchingPlugin` would find the
+right file. **But loaded into one process through the engine's own JUCE (`37c894f8`), the second
+instance runs the first-loaded binary's code.** A then B gives gain 0.5 twice, B then A 0.25 twice,
+and A then C — another CLAP id, another class id — 0.5 twice. The cause is `STB_GNU_UNIQUE`. Each
+export has 49 unique symbols, among them the plugin factory,
+`factorySingleton<…makeGeneratedCppPluginDescriptor<SpikeTwo>…>::factory`. glibc binds a unique
+symbol process-wide to its first definition whatever `RTLD_LOCAL` says, and 3,168 default-visibility
+exports carry the generated class's name. **The colliding key is the main processor's name**: an
+export identical to A but with its processor renamed runs its own code in either order. And two
+versions of one instrument — an edit and its predecessor — always share a processor name. With two
+such modules loaded, the process also **segfaults inside `exit()`**.
+
+**The remedy is a recipe flag set, not a source change, and it took three goes.**
+
+1. `-fvisibility=hidden -fvisibility-inlines-hidden -fno-gnu-unique` leaves no unique symbols and
+   93 exports: the four entry points and libstdc++ instantiations, and no `cmaj` or `SpikeTwo`
+   symbol. Each instance then runs its own code in either order, even beside an old-style build.
+2. **That alone crashes the engine.** JUCE's `RefCountedDllHandle` `dlclose`s a module when its
+   last reference goes. A unique symbol had made glibc never unmap the library; a flagged build
+   really is unmapped, and the engine segfaults inside `exit()` after answering: `--scan` exits
+   139, and a render reports "answered and then was killed by a signal".
+3. **`-Wl,-z,nodelete`** restores never-unload explicitly (`FLAGS_1: NODELETE`). With it the
+   two-bundle host is clean in both orders, `--scan` exits 0, and each render exits cleanly
+   within 6e-8 and 9e-8 of 0.5× and 0.25× the dry signal.
+
+The full recipe is therefore **two helper edits, three compile flags and one link flag**. The
+engine side was not changed in this spike. Its manifest and `byId` are keyed by `vendor/name`, so
+two same-named exports cannot even be named to it; PR 6 keys the loader by export identity, which
+is a path, and Tracktion's identifier string already tells two paths apart. **Not measured:
+successive preview replacements, or a fresh export while a preview plays.** Preview needs ALSA's
+default PCM, and this machine defines none. A null PCM would mean editing the user's home ALSA
+configuration, and it produces no audio from which to tell which binary sounded. Agent default
+#11 stands on the in-process measurement above.
+
+**Measurement 3 — a graph becomes audio, not merely Cmajor.**
+
+- **A feed-forward graph matches numpy within float32 rounding.** The graph is `[1,2]` →
+  `MatMul [2,4]` → `Add` → `Tanh` → `MatMul [4,2]` → `Add` → `[1,2]`, with its weights written
+  down. It converts, compiles and, through `cmaj render`, agrees with numpy frame for frame:
+  relative error 1.8e-7, zero latency. Halving `W2` takes the rms from 0.3365 to 0.1694.
+- **Through the engine, with an explicit adapter, it stays correct.** The adapter is a graph
+  made the patch's `[[ main ]]`: stereo `in` and `out`, L → `x[0]` and R → `x[1]`, one tensor per
+  frame. The converted graph's own `[[ main ]]` has to be stripped, which is a recipe step.
+  Exported through the same recipe and rendered on an audio clip, it lies **within 1.2–1.9 LSB of
+  24-bit** of numpy applied to the dry render. Changed weights change it, a changed input
+  changes it, and two fresh engine processes give identical `data` chunks (`2e582836…`). The
+  plugin has no parameters, which is the adapter's choice.
+- **`Gemm` is correct with `C` full-rank, vector or absent**, at `alpha` = `beta` = 1 and no
+  transpose (relative error 7.6e-8).
+- **`alpha`, `beta` and `transB` are silently ignored.** Each compiles, renders and exits 0 with
+  exactly the plain `Gemm`'s output, rms 0.2814 each time.
+- **`transA` and a scalar `C` fail without naming `Gemm`.** `transA` fails as a type error inside
+  `onnx.cmajor`; a scalar `C` makes the converter emit invalid Cmajor.
+- **`Softmax` fails with "Type references are not allowed in this context"**, as M4 found, still
+  without naming the operator.
+- **The converted `GRU` matches no ONNX semantics tried.** It converts, compiles and renders, and
+  it carries state across frames, settling over about 30 frames within each held step of a
+  staircase input. But it matches none of 24 variants — gate order × `linear_before_reset` ×
+  carried or reset state. The best maximum error is 0.076 against outputs of about 0.15. U6's
+  default named recurrence as refused unless this branch demonstrated its semantics, and it did
+  not.
+
+A preflight prototype (`tests/spike/cmajor/preflight.py`) accepts exactly the five graphs measured
+correct and refuses the other six, naming each node and operator before the converter runs.
+**Five exit codes that are not what they look like**, which agent default #14 needs exactly:
+
+| Tool, and what went wrong | What it does |
+|---|---|
+| the converter, handed an invalid model | prints "The model is invalid", writes the template patch anyway, exits 0 |
+| `cmaj render`, on a compile error | exits 1, **prints no diagnostic**, and leaves a 104-byte WAV with an empty `data` chunk |
+| `cmaj play --dry-run --stop-on-error`, on a compile error | prints the diagnostic and **exits 0** |
+| `cmaj render --input` | blanks the first 20,480 output frames rather than delaying the input: output frame *n* is the graph applied to input frame *n* |
+| `cmaj generate`, on a compile error | exits 1 with `file:line:col: error:`, but leaves four helper files behind in the output directory, and prints "Loaded: <name>" before the compile |
+
+So an export reads the status, the diagnostic and the expected `entry.cpp`, and never trusts a
+populated directory. One licence fact, consistent with decision 6: the converter's template and
+the `onnx.cmajor` operator library it copies into every converted patch carry Cmajor's GPLv3 or
+commercial header.
+
+**Export cost and reproducibility.** Over 36 exports: generate takes a median 0.11 s, configure
+0.66 s, and build a median **21.2 s** (range 20.0–33.9 s, five builds over 24 s that are not
+explained). That is M4's ≈20 s again. Two independent exports of one patch, in differently named
+directories with the helper edits applied, gave an identical `.so` (`7a38ece2…`) and `.clap`
+(`e13d6906…`). The bundle is **one file**, `Contents/x86_64-linux/<name>.so`, with no
+`moduleinfo.json` and no resources, which is what an export record's member list holds. The
+configure reached no network: downloads were forced off and both SDK roots given.
+
+**What this hands to whom.** The user took the two helper edits as decision 9. Agent defaults,
+written back below where they live:
+
+- the recipe's visibility and `nodelete` flags;
+- the generated `EndpointHandles` and `programDetailsJSON` as the mapping's source, verified
+  against the inspected binary;
+- the measured `Gemm` envelope and recurrent refusal;
+- a wall clock on `render_export`.
+
+**U1 still reads one M5.** Each finding lands in a pull request the table already has — the recipe
+in PR 5, the loader in PR 6, the record and lowering in PRs 7–8, the preflight in PR 12 — and none
+of them is a new subsystem.
 
 ### The pins that really move
 
@@ -3844,7 +4338,9 @@ re-derive it rather than trust this table.
 | 4 | **The new environment is constrained to what `ai/` already holds**: `[tool.uv] constraint-dependencies = ["pydantic==2.13.5", "multidict==6.9.1"]`, leaving `onnx` the only genuinely new dependency | The goldened divergence list goes to **3 lines instead of 11**, and the one addition is the known 6.9.1/7.0.0 divergence seen from a third side rather than a new one. The causation matters more than the count and is the finding: resolving the same requirement set **with `onnx` removed** produces the identical `pydantic`, `pydantic-core` and `multidict` movements, so the drift is the price of resolving *any* lock on 2026-10-20 and not of approving `onnx`. A decision that confused the two would either refuse a dependency for someone else's drift or accept the drift as if a dependency had required it |
 | 5 | **CPM.cmake 0.40.2 is vendored, not fetched** | Both airwin2rack and clap-wrapper `file(DOWNLOAD)` it with an identical SHA256, and airwin2rack's fetch is **unconditional**. A hash makes a download safe but **not reproducible**: a release asset can be replaced, and then the hash fails the build rather than reproducing it. That is the same argument that made this project pin Cmajor by commit instead of by release binary (M4's planning, U4), and it is what PR 5's "a fresh configure with the network unreachable succeeds" requires. A configure should need no network |
 
-**U9 is still open, and one measurement proceeds without it.** The user has **not** read Cmajor's
+**U9 is still open, and one measurement proceeds without it.** *(Answered on 2026-10-22 —
+decision 6, after which measurements 1–3 ran; the paragraph stands as what was true on 2026-10-20.)*
+The user has **not** read Cmajor's
 licence, and chose on 2026-10-20 to run **the Airwindows measurement only** — the fourth row of
 the spike table, which builds a JUCE VST3 and exports no Cmajor, so §12's claim about generated
 code is not in its path. **Measurements 1, 2 and 3 wait**: endpoints through the VST3 wrapper,
@@ -4099,6 +4595,26 @@ closure of ADR 0010 §1's `GIT_TAG main`, and the decision that airwin2rack's CL
 built — which is why no CLAP version reconciliation appears in it. None of the three may restate
 a decision differently from the table above; a changed answer is written back there first.
 
+**And where the four of 2026-10-22 land.** Decision 6, U9, is recorded already: §12 is corrected
+on `main` by PR 2, and ADR 0031 cites that reading when PR 5 exports. Decision 9 — the two edits
+to each export's own copy of `cmaj_CLAPPlugin.h` — is ADR 0031's, with the visibility and
+`nodelete` flags ADR 0029 §6 requires beside it. Decisions 7 and 8 are ADR 0033's. **Decision 8
+changes decision 2 rather than contradicting it**: airwin2rack's CLAP target is still not built,
+but its JUCE VST3 cannot be built without `clap-juce-extensions` and CLAP 1.2.7, so ADR 0033
+names that SDK in the Airwindows tree instead of the "no CLAP version reconciliation" this
+paragraph promised. The export recipe still holds exactly one CLAP SDK.
+
+**ADRs 0028–0030 accepted 2026-10-22, in PR 2**, each on what measurements 1–3 found rather than
+on the defaults alone.
+- **0028:** the export record and its `optional` field. Replay forced the `optional`; the
+  defaults had not foreseen it.
+- **0029:** the child, the tools, the endpoint-identifier key, and the loader keyed by export
+  with the symbol flags that make it work. It also adds a render wall clock no default asked for.
+- **0030:** the two lock blocks and re-pin before open.
+
+**ADR 0033's title premise is gone.** There is no `Replace` selection to fix, so the ADR decides
+how a name in the state chunk is represented.
+
 Each accepted ADR gets its §15 row, every affected specs section, dependent ADR amendment and
 index entry in the same change. The table is not permission to amend a decision by leaving a
 contradictory later paragraph. A further split, if U1 takes it, additionally amends ADR 0003,
@@ -4114,8 +4630,8 @@ the next documentation change.
 | # | Branch | Adds |
 |---|---|---|
 | 0 | `m5.0-plan` | This plan, its user questions and defaults, and the dispositions of the inherited ledger. Documentation only; no pin or golden moves |
-| 1 | `m5.1-spike` (**never merged**) | The four bounded measurements above, with U9/U4/U3 gates on the measurements that need them. **As of 2026-10-20 the gate state is: U4 and U3 satisfied, U9 open, so this branch runs the Airwindows measurement only** — the other three export Cmajor-generated code and are blocked until a person reads the licence. Answers the interfaces the ADRs cannot honestly guess; reports any unmeasured item and its cause |
-| 2 | `m5.2-adrs` | User answers (including U9 and §12 if the spike exported), spike findings, ADRs 0028–0030 and their specs/index/dependent-ADR amendments. No code and no pre-emptive baseline edits. Resolve tool target selectors, record schemas and failure kinds here, before generated wire types exist |
+| 1 | `m5.1-spike` (**never merged**) | The four bounded measurements above, with U9/U4/U3 gates on the measurements that need them. **As of 2026-10-20 the gate state is: U4 and U3 satisfied, U9 open, so this branch runs the Airwindows measurement only** — the other three export Cmajor-generated code and are blocked until a person reads the licence. Answers the interfaces the ADRs cannot honestly guess; reports any unmeasured item and its cause. **On 2026-10-22 U9 was answered (decision 6) and measurements 1–3 ran on this branch**; only preview replacement, which needs an audio device, stayed unmeasured |
+| 2 | `m5.2-adrs` | User answers (including U9 and §12 if the spike exported), spike findings, ADRs 0028–0030 and their specs/index/dependent-ADR amendments. No code and no pre-emptive baseline edits. Resolve tool target selectors, record schemas and failure kinds here, before generated wire types exist. **Done 2026-10-22**: the target selectors are an existing device, an instrument track or an effect slot (ADR 0029 §3); the record is `ExportRecord` with its fields (ADR 0028 §2); the failure kinds are ADR 0029 §4's, split as ADR 0022 §3 splits everything. The user's U9 reading is carried, and nothing in `lock.baseline.json` moved |
 | 3 | `m5.3-export-ref` | **The schema change, alone**: optional export fields on SourceRef and ModelRef, generated Rust/TS/Python and the dependent descriptor, schema fixture and all round trips. Old projects and historical refs replay unchanged; `buf breaking` and the explicit absence tests both run. No default-key mass rewrite |
 | 4 | `m5.4-export-proto` | `Export` whole, source/compile/read-status interfaces, the re-pin recovery request/response contract, and `render.proto`'s resolved artefact description, in all generated consumers. Inspect/provenance messages describe binaries, not song state. `buf breaking` against the actual base; required tonic methods may answer `UNIMPLEMENTED`, but unimplemented tools do not join `IMPLEMENTED` or `OFFERED` |
 | 5 | `m5.5-native-build` | ADR 0031 and the approved native trees under `compilers/dsp/`, missing pins, sparse/HTTPS checkout recipe, unmodified `cmaj`, CI setup and flag/provenance checks. A fresh configure with dependencies already present and the network **unreachable** succeeds; deliberately removing a required SDK fails instead of fetching it. Own the Linux VST3 CMake adaptation, downloads OFF, relative/explicit SDK resolution and PIC, with a guard that notices upstream template drift. Pin `CMAJ_VERSION` explicitly instead of deriving it from mutable tags; measure active setup/export time and total concurrent memory on the runner. U9 is required before its first export, including a test export |
@@ -4251,6 +4767,25 @@ different runners merely to make this plan's table shorter.
     no live Cmajor-authoring success rate is measured, and no successful scan establishes
     every Airwindows algorithm's determinism. The first export's licence gate is a person's,
     however green the build. None of those gaps is closed by a new golden file.
+23. **The scan opens it, so it must play.** *(Found 2026-10-22.)* `--scan` instantiates a wrapped
+    Cmajor VST3 and never prepares it, so it says nothing about the render path. That is where
+    the unedited helper deadlocks JUCE's host, and it deadlocks for ever, because
+    `render_export` has no wall clock. A loader test that scans and does not render is
+    measuring the wrong call, and a render with no timeout is a hang nobody reports.
+24. **Two exports differ by every id and still run one binary.** *(Found 2026-10-22.)* A
+    `GNU_UNIQUE` factory is keyed by the C++ class name, so the second module of a processor name
+    runs the first one's code — whatever its CLAP id, class id or path. Hiding the symbols alone
+    then crashes the engine in `exit()` after `dlclose`. Keep all three compile flags and
+    `-z nodelete` together, and test two versions of one source **in one process**, in both load
+    orders, alongside the plain render.
+25. **The instrument exported and is silent.** *(Found 2026-10-22.)* A note port exists only for a
+    `std::midi::Message` input, and only after `activate` unless the helper is edited; a VST3
+    host reads its buses before that. An instrument golden that asserts a correct-length WAV
+    and not a non-silent one passes on a deaf plugin.
+26. **The converter succeeded at the wrong equation.** *(Found 2026-10-22.)* `Gemm`'s `alpha`,
+    `beta` and `transB` compile, render and exit 0 with the attribute ignored. Only a comparison
+    against an independent reference catches it, and only for the attribute the test varies.
+    The preflight refuses what was not measured correct; an exact repeat render proves none of it.
 
 ### The ledger, walked for this plan
 
