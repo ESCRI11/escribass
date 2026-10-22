@@ -1,0 +1,3 @@
+{ "CmajorVersion": 1, "ID": "dev.escribass.spike.net", "version": "1.0", "name": "Spike Net",
+  "description": "m5.1-spike measurement 3", "category": "effect", "manufacturer": "Escribass",
+  "isInstrument": false, "source": [ "onnx.cmajor", "model.cmajor", "adapter.cmajor" ] }

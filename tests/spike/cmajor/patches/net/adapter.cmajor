@@ -1,0 +1,13 @@
+// m5.1-spike: the explicit audio adapter. Stereo in, one tensor per frame, L -> x[0], R -> x[1];
+// y[0] -> L, y[1] -> R. No implicit tensor-to-audio mapping: this file is the mapping.
+graph SpikeNet [[ main ]]
+{
+    input stream float<2> in;
+    output stream float<2> out;
+    node net = model;
+    connection
+    {
+        in -> net.x;
+        net.y -> out;
+    }
+}

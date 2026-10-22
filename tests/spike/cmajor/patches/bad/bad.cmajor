@@ -1,0 +1,5 @@
+processor Bad [[ main ]]
+{
+    output stream float out;
+    void main() { loop { out <- undefinedThing; advance(); } }
+}

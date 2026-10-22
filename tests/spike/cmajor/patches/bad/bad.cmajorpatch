@@ -1,0 +1,3 @@
+{ "CmajorVersion": 1, "ID": "dev.escribass.spike.bad", "version": "1.0", "name": "Spike Fx",
+  "description": "m5.1-spike measurement 1", "category": "effect", "manufacturer": "Escribass",
+  "isInstrument": false, "source": "bad.cmajor" }

@@ -1,0 +1,38 @@
+graph SpikeSyn [[ main ]]
+{
+    input event std::midi::Message midiIn;
+    output stream float<2> out;
+    input value float pan [[ name: "Pan", min: -1.0, max: 1.0, init: 0.0 ]];
+    input value float level [[ name: "Level", min: 0.0, max: 1.0, init: 0.5 ]];
+    node mpe = std::midi::MPEConverter;
+    node voice = Voice;
+    connection
+    {
+        midiIn -> mpe -> voice.eventIn;
+        level -> voice.level;
+        pan -> voice.pan;
+        voice.out -> out;
+    }
+}
+
+processor Voice
+{
+    input event (std::notes::NoteOn, std::notes::NoteOff) eventIn;
+    input value float level, pan, drive;
+    output stream float<2> out;
+    float freq = 0.0f;
+    float gate = 0.0f;
+    float64 phase = 0.0;
+    event eventIn (std::notes::NoteOn e)  { freq = std::notes::noteToFrequency (e.pitch); gate = 1.0f; }
+    event eventIn (std::notes::NoteOff e) { gate = 0.0f; }
+    void main()
+    {
+        loop
+        {
+            let s = gate * level * 1.0f * float (sin (phase));
+            phase = addModulo2Pi (phase, float64 (twoPi * freq * processor.period));
+            out <- float<2> (s * (1.0f - pan), s * (1.0f + pan));
+            advance();
+        }
+    }
+}

@@ -1,0 +1,7 @@
+processor SpikeTwo [[ main ]]
+{
+    input stream float<2> in;
+    output stream float<2> out;
+    input value float gain [[ name: "Gain", min: 0.0, max: 2.0, init: 1.0 ]];
+    void main() { loop { out <- in * (gain * 0.25f); advance(); } }
+}
