@@ -86,7 +86,7 @@ fn plugin() -> Option<DeviceRef> {
 }
 
 fn source(hash: &str) -> SourceRef {
-    SourceRef { source_hash: hash.to_string() }
+    SourceRef { source_hash: hash.to_string(), export_hash: None }
 }
 
 fn ok(result: ToolResult) -> ToolResult {
@@ -525,7 +525,7 @@ fn everything_m1_cannot_render_is_refused_at_once() {
     let (_dir, mut session) = opened();
     let t = track(&mut session, TrackKind::Instrument, cmajor());
     let faust = effect(&mut session, &t, device(Kind::Faust(source("3c1de4f98b"))), 0);
-    let model = ModelRef { model_hash: "ab12".to_string() };
+    let model = ModelRef { model_hash: "ab12".to_string(), export_hash: None };
     let neural = effect(&mut session, &t, device(Kind::Neural(model)), 1);
     // A sampler is an instrument. The model holds one DeviceRef in both places, so a sampler
     // on a chain is a legal document and not a renderable one.

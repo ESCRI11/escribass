@@ -356,7 +356,7 @@ fn what_compile_refuses_is_refused_before_any_engine_starts() {
     session
         .add_effect(&AddEffectRequest {
             track_id: track.expect("the instrument track").clone(),
-            r#ref: Some(DeviceRef { kind: Some(Kind::Faust(SourceRef { source_hash: "3c1de4f98b".to_string() })) }),
+            r#ref: Some(DeviceRef { kind: Some(Kind::Faust(SourceRef { source_hash: "3c1de4f98b".to_string(), export_hash: None })) }),
             index: None,
             dry_run: false,
         })

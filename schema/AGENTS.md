@@ -48,7 +48,7 @@ schema/node_modules/.bin/buf breaking --against '.git#branch=main'   # wire comp
 | Every entity carries `string id = 1; Provenance provenance = 2; uint32 version = 3;` — `AutomationPoint`, `TempoEvent`, `TimeSignatureEvent` carry `id` only | specs §4.3; ADR 0002 §2; ADR 0001 §3, correction |
 | Ticks are `int32`; the only 64-bit field is `Generator.seed` | ADR 0002 §1 |
 | Sum types are `oneof` with message arms; no parallel `kind` enum | ADR 0002 §3 |
-| `optional` only where absent differs from zero | ADR 0002 §5 |
+| `optional` only where absent differs from zero — **or where a field is added to a message committed logs already add**, so an old value replays to the same bytes; a plain field there is emitted at its default and every such log is one key short of its own song (`SourceRef.export_hash`, `ModelRef.export_hash`) | ADR 0002 §5; ADR 0028 §1 |
 | Canonical JSON — proto field names, defaults emitted, map keys sorted — comes from the `protoc-gen-prost-serde` options in `buf.gen.yaml`, never from a hand-written serializer | ADR 0002 §4; specs §4.1 |
 | `syntax = "proto3"`, not Editions | ADR 0002 §10 |
 | Patch ops travel as JSON text in `PatchEntry.ops` (`bytes`), never as a proto message | ADR 0002 §11 |

@@ -214,7 +214,17 @@ is ADR 0029 §7's refusal.
 
 - **M5 PR 3** (`m5.3-export-ref`): the two fields, `schema/gen/` regenerated in three languages,
   the schema fixture, and the replay proof on the existing logs. **A schema change alone**, as
-  M1 PR 2 and M4 PR 2 were. `buf breaking` and the absence tests both run.
+  M1 PR 2 and M4 PR 2 were. `buf breaking` and the absence tests both run. **Done 2026-10-23,
+  and the proof held**:
+  - All nine committed determinism projects open as they were written.
+  - Every entry of every log replays and reads back through the new types byte for byte. That is
+    94 entries, meeting 21 Cmajor and 14 Faust references, none with the key.
+  - `schema_version` stays 1. `buf breaking` against `main` reports nothing, and the schema
+    fixture did not move.
+  - **The proof was watched failing.** With the serialiser made to write the key as a plain
+    `string` would, it fails at `branches`' entry `…0008`. That is an *intermediate* state: the
+    branch's final song no longer holds the reference, so `open` alone, which checks only the
+    head, would have passed it.
 - **M5 PR 4**: `ExportRecord` in `proto/export.proto`, generated for every consumer.
 - **M5 PR 8**: `core` writes and verifies records, reconstructs bundles into the cache, and
   answers `export_pending`, `export_stale`, `export_missing` and `export_corrupt`. These retire

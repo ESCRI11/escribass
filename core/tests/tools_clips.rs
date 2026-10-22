@@ -49,6 +49,7 @@ fn cmajor() -> Option<DeviceRef> {
     Some(DeviceRef {
         kind: Some(escribass_schema::song::device_ref::Kind::Cmajor(SourceRef {
             source_hash: "8b31c0de4f9c00000000000000000000".to_string(),
+            export_hash: None,
         })),
     })
 }

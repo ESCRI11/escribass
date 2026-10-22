@@ -61,6 +61,10 @@ fn build() -> Song {
             r#ref: Some(DeviceRef {
                 kind: Some(device_ref::Kind::Cmajor(SourceRef {
                     source_hash: "8b31c0de4f9c00000000000000000000".to_string(),
+                    // Absent, which is what "never exported" is (ADR 0028 §1), and what every
+                    // reference written before the field existed reads as — so the fixture does
+                    // not move. A plausible-looking digest here would be a record nothing wrote.
+                    export_hash: None,
                 })),
             }),
             state: vec![0x01, 0x02],
@@ -390,9 +394,43 @@ fn defaults_are_emitted_and_unset_optionals_are_absent() {
     // An unset `optional` is genuinely absent, so `add`/`remove` are meaningful for it.
     assert!(!json.contains("loop_length_ticks"));
     assert!(!json.contains("prompt_id"));
+    // The newest `optional`, and the reason it is one: a reference that was never exported
+    // writes no key, so a log written before the field existed replays to the same bytes
+    // (ADR 0028 §1). A plain `string` would write `"export_hash": ""` here.
+    assert!(!json.contains("export_hash"));
     // 64-bit integers are JSON strings; ticks are not.
     assert!(json.contains("\"seed\": \"9007199254740993\""));
     assert!(json.contains("\"start_tick\": 61440"));
+}
+
+#[test]
+fn an_export_hash_is_written_only_when_present_and_empty_is_not_absent() {
+    // ADR 0028 §1 gives the field two meaningful states and refuses a third, so the three
+    // have to stay distinguishable on disk: absent writes no key, a present empty string
+    // writes one (which the validator will refuse, `export_hash_malformed`), and a digest
+    // writes itself. Each read back to exactly what was written.
+    let hash = "d".repeat(64);
+    for (export_hash, expected) in [
+        (None, None),
+        (Some(String::new()), Some("\"export_hash\": \"\"".to_string())),
+        (Some(hash.clone()), Some(format!("\"export_hash\": \"{hash}\""))),
+    ] {
+        for json in [
+            canonical(&SourceRef { source_hash: "s".to_string(), export_hash: export_hash.clone() }),
+            canonical(&ModelRef { model_hash: "m".to_string(), export_hash: export_hash.clone() }),
+        ] {
+            match &expected {
+                None => assert!(!json.contains("export_hash"), "absent writes no key: {json}"),
+                Some(text) => assert!(json.contains(text.as_str()), "{text} in {json}"),
+            }
+        }
+        let source: SourceRef = serde_json::from_str(&canonical(&SourceRef {
+            source_hash: "s".to_string(),
+            export_hash: export_hash.clone(),
+        }))
+        .unwrap();
+        assert_eq!(source.export_hash, export_hash, "read back as written");
+    }
 }
 
 #[test]

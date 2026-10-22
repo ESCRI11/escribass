@@ -597,9 +597,21 @@ default_message_pool.register_message("escribass.song.v1", "Mix", Mix)
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class ModelRef(betterproto2.Message):
+    """
+    An ONNX graph in assets/ by content hash, and — once one has been made — the export record
+    of the plugin converted from it (ADR 0028 §1, §5).
+    """
+
     model_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
         1, betterproto2.TYPE_STRING
     )
+
+    export_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        2, betterproto2.TYPE_STRING, optional=True
+    )
+    """
+    As SourceRef.export_hash.
+    """
 
 
 default_message_pool.register_message("escribass.song.v1", "ModelRef", ModelRef)
@@ -947,12 +959,23 @@ default_message_pool.register_message("escribass.song.v1", "Song", Song)
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class SourceRef(betterproto2.Message):
     """
-    Content hash of a Cmajor or Faust source in assets/ (§10).
+    A Cmajor or Faust source in assets/ by content hash (§10), and — once one has been made —
+    the export record that says what was built from it (ADR 0028 §1, §2).
     """
 
     source_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
         1, betterproto2.TYPE_STRING
     )
+
+    export_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        2, betterproto2.TYPE_STRING, optional=True
+    )
+    """
+    Absent: never exported. Present: the SHA-256 of an export record in assets/, and never
+    empty. `optional` for replay: four committed logs add a SourceRef written before this
+    field existed, and a plain string would make each replay one key short of its own song
+    (ADR 0028 §1). Written by compile_instrument and by no other tool (ADR 0029 §3).
+    """
 
 
 default_message_pool.register_message("escribass.song.v1", "SourceRef", SourceRef)
