@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { equals, fromJsonString, toJsonString } from "@bufbuild/protobuf";
-import { SongSchema } from "../gen/ts/song_pb.js";
+import { SongSchema, SourceRefSchema } from "../gen/ts/song_pb.js";
 
 const fixture = (p: string) =>
   readFileSync(new URL(`../../tests/fixtures/${p}`, import.meta.url), "utf8");
@@ -58,6 +58,26 @@ test("an uncompiled generator reads its hash as the empty string", () => {
   // that the field reached TypeScript at all — the generated type would not have it, `tsc`
   // would refuse this line, and `fromJsonString` would reject the fixture's unknown key.
   assert.equal(song().generators["01M1FPMP00GENCHRS00000000D"].compiledHash, "");
+});
+
+test("a reference nobody exported reads as absent, and a present empty one does not", () => {
+  // ADR 0028 §1: `export_hash` is optional, so "never exported" is absence — in the fixture,
+  // and in a committed project written before the field existed — and a present empty string
+  // is a third, refused value the window must not mistake for pending.
+  const bass = song().tracks["01M1FPMP00TRACKBASS0000002"].instrument?.ref?.kind;
+  if (bass?.case !== "cmajor") throw new Error("the fixture's bass is a Cmajor device");
+  assert.equal(bass.value.exportHash, undefined);
+  const logged = fromJsonString(
+    SongSchema,
+    readFileSync(new URL("../../tests/determinism/every_tool/expected/song.json", import.meta.url), "utf8"),
+  );
+  const faust = Object.values(logged.tracks)
+    .flatMap((t) => Object.values(t.fxChain))
+    .map((e) => e.ref?.kind)
+    .find((k) => k?.case === "faust");
+  if (faust?.case !== "faust") throw new Error("every_tool's golden holds a Faust effect");
+  assert.equal(faust.value.exportHash, undefined);
+  assert.equal(fromJsonString(SourceRefSchema, '{"source_hash":"s","export_hash":""}').exportHash, "");
 });
 
 test("a 64-bit field crosses as a string and lands as an exact bigint", () => {

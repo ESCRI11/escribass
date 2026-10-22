@@ -320,6 +320,7 @@ fn a_dry_run_of_a_minting_tool_returns_the_patch_the_apply_then_records() {
             kind: Some(escribass_schema::song::device_ref::Kind::Cmajor(
                 escribass_schema::song::SourceRef {
                     source_hash: "8b31c0de4f9c00000000000000000000".to_string(),
+                    export_hash: None,
                 },
             )),
         }),

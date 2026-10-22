@@ -179,16 +179,28 @@ pub struct PluginRef {
     #[prost(string, tag="2")]
     pub version: ::prost::alloc::string::String,
 }
-/// Content hash of a Cmajor or Faust source in assets/ (§10).
+/// A Cmajor or Faust source in assets/ by content hash (§10), and — once one has been made —
+/// the export record that says what was built from it (ADR 0028 §1, §2).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SourceRef {
     #[prost(string, tag="1")]
     pub source_hash: ::prost::alloc::string::String,
+    /// Absent: never exported. Present: the SHA-256 of an export record in assets/, and never
+    /// empty. `optional` for replay: four committed logs add a SourceRef written before this
+    /// field existed, and a plain string would make each replay one key short of its own song
+    /// (ADR 0028 §1). Written by compile_instrument and by no other tool (ADR 0029 §3).
+    #[prost(string, optional, tag="2")]
+    pub export_hash: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// An ONNX graph in assets/ by content hash, and — once one has been made — the export record
+/// of the plugin converted from it (ADR 0028 §1, §5).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ModelRef {
     #[prost(string, tag="1")]
     pub model_hash: ::prost::alloc::string::String,
+    /// As SourceRef.export_hash.
+    #[prost(string, optional, tag="2")]
+    pub export_hash: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// The SFZ file is the sample map (§4.2 SampleMap, reduced per ADR 0002 §8).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

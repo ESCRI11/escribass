@@ -196,6 +196,91 @@ fn a_generator_logged_before_compiled_hash_existed_would_strand_its_project() {
 }
 
 #[test]
+fn every_committed_log_replays_unchanged_now_that_a_source_ref_can_name_an_export() {
+    // ADR 0028 §1's condition for keeping `schema_version` at 1, run rather than argued. The
+    // test above shows what an additive field does to a log written before it: the replay is
+    // one key short of the song, and `open` refuses. M4 could say no such project existed.
+    // M5 cannot — `branches`, `every_tool`, `refusals` and `undo` all log a `SourceRef`, and
+    // the field is `optional` so that they still open.
+    //
+    // So every committed determinism project is opened as it was written, and every entry of
+    // every log — `get_song_at`'s states, undo's and both sides of each merge included — is
+    // replayed and read through today's types, which must give back the replay byte for byte.
+    // That is exactly the comparison `open` makes, at every point a reader can ask for.
+    let goldens = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/determinism"));
+    let (mut projects, mut entries, mut cmajor, mut faust) = (0, 0, 0, 0);
+    let mut names: Vec<_> = std::fs::read_dir(&goldens).unwrap().map(|e| e.unwrap().path()).collect();
+    names.sort();
+    for script in names {
+        let expected = script.join("expected");
+        if !expected.join("refs.json").exists() {
+            continue;
+        }
+        // A copy, because a project that opens may be written to, and these are committed.
+        let dir = Scratch::new();
+        copy_tree(&expected, &dir.0);
+        let project = Project::open(&dir.0, manifest())
+            .unwrap_or_else(|e| panic!("{} no longer opens: {} {}", script.display(), e.rule, e.message));
+        for id in project.history().entries().keys() {
+            let replayed = project.history().materialise(id).unwrap();
+            let read: Song = serde_json::from_value(replayed.clone())
+                .unwrap_or_else(|e| panic!("{}@{id} is not a song: {e}", script.display()));
+            assert_eq!(
+                serde_json::to_value(&read).unwrap(),
+                replayed,
+                "{}@{id} reads back differently through today's types",
+                script.display()
+            );
+            for (kind, hash) in source_refs(&replayed) {
+                assert!(!hash.contains_key("export_hash"), "{}@{id}: {hash:?}", script.display());
+                match kind.as_str() {
+                    "cmajor" => cmajor += 1,
+                    "faust" => faust += 1,
+                    _ => {}
+                }
+            }
+            entries += 1;
+        }
+        projects += 1;
+    }
+    // What makes this a test of the hazard rather than of nine projects with nothing in them.
+    assert!(projects >= 9, "every determinism golden is a project: {projects}");
+    assert!(cmajor > 0 && faust > 0, "the logs reached both kinds: cmajor {cmajor}, faust {faust}");
+    eprintln!("{projects} projects, {entries} entries, {cmajor} Cmajor and {faust} Faust references");
+}
+
+/// Every `cmajor`, `faust` and `neural` reference anywhere in a document.
+fn source_refs(doc: &Value) -> Vec<(String, serde_json::Map<String, Value>)> {
+    let mut found = Vec::new();
+    match doc {
+        Value::Object(map) => {
+            for (key, value) in map {
+                if let ("cmajor" | "faust" | "neural", Value::Object(inner)) = (key.as_str(), value) {
+                    found.push((key.clone(), inner.clone()));
+                }
+                found.extend(source_refs(value));
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| found.extend(source_refs(item))),
+        _ => {}
+    }
+    found
+}
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+#[test]
 fn an_orphan_entry_left_by_a_crash_does_not_become_history() {
     // refs.json is written last, so a crash before it leaves an entry nothing references.
     let dir = Scratch::new();

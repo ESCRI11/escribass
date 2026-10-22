@@ -177,13 +177,25 @@ message PluginRef {
   string version = 2;
 }
 
-// Content hash of a Cmajor or Faust source in assets/ (§10).
+// A Cmajor or Faust source in assets/ by content hash (§10), and — once one has been made —
+// the export record that says what was built from it (ADR 0028 §1, §2).
 message SourceRef {
   string source_hash = 1;
+
+  // Absent: never exported. Present: the SHA-256 of an export record in assets/, and never
+  // empty. `optional` for replay: four committed logs add a SourceRef written before this
+  // field existed, and a plain string would make each replay one key short of its own song
+  // (ADR 0028 §1). Written by compile_instrument and by no other tool (ADR 0029 §3).
+  optional string export_hash = 2;
 }
 
+// An ONNX graph in assets/ by content hash, and — once one has been made — the export record
+// of the plugin converted from it (ADR 0028 §1, §5).
 message ModelRef {
   string model_hash = 1;
+
+  // As SourceRef.export_hash.
+  optional string export_hash = 2;
 }
 
 // The SFZ file is the sample map (§4.2 SampleMap, reduced per ADR 0002 §8).

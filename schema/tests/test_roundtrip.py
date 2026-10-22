@@ -13,7 +13,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "gen" / "py
 
 import pydantic  # noqa: E402
 
-from escribass_schema.escribass.song.v1 import Note, Song  # noqa: E402
+from escribass_schema.escribass.song.v1 import Note, Song, SourceRef  # noqa: E402
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[2] / "tests" / "fixtures"
 
@@ -67,6 +67,24 @@ class TestSongFixture(unittest.TestCase):
         # weight is the attribute access: a generated class without the field raises here
         # rather than quietly agreeing.
         self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].compiled_hash, "")
+
+    def test_a_reference_nobody_exported_reads_as_absent(self) -> None:
+        # ADR 0028 §1: "never exported" is absence, in the fixture and in a project written
+        # before the field existed, and a present empty string is a different, refused value.
+        bass = self.song.tracks["01M1FPMP00TRACKBASS0000002"].instrument.ref.cmajor
+        self.assertIsNone(bass.export_hash)
+        logged = Song.from_json(
+            (FIXTURES.parent / "determinism" / "every_tool" / "expected" / "song.json").read_text()
+        )
+        faust = [
+            effect.ref.faust
+            for track in logged.tracks.values()
+            for effect in track.fx_chain.values()
+            if effect.ref.faust is not None
+        ]
+        self.assertEqual(len(faust), 1, "every_tool's golden holds one Faust effect")
+        self.assertIsNone(faust[0].export_hash)
+        self.assertEqual(SourceRef.from_json('{"source_hash": "s", "export_hash": ""}').export_hash, "")
 
     def test_64_bit_seed_survives_the_json_string_encoding(self) -> None:
         self.assertEqual(self.song.generators["01M1FPMP00GENCHRS00000000D"].seed, 9007199254740993)

@@ -232,7 +232,7 @@ fn unrenderable(session: &mut Session) {
         .add_effect(&AddEffectRequest {
             track_id: added(&track),
             r#ref: Some(DeviceRef {
-                kind: Some(Kind::Faust(SourceRef { source_hash: "3c1de4f98b".to_string() })),
+                kind: Some(Kind::Faust(SourceRef { source_hash: "3c1de4f98b".to_string(), export_hash: None })),
             }),
             index: None,
             dry_run: false,

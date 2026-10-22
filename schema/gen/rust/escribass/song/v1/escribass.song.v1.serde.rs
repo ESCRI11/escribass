@@ -2073,9 +2073,15 @@ impl serde::Serialize for ModelRef {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.song.v1.ModelRef", len)?;
         if true {
             struct_ser.serialize_field("model_hash", &self.model_hash)?;
+        }
+        if let Some(v) = self.export_hash.as_ref() {
+            struct_ser.serialize_field("export_hash", v)?;
         }
         struct_ser.end()
     }
@@ -2089,11 +2095,14 @@ impl<'de> serde::Deserialize<'de> for ModelRef {
         const FIELDS: &[&str] = &[
             "model_hash",
             "modelHash",
+            "export_hash",
+            "exportHash",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             ModelHash,
+            ExportHash,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -2116,6 +2125,7 @@ impl<'de> serde::Deserialize<'de> for ModelRef {
                     {
                         match value {
                             "modelHash" | "model_hash" => Ok(GeneratedField::ModelHash),
+                            "exportHash" | "export_hash" => Ok(GeneratedField::ExportHash),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -2136,6 +2146,7 @@ impl<'de> serde::Deserialize<'de> for ModelRef {
                     V: serde::de::MapAccess<'de>,
             {
                 let mut model_hash__ = None;
+                let mut export_hash__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::ModelHash => {
@@ -2144,10 +2155,17 @@ impl<'de> serde::Deserialize<'de> for ModelRef {
                             }
                             model_hash__ = Some(map_.next_value()?);
                         }
+                        GeneratedField::ExportHash => {
+                            if export_hash__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("exportHash"));
+                            }
+                            export_hash__ = map_.next_value()?;
+                        }
                     }
                 }
                 Ok(ModelRef {
                     model_hash: model_hash__.unwrap_or_default(),
+                    export_hash: export_hash__,
                 })
             }
         }
@@ -3832,9 +3850,15 @@ impl serde::Serialize for SourceRef {
         if true {
             len += 1;
         }
+        if true {
+            len += 1;
+        }
         let mut struct_ser = serializer.serialize_struct("escribass.song.v1.SourceRef", len)?;
         if true {
             struct_ser.serialize_field("source_hash", &self.source_hash)?;
+        }
+        if let Some(v) = self.export_hash.as_ref() {
+            struct_ser.serialize_field("export_hash", v)?;
         }
         struct_ser.end()
     }
@@ -3848,11 +3872,14 @@ impl<'de> serde::Deserialize<'de> for SourceRef {
         const FIELDS: &[&str] = &[
             "source_hash",
             "sourceHash",
+            "export_hash",
+            "exportHash",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             SourceHash,
+            ExportHash,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -3875,6 +3902,7 @@ impl<'de> serde::Deserialize<'de> for SourceRef {
                     {
                         match value {
                             "sourceHash" | "source_hash" => Ok(GeneratedField::SourceHash),
+                            "exportHash" | "export_hash" => Ok(GeneratedField::ExportHash),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -3895,6 +3923,7 @@ impl<'de> serde::Deserialize<'de> for SourceRef {
                     V: serde::de::MapAccess<'de>,
             {
                 let mut source_hash__ = None;
+                let mut export_hash__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
                         GeneratedField::SourceHash => {
@@ -3903,10 +3932,17 @@ impl<'de> serde::Deserialize<'de> for SourceRef {
                             }
                             source_hash__ = Some(map_.next_value()?);
                         }
+                        GeneratedField::ExportHash => {
+                            if export_hash__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("exportHash"));
+                            }
+                            export_hash__ = map_.next_value()?;
+                        }
                     }
                 }
                 Ok(SourceRef {
                     source_hash: source_hash__.unwrap_or_default(),
+                    export_hash: export_hash__,
                 })
             }
         }
