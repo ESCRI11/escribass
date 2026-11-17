@@ -364,7 +364,15 @@ stays withheld, and nothing here offers a plugin catalogue.
 
 - **M5 PR 4**: `proto/export.proto` whole (`Export`, `ExportRecord`, `Recipe`, `Endpoint`, `Diagnostic`)
   and the three request messages on `SongTools`, regenerated for every consumer. The two tools
-  answer `UNIMPLEMENTED` until PR 8 and join neither `IMPLEMENTED` nor `OFFERED`.
+  answer `UNIMPLEMENTED` until PR 8 and join neither `IMPLEMENTED` nor `OFFERED`. **Done
+  2026-11-17**, with three things this section left to the file:
+  - `Recipe` is declared **empty**, since decision 2 gives its fields to ADR 0031.
+  - `get_device_source` answers `DeviceSourceResponse` with `valid` and `errors`, because
+    decision 4 makes `device_unknown` and `not_compilable` the caller's.
+  - Decision 6's concrete ids are **lowered into the plan's existing `params` keys and lane
+    names**, beside a new `PlanArtefact` holding the path and the class id.
+
+  All **three** tools answer `UNIMPLEMENTED`, the read included.
 - **M5 PR 6**: `--inspect`, the loader keyed by export, and two same-named exports in one plan,
   driven with real bundles from PR 5's recipe.
 - **M5 PR 7**: `compilers/dsp/` and `Export.Compile`, with every exit-code trap above watched

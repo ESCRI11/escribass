@@ -4,6 +4,7 @@
 # This file has been @generated
 
 __all__ = (
+    "PlanArtefact",
     "PlanAudio",
     "PlanClip",
     "PlanEffect",
@@ -66,6 +67,46 @@ class PreviewState(betterproto2.Enum):
             "PREVIEW_STATE_PLAYING": 1,
             "PREVIEW_STATE_STOPPED": 2,
         }
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class PlanArtefact(betterproto2.Message):
+    """
+    A compiled device's export, resolved by core: **loaded by export, not by name** (ADR 0029 §6;
+    ADR 0007 §2, extended 2026-10-22).
+
+    A bundled plugin is found by its `vendor/name`, and that key cannot tell two exports of one
+    source apart — an edit and its predecessor, on two tracks or two branches, share a name by
+    construction. So a compiled device crosses as the bundle to open and the class inside it, and
+    the engine never looks it up in the manifest.
+
+    Its parameters are lowered beside it rather than carried here: compile rewrites the device's
+    `params` keys and every lane's `param` from the source's endpoint identifiers to the decimal
+    VST3 ParamID the export record maps each to, so the engine meets the key it already meets for
+    a bundled plugin, and the values stay the normalised 0..1 of ADR 0010 §4 (ADR 0029 §5). No
+    source, export record, lock.json or model graph crosses: core verifies the export outside
+    compile and hands it the result, as it hands it the asset index.
+    """
+
+    path: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+    """
+    Absolute path of the reconstructed `.vst3` bundle in the loading cache, under the export's
+    hash — a path that names one set of bytes for ever (ADR 0028 §3).
+    """
+
+    vst3_class_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        2, betterproto2.TYPE_STRING
+    )
+    """
+    The VST3 class to instantiate from it, as the export record names it.
+    """
+
+
+default_message_pool.register_message(
+    "escribass.render.v1", "PlanArtefact", PlanArtefact
+)
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
@@ -141,6 +182,13 @@ class PlanEffect(betterproto2.Message):
         2, betterproto2.TYPE_MESSAGE, repeated=True
     )
 
+    artefact: "PlanArtefact | None" = betterproto2.field(
+        3, betterproto2.TYPE_MESSAGE, optional=True
+    )
+    """
+    As PlanInstrument.artefact.
+    """
+
 
 default_message_pool.register_message("escribass.render.v1", "PlanEffect", PlanEffect)
 
@@ -179,6 +227,14 @@ class PlanInstrument(betterproto2.Message):
     name, which no ADR has decided.
     """
 
+    artefact: "PlanArtefact | None" = betterproto2.field(
+        4, betterproto2.TYPE_MESSAGE, optional=True
+    )
+    """
+    Set exactly when the instrument is a compiled device — a `cmajor` or `neural` reference —
+    and then it is what the engine loads (ADR 0029 §6).
+    """
+
 
 default_message_pool.register_message(
     "escribass.render.v1", "PlanInstrument", PlanInstrument
@@ -198,7 +254,8 @@ class PlanLane(betterproto2.Message):
     """
     ParamRef.param: the identifier the plugin itself declares (ADR 0010 §4), or `gain_db` or
     `pan` where the lane is a mix lane (ADR 0015 §1). Which of the two a point's value means
-    follows from where the lane is nested, never from a field naming it.
+    follows from where the lane is nested, never from a field naming it. Under a compiled
+    device it is the ParamID compile lowered the endpoint identifier to (PlanArtefact).
     """
 
     points: "list[__song__v1__.AutomationPoint]" = betterproto2.field(

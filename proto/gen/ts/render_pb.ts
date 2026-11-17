@@ -44,7 +44,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file render.proto.
  */
 export const file_render: GenFile = /*@__PURE__*/
-  fileDesc("CgxyZW5kZXIucHJvdG8SE2VzY3JpYmFzcy5yZW5kZXIudjEi9gEKClJlbmRlclBsYW4SLgoGdHJhY2tzGAEgAygLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLgoGbWFzdGVyGAIgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLAoFdGVtcG8YAyADKAsyHS5lc2NyaWJhc3Muc29uZy52MS5UZW1wb0V2ZW50Ei8KBnRhcmdldBgEIAEoCzIfLmVzY3JpYmFzcy5zb25nLnYxLlJlbmRlclRhcmdldBIUCgxsZW5ndGhfdGlja3MYBSABKAUSEwoLb3V0cHV0X3BhdGgYBiABKAki+wEKCVBsYW5UcmFjaxI3CgppbnN0cnVtZW50GAEgASgLMiMuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuSW5zdHJ1bWVudBIwCgdlZmZlY3RzGAIgAygLMh8uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuRWZmZWN0EiMKA21peBgDIAEoCzIWLmVzY3JpYmFzcy5zb25nLnYxLk1peBIsCgVjbGlwcxgEIAMoCzIdLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkNsaXASMAoJbWl4X2xhbmVzGAUgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSKDAQoOUGxhbkluc3RydW1lbnQSMQoKaW5zdHJ1bWVudBgBIAEoCzIdLmVzY3JpYmFzcy5zb25nLnYxLkluc3RydW1lbnQSLAoFbGFuZXMYAiADKAsyHS5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5MYW5lEhAKCHNmel9wYXRoGAMgASgJImUKClBsYW5FZmZlY3QSKQoGZWZmZWN0GAEgASgLMhkuZXNjcmliYXNzLnNvbmcudjEuRWZmZWN0EiwKBWxhbmVzGAIgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSJNCghQbGFuTGFuZRINCgVwYXJhbRgBIAEoCRIyCgZwb2ludHMYAiADKAsyIi5lc2NyaWJhc3Muc29uZy52MS5BdXRvbWF0aW9uUG9pbnQioQEKCFBsYW5DbGlwEhIKCnN0YXJ0X3RpY2sYASABKAUSFAoMbGVuZ3RoX3RpY2tzGAIgASgFEi8KBW5vdGVzGAMgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTm90ZXNIABIvCgVhdWRpbxgEIAEoCzIeLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkF1ZGlvSABCCQoHY29udGVudCIzCglQbGFuTm90ZXMSJgoFbm90ZXMYASADKAsyFy5lc2NyaWJhc3Muc29uZy52MS5Ob3RlIkUKCVBsYW5BdWRpbxIqCgRjbGlwGAEgASgLMhwuZXNjcmliYXNzLnNvbmcudjEuQXVkaW9DbGlwEgwKBHBhdGgYAiABKAkikwEKDFJlbmRlclJlc3VsdBISCgpwY21fc2hhMjU2GAEgASgJEj8KB2NvbW1pdHMYAiADKAsyLi5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdC5Db21taXRzRW50cnkaLgoMQ29tbWl0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUAoLUHJldmlld1BsYXkSLQoEcGxhbhgBIAEoCzIfLmVzY3JpYmFzcy5yZW5kZXIudjEuUmVuZGVyUGxhbhISCgpzdGFydF90aWNrGAIgASgFIhsKC1ByZXZpZXdTZWVrEgwKBHRpY2sYASABKAUiMwoLUHJldmlld0xvb3ASEgoKc3RhcnRfdGljaxgBIAEoBRIQCghlbmRfdGljaxgCIAEoBSINCgtQcmV2aWV3U3RvcCLjAQoOUHJldmlld0NvbW1hbmQSMAoEcGxheRgBIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1BsYXlIABIwCgRzZWVrGAIgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U2Vla0gAEjAKBGxvb3AYAyABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdMb29wSAASMAoEc3RvcBgEIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1N0b3BIAEIJCgdjb21tYW5kIl8KDFByZXZpZXdFdmVudBIMCgR0aWNrGAEgASgFEjAKBXN0YXRlGAIgASgOMiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3U3RhdGUSDwoHYXBwbGllZBgDIAEoBSpjCgxQcmV2aWV3U3RhdGUSHQoZUFJFVklFV19TVEFURV9VTlNQRUNJRklFRBAAEhkKFVBSRVZJRVdfU1RBVEVfUExBWUlORxABEhkKFVBSRVZJRVdfU1RBVEVfU1RPUFBFRBACMlYKBlJlbmRlchJMCgZSZW5kZXISHy5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclBsYW4aIS5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclJlc3VsdDJgCgdQcmV2aWV3ElUKB1ByZXZpZXcSIy5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdDb21tYW5kGiEuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3RXZlbnQoATABYgZwcm90bzM", [file_song]);
+  fileDesc("CgxyZW5kZXIucHJvdG8SE2VzY3JpYmFzcy5yZW5kZXIudjEi9gEKClJlbmRlclBsYW4SLgoGdHJhY2tzGAEgAygLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLgoGbWFzdGVyGAIgASgLMh4uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuVHJhY2sSLAoFdGVtcG8YAyADKAsyHS5lc2NyaWJhc3Muc29uZy52MS5UZW1wb0V2ZW50Ei8KBnRhcmdldBgEIAEoCzIfLmVzY3JpYmFzcy5zb25nLnYxLlJlbmRlclRhcmdldBIUCgxsZW5ndGhfdGlja3MYBSABKAUSEwoLb3V0cHV0X3BhdGgYBiABKAki+wEKCVBsYW5UcmFjaxI3CgppbnN0cnVtZW50GAEgASgLMiMuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuSW5zdHJ1bWVudBIwCgdlZmZlY3RzGAIgAygLMh8uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuRWZmZWN0EiMKA21peBgDIAEoCzIWLmVzY3JpYmFzcy5zb25nLnYxLk1peBIsCgVjbGlwcxgEIAMoCzIdLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkNsaXASMAoJbWl4X2xhbmVzGAUgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZSK4AQoOUGxhbkluc3RydW1lbnQSMQoKaW5zdHJ1bWVudBgBIAEoCzIdLmVzY3JpYmFzcy5zb25nLnYxLkluc3RydW1lbnQSLAoFbGFuZXMYAiADKAsyHS5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5MYW5lEhAKCHNmel9wYXRoGAMgASgJEjMKCGFydGVmYWN0GAQgASgLMiEuZXNjcmliYXNzLnJlbmRlci52MS5QbGFuQXJ0ZWZhY3QimgEKClBsYW5FZmZlY3QSKQoGZWZmZWN0GAEgASgLMhkuZXNjcmliYXNzLnNvbmcudjEuRWZmZWN0EiwKBWxhbmVzGAIgAygLMh0uZXNjcmliYXNzLnJlbmRlci52MS5QbGFuTGFuZRIzCghhcnRlZmFjdBgDIAEoCzIhLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbkFydGVmYWN0IjMKDFBsYW5BcnRlZmFjdBIMCgRwYXRoGAEgASgJEhUKDXZzdDNfY2xhc3NfaWQYAiABKAkiTQoIUGxhbkxhbmUSDQoFcGFyYW0YASABKAkSMgoGcG9pbnRzGAIgAygLMiIuZXNjcmliYXNzLnNvbmcudjEuQXV0b21hdGlvblBvaW50IqEBCghQbGFuQ2xpcBISCgpzdGFydF90aWNrGAEgASgFEhQKDGxlbmd0aF90aWNrcxgCIAEoBRIvCgVub3RlcxgDIAEoCzIeLmVzY3JpYmFzcy5yZW5kZXIudjEuUGxhbk5vdGVzSAASLwoFYXVkaW8YBCABKAsyHi5lc2NyaWJhc3MucmVuZGVyLnYxLlBsYW5BdWRpb0gAQgkKB2NvbnRlbnQiMwoJUGxhbk5vdGVzEiYKBW5vdGVzGAEgAygLMhcuZXNjcmliYXNzLnNvbmcudjEuTm90ZSJFCglQbGFuQXVkaW8SKgoEY2xpcBgBIAEoCzIcLmVzY3JpYmFzcy5zb25nLnYxLkF1ZGlvQ2xpcBIMCgRwYXRoGAIgASgJIpMBCgxSZW5kZXJSZXN1bHQSEgoKcGNtX3NoYTI1NhgBIAEoCRI/Cgdjb21taXRzGAIgAygLMi4uZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJSZXN1bHQuQ29tbWl0c0VudHJ5Gi4KDENvbW1pdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlAKC1ByZXZpZXdQbGF5Ei0KBHBsYW4YASABKAsyHy5lc2NyaWJhc3MucmVuZGVyLnYxLlJlbmRlclBsYW4SEgoKc3RhcnRfdGljaxgCIAEoBSIbCgtQcmV2aWV3U2VlaxIMCgR0aWNrGAEgASgFIjMKC1ByZXZpZXdMb29wEhIKCnN0YXJ0X3RpY2sYASABKAUSEAoIZW5kX3RpY2sYAiABKAUiDQoLUHJldmlld1N0b3Ai4wEKDlByZXZpZXdDb21tYW5kEjAKBHBsYXkYASABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdQbGF5SAASMAoEc2VlaxgCIAEoCzIgLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1NlZWtIABIwCgRsb29wGAMgASgLMiAuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3TG9vcEgAEjAKBHN0b3AYBCABKAsyIC5lc2NyaWJhc3MucmVuZGVyLnYxLlByZXZpZXdTdG9wSABCCQoHY29tbWFuZCJfCgxQcmV2aWV3RXZlbnQSDAoEdGljaxgBIAEoBRIwCgVzdGF0ZRgCIAEoDjIhLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld1N0YXRlEg8KB2FwcGxpZWQYAyABKAUqYwoMUHJldmlld1N0YXRlEh0KGVBSRVZJRVdfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVQUkVWSUVXX1NUQVRFX1BMQVlJTkcQARIZChVQUkVWSUVXX1NUQVRFX1NUT1BQRUQQAjJWCgZSZW5kZXISTAoGUmVuZGVyEh8uZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJQbGFuGiEuZXNjcmliYXNzLnJlbmRlci52MS5SZW5kZXJSZXN1bHQyYAoHUHJldmlldxJVCgdQcmV2aWV3EiMuZXNjcmliYXNzLnJlbmRlci52MS5QcmV2aWV3Q29tbWFuZBohLmVzY3JpYmFzcy5yZW5kZXIudjEuUHJldmlld0V2ZW50KAEwAWIGcHJvdG8z", [file_song]);
 
 /**
  * One offline render. Exactly one of these crosses on one Render.Render call, to a process
@@ -216,6 +216,14 @@ export type PlanInstrument = Message<"escribass.render.v1.PlanInstrument"> & {
    * @generated from field: string sfz_path = 3;
    */
   sfzPath: string;
+
+  /**
+   * Set exactly when the instrument is a compiled device — a `cmajor` or `neural` reference —
+   * and then it is what the engine loads (ADR 0029 §6).
+   *
+   * @generated from field: escribass.render.v1.PlanArtefact artefact = 4;
+   */
+  artefact?: PlanArtefact | undefined;
 };
 
 /**
@@ -238,6 +246,13 @@ export type PlanEffect = Message<"escribass.render.v1.PlanEffect"> & {
    * @generated from field: repeated escribass.render.v1.PlanLane lanes = 2;
    */
   lanes: PlanLane[];
+
+  /**
+   * As PlanInstrument.artefact.
+   *
+   * @generated from field: escribass.render.v1.PlanArtefact artefact = 3;
+   */
+  artefact?: PlanArtefact | undefined;
 };
 
 /**
@@ -246,6 +261,48 @@ export type PlanEffect = Message<"escribass.render.v1.PlanEffect"> & {
  */
 export const PlanEffectSchema: GenMessage<PlanEffect> = /*@__PURE__*/
   messageDesc(file_render, 3);
+
+/**
+ * A compiled device's export, resolved by core: **loaded by export, not by name** (ADR 0029 §6;
+ * ADR 0007 §2, extended 2026-10-22).
+ *
+ * A bundled plugin is found by its `vendor/name`, and that key cannot tell two exports of one
+ * source apart — an edit and its predecessor, on two tracks or two branches, share a name by
+ * construction. So a compiled device crosses as the bundle to open and the class inside it, and
+ * the engine never looks it up in the manifest.
+ *
+ * Its parameters are lowered beside it rather than carried here: compile rewrites the device's
+ * `params` keys and every lane's `param` from the source's endpoint identifiers to the decimal
+ * VST3 ParamID the export record maps each to, so the engine meets the key it already meets for
+ * a bundled plugin, and the values stay the normalised 0..1 of ADR 0010 §4 (ADR 0029 §5). No
+ * source, export record, lock.json or model graph crosses: core verifies the export outside
+ * compile and hands it the result, as it hands it the asset index.
+ *
+ * @generated from message escribass.render.v1.PlanArtefact
+ */
+export type PlanArtefact = Message<"escribass.render.v1.PlanArtefact"> & {
+  /**
+   * Absolute path of the reconstructed `.vst3` bundle in the loading cache, under the export's
+   * hash — a path that names one set of bytes for ever (ADR 0028 §3).
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * The VST3 class to instantiate from it, as the export record names it.
+   *
+   * @generated from field: string vst3_class_id = 2;
+   */
+  vst3ClassId: string;
+};
+
+/**
+ * Describes the message escribass.render.v1.PlanArtefact.
+ * Use `create(PlanArtefactSchema)` to create a new message.
+ */
+export const PlanArtefactSchema: GenMessage<PlanArtefact> = /*@__PURE__*/
+  messageDesc(file_render, 4);
 
 /**
  * One automated parameter of the enclosing device — or, under PlanTrack.mix_lanes, of the
@@ -257,7 +314,8 @@ export type PlanLane = Message<"escribass.render.v1.PlanLane"> & {
   /**
    * ParamRef.param: the identifier the plugin itself declares (ADR 0010 §4), or `gain_db` or
    * `pan` where the lane is a mix lane (ADR 0015 §1). Which of the two a point's value means
-   * follows from where the lane is nested, never from a field naming it.
+   * follows from where the lane is nested, never from a field naming it. Under a compiled
+   * device it is the ParamID compile lowered the endpoint identifier to (PlanArtefact).
    *
    * @generated from field: string param = 1;
    */
@@ -277,7 +335,7 @@ export type PlanLane = Message<"escribass.render.v1.PlanLane"> & {
  * Use `create(PlanLaneSchema)` to create a new message.
  */
 export const PlanLaneSchema: GenMessage<PlanLane> = /*@__PURE__*/
-  messageDesc(file_render, 4);
+  messageDesc(file_render, 5);
 
 /**
  * A clip placed on the timeline. start_tick and length_ticks are Clip's own, copied because
@@ -319,7 +377,7 @@ export type PlanClip = Message<"escribass.render.v1.PlanClip"> & {
  * Use `create(PlanClipSchema)` to create a new message.
  */
 export const PlanClipSchema: GenMessage<PlanClip> = /*@__PURE__*/
-  messageDesc(file_render, 5);
+  messageDesc(file_render, 6);
 
 /**
  * The notes of a clip, by value, in start order. Note.start_tick stays clip-relative, as the
@@ -339,7 +397,7 @@ export type PlanNotes = Message<"escribass.render.v1.PlanNotes"> & {
  * Use `create(PlanNotesSchema)` to create a new message.
  */
 export const PlanNotesSchema: GenMessage<PlanNotes> = /*@__PURE__*/
-  messageDesc(file_render, 6);
+  messageDesc(file_render, 7);
 
 /**
  * An audio clip beside the file it plays. The bytes are not embedded: every sample of every
@@ -373,7 +431,7 @@ export type PlanAudio = Message<"escribass.render.v1.PlanAudio"> & {
  * Use `create(PlanAudioSchema)` to create a new message.
  */
 export const PlanAudioSchema: GenMessage<PlanAudio> = /*@__PURE__*/
-  messageDesc(file_render, 7);
+  messageDesc(file_render, 8);
 
 /**
  * What a successful render reports. Failure is an exit code, never a result carrying errors:
@@ -409,7 +467,7 @@ export type RenderResult = Message<"escribass.render.v1.RenderResult"> & {
  * Use `create(RenderResultSchema)` to create a new message.
  */
 export const RenderResultSchema: GenMessage<RenderResult> = /*@__PURE__*/
-  messageDesc(file_render, 8);
+  messageDesc(file_render, 9);
 
 /**
  * The plan to play, and where the transport starts in it.
@@ -442,7 +500,7 @@ export type PreviewPlay = Message<"escribass.render.v1.PreviewPlay"> & {
  * Use `create(PreviewPlaySchema)` to create a new message.
  */
 export const PreviewPlaySchema: GenMessage<PreviewPlay> = /*@__PURE__*/
-  messageDesc(file_render, 9);
+  messageDesc(file_render, 10);
 
 /**
  * Move the transport, leaving the plan where it is.
@@ -461,7 +519,7 @@ export type PreviewSeek = Message<"escribass.render.v1.PreviewSeek"> & {
  * Use `create(PreviewSeekSchema)` to create a new message.
  */
 export const PreviewSeekSchema: GenMessage<PreviewSeek> = /*@__PURE__*/
-  messageDesc(file_render, 10);
+  messageDesc(file_render, 11);
 
 /**
  * The loop range, in the same model ticks the plan is in. An empty range — `end_tick` at or
@@ -487,7 +545,7 @@ export type PreviewLoop = Message<"escribass.render.v1.PreviewLoop"> & {
  * Use `create(PreviewLoopSchema)` to create a new message.
  */
 export const PreviewLoopSchema: GenMessage<PreviewLoop> = /*@__PURE__*/
-  messageDesc(file_render, 11);
+  messageDesc(file_render, 12);
 
 /**
  * Stop the transport without ending the session: the plan stays loaded and its plugins stay
@@ -508,7 +566,7 @@ export type PreviewStop = Message<"escribass.render.v1.PreviewStop"> & {
  * Use `create(PreviewStopSchema)` to create a new message.
  */
 export const PreviewStopSchema: GenMessage<PreviewStop> = /*@__PURE__*/
-  messageDesc(file_render, 12);
+  messageDesc(file_render, 13);
 
 /**
  * One command from `app` to a live engine.
@@ -555,7 +613,7 @@ export type PreviewCommand = Message<"escribass.render.v1.PreviewCommand"> & {
  * Use `create(PreviewCommandSchema)` to create a new message.
  */
 export const PreviewCommandSchema: GenMessage<PreviewCommand> = /*@__PURE__*/
-  messageDesc(file_render, 13);
+  messageDesc(file_render, 14);
 
 /**
  * Where the transport is and what it is doing.
@@ -603,7 +661,7 @@ export type PreviewEvent = Message<"escribass.render.v1.PreviewEvent"> & {
  * Use `create(PreviewEventSchema)` to create a new message.
  */
 export const PreviewEventSchema: GenMessage<PreviewEvent> = /*@__PURE__*/
-  messageDesc(file_render, 14);
+  messageDesc(file_render, 15);
 
 /**
  * @generated from enum escribass.render.v1.PreviewState

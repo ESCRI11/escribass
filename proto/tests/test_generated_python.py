@@ -30,6 +30,11 @@ import and pass every assertion here before being discovered there. So the mappi
 as `Assistant`'s is, and the identity again through `CompileRequest`, which is the message
 `Generator.compiled_hash` is the hash of (ADR 0024 §6).
 
+**Extended 2026-11-17, in M5 PR 4, for `Export`.** The same two halves one compiler over:
+`compilers/dsp` serves `ExportBase` from M5 PR 7, so its mapping is asserted here, and an
+`Export` answer with no arm set must stay distinguishable from one carrying an empty bundle
+(ADR 0029 §2). `export.proto` imports no model, so there is no identity to assert through it.
+
 Run from `schema/`'s environment, which is where the compiler and `grpclib` are pinned:
 
     cd schema && uv run python -m unittest discover -s ../proto/tests
@@ -58,6 +63,12 @@ from escribass_proto.escribass.generate.v1 import (  # noqa: E402
     GenerateBase,
     Notes,
 )
+from escribass_proto.escribass.export.v1 import (  # noqa: E402
+    Bundle,
+    ExportBase,
+)
+from escribass_proto.escribass.export.v1 import CompileRequest as ExportRequest  # noqa: E402
+from escribass_proto.escribass.export.v1 import CompileResponse as ExportResponse  # noqa: E402
 from escribass_schema.escribass.song.v1 import Note, Song, TempoEvent  # noqa: E402
 
 
@@ -94,6 +105,28 @@ class TestTheServerStubIsReal(unittest.TestCase):
 
         nothing = CompileResponse.parse(bytes(CompileResponse()))
         self.assertIsNone(nothing.notes)
+        self.assertIsNone(nothing.diagnostic)
+
+    def test_the_export_server_maps_the_one_rpc(self) -> None:
+        # The stub `compilers/dsp` subclasses in M5 PR 7 (ADR 0029 §1), asserted for the reason
+        # `Generate`'s is above.
+        mapping = ExportBase().__mapping__()
+        self.assertEqual(list(mapping), ["/escribass.export.v1.Export/Compile"])
+        handler = mapping["/escribass.export.v1.Export/Compile"]
+        self.assertEqual(handler.cardinality.name, "UNARY_UNARY")
+        self.assertIs(handler.request_type, ExportRequest)
+        self.assertIs(handler.reply_type, ExportResponse)
+
+    def test_an_export_answer_with_no_arm_is_not_an_empty_bundle(self) -> None:
+        # export.proto, `CompileResponse.result`: an unset result is not an answer and an empty
+        # bundle is not an export — two different failures `core` names apart (ADR 0029 §2, §4),
+        # so the wire has to keep them apart too.
+        empty = ExportResponse.parse(bytes(ExportResponse(bundle=Bundle())))
+        self.assertIsNotNone(empty.bundle, "an empty bundle still arrives as a bundle")
+        self.assertEqual(empty.bundle.files, {})
+
+        nothing = ExportResponse.parse(bytes(ExportResponse()))
+        self.assertIsNone(nothing.bundle)
         self.assertIsNone(nothing.diagnostic)
 
     def test_a_tool_schema_carries_the_descriptors_json_text(self) -> None:

@@ -201,6 +201,39 @@ async fn a_replay_of_an_entry_that_is_not_there_is_a_status() {
     assert!(failed.message().contains("entry_missing"), "{}", failed.message());
 }
 
+#[tokio::test]
+async fn the_compiled_device_tools_are_declared_and_answer_unimplemented() {
+    // M5 PR 4 declares them with `proto/`'s whole M5 wire and PR 8 gives `Session` the tools
+    // (ADR 0029 §3). Until then the only honest answer is that nothing serves them — not a
+    // `valid = false`, which would be this transport inventing a refusal rule — and none of the
+    // three, called for real, writes anything.
+    let dir = Scratch::new();
+    let mut client = serving(&dir).await;
+    let before = client.get_history(GetHistoryRequest {}).await.unwrap().into_inner();
+
+    let device_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string();
+    let defined = client
+        .define_instrument_source(DefineInstrumentSourceRequest {
+            source: "processor P { output stream float out; void main() { advance(); } }".into(),
+            target: Some(define_instrument_source_request::Target::DeviceId(device_id.clone())),
+            dry_run: false,
+        })
+        .await;
+    let compile = CompileInstrumentRequest { device_id: device_id.clone(), dry_run: false };
+    let compiled = client.compile_instrument(compile).await;
+    let read = client.get_device_source(GetDeviceSourceRequest { device_id }).await;
+
+    for (name, code) in [
+        ("define_instrument_source", defined.map(|_| ()).map_err(|s| s.code())),
+        ("compile_instrument", compiled.map(|_| ()).map_err(|s| s.code())),
+        ("get_device_source", read.map(|_| ()).map_err(|s| s.code())),
+    ] {
+        assert_eq!(code, Err(tonic::Code::Unimplemented), "{name}");
+    }
+    let after = client.get_history(GetHistoryRequest {}).await.unwrap().into_inner();
+    assert_eq!(after, before, "an unimplemented tool wrote to the log");
+}
+
 // ---- dry run, over the wire ----
 
 #[tokio::test]

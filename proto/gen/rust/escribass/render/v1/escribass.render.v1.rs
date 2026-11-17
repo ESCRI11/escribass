@@ -100,6 +100,10 @@ pub struct PlanInstrument {
     /// name, which no ADR has decided.
     #[prost(string, tag="3")]
     pub sfz_path: ::prost::alloc::string::String,
+    /// Set exactly when the instrument is a compiled device — a `cmajor` or `neural` reference —
+    /// and then it is what the engine loads (ADR 0029 §6).
+    #[prost(message, optional, tag="4")]
+    pub artefact: ::core::option::Option<PlanArtefact>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PlanEffect {
@@ -107,6 +111,33 @@ pub struct PlanEffect {
     pub effect: ::core::option::Option<::escribass_schema::song::Effect>,
     #[prost(message, repeated, tag="2")]
     pub lanes: ::prost::alloc::vec::Vec<PlanLane>,
+    /// As PlanInstrument.artefact.
+    #[prost(message, optional, tag="3")]
+    pub artefact: ::core::option::Option<PlanArtefact>,
+}
+/// A compiled device's export, resolved by core: **loaded by export, not by name** (ADR 0029 §6;
+/// ADR 0007 §2, extended 2026-10-22).
+///
+/// A bundled plugin is found by its `vendor/name`, and that key cannot tell two exports of one
+/// source apart — an edit and its predecessor, on two tracks or two branches, share a name by
+/// construction. So a compiled device crosses as the bundle to open and the class inside it, and
+/// the engine never looks it up in the manifest.
+///
+/// Its parameters are lowered beside it rather than carried here: compile rewrites the device's
+/// `params` keys and every lane's `param` from the source's endpoint identifiers to the decimal
+/// VST3 ParamID the export record maps each to, so the engine meets the key it already meets for
+/// a bundled plugin, and the values stay the normalised 0..1 of ADR 0010 §4 (ADR 0029 §5). No
+/// source, export record, lock.json or model graph crosses: core verifies the export outside
+/// compile and hands it the result, as it hands it the asset index.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PlanArtefact {
+    /// Absolute path of the reconstructed `.vst3` bundle in the loading cache, under the export's
+    /// hash — a path that names one set of bytes for ever (ADR 0028 §3).
+    #[prost(string, tag="1")]
+    pub path: ::prost::alloc::string::String,
+    /// The VST3 class to instantiate from it, as the export record names it.
+    #[prost(string, tag="2")]
+    pub vst3_class_id: ::prost::alloc::string::String,
 }
 /// One automated parameter of the enclosing device — or, under PlanTrack.mix_lanes, of the
 /// track itself.
@@ -114,7 +145,8 @@ pub struct PlanEffect {
 pub struct PlanLane {
     /// ParamRef.param: the identifier the plugin itself declares (ADR 0010 §4), or `gain_db` or
     /// `pan` where the lane is a mix lane (ADR 0015 §1). Which of the two a point's value means
-    /// follows from where the lane is nested, never from a field naming it.
+    /// follows from where the lane is nested, never from a field naming it. Under a compiled
+    /// device it is the ParamID compile lowered the endpoint identifier to (PlanArtefact).
     #[prost(string, tag="1")]
     pub param: ::prost::alloc::string::String,
     /// In tick order. The curve on each point is one of the two shapes ADR 0002 §8 defines a

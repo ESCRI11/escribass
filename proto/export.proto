@@ -1,0 +1,276 @@
+// What crosses to the DSP compiler, what comes back, and the record core builds from the answer
+// (docs/specs.md §7.2). The choices this file makes that §7.2 leaves open:
+// docs/adr/0029-native-compilation-is-a-bounded-child-and-compiled-parameters-keep-their-names.md
+// §1 (who spawns it), §2 (this shape), §4 (how it fails) and §5 (what a parameter is called),
+// and docs/adr/0028-a-source-names-its-retained-export.md §2 (the record).
+//
+// **core spawns the child and dials it; the child serves this.** generate.proto's shape, one
+// compiler over: the child prints `unix:<path>` as the one line of its stdout once it is
+// listening, core makes one Compile call, and the child exits with its answer (ADR 0029 §1;
+// ADR 0024 §2). It orchestrates `cmaj generate`, CMake and the C++ compiler as grandchildren;
+// none of that is on this wire.
+//
+// **Nothing here is song state, and nothing here is a second description of it** (CLAUDE.md
+// #1). A request is a source or a graph and the recipe to build it with. An answer is files and
+// facts about a binary. A record is what core assembled from that answer and checked against
+// what the built binary says about itself. None of them names a song, a track, a device id, a
+// project path, a patch or audio — which is also why this file imports no model.
+
+syntax = "proto3";
+
+package escribass.export.v1;
+
+// Which kind of device a compile builds. It comes from the request — from the device the song
+// holds — and never from the source, and the recipe writes it into the patch's metadata
+// (ADR 0029 §6).
+enum DeviceKind {
+  DEVICE_KIND_UNSPECIFIED = 0;
+  DEVICE_KIND_INSTRUMENT = 1;
+  DEVICE_KIND_EFFECT = 2;
+}
+
+// The toolchain an export is built with: what ADR 0028 §2 lists — the Cmajor, CLAP SDK,
+// clap-wrapper and VST3 SDK commits, the C/C++ compiler and its flags, Cmajor's optimisation
+// level and the recipe's own edits to generated code.
+//
+// **Empty until ADR 0031**, which fixes its fields and lands with M5 PR 5's vendoring (ADR 0029
+// §2: "`Recipe` is ADR 0031's to fill"). Declared now so that the three places it is carried —
+// what core asks for, what the child says ran, and what a record keeps — are on the wire that
+// `buf breaking` compares once; the fields it gains then are additive. No record exists before
+// M5 PR 8, so none is hashed over the empty message.
+message Recipe {}
+
+// ---------------------------------------------------------------------------
+// The compile (ADR 0029 §2)
+// ---------------------------------------------------------------------------
+
+// Everything a compile reads, and nothing else: never the Song, a project path, a patch or
+// audio (ADR 0029 §2).
+message CompileRequest {
+  oneof input {
+    // The source asset's text, UTF-8 — the saved source the device's SourceRef names, never an
+    // editor buffer (ADR 0029 §3).
+    string cmajor_source = 1;
+
+    // A self-contained ONNX graph, for a device whose reference is `neural`. The converter is a
+    // library this same child calls and ends in the same Cmajor export (ADR 0029 §1); what it
+    // accepts is ADR 0032's.
+    bytes onnx_model = 2;
+  }
+
+  // INSTRUMENT or EFFECT.
+  DeviceKind kind = 3;
+
+  // The approved recipe. The child builds with it or refuses; core compares what comes back in
+  // CompileResponse.actual against it and writes nothing on a difference, `recipe_mismatch`
+  // (ADR 0030 §4).
+  Recipe expected = 4;
+}
+
+// What the child answers, and the only message it sends.
+message CompileResponse {
+  // What ran, stated by the child on every answer — ADR 0027 §1's rule: a fact about the child
+  // is the child's to state, and a constant in core would be a copy that stops agreeing.
+  Recipe actual = 1;
+
+  // Exactly one, and **an unset result is not an answer**: core reports a response with no arm
+  // set as `compiler_failed`, never as an export (ADR 0029 §2, §4) — M1's
+  // `RenderResult::decode(&[]) == Ok`, met a third time.
+  oneof result {
+    Bundle bundle = 2;
+    Diagnostic diagnostic = 3;
+  }
+}
+
+// The built plugin, as bytes, and the interface the generated code declares.
+//
+// **Bytes and not a path**: when the call returns, the child that built it is gone, and a path
+// into its directory would name a file nothing owns (ADR 0029 §2). The answer is bounded by a
+// configurable byte limit, measured in M5 PR 7 and set above gRPC's 4 MiB default; a bundle
+// over it is an error and never a truncation.
+//
+// **An empty bundle is not an export.** No files, or a bundle missing a file the recipe is
+// meant to produce, is `compiler_failed` (ADR 0029 §4). core owns every hash and every write;
+// the child returns files and facts, never a patch.
+message Bundle {
+  // Relative path inside the `.vst3` directory, to that file's bytes. Every Linux export the
+  // spike made was one file, `Contents/x86_64-linux/<name>.so` (ADR 0028 §2). core refuses a
+  // name that is absolute, contains `..`, repeats or would escape the staging directory before
+  // it writes a byte (ADR 0028 §3).
+  map<string, bytes> files = 1;
+
+  // The device's parameters, read from the generated code, which is the one place that maps an
+  // identifier to its handle (ADR 0029 §2, §5). core checks them against the engine's
+  // inspection of the built binary — the same count, ParamIDs and titles — and refuses a
+  // disagreement as `compiler_failed`.
+  repeated Endpoint endpoints = 2;
+}
+
+// One parameter endpoint, as the generated code declares it.
+message Endpoint {
+  // The source's endpoint identifier — `gain`, not its title and not its number. This is the
+  // key a compiled device's `params` and a ParamRef use (ADR 0029 §5).
+  string identifier = 1;
+
+  // Its entry in the generated `EndpointHandles`: 1-based, inputs in declaration order and then
+  // outputs, streams and events included. The wrapped VST3 `ParamID` is this handle with its top
+  // bit cleared — which is why an insert, a reorder or a removal moves it, and why it is never
+  // the key (ADR 0028, Context).
+  uint32 handle = 2;
+
+  // The endpoint's annotation as `programDetailsJSON` carries it, as JSON text: `name`, `min`,
+  // `max`, `init` and `step` where the source declares one. Text rather than fields, as
+  // assistant.proto carries a tool call's arguments, because the generated code is what states
+  // it and core reads it once, when it assembles the record's `params`.
+  string annotation = 3;
+}
+
+// One refusal the source's author can fix: `source_error`, fed back to a model whole and counted
+// against the three a turn allows (ADR 0029 §4; ADR 0022 §3). The rule is core's, so the child
+// names none.
+message Diagnostic {
+  // Which step refused: "generate", "convert", "build" or "inspect". The step is part of the
+  // message a person reads — a refusal from the C++ build of generated code is not a line of
+  // their source.
+  string stage = 1;
+
+  // 1-based, in the source. 0 when the stage has no source position, and a caller then renders
+  // the stage and the message rather than pointing at character zero.
+  int32 line = 2;
+
+  int32 column = 3;
+
+  // The tool's own words, whole. core carries them into the Violation and does not rewrite them.
+  string message = 4;
+}
+
+// ---------------------------------------------------------------------------
+// The export record (ADR 0028 §2)
+// ---------------------------------------------------------------------------
+
+// What `SourceRef.export_hash` and `ModelRef.export_hash` name: a small, immutable record of
+// what was built, stored in assets/ as canonical JSON by the store's one writer and named by the
+// store's one hasher (ADR 0028 §2).
+//
+// **It describes a binary, not a song.** It lives here rather than in song.proto because it is
+// assembled from a CompileResponse, and in a .proto at all because the window and the model
+// read what it holds and no language here holds a hand-written model type. It carries what
+// follows **and nothing else**: the hash covers the whole record, so identity follows content —
+// the same source under the same recipe gives the same bytes and the same hash, and a changed
+// recipe gives a new record while the old one keeps its own provenance.
+//
+// core writes it, after inspecting what was built, and never edits one: a new compile writes a
+// new record and changes the reference.
+message ExportRecord {
+  // What the binary was built from. Freshness is this against the reference's current hash:
+  // a record whose input is not the device's `source_hash` (or `model_hash`) is stale
+  // (ADR 0028 §4).
+  ExportInput input = 1;
+
+  // What loads it: `vst3/x86_64-linux`, the only target v1 builds (ADR 0014 §2). A record for
+  // another target is refused before a load, `target_unsupported` (ADR 0030 §4).
+  string target = 2;
+
+  // The toolchain that actually ran — CompileResponse.actual, never what was asked for. An
+  // export's identity includes how it was made (ADR 0023 §2), and lock.json's `artefacts` entry
+  // is this, copied once (ADR 0030 §1).
+  Recipe recipe = 3;
+
+  // Each file of the bundle, by relative path, to the SHA-256 of the blob in assets/ that holds
+  // it. What core reconstructs the loadable bundle from; every member is an ordinary asset, so
+  // there is no archive (ADR 0028 §3).
+  map<string, string> members = 4;
+
+  // Who the built binary says it is. What the engine is told to load (ADR 0029 §6).
+  PluginClass class = 5;
+
+  // Its audio channels and whether it takes MIDI — because an instrument with no MIDI input is
+  // deaf, and the spike exported one that exited 0 (ADR 0028 §2).
+  Ports ports = 6;
+
+  // The interface the binary cannot state about itself, by **source endpoint identifier**
+  // (ADR 0029 §5). Every write of a compiled device's parameter resolves against this map,
+  // and a replacement export is checked against it before it replaces this one.
+  map<string, Param> params = 7;
+}
+
+// What a record was built from: one of the two references that can name an export.
+message ExportInput {
+  oneof built_from {
+    // A Cmajor device: the SourceRef's `source_hash`.
+    string source_hash = 1;
+
+    // A neural device: the graph and the conversion that made a Cmajor patch of it.
+    ConvertedModel model = 2;
+  }
+}
+
+// A converted ONNX graph (ADR 0028 §5).
+message ConvertedModel {
+  // The ModelRef's `model_hash`: the graph the person supplied.
+  string model_hash = 1;
+
+  // The conversion record's hash — the asset binding the graph, the Cmajor source the converter
+  // produced, the adapter and the converter's recipe. Its fields are ADR 0032's; it is the key
+  // of lock.json's `models` block (ADR 0030 §2).
+  string conversion_hash = 2;
+}
+
+// A plugin class as the built binary reports it.
+message PluginClass {
+  string vendor = 1;
+
+  // From the source's main processor (ADR 0029 §6).
+  string name = 2;
+
+  // The VST3 class id, which the wrapper derives from the patch's `ID` as a SHA-1 name GUID;
+  // the recipe derives that `ID` from the device's input hash, so two different sources never
+  // share one (ADR 0029 §6).
+  string vst3_class_id = 3;
+
+  string clap_id = 4;
+}
+
+// The binary's buses.
+message Ports {
+  uint32 audio_input_channels = 1;
+  uint32 audio_output_channels = 2;
+  bool midi_input = 3;
+}
+
+// One parameter of a compiled device.
+message Param {
+  // The wrapped VST3 `ParamID`, which is what the plan carries once core has lowered the
+  // identifier (ADR 0029 §6). Recorded rather than relied on: it moves under an edit the
+  // identifier survives.
+  uint32 param_id = 1;
+
+  // The display title, which is the annotation's `name` and not the identifier.
+  string title = 2;
+
+  // The plain range and default. A stored value is the normalised 0..1 of ADR 0010 §4,
+  // normalised against `min` and `max` here, which is why a changed range or step on an
+  // identifier the song refers to refuses the replacement, `param_incompatible` (ADR 0029 §5).
+  double min = 3;
+  double max = 4;
+  double init = 5;
+
+  // Present only where the source declares one.
+  optional double step = 6;
+}
+
+// ---------------------------------------------------------------------------
+// The service (ADR 0029 §1, §2)
+// ---------------------------------------------------------------------------
+
+// Defined in M5 PR 4 and served from PR 7, for the reason Generate, Render, Preview and
+// Assistant were each defined before anything served them: `buf breaking` runs on pull requests
+// only, so a wire that grows across two of them is compared against a main that has already
+// moved (docs/plan.md, M4 trap 4).
+service Export {
+  // One compile, blocking for its length — a median of 21 s in the spike — bounded by core's
+  // five-minute wall clock, and one in flight per session. A fresh process serves exactly one of
+  // these and exits; on timeout, cancel or end of file its whole process group is killed
+  // (ADR 0029 §4). No progress stream: the bound is what says a build is too slow.
+  rpc Compile(CompileRequest) returns (CompileResponse);
+}

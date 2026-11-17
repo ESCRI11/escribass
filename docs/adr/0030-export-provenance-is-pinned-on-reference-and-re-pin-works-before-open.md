@@ -223,6 +223,9 @@ any code writes the new blocks would be the sentence that stops being true by be
 - **M5 PR 8**: `Lock` gains `artefacts` and `models`, both absent until used, written by
   `Project::write`. The pre-load checks and `target_unsupported` arrive. The instrument and effect
   goldens are the first `lock.json`s with the block. No existing golden's `lock.json` moves.
+- **M5 PR 4** declared decision 5's request and receipt as `RepinRequest` and `RepinResponse` in
+  `proto/song_tools.proto`, **with no rpc**, so the window reads the receipt through generated
+  types and no session is implied. The project path is the caller's handle and does not cross.
 - **M5 PR 9** (`m5.9-repin`): `core::repin`, `escribass-repin` and the window's recovery view,
   exercised on a real mismatched project. The test pins a fixture to a deliberately changed
   **existing** commit (trap 18), with a concurrent change and a cancelled apply under the kernel

@@ -20,8 +20,11 @@
 //! answered `UNIMPLEMENTED` between M4 PR 3, which declared `proto/`'s whole M4 shape in one
 //! change so `buf breaking` compared it once (docs/plan.md, M4 trap 4), and M4 PR 5, which
 //! gave `Session` the two tools — so they are two more macro arms now and the two methods are
-//! gone. The tools §5 lists that are missing from this file are missing from the *contract*
-//! too, named in a comment there with the milestone each waits for.
+//! gone. **From M5 PR 4 the same shape again, three wide**: `DefineInstrumentSource`,
+//! `CompileInstrument` and `GetDeviceSource` are declared with the rest of `proto/`'s M5 wire
+//! and answered `UNIMPLEMENTED` until PR 8 gives `Session` the tools (ADR 0029 §3). The tools §5
+//! lists that are missing from this file are missing from the *contract* too, named in a
+//! comment there with the event each waits for.
 
 use crate::session::Session;
 use crate::ProjectError;
@@ -143,6 +146,36 @@ macro_rules! service {
                 let response =
                     self.locked().render_preview(&request.into_inner()).map_err(status)?;
                 Ok(Response::new(response))
+            }
+
+            // Declared in M5 PR 4 with the rest of `proto/`'s M5 wire, so `buf breaking`
+            // compares it once (docs/plan.md, M4 trap 4), and wired to a `Session` in PR 8 —
+            // two macro arms and one method like `render_export`'s, and these three deleted.
+            // Not a stub answering `valid = false`: a refusal is a rule, and a transport that
+            // invented one is what ADR 0006 says a transport never is. None of the three is in
+            // `IMPLEMENTED`, so MCP neither advertises nor dispatches them, and nothing is
+            // written either way.
+            async fn define_instrument_source(
+                &self,
+                _request: Request<DefineInstrumentSourceRequest>,
+            ) -> Result<Response<ToolResult>, Status> {
+                Err(Status::unimplemented(
+                    "define_instrument_source arrives in M5 PR 8 (ADR 0029 §3)",
+                ))
+            }
+
+            async fn compile_instrument(
+                &self,
+                _request: Request<CompileInstrumentRequest>,
+            ) -> Result<Response<ToolResult>, Status> {
+                Err(Status::unimplemented("compile_instrument arrives in M5 PR 8 (ADR 0029 §3)"))
+            }
+
+            async fn get_device_source(
+                &self,
+                _request: Request<GetDeviceSourceRequest>,
+            ) -> Result<Response<DeviceSourceResponse>, Status> {
+                Err(Status::unimplemented("get_device_source arrives in M5 PR 8 (ADR 0029 §3)"))
             }
 
             $(

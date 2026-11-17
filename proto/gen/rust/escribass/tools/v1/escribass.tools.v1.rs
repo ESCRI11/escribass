@@ -392,6 +392,110 @@ pub struct CompileGeneratorRequest {
     pub dry_run: bool,
 }
 // ---------------------------------------------------------------------------
+// Compiled devices (§7.2, ADR 0029 §3)
+// ---------------------------------------------------------------------------
+//
+// Declared in M5 PR 4 and answered by core from PR 8. Until then gRPC answers all three
+// UNIMPLEMENTED and neither carrier advertises them: none is in IMPLEMENTED or OFFERED.
+
+/// Saves Cmajor source for a device: installs the source asset and points the reference at it,
+/// in one entry. Compiles nothing. Targets exactly one of: an existing Cmajor device (its
+/// source is replaced; an existing export stays and becomes stale), an instrument track
+/// (set_track_instrument's rules), or a new effect (add_effect's rules, index optional).
+///
+/// One gesture, and it reuses those two tools' rules rather than restating them, so a device it
+/// creates sits in a chain exactly where add_effect would have put it. A dry run writes no asset.
+/// A Faust target is refused, `export_unsupported`: Faust is import-only (ADR 0029 §3).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DefineInstrumentSourceRequest {
+    #[prost(string, tag="1")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(bool, tag="5")]
+    pub dry_run: bool,
+    #[prost(oneof="define_instrument_source_request::Target", tags="2, 3, 4")]
+    pub target: ::core::option::Option<define_instrument_source_request::Target>,
+}
+/// Nested message and enum types in `DefineInstrumentSourceRequest`.
+pub mod define_instrument_source_request {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(string, tag="2")]
+        DeviceId(::prost::alloc::string::String),
+        #[prost(string, tag="3")]
+        InstrumentTrackId(::prost::alloc::string::String),
+        #[prost(message, tag="4")]
+        Effect(super::EffectSlot),
+    }
+}
+/// Where define_instrument_source adds a new effect: AddEffectRequest's two placement fields,
+/// with its rules.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct EffectSlot {
+    #[prost(string, tag="1")]
+    pub track_id: ::prost::alloc::string::String,
+    /// Position in the chain. Absent appends after the current last.
+    #[prost(uint32, optional, tag="2")]
+    pub index: ::core::option::Option<u32>,
+}
+/// Compiles the saved source of a device into an export and points the reference at it.
+///
+/// It compiles what the song names, never an unsaved buffer, so freshness is a comparison of two
+/// hashes. A `neural` device is compiled by this same tool, through the converter (ADR 0029 §1).
+///
+/// **A dry run builds and holds one candidate**, and answers with the patch — `export_hash` set —
+/// and a summary comparing the new record's parameters with the old one's. It writes no asset,
+/// no lock and no entry. A later real call on the same device **applies the held candidate rather
+/// than building again**, if the device's `source_hash`, its `export_hash` and the recipe it was
+/// built against still hold; otherwise it is refused, `document_moved`, naming what moved. One
+/// candidate per session, and a new dry run replaces it (ADR 0029 §3).
+///
+/// Refused — `valid = false`, the caller's to fix — with `source_error` carrying the stage, line,
+/// column and the compiler's own text; `graph_unsupported` for a graph the converter refuses
+/// (ADR 0032); `device_unknown`; `not_compilable` for a plugin or sampler device;
+/// `param_incompatible`, naming each identifier the song refers to that the new export
+/// drops or re-ranges; and `document_moved`. An operator's instead, ending a model's turn at the
+/// host: `compiler_missing`, `compiler_failed`, `compiler_timeout`, `recipe_mismatch`,
+/// `export_missing`, `export_corrupt`, `target_unsupported` and `runtime_missing` (ADR 0029 §4).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CompileInstrumentRequest {
+    #[prost(string, tag="1")]
+    pub device_id: ::prost::alloc::string::String,
+    #[prost(bool, tag="2")]
+    pub dry_run: bool,
+}
+/// A read: the device's saved source, its export state and, when there is one, its record.
+/// Never compiles and never writes. Selecting a device never compiles it either (ADR 0029 §3,
+/// §8).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetDeviceSourceRequest {
+    #[prost(string, tag="1")]
+    pub device_id: ::prost::alloc::string::String,
+}
+/// What get_device_source returns. Not ToolResult: a read records nothing, and what it has to
+/// say has nowhere to go in one (ADR 0006 §1). `valid` and `errors` nonetheless, as
+/// RenderResponse carries them: an unknown device or one that compiles nothing is the caller's
+/// to fix, `device_unknown` or `not_compilable`, and has to reach a model that asked as a result
+/// it can retry against rather than as a transport failure (ADR 0029 §4; ADR 0006 §2).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeviceSourceResponse {
+    #[prost(bool, tag="1")]
+    pub valid: bool,
+    #[prost(message, repeated, tag="2")]
+    pub errors: ::prost::alloc::vec::Vec<Violation>,
+    /// The source text the reference names, and its hash as the reference holds it.
+    #[prost(string, tag="3")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(string, tag="4")]
+    pub source_hash: ::prost::alloc::string::String,
+    #[prost(enumeration="ExportState", tag="5")]
+    pub state: i32,
+    /// The record `export_hash` names. Absent while pending; present and describing the **old**
+    /// binary while stale, because a stale export still describes the interface the song was
+    /// written against (ADR 0029 §5).
+    #[prost(message, optional, tag="6")]
+    pub record: ::core::option::Option<super::super::export::v1::ExportRecord>,
+}
+// ---------------------------------------------------------------------------
 // Rendering (§8)
 // ---------------------------------------------------------------------------
 
@@ -604,6 +708,110 @@ pub struct MergeBranchRequest {
     /// would be editing the merge rather than resolving it.
     #[prost(btree_map="string, enumeration(MergeSide)", tag="3")]
     pub resolve: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, i32>,
+}
+// ---------------------------------------------------------------------------
+// Re-pin (ADR 0030 §5): a contract, and deliberately not an rpc
+// ---------------------------------------------------------------------------
+//
+// What core::repin is asked and what it answers. **There is no rpc on SongTools for it**: it
+// runs on a project that cannot be opened — the case it exists for is `lock_mismatch` refusing
+// `open` — so it takes the project's kernel lock without a Session, and a SongTools call needs
+// one. It has two callers, the window's recovery view and `escribass-repin`, both calling the one
+// core function, and it is never offered to a model, which has nothing to review a lock diff
+// against. The project is the caller's handle, as it is for SongTools (ADR 0006 §5), so no path
+// crosses here. Messages without an rpc so that the window reads the receipt through generated
+// types rather than a hand-written one; core implements them in M5 PR 9.
+
+/// A dry run, or the apply of what a dry run showed.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RepinRequest {
+    /// On apply: the RFC 6902 patch over lock.json a dry run answered with, as canonical text like
+    /// ToolResult.patch. Empty on a dry run.
+    #[prost(bytes="vec", tag="1")]
+    pub patch: ::prost::alloc::vec::Vec<u8>,
+    /// On apply: the SHA-256 of lock.json the dry run answered with. Apply refuses, `lock_moved`,
+    /// if the file no longer hashes to it. Empty on a dry run.
+    #[prost(string, tag="2")]
+    pub lock_sha256: ::prost::alloc::string::String,
+    #[prost(bool, tag="3")]
+    pub dry_run: bool,
+}
+/// The receipt, from a dry run and from an apply alike.
+///
+/// Refused, `valid = false` and nothing written, for a plugin the build does not have, a change
+/// of a plugin's identity, anything in `artefacts` or `models`, an export failing its integrity
+/// checks, and a moved lock. Never an "open anyway" (ADR 0030 §5).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RepinResponse {
+    #[prost(bool, tag="1")]
+    pub valid: bool,
+    #[prost(message, repeated, tag="2")]
+    pub errors: ::prost::alloc::vec::Vec<Violation>,
+    /// Each pin the song references that disagrees with this build, by plugin id: what lock.json
+    /// says and what this build has. Only `commit` and `version` move — never which plugin it is.
+    #[prost(btree_map="string, message", tag="3")]
+    pub plugins: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, PinChange>,
+    /// The RFC 6902 patch over lock.json that makes them agree: `replace` on exactly those fields
+    /// and nothing else.
+    #[prost(bytes="vec", tag="4")]
+    pub patch: ::prost::alloc::vec::Vec<u8>,
+    /// The SHA-256 of lock.json as it was read, which an apply hands back.
+    #[prost(string, tag="5")]
+    pub lock_sha256: ::prost::alloc::string::String,
+}
+/// One plugin's pin, before and after.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PinChange {
+    #[prost(message, optional, tag="1")]
+    pub old: ::core::option::Option<Pin>,
+    #[prost(message, optional, tag="2")]
+    pub new: ::core::option::Option<Pin>,
+}
+/// A plugin pin as lock.json's `plugins` block holds it (ADR 0010 §1).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Pin {
+    #[prost(string, tag="1")]
+    pub commit: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub version: ::prost::alloc::string::String,
+}
+/// How a compiled device's export stands against the source it holds. Derived by core on every
+/// read and never stored: there is no status field in the song (ADR 0028 §4, §6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ExportState {
+    Unspecified = 0,
+    /// No `export_hash`. A render or preview of it is refused, `export_pending`.
+    Pending = 1,
+    /// The record was built from another source than the one the reference holds now. Refused,
+    /// `export_stale`; compile_instrument lifts it.
+    Stale = 2,
+    /// Built from this source, and the record and its members verify. It plays.
+    Current = 3,
+}
+impl ExportState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "EXPORT_STATE_UNSPECIFIED",
+            Self::Pending => "EXPORT_STATE_PENDING",
+            Self::Stale => "EXPORT_STATE_STALE",
+            Self::Current => "EXPORT_STATE_CURRENT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "EXPORT_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "EXPORT_STATE_PENDING" => Some(Self::Pending),
+            "EXPORT_STATE_STALE" => Some(Self::Stale),
+            "EXPORT_STATE_CURRENT" => Some(Self::Current),
+            _ => None,
+        }
+    }
 }
 /// Which side of a conflict wins at one path (ADR 0015 §3).
 ///
