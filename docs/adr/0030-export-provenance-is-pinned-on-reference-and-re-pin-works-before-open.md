@@ -56,8 +56,9 @@ exactly the case it exists for.
 
 **An entry is the record's `target` and `recipe`, copied once, keyed by the record's own hash.**
 `recipe`'s fields are ADR 0031's — the Cmajor, CLAP SDK, clap-wrapper and VST3 SDK commits, the
-compiler and its flags, Cmajor's optimisation level and the recipe's own edits to generated
-code. The copy is what §11 asks for, a project's tool versions readable in `lock.json` without
+compiler and its flags, ~~Cmajor's optimisation level~~ the build type and the recipe's own edits
+to generated code (**corrected 2026-11-17**: ADR 0031 §6 measured Cmajor's `-O` to be no input
+of an export, and §7 lists the fields). The copy is what §11 asks for, a project's tool versions readable in `lock.json` without
 opening an asset. It cannot drift from the record, which is immutable and whose hash is the
 key, so an entry can disagree with its record only if one of them was edited by hand (decision
 4).

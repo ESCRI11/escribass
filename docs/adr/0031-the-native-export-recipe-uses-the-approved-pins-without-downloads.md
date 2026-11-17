@@ -221,7 +221,11 @@ deadline that kills the engine's whole process group:
   code (trap 24).
 
 Each check was watched failing first, with the recipe weakened one piece at a time; the record is
-in M5 PR 5's description and `docs/plan.md`.
+in M5 PR 5's description and `docs/plan.md`. One result there is sharper than the spike's: with
+the symbol flags off and the recipe's own `GNU_UNIQUE` check removed, the second export's module
+**reports the first one's class** — the engine refused it as "declares no class called 'Recipe
+Two B'" before a sample was rendered. The collision is in the factory, which is what a VST3 host
+asks first, and not only in the processing.
 
 ## Alternatives considered
 
