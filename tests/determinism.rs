@@ -2473,6 +2473,10 @@ fn the_checks_job_runs_for_every_tier_it_has_a_step_for() {
         "compilers/generative/src/escribass_generative/dsl.py",
         "compilers/generative/tests/test_dsl.py",
         "compilers/generative/uv.lock",
+        // `tests/baseline.rs` reads the recipe's `CMAJ_VERSION` and `LLVM_SPARSE` lines and the
+        // DSP gitlinks, so a change to either is a change this job checks (M5 PR 5).
+        "compilers/dsp/recipe.py",
+        "compilers/dsp/vendor/vst3sdk",
     ] {
         assert!(
             !skips(file),

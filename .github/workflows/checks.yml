@@ -17,10 +17,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Five jobs with very different appetites: `checks` is a few minutes, `app` (M2 PR 2) is a
+# Six jobs with very different appetites: `checks` is a few minutes, `app` (M2 PR 2) is a
 # frontend build and a Tauri host, `engine` compiles Tracktion Engine, JUCE and three VST3s
 # and is up to an hour cold, and `renders` and `cross-cpu` (M1 PR 11) render the goldens on
-# three runners with the binary `engine` built.
+# three runners with the binary `engine` built. `dsp` (M5 PR 5) builds the native export
+# toolchain and renders what it exports with that same binary.
 # Paying that for a typo in docs/specs.md is the wall-clock cost of the whole workflow spent on
 # nothing, so each job below first asks whether the pull request touched anything it actually
 # reads — the last two by asking `engine`, whose inputs are theirs.
@@ -1292,6 +1293,103 @@ jobs:
           name: render-report-${{ matrix.runner }}
           path: report/
           retention-days: 1
+
+  # ADR 0031's native export recipe (M5 PR 5): the approved trees checked out, `cmaj` built
+  # unmodified, and three exports **rendered** through the engine `engine` built — because a
+  # scan of a wrapped Cmajor plugin passes over the deadlock and the deaf instrument alike
+  # (docs/plan.md, M5 trap 23). After `engine`, on its uploaded binary, so it runs beside
+  # `renders` rather than lengthening the engine job, and it inherits `engine`'s gate: the
+  # recipe, its fixtures, `.gitmodules` and `lock.baseline.json` all build the engine, and
+  # `compilers/generative/` builds neither (`tests/determinism.rs` holds both halves of that).
+  #
+  # **Everything after the checkout runs with the network unreachable**, in a user and network
+  # namespace with no route out (`unshare -rn`): `cmaj`'s build, and every export the render
+  # test makes. A configure that worked online proves nothing about offline closure (trap 4).
+  #
+  # What each step costs — wall time and the **total** memory in use at its peak, every
+  # compiler at once, not the largest process — is printed by `recipe.py` and raised as a
+  # notice, and is what ADR 0031 §6's `EXPORT_JOBS` was chosen against.
+  dsp:
+    needs: engine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The engine that was built, not one built here
+        if: needs.engine.outputs.skipped != '1'
+        uses: actions/download-artifact@v4
+        with:
+          name: engine-build
+          path: engine/build
+
+      # The engine's build list — the plugins' runtime libraries come with their -dev packages —
+      # plus the two the recipe adds, GTK3 and WebKit2GTK 4.1: `cmaj` and every export's helpers
+      # link them (ADR 0031 §8; U5). JACK is on the engine's list already, and `cmaj` needs it.
+      - name: What the recipe builds with, and what an export loads
+        if: needs.engine.outputs.skipped != '1'
+        timeout-minutes: 20
+        env:
+          APT: -o Acquire::Retries=3
+        run: |
+          sudo apt-get $APT update
+          sudo apt-get $APT install -y --no-install-recommends ninja-build \
+            libasound2-dev libfreetype-dev libfontconfig1-dev libcurl4-openssl-dev \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libjack-jackd2-dev \
+            libxcb1-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev libxcb-xkb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libcairo2-dev libpango1.0-dev libglib2.0-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+          # Ubuntu 24.04 confines unprivileged user namespaces through AppArmor, and the offline
+          # steps below are one. Lifted for this throwaway runner, then shown to work.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          unshare -rn true
+
+      - name: The engine arrived intact
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          engine=engine/build/escribass_engine_artefacts/Release/escribass_engine
+          chmod +x "$engine"
+          # As in `renders`: the artefact carries no file times, and the binary is built from
+          # this commit by construction, so the staleness guard's timestamps are restated.
+          find engine/build -exec touch {} +
+          "$engine" --version
+
+      - name: Check out the approved trees
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          start=$(date +%s)
+          python3 -I compilers/dsp/recipe.py checkout
+          echo "::notice::recipe.py checkout: $(( $(date +%s) - start )) s, cold"
+          du -sh compilers/dsp/vendor/* compilers/dsp/vendor/cmajor/3rdParty/llvm
+
+      # Unmodified, flag-checked, version told, and provenance written from the checkout — and
+      # the same commits compared with lock.baseline.json, which fails naming the one that moved.
+      - name: Build cmaj, unmodified, with the network unreachable
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          unshare -rn python3 -I compilers/dsp/recipe.py build 2> build.err || { cat build.err; exit 1; }
+          echo "::notice::recipe.py build: $(tail -1 build.err)"
+          cat compilers/dsp/build/toolchain.json
+
+      # A template that moved, a configure that would fetch, a missing SDK, and Cmajor's `-O`
+      # re-measured as no input of an export — each made to fire (ADR 0031 §2, §4, §6).
+      - name: The recipe refuses what it must
+        if: needs.engine.outputs.skipped != '1'
+        run: python3 -I compilers/dsp/test_recipe.py
+
+      # Built online, because crates are downloaded; run offline, because exports are not.
+      - name: Exports play in the engine, with the network unreachable
+        if: needs.engine.outputs.skipped != '1'
+        run: |
+          cargo build -p escribass-tests --features dsp --tests
+          unshare -rn cargo test --offline -p escribass-tests --features dsp --test dsp -- --nocapture 2>&1 | tee dsp.log
+          grep 'exported in' dsp.log | sed 's/^/::notice::/'
 
   # ADR 0009 §6's experiment, reported rather than asserted.
   #

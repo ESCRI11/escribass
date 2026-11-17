@@ -190,7 +190,9 @@ fn render_once(engine: &Path, manifest: &Path, plan: &RenderPlan, name: &str) ->
     let started = Instant::now();
     while child.try_wait().expect("render-once can be waited on").is_none() {
         if started.elapsed() > DEADLINE {
-            let _ = Command::new("kill").arg("-KILL").arg(format!("-{}", child.id())).status();
+            // `--`, or procps' `kill` reads the negative group id as an option and kills nothing
+            // — found the way it would be found, by a deadlocked demo that outlived its deadline.
+            let _ = Command::new("kill").args(["-s", "KILL", "--", &format!("-{}", child.id())]).status();
             let _ = child.wait();
             panic!(
                 "{name}: the engine did not answer in {DEADLINE:?}. An export whose CLAP \
