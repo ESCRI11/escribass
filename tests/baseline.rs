@@ -78,6 +78,7 @@ fn pins(lock: &Value) -> Vec<Pin> {
     const CHECKS: &str = ".github/workflows/checks.yml";
     const APP_NPM: &str = "app/package.json";
     const SCHEMA_NPM: &str = "schema/package.json";
+    const DSP_RECIPE: &str = "compilers/dsp/recipe.py";
 
     let mut rows = vec![
         // ---- schema.rust: the codegen crates, resolved in the one Cargo.lock ----
@@ -313,6 +314,21 @@ fn pins(lock: &Value) -> Vec<Pin> {
             "schema/.python-version",
             at("/tool_api/python/_reused/python"),
         ),
+        // ---- dsp: what the export recipe itself states (ADR 0031 §2, §3) ----
+        // The version is told to Cmajor's CMake rather than derived from a tag, so the recipe's
+        // constant is its source; `recipe.py build` then holds `cmaj --version` to it.
+        pin(
+            "/dsp/cmajor/version",
+            "",
+            DSP_RECIPE,
+            format!("CMAJ_VERSION = \"{}\"", at("/dsp/cmajor/version")),
+        ),
+        pin(
+            "/dsp/cmajor/llvm/sparse",
+            "",
+            DSP_RECIPE,
+            format!("LLVM_SPARSE = \"{}\"", at("/dsp/cmajor/llvm/sparse")),
+        ),
         // ---- ci ----
         pin(
             "/ci/actions_checkout/version",
@@ -402,6 +418,18 @@ const READ_ELSEWHERE: &[(&str, &str)] = &[
     ("/bundled_plugins/surge_xt/commit", "tests/renders.rs and checks.yml"),
     ("/bundled_plugins/sfizz_ui/commit", "tests/renders.rs and checks.yml"),
     ("/bundled_plugins/dexed/commit", "tests/renders.rs and checks.yml"),
+    // Inside a submodule, which the `checks` job never checks out: `compilers/dsp/recipe.py`'s
+    // `verify_checkout` reads each from the checkout itself — a nested HEAD, a version in a
+    // header — in the `dsp` job, and fails naming the one that differs (ADR 0031 §1).
+    ("/dsp/cmajor/llvm/commit", "compilers/dsp/recipe.py, from the sparse checkout's HEAD, in checks.yml's dsp job"),
+    ("/dsp/cmajor/choc/commit", "compilers/dsp/recipe.py, from include/choc's HEAD"),
+    ("/dsp/clap_sdk/version", "compilers/dsp/recipe.py, from include/clap/version.h"),
+    ("/dsp/clap_wrapper/version", "compilers/dsp/recipe.py, from clap-wrapper's project() line"),
+    ("/dsp/vst3_sdk/version", "compilers/dsp/recipe.py, from pluginterfaces/vst/vsttypes.h"),
+    ("/dsp/vst3_sdk/base", "compilers/dsp/recipe.py, from the submodule's HEAD and the SDK's gitlink"),
+    ("/dsp/vst3_sdk/cmake", "compilers/dsp/recipe.py, as `base`"),
+    ("/dsp/vst3_sdk/pluginterfaces", "compilers/dsp/recipe.py, as `base`"),
+    ("/dsp/vst3_sdk/public_sdk", "compilers/dsp/recipe.py, as `base`"),
     ("/ai/provider", "core/tests/proposal.rs, against escribass_core::DEFAULT_PROVIDER"),
     ("/ai/model", "core/tests/proposal.rs, against escribass_core::DEFAULT_MODEL"),
 ];
@@ -420,13 +448,7 @@ const NO_SOURCE_YET: &[(&str, &str)] = &[
     ("/engine/grpc/abseil/commit", "grpc's own third_party gitlink, two submodules deep; the engine reports grpc and not abseil"),
     ("/engine/onnxruntime/version", "M5's neural runtime (ADR 0003 §7). Nothing is vendored and nothing links it"),
     ("/engine/onnxruntime/commit", "M5's neural runtime; nothing is vendored"),
-    ("/dsp/cmajor/version", "M5 (ADR 0023). Nothing in the tree vendors or builds it"),
-    ("/dsp/cmajor/commit", "M5; nothing vendors it"),
-    ("/dsp/clap_wrapper/version", "M5; nothing vendors it"),
-    ("/dsp/clap_wrapper/commit", "M5; nothing vendors it"),
-    ("/dsp/clap_sdk/version", "M5; nothing vendors it, and its commit is deliberately null"),
     ("/dsp/faust/version", "import-only, and M5 at the earliest"),
-    ("/dsp/clap_sdk/commit", "null on purpose: clap-wrapper carries the SDK and this names the version it carries"),
     ("/dsp/faust/commit", "null on purpose: import-only, so there is nothing to build from a commit"),
     ("/bundled_plugins/surge_xt/version", "the commit is the pin; this names its tag"),
     ("/bundled_plugins/sfizz/version", "the commit is the pin; this names its tag"),
@@ -436,6 +458,70 @@ const NO_SOURCE_YET: &[(&str, &str)] = &[
     ("/bundled_plugins/airwindows/commit", "deferred with clap-wrapper (M4's row, now M5's): no submodule, and twelve characters rather than forty"),
     ("/schema/typescript/node/version", "the local Node, which no file in the tree states: there is no .nvmrc and no `engines`. `ci.node` pins the major CI runs"),
 ];
+
+/// Every submodule of this repository, and the row that pins it.
+///
+/// **A gitlink is readable without a checkout** — it is in the index, which the `checks` job
+/// has — so these are compared here, on every run, in both directions (M5 PR 5; ADR 0031 §1).
+/// The engine's and the bundled plugins' rows are compared a second time against what the
+/// built engine reports (`READ_ELSEWHERE`); the four DSP trees have no build that reports, and
+/// this is their reader.
+const SUBMODULES: &[(&str, &str)] = &[
+    ("engine/vendor/tracktion_engine", "/engine/tracktion_engine/commit"),
+    ("engine/vendor/protobuf", "/engine/protobuf/commit"),
+    ("engine/vendor/grpc", "/engine/grpc/commit"),
+    ("engine/vendor/rubberband", "/engine/rubberband/commit"),
+    ("engine/vendor/surge", "/bundled_plugins/surge_xt/commit"),
+    ("engine/vendor/sfizz-ui", "/bundled_plugins/sfizz_ui/commit"),
+    ("engine/vendor/dexed", "/bundled_plugins/dexed/commit"),
+    ("compilers/dsp/vendor/cmajor", "/dsp/cmajor/commit"),
+    ("compilers/dsp/vendor/clap", "/dsp/clap_sdk/commit"),
+    ("compilers/dsp/vendor/clap-wrapper", "/dsp/clap_wrapper/commit"),
+    ("compilers/dsp/vendor/vst3sdk", "/dsp/vst3_sdk/commit"),
+];
+
+/// The commit this repository's index records for the submodule at `path`.
+fn gitlink(path: &str) -> String {
+    let listed = std::process::Command::new("git")
+        .args(["ls-files", "--stage", "--", path])
+        .current_dir(workspace())
+        .output()
+        .expect("git runs");
+    let line = String::from_utf8(listed.stdout).expect("git speaks UTF-8");
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    assert!(
+        fields.len() >= 2 && fields[0] == "160000",
+        "{path} is not a submodule in this repository's index: {line:?}"
+    );
+    fields[1].to_string()
+}
+
+#[test]
+fn every_submodule_is_the_commit_its_row_pins() {
+    // Direction one, for the trees a `checks` job never checks out. Watched failing by moving
+    // `/dsp/vst3_sdk/commit` one character, and by staging `compilers/dsp/vendor/clap` at its
+    // parent commit — the same assertion either way, naming the path.
+    let lock = baseline();
+    for (path, at) in SUBMODULES {
+        let pinned = lock.pointer(at).and_then(Value::as_str).unwrap_or_else(|| panic!("no `{at}`"));
+        assert_eq!(gitlink(path), pinned, "{path} is checked in at another commit than {at} pins");
+    }
+
+    // Direction two: a submodule nobody gave a row is a dependency added without a pin, which is
+    // what CLAUDE.md #4 is about. Watched failing by deleting the `vst3sdk` row above.
+    let modules = read(".gitmodules");
+    let declared: Vec<&str> = modules
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("path = "))
+        .collect();
+    assert!(declared.len() >= SUBMODULES.len(), ".gitmodules parsed as {declared:?}");
+    for path in declared {
+        assert!(
+            SUBMODULES.iter().any(|(known, _)| *known == path),
+            "the submodule {path} has no row in lock.baseline.json (CLAUDE.md #4)"
+        );
+    }
+}
 
 /// Keys whose value is prose, a date or a provenance note rather than a pin.
 ///
@@ -623,7 +709,12 @@ fn every_leaf_of_the_baseline_is_classified() {
     leaves(&lock, String::new(), &mut found);
 
     let checked: BTreeSet<&str> = pins(&lock).iter().map(|pin| pin.at).collect();
-    let elsewhere: BTreeSet<&str> = READ_ELSEWHERE.iter().map(|(at, _)| *at).collect();
+    // A gitlink is a reader too: `every_submodule_is_the_commit_its_row_pins`.
+    let elsewhere: BTreeSet<&str> = READ_ELSEWHERE
+        .iter()
+        .map(|(at, _)| *at)
+        .chain(SUBMODULES.iter().map(|(_, at)| *at))
+        .collect();
     let no_source: BTreeSet<&str> = NO_SOURCE_YET.iter().map(|(at, _)| *at).collect();
 
     let unclassified: Vec<&String> = found

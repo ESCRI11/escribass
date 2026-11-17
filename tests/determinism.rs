@@ -2434,8 +2434,17 @@ fn the_engine_job_renders_a_change_to_compile_or_to_the_client() {
     for file in [
         "core/src/render.rs",
         "core/src/engine.rs",
-        "compilers/dsp/CMakeLists.txt",
         "compilers/neural/convert.py",
+        // M5 PR 5: the export recipe and what it is pinned and tested by. A pull request that
+        // changes only the recipe is the compiler-only change the plan names — it moves no pin
+        // and touches no C++ of the engine's, and it decides what every export is built from,
+        // so the job that renders exports has to see it (ADR 0031 §9).
+        "compilers/dsp/recipe.py",
+        "compilers/dsp/test_recipe.py",
+        "compilers/dsp/vendor/cmajor",
+        "tests/dsp.rs",
+        "tests/fixtures/dsp/syn/syn.cmajor",
+        ".gitmodules",
     ] {
         assert!(!skips(file), "a pull request touching only `{file}` skipped the engine, so no golden renders");
     }

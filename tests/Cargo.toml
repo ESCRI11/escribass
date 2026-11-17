@@ -31,6 +31,18 @@ name = "renders"
 path = "renders.rs"
 required-features = ["renders"]
 
+# ADR 0031's export recipe through the real engine (M5 PR 5). Absent unless asked for, for
+# `renders`' reason: it needs `cmaj` built by `compilers/dsp/recipe.py build` and the engine by
+# its CMake, which cargo cannot produce, and a test that noticed and returned would be the
+# quiet skip M0.4 exists to prevent.
+#
+#     python3 -I compilers/dsp/recipe.py checkout && python3 -I compilers/dsp/recipe.py build
+#     cargo test -p escribass-tests --features dsp
+[[test]]
+name = "dsp"
+path = "dsp.rs"
+required-features = ["dsp"]
+
 # The gRPC client the engine job's shell steps drive the engine with (M2 PR 9). It is `core`'s
 # own `Engine` behind an argv, not a second implementation of the boundary — see the file.
 [[bin]]
@@ -56,6 +68,8 @@ ai = []
 #     cd compilers/generative && uv sync --locked
 #     cargo test -p escribass-tests --features generators
 generators = []
+# ADR 0031's export recipe through the engine; see `[[test]] dsp` above.
+dsp = []
 
 # `escribass-core`, `escribass-proto` and `prost` are dependencies rather than dev-dependencies
 # because `render-once` above links them, and a `[[bin]]` sees only the first list. Nothing

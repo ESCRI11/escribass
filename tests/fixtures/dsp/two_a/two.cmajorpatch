@@ -1,0 +1,3 @@
+{ "CmajorVersion": 1, "ID": "dev.escribass.recipe.two.a", "version": "1.0", "name": "Recipe Two A",
+  "description": "ADR 0031's same-named effect, version A", "category": "effect", "manufacturer": "Escribass",
+  "isInstrument": false, "source": "two.cmajor" }

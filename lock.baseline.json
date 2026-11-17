@@ -48,16 +48,49 @@
     "cmajor": {
       "version": "1.0.3177",
       "commit": "024a208515f15e43271d9b2ea85ee22a2233384b",
-      "date": "2026-07-28"
+      "date": "2026-07-28",
+      "repo": "cmajor-lang/cmajor",
+      "llvm": {
+        "commit": "c6380f9b8818b666a264399d330f31f55e806b74",
+        "date": "2025-09-12",
+        "repo": "cmajor-lang/llvm",
+        "sparse": "release/linux/x64",
+        "note": "Cmajor's `3rdParty/llvm` gitlink, read from the parent above: upstream's PREBUILT static libraries under a commit, checked out sparse to the one platform this repository builds for and linked into `cmaj`, never rebuilt — so the engine's flags reach none of it, and its standing is a vendor binary's (ADR 0023 §4; ADR 0031 §1). It reaches no export: `cmaj generate` writes C++ that links no LLVM."
+      },
+      "choc": {
+        "commit": "a08bfd84494921700703a8433b9d1a304edfafd2",
+        "date": "2026-07-07",
+        "repo": "Tracktion/choc",
+        "note": "Cmajor's `include/choc` gitlink — a path that differs from its submodule name, `3rdParty/choc`. A row of its own because it is the one Cmajor submodule that enters an export: `cmaj generate` copies the include tree beside the generated C++ (ADR 0031 §1)."
+      },
+      "note": "Vendored 2026-11-17 in M5 PR 5 as compilers/dsp/vendor/cmajor and built UNMODIFIED as the `cmaj` tool only (ADR 0031). Its other 30 submodules — 28 Boost libraries, CLAP 1.2.0 and a clap-wrapper fork, the last two the tool's internal checkout and neither of them an export pin — are pinned by this commit as JUCE is pinned by tracktion_engine's, fetched over HTTPS at exactly the commits it records, and checked by compilers/dsp/recipe.py's `git submodule status`. `version` is passed to its CMake as CMAJ_VERSION rather than derived from a tag."
     },
     "clap_wrapper": {
       "version": "0.16.0",
       "commit": "1cca996e96f29ab2be7ae9f8cfe532bbc92e1dd6",
-      "date": "2026-08-08"
+      "date": "2026-08-08",
+      "repo": "free-audio/clap-wrapper",
+      "note": "Vendored 2026-11-17 in M5 PR 5 as compilers/dsp/vendor/clap-wrapper, passed to every export as CLAP_WRAPPER_PATH in place of Cmajor's own fork. It has no submodules. Every *_DOWNLOAD_DEPENDENCIES flag is off, so its CPM bootstrap is never included (ADR 0031 §2)."
     },
     "clap_sdk": {
       "version": "1.2.10",
-      "commit": null
+      "tag": "1.2.10",
+      "commit": "195b42a004144fab0b3cf95e9c067187d15365b7",
+      "date": "2026-07-13",
+      "repo": "free-audio/clap",
+      "note": "Resolved from the tag and vendored 2026-11-17 in M5 PR 5 as compilers/dsp/vendor/clap. The ONE CLAP SDK an export compiles against: passed to `cmaj generate` as --clapIncludePath, which defines the `clap` target clap-wrapper then uses, and to clap-wrapper as CLAP_SDK_ROOT (ADR 0023 §4; ADR 0031 §1)."
+    },
+    "vst3_sdk": {
+      "version": "3.8.0",
+      "tag": "v3.8.0_build_66",
+      "commit": "9fad9770f2ae8542ab1a548a68c1ad1ac690abe0",
+      "date": "2025-10-20",
+      "repo": "steinbergmedia/vst3sdk",
+      "base": "3d2e82f8e6bff59c1d8b7a27491a29c2286b5206",
+      "cmake": "de6e54eeaaab35b7145f5c32c279b5e892146e04",
+      "pluginterfaces": "31d6eeba6daaa3e2a8bfbe3e7a90ca0b7fbfbc1c",
+      "public_sdk": "a3911a4615dabbfdfd9d181ee26b05c70c289a95",
+      "note": "§17's 'new row', signed off 2026-09-25 (ADR 0023 §4) and absent from this file until M5 PR 5 vendored it as compilers/dsp/vendor/vst3sdk. What clap-wrapper wraps TO, passed as VST3_SDK_ROOT. Four of its seven submodules, the four clap-wrapper's own fetch names; doc, tutorials and vstgui4 are never fetched. A second VST3 SDK beside the one JUCE embeds for hosting, and the two never meet (ADR 0031 §1)."
     },
     "faust": {
       "version": "2.85.9",
