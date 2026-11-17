@@ -327,6 +327,9 @@ impl Compiler<'_> {
                 }),
                 lanes: take_lanes(lanes, &held.id),
                 sfz_path: self.sampler_path(&at, held.r#ref.as_ref()),
+                // Always unset until M5 PR 8: `check_device` still refuses every compiled
+                // device, so nothing reaches here that an artefact would describe (ADR 0029 §6).
+                artefact: None,
             }
         });
 
@@ -358,6 +361,7 @@ impl Compiler<'_> {
                         ..held.clone()
                     }),
                     lanes: take_lanes(lanes, &held.id),
+                    artefact: None,
                 }
             })
             .collect();

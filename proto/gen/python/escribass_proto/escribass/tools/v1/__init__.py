@@ -13,9 +13,15 @@ __all__ = (
     "ApplyPatchRequest",
     "AssetResponse",
     "CompileGeneratorRequest",
+    "CompileInstrumentRequest",
     "CreateBranchRequest",
     "DefineGeneratorRequest",
+    "DefineInstrumentSourceRequest",
     "DeleteBranchRequest",
+    "DeviceSourceResponse",
+    "EffectSlot",
+    "ExportState",
+    "GetDeviceSourceRequest",
     "GetHistoryRequest",
     "GetSongAtRequest",
     "GetSongRequest",
@@ -23,6 +29,8 @@ __all__ = (
     "MergeBranchRequest",
     "MergeSide",
     "MoveSectionRequest",
+    "Pin",
+    "PinChange",
     "PreviewFrom",
     "PreviewResponse",
     "QuantizeRequest",
@@ -30,6 +38,8 @@ __all__ = (
     "RenderExportRequest",
     "RenderPreviewRequest",
     "RenderResponse",
+    "RepinRequest",
+    "RepinResponse",
     "SetNotesRequest",
     "SetParamRequest",
     "SetTempoRequest",
@@ -60,6 +70,49 @@ if TYPE_CHECKING:
 
 _COMPILER_VERSION = "0.10.1"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
+
+
+class ExportState(betterproto2.Enum):
+    """
+    How a compiled device's export stands against the source it holds. Derived by core on every
+    read and never stored: there is no status field in the song (ADR 0028 §4, §6).
+    """
+
+    UNSPECIFIED = 0
+
+    PENDING = 1
+    """
+    No `export_hash`. A render or preview of it is refused, `export_pending`.
+    """
+
+    STALE = 2
+    """
+    The record was built from another source than the one the reference holds now. Refused,
+    `export_stale`; compile_instrument lifts it.
+    """
+
+    CURRENT = 3
+    """
+    Built from this source, and the record and its members verify. It plays.
+    """
+
+    @classmethod
+    def betterproto_value_to_renamed_proto_names(cls) -> dict[int, str]:
+        return {
+            0: "EXPORT_STATE_UNSPECIFIED",
+            1: "EXPORT_STATE_PENDING",
+            2: "EXPORT_STATE_STALE",
+            3: "EXPORT_STATE_CURRENT",
+        }
+
+    @classmethod
+    def betterproto_renamed_proto_names_to_value(cls) -> dict[str, int]:
+        return {
+            "EXPORT_STATE_UNSPECIFIED": 0,
+            "EXPORT_STATE_PENDING": 1,
+            "EXPORT_STATE_STALE": 2,
+            "EXPORT_STATE_CURRENT": 3,
+        }
 
 
 class MergeSide(betterproto2.Enum):
@@ -385,6 +438,42 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class CompileInstrumentRequest(betterproto2.Message):
+    """
+    Compiles the saved source of a device into an export and points the reference at it.
+
+    It compiles what the song names, never an unsaved buffer, so freshness is a comparison of two
+    hashes. A `neural` device is compiled by this same tool, through the converter (ADR 0029 §1).
+
+    **A dry run builds and holds one candidate**, and answers with the patch — `export_hash` set —
+    and a summary comparing the new record's parameters with the old one's. It writes no asset,
+    no lock and no entry. A later real call on the same device **applies the held candidate rather
+    than building again**, if the device's `source_hash`, its `export_hash` and the recipe it was
+    built against still hold; otherwise it is refused, `document_moved`, naming what moved. One
+    candidate per session, and a new dry run replaces it (ADR 0029 §3).
+
+    Refused — `valid = false`, the caller's to fix — with `source_error` carrying the stage, line,
+    column and the compiler's own text; `graph_unsupported` for a graph the converter refuses
+    (ADR 0032); `device_unknown`; `not_compilable` for a plugin or sampler device;
+    `param_incompatible`, naming each identifier the song refers to that the new export
+    drops or re-ranges; and `document_moved`. An operator's instead, ending a model's turn at the
+    host: `compiler_missing`, `compiler_failed`, `compiler_timeout`, `recipe_mismatch`,
+    `export_missing`, `export_corrupt`, `target_unsupported` and `runtime_missing` (ADR 0029 §4).
+    """
+
+    device_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+    dry_run: "bool" = betterproto2.field(2, betterproto2.TYPE_BOOL)
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "CompileInstrumentRequest", CompileInstrumentRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class CreateBranchRequest(betterproto2.Message):
     """
     ---------------------------------------------------------------------------
@@ -490,6 +579,57 @@ default_message_pool.register_message(
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class DefineInstrumentSourceRequest(betterproto2.Message):
+    """
+    ---------------------------------------------------------------------------
+    Compiled devices (§7.2, ADR 0029 §3)
+    ---------------------------------------------------------------------------
+
+    Declared in M5 PR 4 and answered by core from PR 8. Until then gRPC answers all three
+    UNIMPLEMENTED and neither carrier advertises them: none is in IMPLEMENTED or OFFERED.
+
+    Saves Cmajor source for a device: installs the source asset and points the reference at it,
+    in one entry. Compiles nothing. Targets exactly one of: an existing Cmajor device (its
+    source is replaced; an existing export stays and becomes stale), an instrument track
+    (set_track_instrument's rules), or a new effect (add_effect's rules, index optional).
+
+    One gesture, and it reuses those two tools' rules rather than restating them, so a device it
+    creates sits in a chain exactly where add_effect would have put it. A dry run writes no asset.
+    A Faust target is refused, `export_unsupported`: Faust is import-only (ADR 0029 §3).
+
+    Oneofs:
+        - target:
+    """
+
+    source: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+    device_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        2, betterproto2.TYPE_STRING, optional=True, group="target"
+    )
+
+    instrument_track_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)] | None" = betterproto2.field(
+        3, betterproto2.TYPE_STRING, optional=True, group="target"
+    )
+
+    effect: "EffectSlot | None" = betterproto2.field(
+        4, betterproto2.TYPE_MESSAGE, optional=True, group="target"
+    )
+
+    dry_run: "bool" = betterproto2.field(5, betterproto2.TYPE_BOOL)
+
+    @model_validator(mode="after")
+    def check_oneof(cls, values):
+        return cls._validate_field_groups(values)
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "DefineInstrumentSourceRequest", DefineInstrumentSourceRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
 class DeleteBranchRequest(betterproto2.Message):
     """
     Discards the name. The entries stay in the log, unreferenced and inert (ADR 0001 §2).
@@ -504,6 +644,92 @@ class DeleteBranchRequest(betterproto2.Message):
 
 default_message_pool.register_message(
     "escribass.tools.v1", "DeleteBranchRequest", DeleteBranchRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class DeviceSourceResponse(betterproto2.Message):
+    """
+    What get_device_source returns. Not ToolResult: a read records nothing, and what it has to
+    say has nowhere to go in one (ADR 0006 §1). `valid` and `errors` nonetheless, as
+    RenderResponse carries them: an unknown device or one that compiles nothing is the caller's
+    to fix, `device_unknown` or `not_compilable`, and has to reach a model that asked as a result
+    it can retry against rather than as a transport failure (ADR 0029 §4; ADR 0006 §2).
+    """
+
+    valid: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
+
+    errors: "list[Violation]" = betterproto2.field(
+        2, betterproto2.TYPE_MESSAGE, repeated=True
+    )
+
+    source: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        3, betterproto2.TYPE_STRING
+    )
+    """
+    The source text the reference names, and its hash as the reference holds it.
+    """
+
+    source_hash: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        4, betterproto2.TYPE_STRING
+    )
+
+    state: "ExportState" = betterproto2.field(
+        5, betterproto2.TYPE_ENUM, default_factory=lambda: ExportState(0)
+    )
+
+    record: "__export__v1__.ExportRecord | None" = betterproto2.field(
+        6, betterproto2.TYPE_MESSAGE, optional=True
+    )
+    """
+    The record `export_hash` names. Absent while pending; present and describing the **old**
+    binary while stale, because a stale export still describes the interface the song was
+    written against (ADR 0029 §5).
+    """
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "DeviceSourceResponse", DeviceSourceResponse
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class EffectSlot(betterproto2.Message):
+    """
+    Where define_instrument_source adds a new effect: AddEffectRequest's two placement fields,
+    with its rules.
+    """
+
+    track_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+    index: "typing.Annotated[int, pydantic.Field(ge=0, le=2**32 - 1)] | None" = (
+        betterproto2.field(2, betterproto2.TYPE_UINT32, optional=True)
+    )
+    """
+    Position in the chain. Absent appends after the current last.
+    """
+
+
+default_message_pool.register_message("escribass.tools.v1", "EffectSlot", EffectSlot)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class GetDeviceSourceRequest(betterproto2.Message):
+    """
+    A read: the device's saved source, its export state and, when there is one, its record.
+    Never compiles and never writes. Selecting a device never compiles it either (ADR 0029 §3,
+    §8).
+    """
+
+    device_id: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "GetDeviceSourceRequest", GetDeviceSourceRequest
 )
 
 
@@ -648,6 +874,38 @@ class MoveSectionRequest(betterproto2.Message):
 default_message_pool.register_message(
     "escribass.tools.v1", "MoveSectionRequest", MoveSectionRequest
 )
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class Pin(betterproto2.Message):
+    """
+    A plugin pin as lock.json's `plugins` block holds it (ADR 0010 §1).
+    """
+
+    commit: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        1, betterproto2.TYPE_STRING
+    )
+
+    version: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        2, betterproto2.TYPE_STRING
+    )
+
+
+default_message_pool.register_message("escribass.tools.v1", "Pin", Pin)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class PinChange(betterproto2.Message):
+    """
+    One plugin's pin, before and after.
+    """
+
+    old: "Pin | None" = betterproto2.field(1, betterproto2.TYPE_MESSAGE, optional=True)
+
+    new: "Pin | None" = betterproto2.field(2, betterproto2.TYPE_MESSAGE, optional=True)
+
+
+default_message_pool.register_message("escribass.tools.v1", "PinChange", PinChange)
 
 
 @dataclass(eq=False, repr=False, config={"extra": "forbid"})
@@ -891,6 +1149,94 @@ class RenderResponse(betterproto2.Message):
 
 default_message_pool.register_message(
     "escribass.tools.v1", "RenderResponse", RenderResponse
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class RepinRequest(betterproto2.Message):
+    """
+    ---------------------------------------------------------------------------
+    Re-pin (ADR 0030 §5): a contract, and deliberately not an rpc
+    ---------------------------------------------------------------------------
+
+    What core::repin is asked and what it answers. **There is no rpc on SongTools for it**: it
+    runs on a project that cannot be opened — the case it exists for is `lock_mismatch` refusing
+    `open` — so it takes the project's kernel lock without a Session, and a SongTools call needs
+    one. It has two callers, the window's recovery view and `escribass-repin`, both calling the one
+    core function, and it is never offered to a model, which has nothing to review a lock diff
+    against. The project is the caller's handle, as it is for SongTools (ADR 0006 §5), so no path
+    crosses here. Messages without an rpc so that the window reads the receipt through generated
+    types rather than a hand-written one; core implements them in M5 PR 9.
+
+    A dry run, or the apply of what a dry run showed.
+    """
+
+    patch: "bytes" = betterproto2.field(1, betterproto2.TYPE_BYTES)
+    """
+    On apply: the RFC 6902 patch over lock.json a dry run answered with, as canonical text like
+    ToolResult.patch. Empty on a dry run.
+    """
+
+    lock_sha256: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        2, betterproto2.TYPE_STRING
+    )
+    """
+    On apply: the SHA-256 of lock.json the dry run answered with. Apply refuses, `lock_moved`,
+    if the file no longer hashes to it. Empty on a dry run.
+    """
+
+    dry_run: "bool" = betterproto2.field(3, betterproto2.TYPE_BOOL)
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "RepinRequest", RepinRequest
+)
+
+
+@dataclass(eq=False, repr=False, config={"extra": "forbid"})
+class RepinResponse(betterproto2.Message):
+    """
+    The receipt, from a dry run and from an apply alike.
+
+    Refused, `valid = false` and nothing written, for a plugin the build does not have, a change
+    of a plugin's identity, anything in `artefacts` or `models`, an export failing its integrity
+    checks, and a moved lock. Never an "open anyway" (ADR 0030 §5).
+    """
+
+    valid: "bool" = betterproto2.field(1, betterproto2.TYPE_BOOL)
+
+    errors: "list[Violation]" = betterproto2.field(
+        2, betterproto2.TYPE_MESSAGE, repeated=True
+    )
+
+    plugins: "dict[str, PinChange]" = betterproto2.field(
+        3,
+        betterproto2.TYPE_MAP,
+        map_meta=betterproto2.map_meta(
+            betterproto2.TYPE_STRING, betterproto2.TYPE_MESSAGE
+        ),
+    )
+    """
+    Each pin the song references that disagrees with this build, by plugin id: what lock.json
+    says and what this build has. Only `commit` and `version` move — never which plugin it is.
+    """
+
+    patch: "bytes" = betterproto2.field(4, betterproto2.TYPE_BYTES)
+    """
+    The RFC 6902 patch over lock.json that makes them agree: `replace` on exactly those fields
+    and nothing else.
+    """
+
+    lock_sha256: "typing.Annotated[str, pydantic.AfterValidator(betterproto2.validators.validate_string)]" = betterproto2.field(
+        5, betterproto2.TYPE_STRING
+    )
+    """
+    The SHA-256 of lock.json as it was read, which an apply hands back.
+    """
+
+
+default_message_pool.register_message(
+    "escribass.tools.v1", "RepinResponse", RepinResponse
 )
 
 
@@ -1166,6 +1512,7 @@ class Violation(betterproto2.Message):
 default_message_pool.register_message("escribass.tools.v1", "Violation", Violation)
 
 
+from ...export import v1 as __export__v1__
 from escribass_schema.escribass.history import v1 as __history__v1__
 from ...render import v1 as __render__v1__
 from escribass_schema.escribass.song import v1 as __song__v1__
@@ -1259,6 +1606,24 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
     async def compile_generator(
         self, message: "CompileGeneratorRequest"
     ) -> "ToolResult":
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def define_instrument_source(
+        self, message: "DefineInstrumentSourceRequest"
+    ) -> "ToolResult":
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def compile_instrument(
+        self, message: "CompileInstrumentRequest"
+    ) -> "ToolResult":
+
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def get_device_source(
+        self, message: "GetDeviceSourceRequest"
+    ) -> "DeviceSourceResponse":
 
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
@@ -1448,6 +1813,31 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
         response = await self.compile_generator(request)
         await stream.send_message(response)
 
+    async def __rpc_define_instrument_source(
+        self, stream: "grpclib.server.Stream[DefineInstrumentSourceRequest, ToolResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.define_instrument_source(request)
+        await stream.send_message(response)
+
+    async def __rpc_compile_instrument(
+        self, stream: "grpclib.server.Stream[CompileInstrumentRequest, ToolResult]"
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.compile_instrument(request)
+        await stream.send_message(response)
+
+    async def __rpc_get_device_source(
+        self,
+        stream: "grpclib.server.Stream[GetDeviceSourceRequest, DeviceSourceResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        assert request is not None
+        response = await self.get_device_source(request)
+        await stream.send_message(response)
+
     async def __rpc_render_export(
         self, stream: "grpclib.server.Stream[RenderExportRequest, RenderResponse]"
     ) -> None:
@@ -1627,6 +2017,24 @@ class SongToolsBase(betterproto2_grpclib.ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 CompileGeneratorRequest,
                 ToolResult,
+            ),
+            "/escribass.tools.v1.SongTools/DefineInstrumentSource": grpclib.const.Handler(
+                self.__rpc_define_instrument_source,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                DefineInstrumentSourceRequest,
+                ToolResult,
+            ),
+            "/escribass.tools.v1.SongTools/CompileInstrument": grpclib.const.Handler(
+                self.__rpc_compile_instrument,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                CompileInstrumentRequest,
+                ToolResult,
+            ),
+            "/escribass.tools.v1.SongTools/GetDeviceSource": grpclib.const.Handler(
+                self.__rpc_get_device_source,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                GetDeviceSourceRequest,
+                DeviceSourceResponse,
             ),
             "/escribass.tools.v1.SongTools/RenderExport": grpclib.const.Handler(
                 self.__rpc_render_export,

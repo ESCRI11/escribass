@@ -24,6 +24,7 @@ syntax = "proto3";
 
 package escribass.tools.v1;
 
+import "export.proto";
 import "history.proto";
 import "render.proto";
 import "song.proto";
@@ -335,6 +336,104 @@ message CompileGeneratorRequest {
 }
 
 // ---------------------------------------------------------------------------
+// Compiled devices (§7.2, ADR 0029 §3)
+// ---------------------------------------------------------------------------
+//
+// Declared in M5 PR 4 and answered by core from PR 8. Until then gRPC answers all three
+// UNIMPLEMENTED and neither carrier advertises them: none is in IMPLEMENTED or OFFERED.
+
+// Saves Cmajor source for a device: installs the source asset and points the reference at it,
+// in one entry. Compiles nothing. Targets exactly one of: an existing Cmajor device (its
+// source is replaced; an existing export stays and becomes stale), an instrument track
+// (set_track_instrument's rules), or a new effect (add_effect's rules, index optional).
+//
+// One gesture, and it reuses those two tools' rules rather than restating them, so a device it
+// creates sits in a chain exactly where add_effect would have put it. A dry run writes no asset.
+// A Faust target is refused, `export_unsupported`: Faust is import-only (ADR 0029 §3).
+message DefineInstrumentSourceRequest {
+  string source = 1;
+  oneof target {
+    string device_id = 2;
+    string instrument_track_id = 3;
+    EffectSlot effect = 4;
+  }
+  bool dry_run = 5;
+}
+
+// Where define_instrument_source adds a new effect: AddEffectRequest's two placement fields,
+// with its rules.
+message EffectSlot {
+  string track_id = 1;
+  // Position in the chain. Absent appends after the current last.
+  optional uint32 index = 2;
+}
+
+// Compiles the saved source of a device into an export and points the reference at it.
+//
+// It compiles what the song names, never an unsaved buffer, so freshness is a comparison of two
+// hashes. A `neural` device is compiled by this same tool, through the converter (ADR 0029 §1).
+//
+// **A dry run builds and holds one candidate**, and answers with the patch — `export_hash` set —
+// and a summary comparing the new record's parameters with the old one's. It writes no asset,
+// no lock and no entry. A later real call on the same device **applies the held candidate rather
+// than building again**, if the device's `source_hash`, its `export_hash` and the recipe it was
+// built against still hold; otherwise it is refused, `document_moved`, naming what moved. One
+// candidate per session, and a new dry run replaces it (ADR 0029 §3).
+//
+// Refused — `valid = false`, the caller's to fix — with `source_error` carrying the stage, line,
+// column and the compiler's own text; `graph_unsupported` for a graph the converter refuses
+// (ADR 0032); `device_unknown`; `not_compilable` for a plugin or sampler device;
+// `param_incompatible`, naming each identifier the song refers to that the new export
+// drops or re-ranges; and `document_moved`. An operator's instead, ending a model's turn at the
+// host: `compiler_missing`, `compiler_failed`, `compiler_timeout`, `recipe_mismatch`,
+// `export_missing`, `export_corrupt`, `target_unsupported` and `runtime_missing` (ADR 0029 §4).
+message CompileInstrumentRequest {
+  string device_id = 1;
+  bool dry_run = 2;
+}
+
+// A read: the device's saved source, its export state and, when there is one, its record.
+// Never compiles and never writes. Selecting a device never compiles it either (ADR 0029 §3,
+// §8).
+message GetDeviceSourceRequest {
+  string device_id = 1;
+}
+
+// How a compiled device's export stands against the source it holds. Derived by core on every
+// read and never stored: there is no status field in the song (ADR 0028 §4, §6).
+enum ExportState {
+  EXPORT_STATE_UNSPECIFIED = 0;
+  // No `export_hash`. A render or preview of it is refused, `export_pending`.
+  EXPORT_STATE_PENDING = 1;
+  // The record was built from another source than the one the reference holds now. Refused,
+  // `export_stale`; compile_instrument lifts it.
+  EXPORT_STATE_STALE = 2;
+  // Built from this source, and the record and its members verify. It plays.
+  EXPORT_STATE_CURRENT = 3;
+}
+
+// What get_device_source returns. Not ToolResult: a read records nothing, and what it has to
+// say has nowhere to go in one (ADR 0006 §1). `valid` and `errors` nonetheless, as
+// RenderResponse carries them: an unknown device or one that compiles nothing is the caller's
+// to fix, `device_unknown` or `not_compilable`, and has to reach a model that asked as a result
+// it can retry against rather than as a transport failure (ADR 0029 §4; ADR 0006 §2).
+message DeviceSourceResponse {
+  bool valid = 1;
+  repeated Violation errors = 2;
+
+  // The source text the reference names, and its hash as the reference holds it.
+  string source = 3;
+  string source_hash = 4;
+
+  ExportState state = 5;
+
+  // The record `export_hash` names. Absent while pending; present and describing the **old**
+  // binary while stale, because a stale export still describes the interface the song was
+  // written against (ADR 0029 §5).
+  escribass.export.v1.ExportRecord record = 6;
+}
+
+// ---------------------------------------------------------------------------
 // Rendering (§8)
 // ---------------------------------------------------------------------------
 
@@ -532,6 +631,65 @@ message MergeBranchRequest {
 }
 
 // ---------------------------------------------------------------------------
+// Re-pin (ADR 0030 §5): a contract, and deliberately not an rpc
+// ---------------------------------------------------------------------------
+//
+// What core::repin is asked and what it answers. **There is no rpc on SongTools for it**: it
+// runs on a project that cannot be opened — the case it exists for is `lock_mismatch` refusing
+// `open` — so it takes the project's kernel lock without a Session, and a SongTools call needs
+// one. It has two callers, the window's recovery view and `escribass-repin`, both calling the one
+// core function, and it is never offered to a model, which has nothing to review a lock diff
+// against. The project is the caller's handle, as it is for SongTools (ADR 0006 §5), so no path
+// crosses here. Messages without an rpc so that the window reads the receipt through generated
+// types rather than a hand-written one; core implements them in M5 PR 9.
+
+// A dry run, or the apply of what a dry run showed.
+message RepinRequest {
+  // On apply: the RFC 6902 patch over lock.json a dry run answered with, as canonical text like
+  // ToolResult.patch. Empty on a dry run.
+  bytes patch = 1;
+
+  // On apply: the SHA-256 of lock.json the dry run answered with. Apply refuses, `lock_moved`,
+  // if the file no longer hashes to it. Empty on a dry run.
+  string lock_sha256 = 2;
+
+  bool dry_run = 3;
+}
+
+// The receipt, from a dry run and from an apply alike.
+//
+// Refused, `valid = false` and nothing written, for a plugin the build does not have, a change
+// of a plugin's identity, anything in `artefacts` or `models`, an export failing its integrity
+// checks, and a moved lock. Never an "open anyway" (ADR 0030 §5).
+message RepinResponse {
+  bool valid = 1;
+  repeated Violation errors = 2;
+
+  // Each pin the song references that disagrees with this build, by plugin id: what lock.json
+  // says and what this build has. Only `commit` and `version` move — never which plugin it is.
+  map<string, PinChange> plugins = 3;
+
+  // The RFC 6902 patch over lock.json that makes them agree: `replace` on exactly those fields
+  // and nothing else.
+  bytes patch = 4;
+
+  // The SHA-256 of lock.json as it was read, which an apply hands back.
+  string lock_sha256 = 5;
+}
+
+// One plugin's pin, before and after.
+message PinChange {
+  Pin old = 1;
+  Pin new = 2;
+}
+
+// A plugin pin as lock.json's `plugins` block holds it (ADR 0010 §1).
+message Pin {
+  string commit = 1;
+  string version = 2;
+}
+
+// ---------------------------------------------------------------------------
 // The service (§5)
 // ---------------------------------------------------------------------------
 
@@ -565,6 +723,10 @@ service SongTools {
   rpc DefineGenerator(DefineGeneratorRequest) returns (ToolResult);
   rpc CompileGenerator(CompileGeneratorRequest) returns (ToolResult);
 
+  rpc DefineInstrumentSource(DefineInstrumentSourceRequest) returns (ToolResult);
+  rpc CompileInstrument(CompileInstrumentRequest) returns (ToolResult);
+  rpc GetDeviceSource(GetDeviceSourceRequest) returns (DeviceSourceResponse);
+
   rpc RenderExport(RenderExportRequest) returns (RenderResponse);
   rpc RenderPreview(RenderPreviewRequest) returns (PreviewResponse);
 
@@ -581,9 +743,4 @@ service SongTools {
   // compiler reads the layer-2 sections it is handed and needs no rule. Its trigger is the
   // first time a person wants a form re-laid rather than re-typed, and set_form goes with it
   // (ADR 0023 §6, amending ADR 0002 §7's "M4").
-  //
-  // define_instrument_source and compile_instrument wait for the **DSP** compilers, which are
-  // M5's — M4 is the generators and M5 is the native half (ADR 0023 §1). They are named here
-  // with that milestone rather than with "the compilers", because the two halves are now two
-  // milestones and a reader who finds this line in M4's tree should not go looking for them.
 }

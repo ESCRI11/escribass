@@ -23,6 +23,11 @@
 //! and `core` dials — so `generate_client` is the half `core` uses and `generate_server` the
 //! half `compilers/generative` implements, in Python, from this same `.proto` (M4 PR 4).
 //!
+//! `export` is the DSP compiler's boundary (`proto/export.proto`, ADR 0029): one `Compile` call
+//! to a child `core` spawns per native compile, answered with a bundle's bytes and its endpoint
+//! table or one diagnostic — `generate`'s direction, served in Python from M5 PR 7 — and the
+//! `ExportRecord` `core` assembles from that answer (ADR 0028 §2).
+//!
 //! `assistant` is the AI sidecar's boundary (`proto/assistant.proto`, ADR 0020): one
 //! bidirectional stream per prompt, on which the model's tool calls come **back** to the host
 //! as a name and arguments. Here the generated `assistant_client` is the half that matters —
@@ -64,9 +69,18 @@ pub mod escribass {
             ));
         }
     }
+    pub mod export {
+        pub mod v1 {
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/gen/rust/escribass/export/v1/escribass.export.v1.rs"
+            ));
+        }
+    }
 }
 
 pub use escribass::assistant::v1 as assistant;
+pub use escribass::export::v1 as export;
 pub use escribass::generate::v1 as generate;
 pub use escribass::render::v1 as render;
 pub use escribass::tools::v1 as tools;

@@ -225,7 +225,10 @@ is ADR 0029 §7's refusal.
     `string` would, it fails at `branches`' entry `…0008`. That is an *intermediate* state: the
     branch's final song no longer holds the reference, so `open` alone, which checks only the
     head, would have passed it.
-- **M5 PR 4**: `ExportRecord` in `proto/export.proto`, generated for every consumer.
+- **M5 PR 4**: `ExportRecord` in `proto/export.proto`, generated for every consumer. **Done
+  2026-11-17**, with decision 2's seven fields and no eighth: `input` is a message whose one
+  arm is the `source_hash` or the model and conversion hashes, and `class` and `ports` are
+  messages of their own.
 - **M5 PR 8**: `core` writes and verifies records, reconstructs bundles into the cache, and
   answers `export_pending`, `export_stale`, `export_missing` and `export_corrupt`. These retire
   the five sites in `core/src` that still say a Cmajor or neural device is something "M4"

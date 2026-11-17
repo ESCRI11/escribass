@@ -81,7 +81,7 @@ fn the_generated_serde_impl_base64_encodes_patch() {
 /// caught by nothing until a reviewer noticed.
 #[test]
 fn every_mutating_rpc_returns_the_shared_result() {
-    const OWN_SHAPE: [(&str, &str); 6] = [
+    const OWN_SHAPE: [(&str, &str); 7] = [
         ("GetSong", "SongResponse"),
         ("GetSongAt", "SongResponse"),
         ("GetHistory", "HistoryResponse"),
@@ -93,6 +93,10 @@ fn every_mutating_rpc_returns_the_shared_result() {
         // M2 PR 10, for the same reason: a preview records nothing, and where the transport is
         // has nowhere to go in `ToolResult` (song_tools.proto, `PreviewResponse`).
         ("RenderPreview", "PreviewResponse"),
+        // M5 PR 4: a read, and one that can be refused for the caller's reason — an unknown
+        // device, or one that compiles nothing — so it carries `valid` and `errors` as the two
+        // above do (song_tools.proto, `DeviceSourceResponse`; ADR 0029 §3, §4).
+        ("GetDeviceSource", "DeviceSourceResponse"),
     ];
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/song_tools.proto"))
         .expect("song_tools.proto");
@@ -111,7 +115,9 @@ fn every_mutating_rpc_returns_the_shared_result() {
     }
     // Twenty-seven from M4 PR 3: `DefineGenerator` and `CompileGenerator` both produce ops on
     // the document, so neither earns its own response message (ADR 0006 §1, ADR 0026 §2).
-    assert_eq!(seen, 27, "every rpc in the service is checked");
+    // Thirty from M5 PR 4: `DefineInstrumentSource` and `CompileInstrument` produce ops for the
+    // same reason, and `GetDeviceSource` is the read above (ADR 0029 §3).
+    assert_eq!(seen, 30, "every rpc in the service is checked");
 }
 
 // ---- render.proto (ADR 0007 §2) ----

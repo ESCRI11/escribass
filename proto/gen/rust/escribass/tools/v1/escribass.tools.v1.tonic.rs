@@ -524,6 +524,84 @@ pub mod song_tools_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn define_instrument_source(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DefineInstrumentSourceRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/DefineInstrumentSource",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "escribass.tools.v1.SongTools",
+                        "DefineInstrumentSource",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn compile_instrument(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CompileInstrumentRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/CompileInstrument",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("escribass.tools.v1.SongTools", "CompileInstrument"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn get_device_source(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetDeviceSourceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::DeviceSourceResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/escribass.tools.v1.SongTools/GetDeviceSource",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("escribass.tools.v1.SongTools", "GetDeviceSource"),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn render_export(
             &mut self,
             request: impl tonic::IntoRequest<super::RenderExportRequest>,
@@ -814,6 +892,24 @@ pub mod song_tools_server {
             &self,
             request: tonic::Request<super::CompileGeneratorRequest>,
         ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn define_instrument_source(
+            &self,
+            request: tonic::Request<super::DefineInstrumentSourceRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn compile_instrument(
+            &self,
+            request: tonic::Request<super::CompileInstrumentRequest>,
+        ) -> std::result::Result<tonic::Response<super::ToolResult>, tonic::Status>;
+        ///
+        async fn get_device_source(
+            &self,
+            request: tonic::Request<super::GetDeviceSourceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::DeviceSourceResponse>,
+            tonic::Status,
+        >;
         ///
         async fn render_export(
             &self,
@@ -1772,6 +1868,142 @@ pub mod song_tools_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = CompileGeneratorSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/DefineInstrumentSource" => {
+                    #[allow(non_camel_case_types)]
+                    struct DefineInstrumentSourceSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::DefineInstrumentSourceRequest>
+                    for DefineInstrumentSourceSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DefineInstrumentSourceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::define_instrument_source(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DefineInstrumentSourceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/CompileInstrument" => {
+                    #[allow(non_camel_case_types)]
+                    struct CompileInstrumentSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::CompileInstrumentRequest>
+                    for CompileInstrumentSvc<T> {
+                        type Response = super::ToolResult;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CompileInstrumentRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::compile_instrument(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CompileInstrumentSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/escribass.tools.v1.SongTools/GetDeviceSource" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetDeviceSourceSvc<T: SongTools>(pub Arc<T>);
+                    impl<
+                        T: SongTools,
+                    > tonic::server::UnaryService<super::GetDeviceSourceRequest>
+                    for GetDeviceSourceSvc<T> {
+                        type Response = super::DeviceSourceResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetDeviceSourceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as SongTools>::get_device_source(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetDeviceSourceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

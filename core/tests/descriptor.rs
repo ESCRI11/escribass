@@ -5,7 +5,7 @@
 //! properly, or learns a field that is not there. So the assertions are about *correspondence*
 //! with the proto rather than about any particular shape being pretty.
 
-use escribass_core::{tool_names, tool_schemas, ToolSchema};
+use escribass_core::{tool_names, tool_schemas, ToolSchema, IMPLEMENTED, OFFERED};
 use escribass_proto::DESCRIPTOR;
 use prost::Message;
 use serde_json::{json, Value};
@@ -37,13 +37,41 @@ fn every_rpc_in_the_service_becomes_a_tool() {
     // carrier's: MCP advertises `IMPLEMENTED`, so it advertised twenty-five and refused to
     // hand a model a name that could only fail. It is closed; what is still a subset is
     // `OFFERED`, which is ADR 0022 §1's and M4 PR 6's.
+    //
+    // Thirty from M5 PR 4, and the same gap opened again, three wide: the three tools below are
+    // declared with `proto/`'s whole M5 wire and dispatched from PR 8. The next test is what
+    // holds that gap at exactly those three.
     let names = tool_names(DESCRIPTOR).unwrap();
-    assert_eq!(names.len(), 27);
+    assert_eq!(names.len(), 30);
     for expected in ["apply_patch", "get_song", "get_song_at", "get_history", "merge_branch",
                      "add_asset", "render_export", "render_preview", "undo", "redo",
                      "define_generator", "compile_generator"] {
         assert!(names.contains(&expected.to_string()), "{expected} missing from {names:?}");
     }
+}
+
+/// The tools ADR 0029 §3 declares in M5 PR 4 and `core` answers from PR 8.
+const DECLARED_NOT_DISPATCHED: [&str; 3] =
+    ["define_instrument_source", "compile_instrument", "get_device_source"];
+
+#[test]
+fn the_compiled_device_tools_are_declared_and_neither_advertised_nor_offered() {
+    // M5 PR 4 declares them so `buf breaking` sees `proto/`'s M5 wire once (docs/plan.md, M4
+    // trap 4), and gRPC answers each `UNIMPLEMENTED`. A name in `IMPLEMENTED` before PR 8 would
+    // be advertised over MCP and in the window as a call that can only fail; a name in
+    // `OFFERED` before PR 11 would be handed to a model before proposal staging and
+    // cancellation are proved (ADR 0029 §8, U8). So the gap between what the service declares
+    // and what `IMPLEMENTED` dispatches is held at exactly these three, in both directions —
+    // PR 8 closes it by deleting this constant, not by forgetting it.
+    let names = tool_names(DESCRIPTOR).unwrap();
+    for name in DECLARED_NOT_DISPATCHED {
+        assert!(names.contains(&name.to_string()), "`{name}` is not declared: {names:?}");
+        assert!(!IMPLEMENTED.contains(&name), "`{name}` is in IMPLEMENTED before M5 PR 8");
+        assert!(!OFFERED.contains(&name), "`{name}` is in OFFERED before M5 PR 11");
+    }
+    let undispatched: Vec<&str> =
+        names.iter().map(String::as_str).filter(|n| !IMPLEMENTED.contains(n)).collect();
+    assert_eq!(undispatched, DECLARED_NOT_DISPATCHED, "the declared-but-not-dispatched set");
 }
 
 #[test]
@@ -53,6 +81,11 @@ fn the_generative_compilers_service_is_not_a_tool() {
     // a source, a seed and a clip's bounds and ask it to play the sandbox, next to the
     // `compile_generator` that does the real thing through the document. A model compiles a
     // generator the project holds; nothing calls this but `core`, and only with what it built.
+    //
+    // `Export` (proto/export.proto, M5 PR 4) is the fifth, its one RPC is also `Compile`, and the
+    // same assertion covers it for the same reason one boundary over: advertised, it would hand
+    // a model a recipe to approve and a bundle's bytes, beside the `compile_instrument` that
+    // builds from what the song holds (ADR 0029 §1).
     let names = tool_names(DESCRIPTOR).unwrap();
     assert!(!names.contains(&"compile".to_string()), "{names:?}");
 }
@@ -106,7 +139,9 @@ fn every_tool_takes_an_object_with_no_extra_properties() {
 #[test]
 fn every_mutating_tool_advertises_dry_run() {
     // §5 gives every tool `dry_run`. A model that cannot see the field cannot preview.
-    let reads = ["get_song", "get_song_at", "get_history"];
+    // `get_device_source` is a read from M5 PR 4: it compiles nothing and writes nothing, so
+    // there is nothing for a dry run to withhold (ADR 0029 §3).
+    let reads = ["get_song", "get_song_at", "get_history", "get_device_source"];
     for tool in tools().into_iter().filter(|t| !reads.contains(&t.name.as_str())) {
         assert_eq!(property(&tool, "dry_run"), json!({"type": "boolean"}), "{}", tool.name);
     }
