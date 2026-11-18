@@ -1329,9 +1329,12 @@ jobs:
       # The engine's build list — the plugins' runtime libraries come with their -dev packages —
       # plus the two the recipe adds, GTK3 and WebKit2GTK 4.1: `cmaj` and every export's helpers
       # link them (ADR 0031 §8; U5). JACK is on the engine's list already, and `cmaj` needs it.
+      # Thirty minutes rather than the engine's twenty: the desktop stack is the largest download in
+      # this workflow, and the first run of this job fetched it at about 70 kB/s — 18 minutes, two
+      # short of the engine's bound, for a step that takes two on a healthy mirror.
       - name: What the recipe builds with, and what an export loads
         if: needs.engine.outputs.skipped != '1'
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           APT: -o Acquire::Retries=3
         run: |
@@ -1363,6 +1366,7 @@ jobs:
       - name: Check out the approved trees
         if: needs.engine.outputs.skipped != '1'
         run: |
+          echo "::notice::runner: $(nproc) cores, $(free -m | awk '/^Mem:/ {print $2}') MiB"
           start=$(date +%s)
           python3 -I compilers/dsp/recipe.py checkout
           echo "::notice::recipe.py checkout: $(( $(date +%s) - start )) s, cold"

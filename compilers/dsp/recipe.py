@@ -61,8 +61,10 @@ CC, CXX = "gcc-13", "g++-13"
 # binary under an unchanged recipe (U5's measured closure is 4.1).
 WEBKIT = "webkit2gtk-4.1"
 
-# An export's build parallelism, bounded by what the CI runner's memory measured (ADR 0029 §4;
-# ADR 0031 §6). It decides how long a build takes and nothing about its bytes.
+# Build parallelism, for `cmaj` and for every export, bounded by what the CI runner's memory
+# measured (ADR 0029 §4; ADR 0031 §6): `cmaj` at ninja's default parallelism peaked at 7.5 GiB
+# in all on the runner, and an export at four jobs at 1.1 GiB. It decides how long a build
+# takes and nothing about its bytes.
 EXPORT_JOBS = 4
 
 LLVM_SPARSE = "release/linux/x64"
@@ -283,7 +285,7 @@ def check_flags(compile_commands, required):
     return len(commands)
 
 
-def build(jobs=None):
+def build(jobs=EXPORT_JOBS):
     """`cmaj` from the checkout as it stands, and its provenance (ADR 0031 §3, §7).
 
     Reaches no network: run it under `unshare -rn` and it builds the same. Nothing upstream is
@@ -299,7 +301,7 @@ def build(jobs=None):
             f"-DCMAJ_VERSION={CMAJ_VERSION}", f"-DWEBKIT2_GTK_VERSION={WEBKIT}",
             log=BUILD / "cmajor-configure.log")
         lines = check_flags(CMAJ_BUILD / "compile_commands.json", ISA_FLAGS)
-        run("cmake", "--build", CMAJ_BUILD, "--target", "cmaj", *(["-j", str(jobs)] if jobs else []),
+        run("cmake", "--build", CMAJ_BUILD, "--target", "cmaj", "-j", str(jobs),
             log=BUILD / "cmajor-build.log")
 
     # The version line, and not the whole of stdout: the next line is a build date, which is not
@@ -531,7 +533,7 @@ def main(argv):
     sub = parser.add_subparsers(dest="step", required=True)
     sub.add_parser("checkout")
     built = sub.add_parser("build")
-    built.add_argument("--jobs", type=int)
+    built.add_argument("--jobs", type=int, default=EXPORT_JOBS)
     exported = sub.add_parser("export")
     exported.add_argument("patch")
     exported.add_argument("out")

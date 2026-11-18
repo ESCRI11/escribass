@@ -499,8 +499,7 @@ fn gitlink(path: &str) -> String {
 #[test]
 fn every_submodule_is_the_commit_its_row_pins() {
     // Direction one, for the trees a `checks` job never checks out. Watched failing by moving
-    // `/dsp/vst3_sdk/commit` one character, and by staging `compilers/dsp/vendor/clap` at its
-    // parent commit — the same assertion either way, naming the path.
+    // `/dsp/vst3_sdk/commit` one character, which names the path and both commits.
     let lock = baseline();
     for (path, at) in SUBMODULES {
         let pinned = lock.pointer(at).and_then(Value::as_str).unwrap_or_else(|| panic!("no `{at}`"));
@@ -508,7 +507,8 @@ fn every_submodule_is_the_commit_its_row_pins() {
     }
 
     // Direction two: a submodule nobody gave a row is a dependency added without a pin, which is
-    // what CLAUDE.md #4 is about. Watched failing by deleting the `vst3sdk` row above.
+    // what CLAUDE.md #4 is about. Watched failing by declaring a submodule at
+    // `compilers/dsp/vendor/onnx` in `.gitmodules` with no row here.
     let modules = read(".gitmodules");
     let declared: Vec<&str> = modules
         .lines()

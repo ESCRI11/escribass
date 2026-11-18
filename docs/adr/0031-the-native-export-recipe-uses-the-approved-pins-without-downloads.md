@@ -171,9 +171,11 @@ there. What optimises an export is the host compiler's `Release` `-O3 -DNDEBUG`,
 recipe names. This corrects ADR 0023 §2's "the optimisation level is a pin", which was measured
 through the JIT and the `cpp` engine and not through an export.
 
-**Build parallelism is a bound, `EXPORT_JOBS = 4`**, chosen against the runner's memory as ADR
-0029 §4 asks; it decides how long an export takes and nothing about its bytes. The measurement
-it rests on is under Consequences.
+**Build parallelism is a bound, `EXPORT_JOBS = 4`, for every export and for `cmaj` too**,
+chosen against the runner's memory as ADR 0029 §4 asks; it decides how long a build takes and
+nothing about its bytes. Measured on the first CI run: an export at four jobs peaked at
+**0.7–1.1 GiB in all** and took 26–28 s, while `cmaj` at ninja's default parallelism peaked at
+**7.5 GiB** in 184 s — which is why `cmaj`'s build is now held to the same four.
 
 ### 7. Actual-build provenance: what a recipe is, read from what ran
 
@@ -251,9 +253,12 @@ asks first, and not only in the processing.
   `test_recipe.py`, and `tests/dsp.rs` offline. The engine job's path gate now has positive cases
   for `compilers/dsp/` and the fixtures, `compilers/generative/` stays excluded, and the `dsp`
   job inherits the engine's decision.
-- **Measured on the runner** — what a cold checkout, a `cmaj` build and an export cost, and the
-  peak memory of each — is recorded in `docs/plan.md`'s M5.6 row and was the basis for
-  `EXPORT_JOBS`.
+- **Measured on the runner** (`ubuntu-24.04`, the first run of the `dsp` job): the checkout
+  32 s cold; `cmaj` 184 s and 7.5 GiB at its peak at ninja's default parallelism; each export
+  26–28 s, of which the build is 26–27 s, and 0.7–1.1 GiB at its peak; `test_recipe.py` 3 s; the
+  render test 85 s for three exports and six renders. The job's apt step took 18 minutes at
+  about 70 kB/s, a mirror's cost rather than the recipe's, and has its own thirty-minute bound.
+  `docs/plan.md`'s M5.6 row carries these with the second run's.
 - ADRs amended in place, dated: **0009** §3 (the ISA pin reaches exports and `cmaj`, with no
   exception) and §4 (a sixth surface); **0023** §2 (`-O` is not an export input) and §4 (vendored,
   and how); **0028** §2 and **0030** §1 (a recipe holds no Cmajor optimisation level).
