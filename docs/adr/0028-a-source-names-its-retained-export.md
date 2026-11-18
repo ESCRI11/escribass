@@ -107,7 +107,7 @@ language here holds a hand-written model type (CLAUDE.md, Toolchain). It carries
 |---|---|---|
 | `input` | the `source_hash`, or the `model_hash` and the conversion record's hash (decision 5) | what the binary was built from; freshness is this against the reference (decision 4) |
 | `target` | `vst3/x86_64-linux` | what loads it; the only target v1 builds (ADR 0014 §2) |
-| `recipe` | the toolchain that actually ran: the Cmajor, CLAP SDK, clap-wrapper and VST3 SDK commits, the C/C++ compiler and its flags, Cmajor's optimisation level, and the recipe's own edits to generated code | an export's identity includes how it was made (ADR 0023 §2); its fields are ADR 0031's to fix |
+| `recipe` | the toolchain that actually ran: the Cmajor, CLAP SDK, clap-wrapper and VST3 SDK commits, the C/C++ compiler and its flags, ~~Cmajor's optimisation level~~ the build type, and the recipe's own edits to generated code — **corrected 2026-11-17 (ADR 0031 §6, §7): Cmajor's `-O` reaches nothing an export is built from, and the optimisation is the host compiler's `Release`** | an export's identity includes how it was made (ADR 0023 §2); its fields are ADR 0031 §7's |
 | `members` | each file of the bundle, by relative path, to the SHA-256 of its blob | what reconstructs the bundle (decision 3); one entry for every Linux export the spike made |
 | `class` | vendor, name, VST3 class id and CLAP id, as the built binary reports them | what the engine is told to load (ADR 0029 §6) |
 | `ports` | audio input and output channel counts, and whether it takes MIDI | an instrument with no MIDI input is deaf, and the spike exported one that exited 0 |

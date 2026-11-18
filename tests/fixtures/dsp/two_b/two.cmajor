@@ -1,0 +1,9 @@
+// One of two effects with ONE processor name and two behaviours (ADR 0031; ADR 0029 §6): this one
+// passes the right channel at a quarter and silences the other. Loaded into one engine process beside its twin,
+// each must run its own code, which an export built without the symbol flags does not.
+processor Two [[ main ]]
+{
+    input stream float<2> in;
+    output stream float<2> out;
+    void main() { loop { let x = in; out <- float<2> (0.0f, x[1] * 0.25f); advance(); } }
+}

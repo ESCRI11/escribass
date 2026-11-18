@@ -162,7 +162,8 @@ because that is when it matters and the only time it can be wrong.
 
 M5 records, for each exported artefact and each converted model, the toolchain that made it —
 `cmaj`'s commit, the CLAP SDK, clap-wrapper, the VST3 SDK, the compiler and its **optimisation
-level** (ADR 0023 §2) — so that "what a render was made with travels with the render" (ADR
+level** (ADR 0023 §2; **the host compiler's, corrected 2026-11-17** — Cmajor's own `-O` reaches
+no export, ADR 0031 §6) — so that "what a render was made with travels with the render" (ADR
 0010). This ADR reserves two top-level keys, **`artefacts`** and **`models`**, and one rule:
 **each is a map keyed by the artefact's content hash**, so an entry names one thing and the
 thing names its entry, written on first reference and never removed (ADR 0010 §2). Their fields

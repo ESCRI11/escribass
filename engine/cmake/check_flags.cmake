@@ -54,6 +54,13 @@ set(isa_flags
 # not predicted, and the reason ADR 0013 §1 could say the guard would not fire.
 set(allowed "-mavx" "-msse2" "-msse4.1" "-maes")
 
+# **A tree with no such source passes `-DALLOWED_ISA=` and gets no exception at all** (M5 PR 5).
+# The four above are reasons about sfizz and abseil, not permission for a compiled Cmajor export
+# or the `cmaj` that writes one to gain `-mavx` (docs/plan.md, M5 trap 5; ADR 0031 §6).
+if(DEFINED ALLOWED_ISA)
+    set(allowed ${ALLOWED_ISA})
+endif()
+
 set(found "")
 foreach(flag IN LISTS isa_flags)
     string(REPLACE "." "\\." pattern "${flag}")
@@ -65,6 +72,8 @@ foreach(flag IN LISTS isa_flags)
 endforeach()
 if(found)
     list(REMOVE_DUPLICATES found)
+endif()
+if(found AND allowed)
     list(REMOVE_ITEM found ${allowed})
 endif()
 if(found)

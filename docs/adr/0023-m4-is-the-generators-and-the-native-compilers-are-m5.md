@@ -124,7 +124,14 @@ fourth bundled plugin against its GTK and WebKit cost, decision 4).
 
 Two things follow for M5 and are said now so its plan inherits them. **The optimisation level
 is a pin**: an exported artefact's `lock.json` record (ADR 0027 §3) names the `-O` it was built
-at, because `-O4` is a different hash from `-O2` inside one engine. And Plate 3's *export
+at, because `-O4` is a different hash from `-O2` inside one engine. **Corrected 2026-11-17, in
+M5 PR 5 (ADR 0031 §6): Cmajor's `-O` is not an input of an export at all.** The measurement
+above went through the JIT and the `cpp` engine, which read it; `cmaj generate --target=clap`
+does not — the default, `-O0` and `-O4` write byte-identical trees at the approved commit, all
+145 files, and `compilers/dsp/test_recipe.py` re-measures that on every run. What optimises an
+export is the host compiler's CMake `Release` (`-O3 -DNDEBUG` on g++ 13.3), and that is what its
+recipe records; the pin this paragraph asked for is kept, on the flag that decides the bytes.
+And Plate 3's *export
 pending* state does not disappear with the JIT; it changes meaning: a Cmajor device whose
 source has no export yet cannot be **played** either, and `render_unsupported` on it becomes
 `export_pending` (M5's `core` PR), naming the tool that lifts it.
@@ -220,6 +227,22 @@ Two facts about the **build image** come with the set, and both correct the plan
 
 Both facts were what made U3's option (b), `CmajPlugin` as a fourth bundled plugin, more
 expensive than it read, and they are part of why (c) held.
+
+**Vendored 2026-11-17, in M5 PR 5 (ADR 0031), and three things above read differently now.**
+The four export pins are submodules under `compilers/dsp/vendor/` at exactly the commits this
+table approved, `lock.baseline.json` carries the LLVM sub-pin, choc, the CLAP SDK's commit and
+the VST3 SDK row, and `cmaj` builds from the unmodified tree with `libjack-jackd2-dev` installed
+— no deviation of any kind. First, **`CLAP_SDK_ROOT` is still unused and is passed anyway**: the
+generated project defines `clap` over `CLAP_INCLUDE_PATH`, which the recipe now gives at
+configure rather than to `cmaj generate`, so that no machine path is written into a generated
+tree; the root is there for the day a template stops defining the target. Second, **clap-wrapper
+never includes CPM** with every download flag off and every root given, so the export recipe
+needs no CPM.cmake, and decision 5's vendored copy waits for airwin2rack. Third, **the desktop
+stack grows the `dsp` job's image and not the engine's**: the engine renders a VST3 without
+linking it, and the job that builds exports installs GTK3 and WebKit2GTK. The closure is
+re-measured on a wrapped VST3 rather than a `.clap`: twelve `DT_NEEDED` entries, the loader
+among them, and 129 shared objects, the spike's count. That none is on the render path is still
+the assumption named above.
 
 ### 5. Airwindows is M5's, as one JUCE plugin whose `Replace` parameter selects the effect
 
