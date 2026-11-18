@@ -175,7 +175,8 @@ through the JIT and the `cpp` engine and not through an export.
 chosen against the runner's memory as ADR 0029 §4 asks; it decides how long a build takes and
 nothing about its bytes. Measured on the first CI run: an export at four jobs peaked at
 **0.7–1.1 GiB in all** and took 26–28 s, while `cmaj` at ninja's default parallelism peaked at
-**7.5 GiB** in 184 s — which is why `cmaj`'s build is now held to the same four.
+**7.5 GiB** in 184 s — which is why `cmaj`'s build is now held to the same four. Held there, on
+the second run, it peaked at **5.0 GiB** in 252 s, of a runner's 4 cores and 15.6 GiB.
 
 ### 7. Actual-build provenance: what a recipe is, read from what ran
 
@@ -258,7 +259,8 @@ asks first, and not only in the processing.
   26–28 s, of which the build is 26–27 s, and 0.7–1.1 GiB at its peak; `test_recipe.py` 3 s; the
   render test 85 s for three exports and six renders. The job's apt step took 18 minutes at
   about 70 kB/s, a mirror's cost rather than the recipe's, and has its own thirty-minute bound.
-  `docs/plan.md`'s M5.6 row carries these with the second run's.
+  On the second run, with `cmaj` held to four jobs: 252 s and 5.0 GiB, exports 40 s and
+  0.7–0.9 GiB on a slower draw, the apt step 36 s and the whole job under nine minutes.
 - ADRs amended in place, dated: **0009** §3 (the ISA pin reaches exports and `cmaj`, with no
   exception) and §4 (a sixth surface); **0023** §2 (`-O` is not an export input) and §4 (vendored,
   and how); **0028** §2 and **0030** §1 (a recipe holds no Cmajor optimisation level).
